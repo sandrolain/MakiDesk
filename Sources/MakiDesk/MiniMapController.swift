@@ -107,17 +107,20 @@ private struct MiniMapView: View {
     let motionFrom: [UUID: CGRect]
     let motionStartDate: Date
 
+    /// The area the map is scaled to. Deliberately *not* the union of every
+    /// window: a window left on another display sits far off the side, and
+    /// including it would shrink the screen to nothing. Off-screen windows are
+    /// drawn as edge markers instead (A6).
     private var contentBounds: CGRect {
-        var bounds = screenFrame
-        for window in windows {
-            let frame = CGRect(x: window.x, y: window.y, width: window.width, height: window.height)
-            guard frame.width > 0, frame.height > 0 else { continue }
-            bounds = bounds.union(frame)
-        }
-        for frame in motionFrom.values where frame.width > 0 && frame.height > 0 {
-            bounds = bounds.union(frame)
-        }
-        return bounds
+        screenFrame.insetBy(dx: -MiniMapView.margin, dy: -MiniMapView.margin)
+    }
+
+    private static let margin: CGFloat = 18
+
+    /// True when a window only touches the screen through a thin strip.
+    private func isOffScreen(_ frame: CGRect) -> Bool {
+        let hit = screenFrame.intersection(frame)
+        return hit.width < 8 || hit.height < 8
     }
 
     var body: some View {
@@ -173,10 +176,29 @@ private struct MiniMapView: View {
                             height: from.height + (destination.height - from.height) * progress
                         )
                     }
-                    let rect = mapRect(displayFrame)
                     let isHighlighted = highlightedIDs.contains(window.id)
-                    let radius = min(4, rect.height / 5)
                     let color = Color(nsColor: WorkspaceStore.shared.color(for: window.appName))
+
+                    // A window left largely off screen (on a detached display,
+                    // or dragged beyond the edge): draw a bar on the edge it
+                    // overhangs instead of a tiny sliver (A6).
+                    guard !isOffScreen(displayFrame) else {
+                        let screenRect = mapRect(screenFrame)
+                        let onLeft = displayFrame.midX < screenFrame.midX
+                        let barWidth: CGFloat = isHighlighted ? 6 : 4
+                        let barHeight = max(6, min(screenRect.height * 0.5, screenRect.height * 0.5))
+                        let centerY = min(max(mapRect(displayFrame).midY, screenRect.minY + barHeight / 2),
+                                          screenRect.maxY - barHeight / 2)
+                        let x = onLeft ? screenRect.minX - barWidth : screenRect.maxX
+                        let bar = CGRect(x: x, y: centerY - barHeight / 2,
+                                         width: barWidth, height: barHeight)
+                        context.fill(Path(roundedRect: bar, cornerRadius: barWidth / 2),
+                                     with: .color(color.opacity(isHighlighted ? 1 : 0.85)))
+                        continue
+                    }
+
+                    let rect = mapRect(displayFrame)
+                    let radius = min(4, rect.height / 5)
                     let path = Path(roundedRect: rect, cornerRadius: radius)
                     context.fill(path, with: .color(color.opacity(isHighlighted ? 0.95 : 0.72)))
                     context.stroke(path,

@@ -1,0 +1,111 @@
+version: '3'
+
+vars:
+  APP_NAME: MakiDesk
+  APP_BUNDLE: '{{.ROOT_DIR}}/dist/MakiDesk.app'
+  RELEASE_BIN: '{{.ROOT_DIR}}/.build/release/MakiDesk'
+
+tasks:
+  default:
+    desc: Build debug target
+    cmds:
+      - task: build
+
+  build:
+    desc: Compile debug build
+    cmds:
+      - swift build
+
+  run:
+    desc: Build and run from SwiftPM
+    cmds:
+      - swift run
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - swift test
+
+  release:
+    desc: Compile optimized release target
+    cmds:
+      - swift build -c release
+
+  bundle:
+    desc: Create dist/MakiDesk.app from release build
+    deps:
+      - release
+    cmds:
+      - mkdir -p "{{.APP_BUNDLE}}/Contents/MacOS" "{{.APP_BUNDLE}}/Contents/Resources"
+      - cp "{{.RELEASE_BIN}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
+      - cp Resources/Info.plist "{{.APP_BUNDLE}}/Contents/Info.plist"
+      - cp Resources/AppIcon.icns "{{.APP_BUNDLE}}/Contents/Resources/AppIcon.icns"
+
+  cert:
+    desc: Create a stable self-signed signing identity (run once)
+    cmds:
+      - sh scripts/setup-signing-cert.sh
+
+  trust-cert:
+    desc: (Optional) Trust the signing cert in the system trust store; not needed for TCC
+    cmds:
+      - |
+        CERT="MakiDesk Local Signing"
+        KEYCHAIN="$HOME/Library/Keychains/makidesk-signing.keychain-db"
+        PEM="$(mktemp)"
+        security find-certificate -c "$CERT" -p "$KEYCHAIN" > "$PEM"
+        security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$PEM"
+        rm -f "$PEM"
+        echo "Certificate '$CERT' is now trusted."
+
+  reset-permission:
+    desc: Clear MakiDesk's Accessibility entry so it can be re-added cleanly
+    cmds:
+      - tccutil reset Accessibility com.makidesk.app
+      - echo "Cleared. Relaunch with 'task open' and enable MakiDesk in Accessibility."
+
+  sign:
+    desc: Sign app bundle (stable identity if present, else ad-hoc)
+    deps:
+      - bundle
+    cmds:
+      - |
+        CERT_NAME="MakiDesk Local Signing"
+        KEYCHAIN="$HOME/Library/Keychains/makidesk-signing.keychain-db"
+        if security find-identity -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$CERT_NAME"; then
+          security unlock-keychain -p makidesk "$KEYCHAIN"
+          codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "{{.APP_BUNDLE}}"
+          echo "Signed with '$CERT_NAME' — Accessibility permission survives rebuilds."
+        else
+          codesign --force --deep --sign - -r='designated => identifier "com.makidesk.app"' "{{.APP_BUNDLE}}"
+          echo "WARNING: ad-hoc signed. Accessibility permission may reset each build."
+          echo "         Run 'task cert' once to create a stable identity."
+        fi
+
+  open:
+    desc: Build, sign, and launch app bundle
+    deps:
+      - sign
+    cmds:
+      - open -n "{{.APP_BUNDLE}}"
+
+  reload:
+    desc: Kill the running app, then rebuild, sign and relaunch it
+    cmds:
+      - pkill -x "{{.APP_NAME}}" || true
+      - sleep 1
+      - task: open
+
+  install:
+    desc: Copy signed app to ~/Applications
+    deps:
+      - sign
+    cmds:
+      - mkdir -p "$HOME/Applications"
+      - ditto "{{.APP_BUNDLE}}" "$HOME/Applications/MakiDesk.app"
+
+  clean:
+    desc: Remove Swift build products and generated app bundle
+    cmds:
+      - swift package clean
+      - rm -rf "{{.ROOT_DIR}}/dist"

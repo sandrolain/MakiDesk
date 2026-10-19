@@ -8,3 +8,6 @@ refs
 dist
 docs
 scripts
+.vscode/launch.json
+/.agents
+skills-lock.json

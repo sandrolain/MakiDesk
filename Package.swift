@@ -2,20 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "OrbitDesk",
+    name: "MakiDesk",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "OrbitDesk", targets: ["OrbitDesk"])
+        .executable(name: "MakiDesk", targets: ["MakiDesk"])
     ],
     targets: [
         .executableTarget(
-            name: "OrbitDesk",
-            path: "Sources/OrbitDesk"
+            name: "MakiDesk",
+            path: "Sources/MakiDesk"
         ),
         .testTarget(
-            name: "OrbitDeskTests",
-            dependencies: ["OrbitDesk"],
-            path: "Tests/OrbitDeskTests"
+            name: "MakiDeskTests",
+            dependencies: ["MakiDesk"],
+            path: "Tests/MakiDeskTests"
         )
     ]
 )
