@@ -40,6 +40,7 @@ tasks:
       - cp "{{.RELEASE_BIN}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
       - cp Resources/Info.plist "{{.APP_BUNDLE}}/Contents/Info.plist"
       - cp Resources/AppIcon.icns "{{.APP_BUNDLE}}/Contents/Resources/AppIcon.icns"
+      - cp LICENSE THIRD_PARTY_NOTICES.md "{{.APP_BUNDLE}}/Contents/Resources/"
 
   cert:
     desc: Create a stable self-signed signing identity (run once)
@@ -95,6 +96,29 @@ tasks:
       - pkill -x "{{.APP_NAME}}" || true
       - sleep 1
       - task: open
+
+  dmg:
+    desc: Create a local DMG (signs with the local identity first)
+    deps:
+      - sign
+    cmds:
+      - task: dmg-only
+
+  dmg-only:
+    desc: Package the already-signed dist/MakiDesk.app (use for Developer ID notarization)
+    cmds:
+      - |
+        VERSION=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
+        STAGE="{{.ROOT_DIR}}/dist/.dmg-stage"
+        rm -rf "$STAGE"
+        mkdir -p "$STAGE"
+        cp -R "{{.APP_BUNDLE}}" "$STAGE/"
+        ln -s /Applications "$STAGE/Applications"
+        cp LICENSE THIRD_PARTY_NOTICES.md README.md "$STAGE/"
+        hdiutil create -volname "MakiDesk $VERSION" -srcfolder "$STAGE" \
+          -ov -format UDZO "{{.ROOT_DIR}}/dist/MakiDesk-$VERSION.dmg"
+        rm -rf "$STAGE"
+        echo "Created dist/MakiDesk-$VERSION.dmg (not notarized; see README ▸ Distribution)."
 
   install:
     desc: Copy signed app to ~/Applications

@@ -221,6 +221,72 @@ macOS does not provide a public general-purpose API for moving other apps' windo
 3. Add dry-run preview before applying large layouts.
 4. Test application-specific Accessibility failures and Spaces behavior.
 
+## Distribution
+
+The source is MIT-licensed and every runtime dependency is permissive (MIT or
+BSD-3); no GPL or AGPL code is linked. `task dmg` packages
+`dist/MakiDesk-<version>.dmg` with the app, an `/Applications` link,
+`LICENSE`, `THIRD_PARTY_NOTICES.md` and this README.
+
+That DMG is **not distribution-ready as it is**: the current build is
+**arm64-only** and signed with a local self-signed identity (`MakiDesk Local
+Signing`), so Gatekeeper rejects it on another Mac (`spctl -a` says
+“rejected”). For a clean GitHub download:
+
+1. Join the Apple Developer Program and create a **Developer ID Application**
+   certificate. The Mac App Store is not an option for this design: MakiDesk
+   needs Accessibility and is not sandboxed.
+2. Build **arm64 + x86_64** (universal) with Xcode or SwiftPM’s multi-arch
+   build, then sign the app with the hardened runtime:
+   ```sh
+   task bundle        # or build the universal app yourself
+   codesign --force --options runtime --timestamp \
+     --sign "Developer ID Application: Your Name (TEAMID)" dist/MakiDesk.app
+   ```
+3. Package and sign the DMG, then notarize and staple it:
+   ```sh
+   task dmg-only
+   codesign --force --timestamp --sign "Developer ID Application: …" \
+     dist/MakiDesk-0.2.0.dmg
+   xcrun notarytool submit dist/MakiDesk-0.2.0.dmg \
+     --keychain-profile "notary" --wait
+   xcrun stapler staple dist/MakiDesk-0.2.0.dmg
+   spctl -a -vv dist/MakiDesk.app
+   ```
+   `notarytool` needs an app-specific password or API key stored once in a
+   keychain profile. `task dmg` (without `-only`) is the convenience path for
+   a local DMG: it re-signs with the local identity, so do not use it after
+   the Developer ID signature.
+4. Publish a GitHub Release with the DMG, its SHA-256 and a source tag. Keep
+   `refs/` out of the repository (it contains third-party checkouts used for
+   analysis and is git-ignored), and include `Package.resolved` for a
+   reproducible dependency set.
+
+Without notarization the source is still usable (`task build` / `task open`);
+only the convenience binary needs the paid identity. The build needs macOS 14
+or later and, at runtime, **Accessibility** (window control, clipboard paste,
+shelf shake) and **Screen Recording** (window previews and content-weighted
+layout). Permissions survive updates only while the bundle identifier and the
+signing identity stay the same.
+
+The project name is not a trademark clearance: check that “MakiDesk” is free in
+your jurisdiction before publishing a binary.
+
+## Privacy and permissions
+
+- **No network, no telemetry.** There are no analytics, crash uploaders or
+  accounts. The only URLs the app opens are ones you drag onto the shelf, a
+  file you ask Finder to reveal, or the licence files in Settings.
+- **No sandbox.** MakiDesk needs Accessibility to read and move other apps’
+  windows and to paste into them, and Screen Recording for previews and the
+  content measure. Both are granted and revoked by the user in System Settings.
+- **Local data.** Notes and drafts live in
+  `~/Library/Application Support/MakiDesk/Note/`; window groups live beside
+  them. Shelf items are references to your files, with a temporary staging
+  folder for file promises that is removed when the shelf closes. The
+  clipboard history is **in memory only** and disappears when the app quits.
+- Window titles, previews, notes and clipboard contents are never uploaded.
+
 ## Credits
 The colour presets in `Theme.swift` follow the palettes published by
 [Catppuccin](https://github.com/catppuccin/catppuccin),
@@ -230,6 +296,21 @@ The colour presets in `Theme.swift` follow the palettes published by
 [Gruvbox](https://github.com/morhetz/gruvbox) and
 [One Dark](https://github.com/atom/one-dark-syntax). Only colour values are
 used; no code from those projects is included.
+
+The shelf's shake presets and drag-and-drop ordering are inspired by
+[OpenYoink](https://github.com/weijue/OpenYoink) (MIT, © 2026 weijue); the
+detector is rewritten here, no code is copied. The shelf itself is inspired by
+[Dropover](https://dropoverapp.com); no name, icon or interface text is taken
+from it.
+
+The notes editor highlights code with
+[tree-sitter](https://github.com/tree-sitter/tree-sitter) and
+[SwiftTreeSitter](https://github.com/ChimeHQ/SwiftTreeSitter), plus the
+tree-sitter grammars for Swift, JSON, Markdown, shell, Python, JavaScript,
+TypeScript, HTML and CSS. Their licences and copyright notices are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The scanner sources for
+JavaScript, Python and CSS are vendored in `Sources/GrammarScanners` because
+the upstream SwiftPM manifests leave them out of a normal build.
 
 ## License
 

@@ -4,12 +4,44 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var store: WorkspaceStore
 
+    private enum SettingsTab: String, CaseIterable, Identifiable {
+        case general, windows, layouts, panels, groups
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .general: return "General"
+            case .windows: return "Windows"
+            case .layouts: return "Layouts"
+            case .panels: return "Panels"
+            case .groups: return "Groups"
+            }
+        }
+    }
+
+    @AppStorage("settingsTab") private var settingsTab: SettingsTab = .general
     @State private var showResetConfirmation = false
+    @State private var excludedAppsText = ""
 
     private static let gapOptions: [Double] = [0, 2, 4, 8, 12, 16, 24, 32, 48, 64]
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            Picker("Settings section", selection: $settingsTab) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            Divider()
+
+            Form {
+                if settingsTab == .general {
             Section("Permissions") {
                 Label(
                     store.accessibilityTrusted ? "Accessibility enabled" : "Accessibility required",
@@ -53,6 +85,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+                }
+                if settingsTab == .windows {
             Section("Placement") {
                 Picker("Gap", selection: Binding(get: { store.gap }, set: { store.updateGap($0) })) {
                     ForEach(Self.gapOptions, id: \.self) { Text("\(Int($0)) px").tag($0) }
@@ -76,16 +110,82 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+                }
+                if settingsTab == .layouts {
             Section("Layouts") {
                 Toggle("Ask before using the suggested layout", isOn: Binding(
                     get: { store.layoutAsksFirst },
                     set: { store.updateLayoutAsksFirst($0) }
                 ))
-                Text("Three keys lay out the windows in view (minimised ones and windows of hidden apps stay where they are): ⌃⌥G a grid, ⌃⌥S the golden spiral, ⌃⌥A the suggested layout. The suggestion sees how many windows there are, how much is drawn in each one (needs Screen Recording), what kind of app they are and how big they are, and says why. With this on, the suggestion appears with its reason and waits to be run again; with it off, it applies at once. Without Screen Recording it falls back to equal cells.")
+                Text("Four keys lay out the windows in view (minimised ones and windows of hidden apps stay where they are): ⌃⌥G a grid, ⌃⌥S the golden spiral, ⌃⌥A the suggested layout, ⌃⌥W areas weighted by the content each window shows. The suggestion sees how many windows there are, how much is drawn in each one (needs Screen Recording), what kind of app they are and how big they are, and says why. With this on, the suggestion appears with its reason and waits to be run again; with it off, it applies at once. Without Screen Recording the weighted layout still uses the weights below, and the suggestion falls back to equal cells.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text("Content weights")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.top, 4)
+                ForEach(WindowKind.allCases, id: \.self) { kind in
+                    HStack(spacing: 10) {
+                        Text(kind.label)
+                            .frame(width: 76, alignment: .leading)
+                        Slider(value: Binding(
+                            get: { store.layoutPrior(kind) },
+                            set: { store.updateLayoutPrior($0, for: kind) }
+                        ), in: 0.5...2.0, step: 0.05)
+                        Text(String(format: "%.2f", store.layoutPrior(kind)))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, alignment: .trailing)
+                    }
+                }
+                Text("How much room a window of that kind deserves before its content adjusts the weight (0.5–2.0). The same numbers are used by the suggested layout: it proposes Content only when the spread is clear.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
+                }
+                if settingsTab == .panels {
+            Section("Shelf") {
+                Toggle("Shake while dragging to open the shelf", isOn: Binding(
+                    get: { store.shelfShakeEnabled },
+                    set: { store.updateShelfShakeEnabled($0) }
+                ))
+                Picker("Shake sensitivity", selection: Binding(
+                    get: { store.shelfShakeSensitivity },
+                    set: { store.updateShelfShakeSensitivity($0) }
+                )) {
+                    ForEach(ShelfShakeSensitivity.allCases) { Text($0.label).tag($0) }
+                }
+                .disabled(!store.shelfShakeEnabled)
+                TextField("Excluded apps (bundle IDs, comma-separated)", text: $excludedAppsText)
+                    .disabled(!store.shelfShakeEnabled)
+                    .onChange(of: excludedAppsText) { _, value in
+                        store.updateShelfExcludedApps(value)
+                    }
+                Text("⌃⌥D opens the shelf near the pointer; the shake opens it during a drag. It collects files, folders, links, text and images, lets you drag them out or copy/move them to a folder, and empties when closed. Space previews, Delete removes, Esc closes. The shelf is temporary: nothing is written to disk except files promised by apps such as Photos, in a temporary folder removed on close.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+                }
+                if settingsTab == .general {
+            Section("Animations") {
+                Toggle("Animate lists and panels", isOn: Binding(
+                    get: { store.animationsEnabled },
+                    set: { store.updateAnimationsEnabled($0) }
+                ))
+                SliderRow(title: "Duration",
+                          value: Binding(get: { store.animationDuration },
+                                         set: { store.updateAnimationDuration($0) }),
+                          range: 0.08...0.6, step: 0.02, unit: " s", decimals: 2)
+                    .disabled(!store.animationsEnabled)
+                Text("Used when a second shake moves the shelf, and when the window switcher and clipboard scroll to the selection. macOS Reduce Motion always wins.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+                }
+                if settingsTab == .windows {
             Section("macOS integration") {
                 Label(
                     store.macOSTilingEnabled
@@ -127,6 +227,8 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+                }
+                if settingsTab == .panels {
             Section("Window switcher & search") {
                 Toggle("Show window previews", isOn: Binding(
                     get: { store.showPreview },
@@ -171,11 +273,38 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+                }
+                if settingsTab == .groups {
             Section("Groups") {
                 ForEach(1...9, id: \.self) { slot in
                     GroupSettingsRow(store: store, slot: slot)
                 }
                 Text("A group is a saved selection of windows: ⌃⌥⌘N adds or removes the front window, ⌃⌥N brings the group back. Recalling a group shows its windows where you left them — a group has no layout of its own. To give one a disposition, recall it and then run a layout (⌃⌥G grid, ⌃⌥S golden spiral, ⌃⌥A suggested): the arrangement is remembered for next time. The group column in the Opt-Tab / Opt-Space palette edits the same groups.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+                }
+                if settingsTab == .general {
+            Section("Reference") {
+                Button {
+                    ShortcutsWindowController.shared.show()
+                } label: {
+                    Label("Keyboard Shortcuts…", systemImage: "keyboard")
+                }
+                Text("Every command, grouped by where it works: window tiling, layouts, groups, focus, the switcher, notes and the clipboard.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Licensing") {
+                Button("MakiDesk license (MIT)") {
+                    openBundledDocument("LICENSE", extension: nil)
+                }
+                Button("Third-party notices") {
+                    openBundledDocument("THIRD_PARTY_NOTICES", extension: "md")
+                }
+                Text("MakiDesk is MIT-licensed. The notes editor ships SwiftTreeSitter (BSD-3) and tree-sitter grammars (MIT); the notices open above. Both files are included in the app bundle and the DMG.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -197,8 +326,11 @@ struct SettingsView: View {
                     NSApplication.shared.keyWindow?.close()
                 }
             }
+                }
+            }
+            .formStyle(.grouped)
+            .id(settingsTab)
         }
-        .formStyle(.grouped)
         // Every flag is a switch, never a checkbox.
         .toggleStyle(.switch)
         .sheet(isPresented: $showResetConfirmation) {
@@ -209,14 +341,24 @@ struct SettingsView: View {
                 showResetConfirmation = false
             }
         }
-        .frame(minWidth: 460, idealWidth: 620, minHeight: 400, idealHeight: 660)
-        .padding()
+        .frame(minWidth: 560, idealWidth: 700, minHeight: 520, idealHeight: 720)
         .background(SettingsWindowConfigurator())
         .onAppear {
             store.refreshPermissionState()
             store.refreshMacOSTiling()
+            excludedAppsText = store.shelfExcludedApps.joined(separator: ", ")
             store.bringSettingsToFront()
         }
+    }
+
+    private func openBundledDocument(_ name: String, extension ext: String?) {
+        let url = Bundle.main.url(forResource: name, withExtension: ext)
+            ?? URL(fileURLWithPath: ext.map { "\(name).\($0)" } ?? name)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     /// The permission buttons, shared by the horizontal and stacked variants.
@@ -336,8 +478,12 @@ private struct ResetConfirmationView: View {
     let onCancel: () -> Void
 
     @State private var includeGroups = false
+    @State private var includeNotes = false
+    @State private var includeClipboard = false
 
     private var groupCount: Int { store.groups.count }
+    private var noteCount: Int { NotesStore.shared.noteCount }
+    private var clipboardCount: Int { ClipboardHistory.shared.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -357,6 +503,14 @@ private struct ResetConfirmationView: View {
                        isOn: $includeGroups)
                     .disabled(groupCount == 0)
                     .help("Deletes every group with its members and the arrangement remembered for it. The windows themselves are not closed.")
+                Toggle(noteCount == 1 ? "Notes (1)" : "Notes (\(noteCount))",
+                       isOn: $includeNotes)
+                    .disabled(noteCount == 0)
+                    .help("Deletes every note and draft, including the ones never saved to a file. Files opened from other folders are left where they are.")
+                Toggle(clipboardCount == 1 ? "Clipboard history (1)" : "Clipboard history (\(clipboardCount))",
+                       isOn: $includeClipboard)
+                    .disabled(clipboardCount == 0)
+                    .help("Empties the in-memory clipboard history. Nothing is written to disk, and the history is lost when the app quits anyway.")
             }
             .toggleStyle(.checkbox)
 
@@ -370,7 +524,11 @@ private struct ResetConfirmationView: View {
                 Button("Cancel") { onCancel() }
                     .keyboardShortcut(.cancelAction)
                 Button("Reset", role: .destructive) {
-                    onReset(includeGroups ? [.settings, .groups] : .settings)
+                    var scope: WorkspaceStore.ResetScope = [.settings]
+                    if includeGroups { scope.insert(.groups) }
+                    if includeNotes { scope.insert(.notes) }
+                    if includeClipboard { scope.insert(.clipboard) }
+                    onReset(scope)
                 }
                 .keyboardShortcut(.defaultAction)
             }

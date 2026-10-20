@@ -11,11 +11,15 @@ import CoreGraphics
 enum LayoutPreset: Equatable {
     case grid
     case goldenSpiral
+    /// Areas proportional to each window's weight (T30). The weights come from
+    /// `weightedFrames`; without them the preset falls back to the grid.
+    case content
 
     var label: String {
         switch self {
         case .grid: return "Grid"
         case .goldenSpiral: return "Golden spiral"
+        case .content: return "Content"
         }
     }
 }
@@ -268,7 +272,8 @@ enum TilingEngine {
     /// The frames for laying `count` windows out with a preset. The grid leaves
     /// `gap` around and between cells; the golden spiral insets each slot by
     /// `gap/2`, exactly as the keyboard auto-layout applies it.
-    static func frames(for preset: LayoutPreset, count: Int, in area: CGRect, gap: CGFloat) -> [CGRect] {
+    static func frames(for preset: LayoutPreset, count: Int, in area: CGRect, gap: CGFloat,
+                       weights: [Double] = []) -> [CGRect] {
         switch preset {
         case .grid:
             return gridFrames(count: count, in: area, gap: gap)
@@ -276,6 +281,118 @@ enum TilingEngine {
             return goldenSpiralSlots(area: area, count: count).map {
                 $0.insetBy(dx: gap / 2, dy: gap / 2).integral
             }
+        case .content:
+            if weights.count == count {
+                return weightedFrames(weights: weights, in: area, gap: gap)
+            }
+            return gridFrames(count: count, in: area, gap: gap)
         }
+    }
+
+    /// The squarified treemap of Bruls, Huizing and van Wijk (2000): each
+    /// window gets an area proportional to its weight, while rows are kept as
+    /// square as the remaining space allows. Frames come back in the same order
+    /// as `weights`, already inset by `gap / 2` like the golden spiral.
+    ///
+    /// Pure and deterministic: the input order is the tie-breaker, so the same
+    /// weights always produce the same frames.
+    static func weightedFrames(weights: [Double], in area: CGRect, gap: CGFloat) -> [CGRect] {
+        let count = weights.count
+        guard count > 0, area.width > 1, area.height > 1 else { return [] }
+        if count == 1 {
+            return [area.insetBy(dx: gap / 2, dy: gap / 2).integral]
+        }
+
+        let clean = weights.map { value -> Double in
+            value.isFinite && value > 0 ? value : 0.001
+        }
+        let total = clean.reduce(0, +)
+        guard total > 0 else { return [] }
+        let scale = Double(area.width * area.height) / total
+
+        struct Item {
+            let index: Int
+            let area: Double
+        }
+        var items = clean.enumerated().map { Item(index: $0.offset, area: $0.element * scale) }
+        items.sort { lhs, rhs in
+            if lhs.area != rhs.area { return lhs.area > rhs.area }
+            return lhs.index < rhs.index
+        }
+
+        var frames = [CGRect](repeating: .zero, count: count)
+        var remaining = area
+
+        /// The worst aspect ratio of a row of items laid on `side`; the smaller,
+        /// the more square the row is.
+        func worst(_ row: [Int], side: Double) -> Double {
+            let areas = row.map { items[$0].area }
+            let sum = areas.reduce(0, +)
+            guard sum > 0, let largest = areas.max(), let smallest = areas.min(),
+                  smallest > 0, side > 0 else { return .infinity }
+            return max((side * side * largest) / (sum * sum),
+                       (sum * sum) / (side * side * smallest))
+        }
+
+        var start = 0
+        while start < items.count {
+            let side = Double(min(remaining.width, remaining.height))
+            guard side > 1 else {
+                for index in start..<items.count {
+                    frames[items[index].index] = remaining
+                }
+                break
+            }
+
+            var row = [start]
+            var end = start + 1
+            while end < items.count,
+                  worst(row + [end], side: side) <= worst(row, side: side) {
+                row.append(end)
+                end += 1
+            }
+
+            let rowArea = row.reduce(0.0) { $0 + items[$1].area }
+            let horizontal = remaining.width <= remaining.height
+            let thickness = min(Double(horizontal ? remaining.height : remaining.width),
+                                rowArea / side)
+            var offset: CGFloat = 0
+
+            for (position, itemIndex) in row.enumerated() {
+                let last = position == row.count - 1
+                if horizontal {
+                    let width = last
+                        ? max(0, remaining.width - offset)
+                        : CGFloat(items[itemIndex].area / thickness)
+                    frames[items[itemIndex].index] = CGRect(
+                        x: remaining.minX + offset, y: remaining.minY,
+                        width: width, height: CGFloat(thickness)
+                    )
+                    offset += width
+                } else {
+                    let height = last
+                        ? max(0, remaining.height - offset)
+                        : CGFloat(items[itemIndex].area / thickness)
+                    frames[items[itemIndex].index] = CGRect(
+                        x: remaining.minX, y: remaining.minY + offset,
+                        width: CGFloat(thickness), height: height
+                    )
+                    offset += height
+                }
+            }
+
+            if horizontal {
+                remaining = CGRect(x: remaining.minX, y: remaining.minY + CGFloat(thickness),
+                                   width: remaining.width,
+                                   height: max(0, remaining.height - CGFloat(thickness)))
+            } else {
+                remaining = CGRect(x: remaining.minX + CGFloat(thickness), y: remaining.minY,
+                                   width: max(0, remaining.width - CGFloat(thickness)),
+                                   height: remaining.height)
+            }
+            start = end
+        }
+
+        return frames.map { $0.insetBy(dx: gap / 2, dy: gap / 2).integral }
     }
 }

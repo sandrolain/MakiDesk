@@ -96,3 +96,8 @@ extension Color {
               blue: Double(value & 0xFF) / 255)
     }
 }
+
+extension Notification.Name {
+    /// The palette theme changed: panels that paint with it repaint (T20).
+    static let makiDeskThemeChanged = Notification.Name("makiDeskThemeChanged")
+}

@@ -555,6 +555,90 @@ final class GeometryTests: XCTestCase {
         }
     }
 
+    // MARK: - Content-weighted treemap (T30)
+
+    func testWeightedFramesAreProportional() {
+        let screen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let frames = TilingEngine.weightedFrames(weights: [2, 1, 1], in: screen, gap: 0)
+        XCTAssertEqual(frames.count, 3)
+
+        let total = frames.reduce(0) { $0 + $1.width * $1.height }
+        XCTAssertEqual(frames[0].width * frames[0].height / total, 0.5, accuracy: 0.02)
+        XCTAssertEqual(frames[1].width * frames[1].height / total, 0.25, accuracy: 0.02)
+        XCTAssertEqual(frames[2].width * frames[2].height / total, 0.25, accuracy: 0.02)
+
+        for frame in frames {
+            XCTAssertTrue(screen.contains(frame), "\(frame) is outside \(screen)")
+        }
+        XCTAssertFalse(frames[0].intersects(frames[1]))
+        XCTAssertFalse(frames[0].intersects(frames[2]))
+        XCTAssertFalse(frames[1].intersects(frames[2]))
+    }
+
+    func testWeightedFramesRespectTheGapAndStayInside() {
+        let screen = CGRect(x: 100, y: 50, width: 1440, height: 900)
+        let frames = TilingEngine.weightedFrames(weights: [4, 3, 2, 1], in: screen, gap: 12)
+        XCTAssertEqual(frames.count, 4)
+
+        for frame in frames {
+            XCTAssertGreaterThanOrEqual(frame.minX, screen.minX)
+            XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
+            XCTAssertLessThanOrEqual(frame.maxX, screen.maxX)
+            XCTAssertLessThanOrEqual(frame.maxY, screen.maxY)
+            XCTAssertGreaterThan(frame.width, 10)
+            XCTAssertGreaterThan(frame.height, 10)
+        }
+        for left in 0..<frames.count {
+            for right in (left + 1)..<frames.count {
+                XCTAssertFalse(frames[left].intersects(frames[right]),
+                               "\(frames[left]) overlaps \(frames[right])")
+            }
+        }
+    }
+
+    func testWeightedFramesCoverTheArea() {
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let frames = TilingEngine.weightedFrames(weights: [3, 2, 2, 1, 1], in: screen, gap: 0)
+        let covered = frames.reduce(0) { $0 + $1.width * $1.height }
+        XCTAssertEqual(covered, screen.width * screen.height,
+                       accuracy: screen.width * screen.height * 0.01)
+    }
+
+    func testWeightedFramesAreDeterministic() {
+        let screen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let first = TilingEngine.weightedFrames(weights: [5, 3, 1, 1], in: screen, gap: 10)
+        let second = TilingEngine.weightedFrames(weights: [5, 3, 1, 1], in: screen, gap: 10)
+        XCTAssertEqual(first, second)
+    }
+
+    func testWeightedFrameForOneWindowIsTheInsetArea() {
+        let screen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let frame = TilingEngine.weightedFrames(weights: [1], in: screen, gap: 12).first
+        XCTAssertEqual(frame, screen.insetBy(dx: 6, dy: 6).integral)
+    }
+
+    func testContentPresetRoutesToTheTreemap() {
+        let screen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let weighted = TilingEngine.weightedFrames(weights: [2, 1, 1], in: screen, gap: 8)
+        XCTAssertEqual(TilingEngine.frames(for: .content, count: 3, in: screen, gap: 8,
+                                           weights: [2, 1, 1]), weighted)
+        // Without weights the preset has to fall back to the grid.
+        XCTAssertEqual(TilingEngine.frames(for: .content, count: 3, in: screen, gap: 8),
+                       TilingEngine.frames(for: .grid, count: 3, in: screen, gap: 8))
+    }
+
+    func testWeightedFramesHandleTenWindows() {
+        let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let weights = (1...10).map(Double.init)
+        let frames = TilingEngine.weightedFrames(weights: weights, in: screen, gap: 8)
+        XCTAssertEqual(frames.count, 10)
+        for frame in frames {
+            XCTAssertTrue(screen.contains(frame))
+            XCTAssertGreaterThan(frame.width, 0)
+            XCTAssertGreaterThan(frame.height, 0)
+        }
+    }
+
     func testGroupGoldenSpiralInsetsTheSlotsLikeAutoLayout() {
         let frames = TilingEngine.frames(for: .goldenSpiral, count: 4, in: area, gap: 12)
         let slots = TilingEngine.goldenSpiralSlots(area: area, count: 4)

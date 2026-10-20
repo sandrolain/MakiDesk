@@ -3,7 +3,7 @@ import Foundation
 /// What kind of thing a window is showing, as far as the intelligent layout
 /// needs to know (T18). Deduced from the bundle id, the app name and the title —
 /// never from reading the content itself.
-enum WindowKind: Equatable, CaseIterable {
+enum WindowKind: String, Equatable, CaseIterable, Hashable {
     case editor
     case terminal
     case browser
@@ -11,6 +11,19 @@ enum WindowKind: Equatable, CaseIterable {
     case document
     case video
     case other
+
+    /// The label in Settings ▸ Layouts.
+    var label: String {
+        switch self {
+        case .editor: return "Editor"
+        case .terminal: return "Terminal"
+        case .browser: return "Browser"
+        case .chat: return "Chat"
+        case .document: return "Document"
+        case .video: return "Video"
+        case .other: return "Other"
+        }
+    }
 
     /// The word used in the reason, when a set is all of one kind.
     var noun: String? {
@@ -55,9 +68,19 @@ struct ContentMeasure: Equatable {
 struct LayoutAdvice: Equatable {
     var layout: LayoutPreset
     /// The window that should take the largest slot — the golden spiral's first
-    /// slot. `nil` for the grid, which has no big slot.
+    /// slot. `nil` for the grid and for the content layout, which sorts by weight.
     var leadID: String?
     var reason: String
+    /// The per-window weights, only for `.content` (T30).
+    var weights: [String: Double]?
+
+    init(layout: LayoutPreset, leadID: String?, reason: String,
+         weights: [String: Double]? = nil) {
+        self.layout = layout
+        self.leadID = leadID
+        self.reason = reason
+        self.weights = weights
+    }
 }
 
 /// Picks between the two available presets — grid and golden spiral — from the
@@ -75,7 +98,25 @@ enum LayoutAdvisor {
     /// deserves the big slot of the spiral.
     static let dominanceRatio = 1.5
 
-    static func advise(_ subjects: [LayoutSubject], measure: ContentMeasure) -> LayoutAdvice {
+    /// How unbalanced the content must be before the weighted layout is worth
+    /// it (T30): one window with twice the score of the next, or a weight ratio
+    /// of at least 1.6.
+    static let contentScoreRatio = 2.0
+    static let contentWeightRatio = 1.6
+
+    /// Starting priors for the content layout, overridable in Settings ▸ Layouts.
+    static let defaultPriors: [WindowKind: Double] = [
+        .editor: 1.4,
+        .browser: 1.2,
+        .video: 1.2,
+        .document: 1.0,
+        .terminal: 0.9,
+        .chat: 0.7,
+        .other: 1.0
+    ]
+
+    static func advise(_ subjects: [LayoutSubject], measure: ContentMeasure,
+                       priors: [WindowKind: Double] = LayoutAdvisor.defaultPriors) -> LayoutAdvice {
         let count = subjects.count
         if count == 0 {
             return LayoutAdvice(layout: .grid, leadID: nil, reason: "nothing to arrange")
@@ -86,6 +127,17 @@ enum LayoutAdvisor {
         if count == 2 {
             return LayoutAdvice(layout: .grid, leadID: nil, reason: "two windows: equal halves")
         }
+
+        // Content-weighted layout (T30): only with a measurement, at least
+        // three windows, and a clearly uneven spread of content or weights.
+        // It comes before the spiral cap: a treemap has no slot limit.
+        if measure.measured {
+            let weighted = weights(subjects, measure: measure, priors: priors)
+            if let content = contentAdvice(subjects, measure: measure, weights: weighted) {
+                return content
+            }
+        }
+
         if count > TilingEngine.maxGoldenSpiralSlots {
             return LayoutAdvice(layout: .grid, leadID: nil,
                                 reason: "\(count) windows: the golden spiral stops at "
@@ -147,6 +199,89 @@ enum LayoutAdvisor {
     /// disagree about which window has the most to look at.
     static func score(of subject: LayoutSubject, measure: ContentMeasure) -> Double {
         measure.scores[subject.id] ?? subject.area
+    }
+
+    /// Per-window weights for the content layout (T30):
+    /// `prior(app kind) × clamp(0.7 + 0.6 × score / median, 0.5 … 2.0)`.
+    /// A window without a score keeps factor 1, so without Screen Recording the
+    /// layout still follows the priors.
+    static func weights(_ subjects: [LayoutSubject], measure: ContentMeasure,
+                        priors: [WindowKind: Double] = LayoutAdvisor.defaultPriors) -> [String: Double] {
+        let measured = subjects.compactMap { subject -> Double? in
+            guard let score = measure.scores[subject.id], score > 0 else { return nil }
+            return score
+        }.sorted()
+        let median: Double? = {
+            guard measured.isEmpty == false else { return nil }
+            let middle = measured.count / 2
+            if measured.count.isMultiple(of: 2) {
+                return (measured[middle - 1] + measured[middle]) / 2
+            }
+            return measured[middle]
+        }()
+
+        var result: [String: Double] = [:]
+        for subject in subjects {
+            let prior = priors[subject.kind] ?? 1.0
+            var factor = 1.0
+            if let score = measure.scores[subject.id], score > 0, let median, median > 0 {
+                factor = min(max(0.7 + 0.6 * (score / median), 0.5), 2.0)
+            }
+            result[subject.id] = max(0.05, prior * factor)
+        }
+        return result
+    }
+
+    /// Content is worth a weighted layout only when it is clearly uneven: the
+    /// busiest window has twice the score of the runner-up, or the heaviest
+    /// weight is 1.6× the lightest. Returns nil when the normal rules should
+    /// decide instead.
+    private static func contentAdvice(_ subjects: [LayoutSubject], measure: ContentMeasure,
+                                      weights: [String: Double]) -> LayoutAdvice? {
+        let scored = subjects.compactMap { subject -> (LayoutSubject, Double)? in
+            guard let score = measure.scores[subject.id] else { return nil }
+            return (subject, score)
+        }.sorted { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 > rhs.1 }
+            return lhs.0.id < rhs.0.id
+        }
+        let scoreRatio: Double
+        if scored.count >= 2 {
+            scoreRatio = scored[0].1 / max(scored[1].1, 1)
+        } else {
+            scoreRatio = 0
+        }
+        let weightValues = subjects.compactMap { weights[$0.id] }.filter { $0 > 0 }
+        let weightRatio: Double
+        if let largest = weightValues.max(), let smallest = weightValues.min(), smallest > 0 {
+            weightRatio = largest / smallest
+        } else {
+            weightRatio = 0
+        }
+
+        let scoreImbalance = scored.count >= 2 && scoreRatio >= contentScoreRatio
+        let weightImbalance = weightValues.count >= 2 && weightRatio >= contentWeightRatio
+        guard scoreImbalance || weightImbalance else { return nil }
+
+        let reason: String
+        if scoreImbalance, let leader = scored.first, let next = scored.dropFirst().first {
+            reason = "\(leader.0.appName) holds \(number(scoreRatio))× the content of "
+                + "\(next.0.appName): area follows the content"
+        } else if let heaviest = subjects.max(by: {
+            (weights[$0.id] ?? 0) < (weights[$1.id] ?? 0)
+        }), let lightest = subjects.min(by: {
+            (weights[$0.id] ?? 0) < (weights[$1.id] ?? 0)
+        }) {
+            reason = "\(heaviest.appName) weighs \(number(weightRatio))× "
+                + "\(lightest.appName): area follows the weights"
+        } else {
+            reason = "the content is unevenly spread: area follows the weights"
+        }
+        return LayoutAdvice(layout: .content, leadID: nil, reason: reason, weights: weights)
+    }
+
+    private static func number(_ value: Double) -> String {
+        String(format: "%.1f", value)
     }
 
     static func rankedByContent(_ subjects: [LayoutSubject], measure: ContentMeasure) -> [LayoutSubject] {

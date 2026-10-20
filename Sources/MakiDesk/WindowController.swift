@@ -27,6 +27,14 @@ enum WindowController {
         /// Let the advisor choose between the two for what is in view, and offer
         /// it or apply it (T18).
         case suggestLayout
+        /// Areas proportional to the content seen in each window (T30).
+        case contentLayout
+        /// Show or hide the notes panel (T20).
+        case toggleNotes
+        /// Show or hide the clipboard history (T21).
+        case clipboardHistory
+        /// Show or hide the shelf (T31).
+        case toggleShelf
     }
 
     struct WindowInfo: Identifiable {

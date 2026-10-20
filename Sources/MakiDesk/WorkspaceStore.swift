@@ -62,6 +62,26 @@ final class WorkspaceStore {
     /// Whether the intelligent layout offers what it suggests — with the reason —
     /// instead of applying it straight away (T18).
     var layoutAsksFirst = UserDefaults.standard.object(forKey: "layoutAsksFirst") as? Bool ?? true
+    /// Per-kind priors for the content-weighted layout (T30), 0.5 … 2.0.
+    var layoutPriors: [WindowKind: Double] = WorkspaceStore.loadLayoutPriors()
+
+    /// Motion for lists and panels (T33). macOS Reduce Motion always wins.
+    var animationsEnabled = UserDefaults.standard.object(forKey: "animationsEnabled") as? Bool ?? true
+    var animationDuration = min(max(
+        UserDefaults.standard.object(forKey: "animationDuration") as? Double ?? 0.22,
+        0.08), 0.6)
+
+    var effectiveAnimationsEnabled: Bool {
+        animationsEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    /// Shake-to-open settings for the shelf (T31).
+    var shelfShakeEnabled = UserDefaults.standard.object(forKey: "shelfShakeEnabled") as? Bool ?? true
+    var shelfShakeSensitivity: ShelfShakeSensitivity = {
+        let raw = UserDefaults.standard.string(forKey: "shelfShakeSensitivity") ?? ""
+        return ShelfShakeSensitivity(rawValue: raw) ?? .medium
+    }()
+    var shelfExcludedApps: [String] = UserDefaults.standard.stringArray(forKey: "shelfExcludedApps") ?? []
     var macOSTilingEnabled = MacOSTiling.optionDragEnabled
     var setupCompleted = UserDefaults.standard.bool(forKey: "setupCompleted")
     var screenRecordingTrusted = WindowCapture.isAuthorized
@@ -342,6 +362,7 @@ final class WorkspaceStore {
     func updateTheme(_ value: String) {
         themeID = value
         UserDefaults.standard.set(value, forKey: "themeID")
+        NotificationCenter.default.post(name: .makiDeskThemeChanged, object: nil)
     }
 
     func updateOverlayScale(_ value: Double) {
@@ -403,6 +424,76 @@ final class WorkspaceStore {
         UserDefaults.standard.set(value, forKey: "layoutAsksFirst")
     }
 
+    private static func loadLayoutPriors() -> [WindowKind: Double] {
+        var priors = LayoutAdvisor.defaultPriors
+        if let stored = UserDefaults.standard.dictionary(forKey: "layoutPriors") {
+            for (key, value) in stored {
+                if let kind = WindowKind(rawValue: key), let number = value as? NSNumber {
+                    priors[kind] = min(max(number.doubleValue, 0.5), 2.0)
+                }
+            }
+        }
+        return priors
+    }
+
+    func layoutPrior(_ kind: WindowKind) -> Double {
+        layoutPriors[kind] ?? LayoutAdvisor.defaultPriors[kind] ?? 1.0
+    }
+
+    func updateAnimationsEnabled(_ value: Bool) {
+        animationsEnabled = value
+        UserDefaults.standard.set(value, forKey: "animationsEnabled")
+    }
+
+    func updateAnimationDuration(_ value: Double) {
+        let clamped = min(max(value, 0.08), 0.6)
+        animationDuration = clamped
+        UserDefaults.standard.set(clamped, forKey: "animationDuration")
+    }
+
+    func updateShelfShakeEnabled(_ value: Bool) {
+        shelfShakeEnabled = value
+        UserDefaults.standard.set(value, forKey: "shelfShakeEnabled")
+    }
+
+    func updateShelfShakeSensitivity(_ value: ShelfShakeSensitivity) {
+        shelfShakeSensitivity = value
+        UserDefaults.standard.set(value.rawValue, forKey: "shelfShakeSensitivity")
+    }
+
+    /// Comma- or newline-separated bundle identifiers.
+    func updateShelfExcludedApps(_ text: String) {
+        let values = text
+            .split(whereSeparator: { $0 == "," || $0 == ";" || $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.isEmpty == false }
+        var unique: [String] = []
+        for value in values where unique.contains(where: {
+            $0.caseInsensitiveCompare(value) == .orderedSame
+        }) == false {
+            unique.append(value)
+        }
+        shelfExcludedApps = unique
+        UserDefaults.standard.set(unique, forKey: "shelfExcludedApps")
+    }
+
+    func isShelfExcluded(bundleId: String?) -> Bool {
+        guard let bundleId else { return false }
+        return shelfExcludedApps.contains {
+            $0.caseInsensitiveCompare(bundleId) == .orderedSame
+        }
+    }
+
+    func updateLayoutPrior(_ value: Double, for kind: WindowKind) {
+        let clamped = min(max(value, 0.5), 2.0)
+        guard layoutPriors[kind] != clamped else { return }
+        layoutPriors[kind] = clamped
+        let stored = Dictionary(uniqueKeysWithValues: layoutPriors.map {
+            ($0.key.rawValue, $0.value)
+        })
+        UserDefaults.standard.set(stored, forKey: "layoutPriors")
+    }
+
     /// Turns the macOS "hold ⌥ to tile" setting on/off (writes the system
     /// preference) and mirrors it in our observable state.
     func updateMacOSTiling(_ enabled: Bool) {
@@ -426,6 +517,10 @@ final class WorkspaceStore {
         /// The window groups, with their members and the arrangement remembered
         /// for them: the user's data, not a setting.
         static let groups = ResetScope(rawValue: 1 << 1)
+        /// The notes and their drafts (T20).
+        static let notes = ResetScope(rawValue: 1 << 2)
+        /// The in-memory clipboard history (T21).
+        static let clipboard = ResetScope(rawValue: 1 << 3)
     }
 
     /// Restores the settings to their default values, going through the same
@@ -440,6 +535,12 @@ final class WorkspaceStore {
     /// otherwise the windows it had put away would stay hidden with no group
     /// left to bring them back.
     func resetToDefaults(scope: ResetScope = .settings) {
+        if scope.contains(.notes) {
+            MainActor.assumeIsolated { NotesStore.shared.deleteAllNotes() }
+        }
+        if scope.contains(.clipboard) {
+            MainActor.assumeIsolated { ClipboardHistory.shared.clear() }
+        }
         if scope.contains(.groups), !groups.isEmpty {
             leaveScene()
             sceneUndo = nil
@@ -462,6 +563,13 @@ final class WorkspaceStore {
         updateDragActivator(.option)
         updateDragEnabled(true)
         updateLayoutAsksFirst(true)
+        layoutPriors = LayoutAdvisor.defaultPriors
+        UserDefaults.standard.removeObject(forKey: "layoutPriors")
+        updateShelfShakeEnabled(true)
+        updateShelfShakeSensitivity(.medium)
+        updateShelfExcludedApps("")
+        updateAnimationsEnabled(true)
+        updateAnimationDuration(0.22)
     }
 
     /// Frame of the overlay at its configured position (for placement math).
@@ -498,6 +606,16 @@ final class WorkspaceStore {
     // MARK: - Shortcuts
 
     func applyShortcut(_ action: WindowController.ShortcutAction) {
+        // The notes panel does not touch other windows, so it must work even
+        // when Accessibility has not been granted (T20).
+        if action == .toggleNotes {
+            MainActor.assumeIsolated { NotesController.shared.toggle() }
+            return
+        }
+        if action == .toggleShelf {
+            MainActor.assumeIsolated { ShelfController.shared.toggle() }
+            return
+        }
         let trusted = AXIsProcessTrusted()
         accessibilityTrusted = trusted
         guard trusted else {
@@ -506,6 +624,9 @@ final class WorkspaceStore {
             return
         }
         switch action {
+        case .clipboardHistory:
+            MainActor.assumeIsolated { ClipboardController.shared.toggle() }
+            return
         case .switchWindows:
             WindowPalette.shared.show(store: self, mode: .browse, backwards: false)
             return
@@ -548,6 +669,9 @@ final class WorkspaceStore {
             return
         case .suggestLayout:
             suggestLayout()
+            return
+        case .contentLayout:
+            contentLayout()
             return
         default:
             break
@@ -697,7 +821,8 @@ final class WorkspaceStore {
         case .toggleFullScreen, .minimize, .switchWindows, .switchWindowsBack, .searchWindows,
              .assignToGroup, .recallGroup, .peekDesignate,
              .putAwayFront, .showEverything, .undoStep,
-             .gridLayout, .spiralLayout, .suggestLayout:
+             .gridLayout, .spiralLayout, .suggestLayout, .contentLayout,
+             .toggleNotes, .clipboardHistory, .toggleShelf:
             return nil
         }
     }
@@ -936,6 +1061,9 @@ final class WorkspaceStore {
         case .switchWindowsBack: return "switch"
         case .searchWindows: return "search"
         case .assignToGroup, .recallGroup: return "group"
+        case .toggleNotes: return "notes"
+        case .clipboardHistory: return "clipboard"
+        case .toggleShelf: return "shelf"
         case .peekDesignate: return "peek"
         case .putAwayFront: return "sent away"
         case .showEverything: return "everything back"
@@ -943,6 +1071,7 @@ final class WorkspaceStore {
         case .gridLayout: return "grid layout"
         case .spiralLayout: return "golden spiral"
         case .suggestLayout: return "suggested layout"
+        case .contentLayout: return "content layout"
         }
     }
 
@@ -2212,7 +2341,7 @@ final class WorkspaceStore {
         Task { @MainActor in
             let scores = await WindowCapture.scores(for: requests, maxDimension: 400)
             let measure = ContentMeasure(scores: scores)
-            let advice = LayoutAdvisor.advise(subjects, measure: measure)
+            let advice = LayoutAdvisor.advise(subjects, measure: measure, priors: self.layoutPriors)
             Self.logLayoutAdvice(advice, measure: measure, requested: requests.count)
             if self.layoutAsksFirst {
                 self.offer(advice, to: set)
@@ -2271,13 +2400,21 @@ final class WorkspaceStore {
         let windows = set.windows
         guard !windows.isEmpty else { return }
         let area = WindowController.axVisibleFrame(for: NSScreen.main)
-        let frames = TilingEngine.frames(for: advice.layout, count: windows.count, in: area, gap: gap)
-        guard !frames.isEmpty else { return }
         var ordered = windows
-        if let lead = advice.leadID, let index = windows.firstIndex(where: { $0.id == lead }) {
-            ordered.remove(at: index)
-            ordered.insert(windows[index], at: 0)
+        let frames: [CGRect]
+
+        if advice.layout == .content, let weights = advice.weights {
+            ordered = Self.orderedByWeight(windows, weights: weights)
+            frames = TilingEngine.frames(for: .content, count: ordered.count, in: area, gap: gap,
+                                         weights: ordered.map { weights[$0.id] ?? 1 })
+        } else {
+            if let lead = advice.leadID, let index = windows.firstIndex(where: { $0.id == lead }) {
+                ordered.remove(at: index)
+                ordered.insert(windows[index], at: 0)
+            }
+            frames = TilingEngine.frames(for: advice.layout, count: windows.count, in: area, gap: gap)
         }
+        guard !frames.isEmpty else { return }
         for (index, frame) in frames.enumerated() where index < ordered.count {
             applyFrame(frame, to: windowInfo(for: ordered[index]),
                        reason: "auto layout (\(advice.layout.label.lowercased()))")
@@ -2285,6 +2422,17 @@ final class WorkspaceStore {
         raiseToFront(ordered)
         HUDController.shared.show("\(advice.layout.label) · \(Self.layoutSummary(set))\n\(advice.reason)",
                                   symbol: "wand.and.stars")
+    }
+
+    /// Heaviest first, stable on the window id so the same set and weights give
+    /// the same frames (T30).
+    static func orderedByWeight(_ windows: [ActionableWindow],
+                                weights: [String: Double]) -> [ActionableWindow] {
+        windows.sorted { lhs, rhs in
+            let left = weights[lhs.id] ?? 0, right = weights[rhs.id] ?? 0
+            if left != right { return left > right }
+            return lhs.id < rhs.id
+        }
     }
 
     /// Everything the advisor may look at, gathered without reading the content:
@@ -2306,6 +2454,67 @@ final class WorkspaceStore {
     private static func logLayoutAdvice(_ advice: LayoutAdvice, measure: ContentMeasure, requested: Int) {
         NSLog("MakiDesk layout advice (%d/%d measured): %@ — %@",
               measure.scores.count, requested, advice.layout.label, advice.reason)
+    }
+
+    // MARK: - Content-weighted layout (T30)
+
+    /// Lays the selected windows (or every window in view) out with areas
+    /// proportional to their weight: the app kind's prior times a factor from
+    /// the same content measure the golden spiral uses. Needs three windows;
+    /// without Screen Recording it still works, from the priors alone.
+    func contentLayout(selection: [ActionableWindow] = []) {
+        clearPendingLayout()
+        let set = selection.isEmpty ? arrangeableSet() : ArrangeableSet(windows: selection)
+        let targets = set.windows
+        guard targets.count >= 3 else {
+            status = "Content layout needs at least 3 windows"
+            HUDController.shared.show("Content needs at least 3 windows",
+                                      symbol: "rectangle.3.group")
+            return
+        }
+        let area = WindowController.axVisibleFrame(for: NSScreen.main)
+        let requests = targets.compactMap { window -> WindowCapture.Request? in
+            guard let id = window.windowID else { return nil }
+            return WindowCapture.Request(key: window.id, windowID: id)
+        }
+        let subjects = targets.map { layoutSubject(for: $0) }
+
+        Task { @MainActor in
+            let scores = await WindowCapture.scores(for: requests, maxDimension: 400)
+            let measure = ContentMeasure(scores: scores)
+            let weights = LayoutAdvisor.weights(subjects, measure: measure, priors: self.layoutPriors)
+            let ordered = Self.orderedByWeight(targets, weights: weights)
+            let frames = TilingEngine.frames(for: .content, count: ordered.count, in: area, gap: self.gap,
+                                             weights: ordered.map { weights[$0.id] ?? 1 })
+            guard frames.count == ordered.count else { return }
+            for (index, window) in ordered.enumerated() {
+                self.applyFrame(frames[index], to: self.windowInfo(for: window),
+                                reason: "content layout")
+            }
+            if !selection.isEmpty { self.raiseToFront(ordered) }
+            self.status = "Content layout: \(ordered.count) windows"
+            HUDController.shared.show("Content · \(Self.layoutSummary(set))",
+                                      symbol: "rectangle.3.group")
+            Self.logContentWeights(ordered, weights: weights, scores: scores,
+                                   requested: requests.count)
+        }
+    }
+
+    /// Writes the weights to the unified log, so a treemap can be checked
+    /// against what is actually on screen:
+    ///
+    ///     log show --last 10m --predicate 'process == "MakiDesk"'
+    private static func logContentWeights(_ windows: [ActionableWindow],
+                                          weights: [String: Double],
+                                          scores: [String: Double],
+                                          requested: Int) {
+        let parts = windows.enumerated().map { index, window -> String in
+            let weight = weights[window.id].map { String(format: "%.2f", $0) } ?? "-"
+            let score = scores[window.id].map { String(format: "%.1f", $0) } ?? "no score"
+            return "#\(index + 1) \(window.appName) w=\(weight) s=\(score)"
+        }
+        NSLog("MakiDesk content weights (%d/%d measured): %@",
+              scores.count, requested, parts.joined(separator: " | "))
     }
 
     // MARK: - Direct manipulation (menu)

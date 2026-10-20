@@ -57,9 +57,16 @@ final class ShortcutManager {
         .init(key: kVK_ANSI_G, modifiers: ctrlOpt, action: .gridLayout),
         .init(key: kVK_ANSI_S, modifiers: ctrlOpt, action: .spiralLayout),
         .init(key: kVK_ANSI_A, modifiers: ctrlOpt, action: .suggestLayout),
+        .init(key: kVK_ANSI_W, modifiers: ctrlOpt, action: .contentLayout),
         .init(key: kVK_Tab, modifiers: optionKey, action: .switchWindows),
         .init(key: kVK_Tab, modifiers: optionKey | shiftKey, action: .switchWindowsBack),
         .init(key: kVK_Space, modifiers: optionKey, action: .searchWindows),
+        // Notes (T20): a panel, not a window, and no Accessibility needed.
+        .init(key: kVK_ANSI_N, modifiers: optionKey, action: .toggleNotes),
+        // Clipboard history (T21): pasting into the front app needs Accessibility.
+        .init(key: kVK_ANSI_V, modifiers: optionKey, action: .clipboardHistory),
+        // Shelf (T31): collecting does not need Accessibility.
+        .init(key: kVK_ANSI_D, modifiers: ctrlOpt, action: .toggleShelf),
     ]
 
     /// Group shortcuts (1…9): ⌃⌥⌘N adds/removes the frontmost window, ⌃⌥N

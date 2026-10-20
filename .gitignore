@@ -6,7 +6,6 @@ DerivedData/
 *.xcuserstate
 refs
 dist
-docs
 scripts
 .vscode/launch.json
 /.agents

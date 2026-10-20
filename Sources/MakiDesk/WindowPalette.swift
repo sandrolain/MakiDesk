@@ -58,7 +58,7 @@ struct PaletteMetrics {
 
 /// The layout actions offered in the palette footer (T14), plus Focus (T17):
 /// bring the ticked windows into use and put the rest away.
-enum PaletteLayoutCommand { case tile, goldenSpiral, auto, focus }
+enum PaletteLayoutCommand { case tile, goldenSpiral, auto, content, focus }
 
 /// Pure geometry for the palette panel: same inputs, same layout, so the
 /// sizing can be tested without a screen (T13).
@@ -244,6 +244,8 @@ final class PaletteModel {
     var selection = 0
     var mode: PaletteMode = .browse
     var theme: PaletteTheme = PaletteTheme.all[0]
+    var animationsEnabled = true
+    var animationDuration = 0.22
     var showPreview = true
     var columns = 3
     var opacity: Double = 0.9
@@ -311,6 +313,8 @@ final class WindowPalette {
     /// change is visible immediately.
     func applySettings(from store: WorkspaceStore) {
         model.theme = store.theme
+        model.animationsEnabled = store.effectiveAnimationsEnabled
+        model.animationDuration = store.animationDuration
         model.showPreview = store.showPreview
         model.opacity = store.paletteOpacity
         model.tintedCards = store.paletteTintedCards
@@ -321,6 +325,8 @@ final class WindowPalette {
     func show(store: WorkspaceStore, mode: PaletteMode, backwards: Bool = false) {
         self.store = store
         model.theme = store.theme
+        model.animationsEnabled = store.effectiveAnimationsEnabled
+        model.animationDuration = store.animationDuration
         model.showPreview = store.showPreview
         model.opacity = store.paletteOpacity
         model.tintedCards = store.paletteTintedCards
@@ -727,6 +733,8 @@ final class WindowPalette {
             store.autoLayout(selection: selected)
         case .auto:
             store.suggestLayout(selection: selected)
+        case .content:
+            store.contentLayout(selection: selected)
         case .focus:
             store.focus(on: selected)
         }
@@ -1099,7 +1107,13 @@ struct PaletteView: View {
                     .onChange(of: model.selection) { _, _ in
                         let list = model.filtered
                         if model.selection < list.count {
-                            withAnimation { proxy.scrollTo(list[model.selection].id, anchor: .center) }
+                            if model.animationsEnabled {
+                                withAnimation(.easeOut(duration: model.animationDuration)) {
+                                    proxy.scrollTo(list[model.selection].id, anchor: .center)
+                                }
+                            } else {
+                                proxy.scrollTo(list[model.selection].id, anchor: .center)
+                            }
                         }
                     }
                 }
@@ -1264,6 +1278,7 @@ struct PaletteView: View {
             }
             commandButton("Tile", symbol: "square.grid.3x3") { onLayoutCommand(.tile) }
             commandButton("Golden", symbol: "circle.hexagongrid") { onLayoutCommand(.goldenSpiral) }
+            commandButton("Content", symbol: "rectangle.3.group") { onLayoutCommand(.content) }
             commandButton("Auto", symbol: "wand.and.stars") { onLayoutCommand(.auto) }
             commandButton("Focus", symbol: "eye") { onLayoutCommand(.focus) }
         }

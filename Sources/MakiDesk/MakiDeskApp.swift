@@ -10,19 +10,55 @@ struct MakiDeskApp: App {
         return WorkspaceStore.shared
     }()
 
+    @NSApplicationDelegateAdaptor(MakiDeskAppDelegate.self) private var appDelegate
+
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
         WorkspaceStore.shared.start()
         WindowDrag.shared.start()
+        ClipboardHistory.shared.start()
+        ShelfController.shared.start()
+
     }
 
-    private func actionButton(
+    /// A menu item whose shortcut text sits after the title. The menu has no
+    /// key equivalents of its own: the global Carbon hot key is the trigger,
+    /// so the text is a reminder, not a second handler.
+    private func menuAction(
         _ title: String,
         _ keys: String,
-        _ action: WindowController.ShortcutAction
+        _ action: WindowController.ShortcutAction,
+        icon: String? = nil
     ) -> some View {
-        Button("\(title)    \(keys)") {
+        Button {
             store.applyShortcut(action)
+        } label: {
+            if let icon {
+                Label("\(title)    \(keys)", systemImage: icon)
+            } else {
+                Text("\(title)    \(keys)")
+            }
+        }
+    }
+
+    private func menuButton(
+        _ title: String,
+        keys: String? = nil,
+        icon: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            if let icon {
+                if let keys {
+                    Label("\(title)    \(keys)", systemImage: icon)
+                } else {
+                    Label(title, systemImage: icon)
+                }
+            } else if let keys {
+                Text("\(title)    \(keys)")
+            } else {
+                Text(title)
+            }
         }
     }
 
@@ -31,126 +67,163 @@ struct MakiDeskApp: App {
             Text(store.status)
                 .font(.caption)
             Divider()
-            Menu("Resize (φ · ½ · φ⁻¹)") {
-                actionButton("Left column", "⌃⌥←", .leftHalf)
-                actionButton("Right column", "⌃⌥→", .rightHalf)
-                actionButton("Top row", "⌃⌥↑", .topHalf)
-                actionButton("Bottom row", "⌃⌥↓", .bottomHalf)
+
+            // The four panels are one click away; everything else lives in a
+            // menu with a single level of nesting.
+            menuButton("Search Windows", keys: "⌥Space", icon: "magnifyingglass") {
+                store.applyShortcut(.searchWindows)
             }
-            Menu("Quarters") {
-                actionButton("Top Left", "⌃⌥U", .topLeft)
-                actionButton("Top Right", "⌃⌥I", .topRight)
-                actionButton("Bottom Left", "⌃⌥J", .bottomLeft)
-                actionButton("Bottom Right", "⌃⌥K", .bottomRight)
+            menuButton("Notes", keys: "⌥N", icon: "note.text") {
+                NotesController.shared.show()
             }
-            Menu("Other") {
-                actionButton("Center / Full / Golden", "⌃⌥↩", .centerCycle)
-                actionButton("Center", "⌃⌥C", .center)
-                actionButton("Golden Ratio (Phi)", "⌃⌥P", .phi)
-                actionButton("Toggle Full Screen", "⌃⌥F", .toggleFullScreen)
-                actionButton("Minimize", "⌃⌥M", .minimize)
+            menuButton("Clipboard History", keys: "⌥V", icon: "doc.on.clipboard") {
+                ClipboardController.shared.toggle()
             }
-            Menu("Windows") {
-                actionButton("Window Switcher", "⌥⇥", .switchWindows)
-                actionButton("Search Windows", "⌥Space", .searchWindows)
+            menuButton("Shelf", keys: "⌃⌥D", icon: "tray.and.arrow.down") {
+                ShelfController.shared.toggle()
             }
-            Menu("Peek") {
-                Button("Designate Front Window    ⌃⌥⌘P") {
-                    store.togglePeekDesignation()
-                }
-                Button("Clear Peek (bring the window back)") {
-                    store.clearPeek()
-                }
-                .disabled(store.peekName == nil)
+
+            Divider()
+
+            Menu {
+                menuAction("Left column", "⌃⌥←", .leftHalf, icon: "rectangle.lefthalf.inset.filled")
+                menuAction("Right column", "⌃⌥→", .rightHalf, icon: "rectangle.righthalf.inset.filled")
+                menuAction("Top row", "⌃⌥↑", .topHalf, icon: "rectangle.tophalf.inset.filled")
+                menuAction("Bottom row", "⌃⌥↓", .bottomHalf, icon: "rectangle.bottomhalf.inset.filled")
                 Divider()
-                // The peek itself is a hold, not a menu action: this line only
-                // says what the keys do and to which window (T16). Designating
-                // puts the window away; the hold is the only way to see it.
-                Text(store.peekName.map { "\($0) is put away · hold ⌃⌥H to peek at it" }
-                     ?? "Hold ⌃⌥H to peek · nothing designated")
+                menuAction("Top Left", "⌃⌥U", .topLeft)
+                menuAction("Top Right", "⌃⌥I", .topRight)
+                menuAction("Bottom Left", "⌃⌥J", .bottomLeft)
+                menuAction("Bottom Right", "⌃⌥K", .bottomRight)
+                Divider()
+                menuAction("Center / Full / Golden", "⌃⌥↩", .centerCycle)
+                menuAction("Center", "⌃⌥C", .center)
+                menuAction("Golden Ratio (Phi)", "⌃⌥P", .phi)
+                menuAction("Toggle Full Screen", "⌃⌥F", .toggleFullScreen)
+                menuAction("Minimize", "⌃⌥M", .minimize)
+            } label: {
+                Label("Window", systemImage: "macwindow")
             }
-            Menu("Groups") {
+
+            Menu {
+                menuAction("Grid — every window in view", "⌃⌥G", .gridLayout)
+                menuAction("Golden spiral — every window in view", "⌃⌥S", .spiralLayout)
+                menuAction("Suggested layout", "⌃⌥A", .suggestLayout)
+                menuAction("Content-weighted", "⌃⌥W", .contentLayout,
+                           icon: "rectangle.3.group")
+                Divider()
+                menuButton("Grid — selected windows") {
+                    store.tileOnScreen(gap: store.gap, selection: store.lastLayoutSelection)
+                }
+                .disabled(store.lastLayoutSelection.isEmpty)
+                menuButton("Golden spiral — selected windows") {
+                    store.autoLayout(selection: store.lastLayoutSelection)
+                }
+                .disabled(store.lastLayoutSelection.isEmpty)
+                menuButton("Suggested layout — selected windows") {
+                    store.suggestLayout(selection: store.lastLayoutSelection)
+                }
+                .disabled(store.lastLayoutSelection.isEmpty)
+                menuButton("Content — selected windows") {
+                    store.contentLayout(selection: store.lastLayoutSelection)
+                }
+                .disabled(store.lastLayoutSelection.count < 3)
+                if let advice = store.pendingLayout {
+                    Divider()
+                    menuButton("Apply Suggested Layout (\(advice.layout.label))") {
+                        store.acceptPendingLayout()
+                    }
+                    menuButton("Dismiss Suggested Layout") {
+                        store.dismissPendingLayout()
+                    }
+                }
+            } label: {
+                Label("Layout", systemImage: "square.grid.2x2")
+            }
+
+            Menu {
+                if let scene = store.sceneTitle {
+                    Text("In use: \(scene)")
+                    if store.activeGroupSlot != nil {
+                        menuButton("Leave Group") { store.leaveGroup() }
+                    }
+                    Divider()
+                }
+                // One flat list to recall a group; three management submenus
+                // replace the nine nested ones.
                 ForEach(1...9, id: \.self) { slot in
-                    Menu(store.groupMenuLabel(slot)) {
-                        Button("Recall    ⌃⌥\(slot)") {
-                            store.recallGroup(slot: slot)
-                        }
-                        .disabled(store.groupIsEmpty(slot))
-                        // The moment the windows this group put away come back
-                        // (T15); only offered for the group that is on screen.
-                        Button("Leave group") {
-                            store.leaveGroup()
-                        }
-                        .disabled(store.activeGroupSlot != slot)
-                        Button("Add / Remove Front Window    ⌃⌥⌘\(slot)") {
+                    menuButton(store.groupMenuLabel(slot), keys: "⌃⌥\(slot)") {
+                        store.recallGroup(slot: slot)
+                    }
+                    .disabled(store.groupIsEmpty(slot))
+                }
+                Divider()
+                Menu("Add Front Window to Group") {
+                    ForEach(1...9, id: \.self) { slot in
+                        menuButton(store.groupMenuLabel(slot), keys: "⌃⌥⌘\(slot)") {
                             store.toggleGroupMembership(slot: slot)
                         }
-                        Divider()
-                        Button("Rename…") {
+                    }
+                }
+                Menu("Rename Group…") {
+                    ForEach(1...9, id: \.self) { slot in
+                        menuButton(store.groupMenuLabel(slot)) {
                             GroupRenamePrompt.present(slot: slot, store: store)
                         }
-                        Button("Empty Group") {
+                    }
+                }
+                Menu("Empty Group") {
+                    ForEach(1...9, id: \.self) { slot in
+                        menuButton(store.groupMenuLabel(slot)) {
                             store.clearGroup(slot: slot)
                         }
                         .disabled(store.groupIsEmpty(slot))
                     }
                 }
+            } label: {
+                Label("Groups", systemImage: "rectangle.3.group")
             }
-            Menu("Focus") {
-                // What is in use now, whatever put it there (T17): a group, or
-                // a set assembled from the switcher.
+
+            Menu {
                 Text(store.sceneTitle.map { "In use: \($0)" } ?? "Nothing in use")
                 Divider()
-                Button("Focus Selected Windows") {
+                menuButton("Focus Selected Windows") {
                     store.focus(on: store.lastLayoutSelection)
                 }
                 .disabled(store.lastLayoutSelection.isEmpty)
-                Button("Send Front Window Away    ⌃⌥V") {
-                    store.putAwayFrontWindow()
-                }
-                .disabled(store.sceneTitle == nil)
+                menuAction("Send Front Window Away", "⌃⌥V", .putAwayFront)
                 Divider()
-                Button("Everything Back    ⌃⌥⇧A") {
-                    store.showEverything()
-                }
-                .disabled(store.sceneTitle == nil)
-                Button("Undo One Step    ⌃⌥Z") {
-                    store.undoScene()
-                }
+                menuAction("Everything Back", "⌃⌥⇧A", .showEverything)
+                menuAction("Undo One Step", "⌃⌥Z", .undoStep)
+            } label: {
+                Label("Focus", systemImage: "scope")
             }
-            Menu("Layout") {
-                Button("Grid — every window in view    ⌃⌥G") { store.tileOnScreen(gap: store.gap) }
-                Button("Golden spiral — every window in view    ⌃⌥S") { store.autoLayout() }
-                Button("Suggested layout    ⌃⌥A") { store.suggestLayout() }
+
+            Menu {
+                menuButton("Designate Front Window", keys: "⌃⌥⌘P") {
+                    store.togglePeekDesignation()
+                }
+                menuButton("Clear Peek (bring the window back)") {
+                    store.clearPeek()
+                }
+                .disabled(store.peekName == nil)
                 Divider()
-                Button("Grid — selected windows") {
-                    store.tileOnScreen(gap: store.gap, selection: store.lastLayoutSelection)
-                }
-                .disabled(store.lastLayoutSelection.isEmpty)
-                Button("Golden spiral — selected windows") {
-                    store.autoLayout(selection: store.lastLayoutSelection)
-                }
-                .disabled(store.lastLayoutSelection.isEmpty)
-                Button("Suggested layout — selected windows") {
-                    store.suggestLayout(selection: store.lastLayoutSelection)
-                }
-                .disabled(store.lastLayoutSelection.isEmpty)
-                if let advice = store.pendingLayout {
-                    Divider()
-                    Button("Apply Suggested Layout (\(advice.layout.label))") {
-                        store.acceptPendingLayout()
-                    }
-                    Button("Dismiss Suggested Layout") {
-                        store.dismissPendingLayout()
-                    }
-                }
+                Text(store.peekName.map { "\($0) is put away · hold ⌃⌥H to peek at it" }
+                     ?? "Hold ⌃⌥H to peek · nothing designated")
+            } label: {
+                Label("Peek", systemImage: "eye")
             }
+
             Divider()
+
+            menuButton("Keyboard Shortcuts…", icon: "keyboard") {
+                ShortcutsWindowController.shared.show()
+            }
             SettingsLink {
-                Text("Settings")
+                Label("Settings", systemImage: "gearshape")
             }
             Divider()
-            Button("Quit MakiDesk") {
+            menuButton("Quit MakiDesk", icon: "power") {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
@@ -194,4 +267,16 @@ private struct SettingsOpenerBridge: ViewModifier {
 extension Notification.Name {
     /// Requests that the Settings window be opened (see `SettingsOpenerBridge`).
     static let makiDeskOpenSettings = Notification.Name("makiDeskOpenSettings")
+}
+
+/// Notes are written while the user types, but the session (tabs, cursors,
+/// window frame) and the clean-close marker are flushed here, together with
+/// any debounce still in flight (T20).
+final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            NotesStore.shared.flushIfNeeded(cleanClose: true)
+            ShelfController.shared.shutdown()
+        }
+    }
 }
