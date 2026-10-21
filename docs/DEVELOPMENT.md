@@ -92,7 +92,7 @@ swift test
 
 The suite is pure where possible (geometry, advisor, groups, shake, catalogue,
 focus-border placement) and uses temporary directories/pasteboards for
-persistence and clipboard. It currently has **231 tests**. Add cases next to
+persistence and clipboard. It currently has **232 tests**. Add cases next to
 the existing ones; keep the engines free of AppKit so they stay testable.
 
 ## Project layout

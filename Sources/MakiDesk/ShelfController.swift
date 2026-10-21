@@ -1317,6 +1317,11 @@ final class ShelfPanel: NSPanel {
 /// The only surface that moves the panel: the header. The footer must never
 /// drag the window, or “Drag all out” would move the shelf at the same time.
 final class ShelfHeaderView: NSView {
+    /// A shake-opened shelf is visible without owning the keyboard. Without
+    /// this, the first click only activates the window and is swallowed, so the
+    /// user has to click once and drag a second time.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func mouseDown(with event: NSEvent) {
         window?.performDrag(with: event)
     }
