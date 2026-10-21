@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/sandrolain/MakiDesk/releases"><img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-1e1e2e?style=flat-square&logo=apple&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-cba6f7?style=flat-square"></a>
-  <img alt="198 tests" src="https://img.shields.io/badge/tests-230%20passing-a6e3a1?style=flat-square">
+  <img alt="198 tests" src="https://img.shields.io/badge/tests-231%20passing-a6e3a1?style=flat-square">
   <img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-a6e3a1?style=flat-square">
 </p>
 

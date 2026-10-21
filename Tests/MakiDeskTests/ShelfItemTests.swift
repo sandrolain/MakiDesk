@@ -81,4 +81,20 @@ final class ShelfItemTests: XCTestCase {
         XCTAssertEqual(Array(png.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
         XCTAssertEqual(writer.pasteboardPropertyList(forType: .png) as? Data, png)
     }
+
+    func testDraggingFilesAllowsMoveButTextAndImagesStayCopyOnly() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("shelf-drag-\(UUID().uuidString).txt")
+        try "hello".write(to: url, atomically: true, encoding: .utf8)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+
+        let file = ShelfItem.file(url)
+        let operations = ShelfController.dragOperations(for: [file])
+        XCTAssertTrue(operations.contains(.copy))
+        XCTAssertTrue(operations.contains(.move))
+
+        XCTAssertFalse(ShelfController.dragOperations(for: [ShelfItem.text("hello")]).contains(.move))
+        XCTAssertFalse(ShelfController.dragOperations(for: [file, ShelfItem.text("hello")]).contains(.move))
+        XCTAssertFalse(ShelfController.dragOperations(for: []).contains(.move))
+    }
 }

@@ -159,7 +159,7 @@ grid, spiral, treemap), the advisor and weights, group/scene logic, window
 identity, content scores, the palette geometry, notes persistence and external
 drafts, grammar compilation, clipboard history, shelf shake and shelf item
 behaviour, focus-border placement, and the shortcut catalogue. At the time of
-writing: **230 tests**.
+writing: **231 tests**.
 
 ## Design notes
 

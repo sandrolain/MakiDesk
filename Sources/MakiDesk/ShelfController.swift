@@ -205,6 +205,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     private var session = UUID()
     private var openedByShake = false
     private var dropReceived = false
+    private var draggingItemIDs: [UUID] = []
     private let focusReturn = PanelFocusReturn()
 
     private var staging: URL?
@@ -918,6 +919,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let items = available
         let point = view.convert(event.locationInWindow, from: nil)
         var dragging: [NSDraggingItem] = []
+        var draggingIDs: [UUID] = []
         for (index, item) in items.enumerated() {
             guard let writer = item.pasteboardWriter else { continue }
             let draggingItem = NSDraggingItem(pasteboardWriter: writer)
@@ -926,15 +928,41 @@ final class ShelfController: NSObject, NSWindowDelegate,
                                width: 44, height: 44)
             draggingItem.setDraggingFrame(frame, contents: item.icon)
             dragging.append(draggingItem)
+            draggingIDs.append(item.id)
         }
         guard dragging.isEmpty == false else { return }
+        draggingItemIDs = draggingIDs
         let session = view.beginDraggingSession(with: dragging, event: event, source: self)
         session.animatesToStartingPositionsOnCancelOrFail = true
     }
 
+    /// Shelf files are references to the user's own items, so a destination may
+    /// move them: Finder then removes the original on the same volume. Text,
+    /// links and images have no source file to move, so they stay copy-only.
+    static func dragOperations(for items: [ShelfItem]) -> NSDragOperation {
+        guard items.isEmpty == false else { return .copy }
+        let allFiles = items.allSatisfy { item in
+            if case .file = item.content { return true }
+            return false
+        }
+        return allFiles ? [.copy, .move] : .copy
+    }
+
     func draggingSession(_ session: NSDraggingSession,
                          sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        .copy
+        let dragged = draggingItemIDs.compactMap { id in items.first(where: { $0.id == id }) }
+        return Self.dragOperations(for: dragged)
+    }
+
+    func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint,
+                         operation: NSDragOperation) {
+        let draggedIDs = draggingItemIDs
+        draggingItemIDs.removeAll()
+        // A moved file no longer lives at the URL the shelf references, so the
+        // entry would only linger as unavailable. Removed staged copies are
+        // already gone from the staging directory.
+        guard operation.contains(.move) else { return }
+        for id in draggedIDs { remove(itemID: id) }
     }
 
     // MARK: - Menu and folders

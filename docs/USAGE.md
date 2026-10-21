@@ -261,7 +261,10 @@ it too (Settings ▸ Panels). It holds files, folders, links, text and images:
 - **Quick Look** with `Space` or a double-click (files and links directly; text
   and images through a readable temporary preview).
 - **Drag all out** (the handle) or drag a row/selection into Finder or any app.
-  A selected row can be dragged alone; `⌘A` selects every item.
+  A selected row can be dragged alone; `⌘A` selects every item. Dragging a file
+  lets the destination move it — Finder moves the original on the same volume
+  and the row leaves the shelf; hold Option (or drag to another volume) to copy
+  it and keep the row. Text, links and images are always copied.
 - **Save…** and the context menu copy or move everything to a folder. Text
   becomes a `.txt`, an image a `.png`, a link a `.webloc`; files keep their
   names, with a numeric suffix if needed.
