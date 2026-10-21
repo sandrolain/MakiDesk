@@ -483,6 +483,17 @@ enum WindowController {
         CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
+    /// Live window-server bounds for a window id, in AX (top-left) coordinates.
+    /// Unlike an AX read this is cheap and never stalls, so a live drag can be
+    /// followed at pointer rate instead of waiting for coalesced AX events.
+    static func cgFrame(windowNumber: CGWindowID) -> CGRect? {
+        guard let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, windowNumber) as? [[String: Any]],
+              let bounds = info.first?[kCGWindowBounds as String] as? [String: CGFloat],
+              let x = bounds["X"], let y = bounds["Y"],
+              let width = bounds["Width"], let height = bounds["Height"] else { return nil }
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
     static func axVisibleFrame(for screen: NSScreen?) -> CGRect {
         guard let screen else { return CGRect(x: 0, y: 0, width: 1440, height: 900) }
         return flip(screen.visibleFrame)

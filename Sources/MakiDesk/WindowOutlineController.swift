@@ -16,9 +16,17 @@ final class WindowOutlineController {
     private var outlineView: OutlineView?
     private var targetElement: AXUIElement?
     private weak var targetWindow: NSWindow?
+    private var targetWindowID: CGWindowID?
     private var targetLevel: NSWindow.Level = .floating
     private var observers: [NSObjectProtocol] = []
     private var refreshAfterSwitch: DispatchWorkItem?
+    private var settleRefreshWork: DispatchWorkItem?
+    private var settleChecksLeft = 0
+    private var pressMonitor: Any?
+    private var followTimer: Timer?
+    private enum FollowTarget { case ownWindow; case externalWindow(CGWindowID) }
+    private var followTarget: FollowTarget?
+    private var followLastFrame = CGRect.zero
     private var started = false
 
     private init() {}
@@ -27,6 +35,7 @@ final class WindowOutlineController {
         guard !started else { return }
         started = true
         observeSystem()
+        updatePressMonitor()
         applySettings()
         // At launch the activation notifications can arrive before the app's
         // focused window is readable; the border then has no target to follow.
@@ -35,6 +44,13 @@ final class WindowOutlineController {
 
     /// Reads the focused window and moves or hides the border.
     func refresh(frontmost: WindowController.Frontmost? = nil) {
+        refresh(frontmost: frontmost, settle: false)
+    }
+
+    /// `settle` marks a delayed re-read: it must not schedule another one.
+    private func refresh(frontmost: WindowController.Frontmost?, settle: Bool) {
+        // A new track supersedes any drag-follow for the previous target.
+        endFollow()
         let store = WorkspaceStore.shared
         guard store.focusBorderEnabled, AXIsProcessTrusted() else {
             hide()
@@ -50,6 +66,7 @@ final class WindowOutlineController {
             }
             targetElement = nil
             targetWindow = window
+            targetWindowID = CGWindowID(exactly: window.windowNumber)
             targetLevel = borderLevel(for: window)
             present(windowFrame: window.frame, level: targetLevel)
             return
@@ -68,8 +85,10 @@ final class WindowOutlineController {
                 return
             }
             targetElement = info.element
+            targetWindowID = info.windowID
             targetLevel = windowLevel(for: info.windowID)
             present(windowFrame: WindowController.flip(info.frame), level: targetLevel)
+            if !settle { scheduleSettleRefresh() }
         case .desktop, .none:
             hide()
         }
@@ -81,6 +100,14 @@ final class WindowOutlineController {
             hide()
             return
         }
+        // The follower presents its frames on its own timer; geometry events
+        // must add nothing to it.
+        if followTimer != nil { return }
+        // A geometry event while the pointer is down is a live drag or resize.
+        // AX move notifications are coalesced, so the border appears late and
+        // in jumps; switch to the polling follower, which reads live
+        // window-server bounds and stops when the button is released.
+        if NSEvent.pressedMouseButtons & 1 != 0, beginDragFollow() { return }
         if let window = targetWindow {
             guard NSApplication.shared.isActive,
                   window.isVisible,
@@ -112,8 +139,137 @@ final class WindowOutlineController {
         present(windowFrame: WindowController.flip(frame), level: targetLevel)
     }
 
+    /// A click can focus another window of the same app without any
+    /// activation notification, and the AX focus change can arrive late or not
+    /// at all. A global mouse-up check is an event-driven safety net that does
+    /// not depend on the app posting anything.
+    private func updatePressMonitor() {
+        let shouldObserve = WorkspaceStore.shared.focusBorderEnabled && AXIsProcessTrusted()
+        if shouldObserve {
+            guard pressMonitor == nil else { return }
+            pressMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+                DispatchQueue.main.async { self?.scheduleSettleRefresh() }
+            }
+        } else if let monitor = pressMonitor {
+            NSEvent.removeMonitor(monitor)
+            pressMonitor = nil
+        }
+    }
+
+    // MARK: - Focus settle
+
+    /// Some apps publish their AX focus a beat after posting the change (Finder
+    /// among them). The first read can still name the previous window, which is
+    /// why the ring sometimes stayed behind after switching windows inside one
+    /// app. Two cheap re-reads land on the window the user actually picked;
+    /// any newer event cancels and restarts them.
+    private func scheduleSettleRefresh() {
+        guard WorkspaceStore.shared.focusBorderEnabled, AXIsProcessTrusted() else { return }
+        settleChecksLeft = 2
+        scheduleSettleTick(after: 0.12)
+    }
+
+    private func scheduleSettleTick(after delay: TimeInterval) {
+        guard settleChecksLeft > 0,
+              WorkspaceStore.shared.focusBorderEnabled,
+              AXIsProcessTrusted() else { return }
+        settleChecksLeft -= 1
+        settleRefreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.settleRefreshWork = nil
+            self.refresh(frontmost: nil, settle: true)
+            if self.settleChecksLeft > 0 { self.scheduleSettleTick(after: 0.2) }
+        }
+        settleRefreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    // MARK: - Live drag follow
+
+    /// Rounds the drag out: the ring then resyncs from the authoritative frame
+    /// path once the pointer has been released.
+    private func beginDragFollow() -> Bool {
+        let target: FollowTarget
+        if targetWindow != nil {
+            target = .ownWindow
+        } else if let element = targetElement, let windowID = targetWindowID {
+            guard !WindowController.isFullScreen(element),
+                  !WindowController.isMinimized(element) else { return false }
+            target = .externalWindow(windowID)
+        } else {
+            return false
+        }
+        followTarget = target
+        followLastFrame = .zero
+        // `.common` so it keeps running inside a native drag's tracking loop.
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.followTick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        followTimer = timer
+        return true
+    }
+
+    /// While the pointer drags the tracked window, the ring reads cheap live
+    /// window-server bounds every tick — no AX read, no event-lag chase. Ended
+    /// when the button is released or the target goes away.
+    private func followTick() {
+        guard let target = followTarget,
+              WorkspaceStore.shared.focusBorderEnabled,
+              AXIsProcessTrusted() else {
+            endFollow()
+            return
+        }
+        // The press owns the gesture: when the button is up, the pointer is no
+        // longer dragging (or already released without a mouseUp we could see).
+        guard NSEvent.pressedMouseButtons & 1 != 0 else {
+            endFollow()
+            refreshGeometry()
+            return
+        }
+        let frame: CGRect
+        switch target {
+        case .ownWindow:
+            guard let window = targetWindow,
+                  window.isVisible,
+                  !window.isMiniaturized else {
+                endFollow()
+                refresh()
+                return
+            }
+            frame = window.frame
+        case let .externalWindow(windowID):
+            guard let bounds = WindowController.cgFrame(windowNumber: windowID),
+                  bounds.width > 1, bounds.height > 1 else {
+                endFollow()
+                refresh()
+                return
+            }
+            frame = WindowController.flip(bounds)
+        }
+        guard frame != followLastFrame else { return }
+        // Ignore sub-point jitter so the ring does not shimmer between ticks.
+        let previous = followLastFrame
+        guard previous == .zero
+            || abs(frame.minX - previous.minX) > 0.5
+            || abs(frame.minY - previous.minY) > 0.5
+            || abs(frame.width - previous.width) > 0.5
+            || abs(frame.height - previous.height) > 0.5 else { return }
+        followLastFrame = frame
+        present(windowFrame: frame, level: targetLevel)
+    }
+
+    private func endFollow() {
+        followTimer?.invalidate()
+        followTimer = nil
+        followTarget = nil
+        followLastFrame = .zero
+    }
+
     /// Applies the current settings, then redraws the border.
     func applySettings() {
+        updatePressMonitor()
         let store = WorkspaceStore.shared
         guard store.focusBorderEnabled, AXIsProcessTrusted() else {
             hide()
@@ -229,6 +385,8 @@ final class WindowOutlineController {
     private func hide() {
         targetElement = nil
         targetWindow = nil
+        targetWindowID = nil
+        endFollow()
         panel?.orderOut(nil)
     }
 
