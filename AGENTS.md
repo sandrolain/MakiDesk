@@ -28,6 +28,7 @@ For performance or lifecycle work, read the relevant findings and the **final im
 ## Workflow and change scope
 
 - Inspect `git status` and the relevant diff first. Never reset, stash, overwrite or remove someone else's edits to obtain a clean baseline.
+- After every significant change (code, tests or behavior docs), propose a [Conventional Commits](https://www.conventionalcommits.org/) message (`type(scope): summary`, e.g. `fix:`, `perf:`, `docs:`) with a short body grouping the affected areas and what was verified. Wait for the user's confirmation before committing; then stage only the files belonging to that change and never bundle unrelated edits.
 - Trace the caller, state owner, asynchronous completion and teardown before changing a shared API. Use `rg` to locate all callers.
 - Fix the cause with a focused change. Preserve existing dependency injection and pure geometry helpers; avoid adding another global cache or controller for state already owned elsewhere.
 - Keep model/discovery in the index and store, AX primitives in the controller, presentation in panels, and pure layout logic independent of AppKit I/O. Avoid growing `WorkspaceStore` or `ShelfController` with unrelated responsibilities.
