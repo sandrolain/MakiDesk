@@ -388,8 +388,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
         table.delegate = self
         table.target = self
         table.doubleAction = #selector(doubleClicked)
-        table.onDrag = { [weak self] event in self?.dragRows(event) }
         table.onMenu = { [weak self] event in self?.contextMenu(for: event) }
+        table.dragOperationMask = { [weak self] in
+            guard let self else { return .copy }
+            let selected = self.selectedItems
+            return Self.dragOperations(for: selected.isEmpty ? self.items : selected)
+        }
+        table.onDragEnded = { [weak self] operation in self?.tableDragEnded(operation) }
 
         let scroll = NSScrollView()
         scroll.documentView = table
@@ -739,6 +744,16 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+        guard row >= 0, row < items.count, items[row].isAvailable else { return nil }
+        return items[row].pasteboardWriter
+    }
+
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession,
+                   willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
+        tableDraggedIDs = rowIndexes.compactMap { $0 < items.count ? items[$0].id : nil }
+    }
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         guard row < items.count else { return nil }
         let identifier = NSUserInterfaceItemIdentifier("ShelfCell")
@@ -890,22 +905,23 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
     // MARK: - Dragging out
 
-    private func dragRows(_ event: NSEvent) {
-        guard let table else { return }
-        let point = table.convert(event.locationInWindow, from: nil)
-        var row = table.row(at: point)
-        if row < 0 { row = table.selectedRow }
-        guard row >= 0, row < items.count else { return }
-        if table.selectedRowIndexes.contains(row) == false {
-            table.selectRowIndexes([row], byExtendingSelection: false)
-        }
-        let selection = selectedItems
-        beginDrag(selection.isEmpty ? [items[row]] : selection, from: table, event: event)
-    }
+    private var tableDraggedIDs: [UUID] = []
 
     private func dragAll(_ event: NSEvent) {
         guard items.isEmpty == false, let table else { return }
         beginDrag(items, from: table, event: event)
+    }
+
+    private func tableDragEnded(_ operation: NSDragOperation) {
+        let ids = tableDraggedIDs
+        tableDraggedIDs.removeAll()
+        guard operation.contains(.move) else { return }
+        // Remove after the table finishes its own drag teardown; reloading its
+        // rows inside the ended callback can leave the next session stuck.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            for id in ids { self.remove(itemID: id) }
+        }
     }
 
     private func beginDrag(_ items: [ShelfItem], from view: NSView, event: NSEvent) {
@@ -1357,26 +1373,9 @@ final class ShelfRootView: NSView {
 }
 
 final class ShelfTableView: NSTableView {
-    var onDrag: ((NSEvent) -> Void)?
     var onMenu: ((NSEvent) -> NSMenu?)?
-    private var downPoint: NSPoint?
-
-    override func mouseDown(with event: NSEvent) {
-        downPoint = convert(event.locationInWindow, from: nil)
-        super.mouseDown(with: event)
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let downPoint else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        guard abs(point.x - downPoint.x) + abs(point.y - downPoint.y) > 3 else { return }
-        onDrag?(event)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        downPoint = nil
-        super.mouseUp(with: event)
-    }
+    var dragOperationMask: (() -> NSDragOperation)?
+    var onDragEnded: ((NSDragOperation) -> Void)?
 
     override func menu(for event: NSEvent) -> NSMenu? {
         onMenu?(event)
@@ -1389,6 +1388,21 @@ final class ShelfTableView: NSTableView {
             return
         }
         super.keyDown(with: event)
+    }
+
+    // The table owns the drag session through pasteboardWriterForRow, so
+    // AppKit tracks the mouse instead of our mouseDragged override. The custom
+    // path stopped starting drags after the first session, once NSTableView
+    // stayed in its own tracking loop.
+    override func draggingSession(_ session: NSDraggingSession,
+                                  sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        dragOperationMask?() ?? .copy
+    }
+
+    override func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint,
+                                  operation: NSDragOperation) {
+        onDragEnded?(operation)
+        super.draggingSession(session, endedAt: screenPoint, operation: operation)
     }
 }
 
@@ -1570,19 +1584,29 @@ final class ShelfDragHandle: NSView {
         return bounds.contains(local) ? self : nil
     }
 
+    /// The shelf can be visible without being key; a drag from the handle must
+    /// still start on the first click.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    private var downEvent: NSEvent?
+
     override func mouseDown(with event: NSEvent) {
         downPoint = convert(event.locationInWindow, from: nil)
+        downEvent = event
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard isEnabled, let downPoint else { return }
+        guard isEnabled, let downPoint, let downEvent else { return }
         let point = convert(event.locationInWindow, from: nil)
         guard abs(point.x - downPoint.x) + abs(point.y - downPoint.y) > 3 else { return }
-        onDrag?(event)
+        self.downPoint = nil
+        self.downEvent = nil
+        onDrag?(downEvent)
     }
 
     override func mouseUp(with event: NSEvent) {
         downPoint = nil
+        downEvent = nil
     }
 }
 

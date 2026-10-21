@@ -8,4 +8,11 @@ final class ShelfPanelTests: XCTestCase {
         // start the window drag instead of being consumed by activation.
         XCTAssertTrue(ShelfHeaderView().acceptsFirstMouse(for: nil))
     }
+
+    func testRowAndHandleAcceptTheFirstMouseSoADragCanStartOnTheFirstClick() {
+        // A row drag from a shelf that is visible but not key must start on the
+        // first click, exactly like the second click does today.
+        XCTAssertTrue(ShelfTableView().acceptsFirstMouse(for: nil))
+        XCTAssertTrue(ShelfDragHandle().acceptsFirstMouse(for: nil))
+    }
 }
