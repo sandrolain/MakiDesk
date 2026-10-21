@@ -44,7 +44,7 @@ final class WorkspaceStore {
     var showMiniMap = UserDefaults.standard.object(forKey: "showMiniMap") as? Bool ?? true
     var showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
     var miniMapPosition = PalettePosition(rawValue: UserDefaults.standard.string(forKey: "miniMapPosition") ?? "") ?? .topRight
-    var themeID = UserDefaults.standard.string(forKey: "themeID") ?? "catppuccin-mocha"
+    var themeID = PaletteTheme.normalized(UserDefaults.standard.string(forKey: "themeID") ?? "mocha")
     var overlayScale = UserDefaults.standard.object(forKey: "overlayScale") as? Double ?? 1.0
     var overlayOpacity = UserDefaults.standard.object(forKey: "overlayOpacity") as? Double ?? 0.94
     /// The largest a palette card may get, in points (the user's size setting).
@@ -70,6 +70,12 @@ final class WorkspaceStore {
     var animationDuration = min(max(
         UserDefaults.standard.object(forKey: "animationDuration") as? Double ?? 0.22,
         0.08), 0.6)
+
+    /// The coloured outline around the focused window (T36).
+    var focusBorderEnabled = UserDefaults.standard.object(forKey: "focusBorderEnabled") as? Bool ?? true
+    var focusBorderWidth = FocusBorder.clampedWidth(
+        UserDefaults.standard.object(forKey: "focusBorderWidth") as? Double ?? FocusBorder.defaultWidth
+    )
 
     var effectiveAnimationsEnabled: Bool {
         animationsEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -193,8 +199,17 @@ final class WorkspaceStore {
         guard shortcutManager == nil else { return }
         loadGroups()
         WindowIndex.shared.start()
-        WindowIndex.shared.onChange = { [weak self] in self?.syncModel() }
-        WindowIndex.shared.onFocusChange = { [weak self] in self?.checkFrontmostChange() }
+        WindowOutlineController.shared.start()
+        WindowIndex.shared.onChange = { [weak self] in
+            self?.syncModel()
+            WindowOutlineController.shared.refresh()
+        }
+        WindowIndex.shared.onFocusChange = { [weak self] in
+            self?.checkFrontmostChange()
+            WindowOutlineController.shared.refresh()
+        }
+        WindowIndex.shared.onGeometryNow = { WindowOutlineController.shared.refreshGeometry() }
+        WindowIndex.shared.onFocusNow = { WindowOutlineController.shared.refresh() }
         WindowIndex.shared.onScreenChange = { [weak self] in self?.handleScreenChange() }
         startGlobalShortcuts()
         checkTrust()
@@ -274,6 +289,7 @@ final class WorkspaceStore {
             }
             status = "Accessibility not granted · open Settings"
         }
+        WindowOutlineController.shared.applySettings()
     }
 
     func openAccessibilitySettings() { WindowController.openAccessibilitySettings() }
@@ -284,6 +300,7 @@ final class WorkspaceStore {
     func refreshPermissionState() {
         accessibilityTrusted = AXIsProcessTrusted()
         screenRecordingTrusted = WindowCapture.isAuthorized
+        WindowOutlineController.shared.applySettings()
     }
 
     // MARK: - Screen Recording
@@ -451,6 +468,19 @@ final class WorkspaceStore {
         UserDefaults.standard.set(clamped, forKey: "animationDuration")
     }
 
+    func updateFocusBorderEnabled(_ value: Bool) {
+        focusBorderEnabled = value
+        UserDefaults.standard.set(value, forKey: "focusBorderEnabled")
+        WindowOutlineController.shared.applySettings()
+    }
+
+    func updateFocusBorderWidth(_ value: Double) {
+        let clamped = FocusBorder.clampedWidth(value)
+        focusBorderWidth = clamped
+        UserDefaults.standard.set(clamped, forKey: "focusBorderWidth")
+        WindowOutlineController.shared.applySettings()
+    }
+
     func updateShelfShakeEnabled(_ value: Bool) {
         shelfShakeEnabled = value
         UserDefaults.standard.set(value, forKey: "shelfShakeEnabled")
@@ -552,7 +582,7 @@ final class WorkspaceStore {
         updateMiniMapVisibility(true)
         updateShowPreview(true)
         updateMiniMapPosition(.topRight)
-        updateTheme("catppuccin-mocha")
+        updateTheme("mocha")
         updateOverlayScale(1.0)
         updateOverlayOpacity(0.94)
         updatePaletteMaxCardWidth(250)
@@ -570,6 +600,8 @@ final class WorkspaceStore {
         updateShelfExcludedApps("")
         updateAnimationsEnabled(true)
         updateAnimationDuration(0.22)
+        updateFocusBorderEnabled(true)
+        updateFocusBorderWidth(FocusBorder.defaultWidth)
     }
 
     /// Frame of the overlay at its configured position (for placement math).
@@ -2203,6 +2235,7 @@ final class WorkspaceStore {
         rebuildModel(announce: false)
         recallOffscreenWindows()
         if showMiniMap { showMiniMapIfEnabled() }
+        WindowOutlineController.shared.refresh()
     }
 
     /// Pulls windows left on a detached monitor back into the primary screen.

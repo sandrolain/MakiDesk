@@ -101,6 +101,13 @@ struct MakiDeskApp: App {
                 menuAction("Golden Ratio (Phi)", "⌃⌥P", .phi)
                 menuAction("Toggle Full Screen", "⌃⌥F", .toggleFullScreen)
                 menuAction("Minimize", "⌃⌥M", .minimize)
+                Divider()
+                menuButton(
+                    store.focusBorderEnabled ? "Hide Focus Border" : "Show Focus Border",
+                    icon: "rectangle.dashed"
+                ) {
+                    store.updateFocusBorderEnabled(!store.focusBorderEnabled)
+                }
             } label: {
                 Label("Window", systemImage: "macwindow")
             }

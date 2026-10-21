@@ -1,7 +1,7 @@
 import Foundation
 
-/// How eager the shake gesture is (T31). The presets follow the shapes that
-/// worked in OpenYoink, rewritten here as pure data for our own detector.
+/// How eager the shake gesture is (T31). The presets are tuned for a deliberate
+/// shake, with a minimum travel between direction changes.
 enum ShelfShakeSensitivity: String, CaseIterable, Identifiable {
     case low
     case medium

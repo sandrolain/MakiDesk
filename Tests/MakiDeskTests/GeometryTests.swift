@@ -145,9 +145,9 @@ final class GeometryTests: XCTestCase {
     }
 
     func testThemeLookup() {
-        XCTAssertEqual(PaletteTheme.named("dracula").name, "Dracula")
+        XCTAssertEqual(PaletteTheme.named("plum").name, "Plum")
         XCTAssertEqual(PaletteTheme.named("does-not-exist").id, PaletteTheme.all[0].id)
-        XCTAssertFalse(PaletteTheme.named("catppuccin-mocha").background == PaletteTheme.named("catppuccin-latte").background)
+        XCTAssertFalse(PaletteTheme.named("mocha").background == PaletteTheme.named("latte").background)
     }
 
     // MARK: - Explicit ladder slots (A7)

@@ -110,6 +110,22 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Focus border") {
+                Toggle("Outline the focused window", isOn: Binding(
+                    get: { store.focusBorderEnabled },
+                    set: { store.updateFocusBorderEnabled($0) }
+                ))
+                SliderRow(title: "Width",
+                          value: Binding(get: { store.focusBorderWidth },
+                                         set: { store.updateFocusBorderWidth($0) }),
+                          range: FocusBorder.widthRange, step: 1,
+                          unit: " pt", decimals: 0)
+                    .disabled(!store.focusBorderEnabled)
+                Text("A border in the theme accent follows the focused window, including MakiDesk's own windows. It is hidden for full-screen windows, the desktop and windows that cannot take keyboard focus. It needs no permission beyond Accessibility.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
                 }
                 if settingsTab == .layouts {
             Section("Layouts") {
@@ -304,7 +320,7 @@ struct SettingsView: View {
                 Button("Third-party notices") {
                     openBundledDocument("THIRD_PARTY_NOTICES", extension: "md")
                 }
-                Text("MakiDesk is MIT-licensed. The notes editor ships SwiftTreeSitter (BSD-3) and tree-sitter grammars (MIT); the notices open above. Both files are included in the app bundle and the DMG.")
+                Text("MakiDesk is MIT-licensed. The third-party components used by the notes editor and their licences are in the notices above. Both files are included in the app bundle and the DMG.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

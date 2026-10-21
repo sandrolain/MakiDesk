@@ -54,7 +54,7 @@ struct NotesSyntaxTheme {
         punctuation = NSColor(theme.subtext)
     }
 
-    /// The colour a tree-sitter capture name maps to. Capture names nest
+    /// The colour a grammar capture name maps to. Capture names nest
     /// (`function.method`, `string.special`, …): the longest known prefix wins.
     func color(forCapture name: String) -> NSColor? {
         if name.contains("comment") { return comment }
@@ -93,7 +93,7 @@ extension NSColor {
     }
 }
 
-/// Builds — and caches — the tree-sitter configuration of a language: the
+/// Builds — and caches — the grammar configuration of a language: the
 /// parser from its SwiftPM product and the `highlights.scm` query compiled
 /// into the app (see `NotesGrammarQueries`).
 enum NotesGrammar {
@@ -131,15 +131,11 @@ enum NotesGrammar {
 }
 
 
-/// Applies tree-sitter highlighting to an `NSTextView`.
+/// Applies syntax highlighting to an `NSTextView`.
 ///
-/// The original plan named Neon for this layer, but Neon's `TreeSitterClient`
-/// no longer compiles with the current Swift toolchain (it calls a main-actor
-/// initializer from a nonisolated context). The work it did for us is small:
-/// parse the buffer, run the `highlights.scm` query, paint the captures. Doing
-/// it here keeps the same tree-sitter engine with one dependency fewer — and
-/// the highlighting is a debounced whole-document pass, which is the right
-/// trade-off for notes rather than for a code editor.
+/// The highlighter parses the buffer, runs the grammar's highlight query and
+/// paints the captures. A debounced whole-document pass is the right trade-off
+/// for notes rather than for a code editor.
 @MainActor
 final class NotesHighlighter {
     /// Above this size a note stays plain: a full parse on every pause would

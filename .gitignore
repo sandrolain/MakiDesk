@@ -6,7 +6,6 @@ DerivedData/
 *.xcuserstate
 refs
 dist
-scripts
 .vscode/launch.json
 /.agents
 skills-lock.json

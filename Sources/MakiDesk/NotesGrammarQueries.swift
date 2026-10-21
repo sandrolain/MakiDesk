@@ -1,6 +1,6 @@
-// Generated from the `queries/highlights.scm` files of the tree-sitter
-// grammars listed in THIRD_PARTY_NOTICES.md. Kept inline so the editor
-// needs no resource bundle at runtime (the parsers come from SwiftPM).
+// Generated from the grammar highlight queries. The component list and their
+// licences are in THIRD_PARTY_NOTICES.md. Kept inline so the editor needs no
+// resource bundle at runtime (the parsers come from SwiftPM).
 
 enum NotesGrammarQueries {
     static let swift = #"""

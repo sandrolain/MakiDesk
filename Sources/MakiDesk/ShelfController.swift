@@ -1278,7 +1278,7 @@ final class ShelfCellView: NSTableCellView {
         iconView.layer?.cornerRadius = 4
         iconView.layer?.masksToBounds = true
         nameLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        nameLabel.lineBreakMode = .byTruncatingMiddle
+        nameLabel.lineBreakMode = .byTruncatingTail
         detailLabel.font = .systemFont(ofSize: 10)
         detailLabel.lineBreakMode = .byTruncatingMiddle
 

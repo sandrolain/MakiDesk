@@ -19,6 +19,11 @@ final class WindowIndex {
     var onChange: (() -> Void)?
     /// Debounced: the focused window or the active application changed.
     var onFocusChange: (() -> Void)?
+    /// Immediate: a window moved or resized. The focused-window border uses
+    /// this so it follows a drag instead of waiting out the debounce.
+    var onGeometryNow: (() -> Void)?
+    /// Immediate: the focused window or the active application changed.
+    var onFocusNow: (() -> Void)?
     /// The screen configuration changed (monitor added/removed, Dock shown…).
     var onScreenChange: (() -> Void)?
 
@@ -121,9 +126,14 @@ final class WindowIndex {
     /// re-querying the frontmost window.
     private func note(notification: String) {
         invalidate()
+        if notification == kAXWindowMovedNotification as String
+            || notification == kAXWindowResizedNotification as String {
+            onGeometryNow?()
+        }
         scheduleChange()
         if notification == kAXFocusedWindowChangedNotification as String
             || notification == kAXApplicationActivatedNotification as String {
+            onFocusNow?()
             scheduleFocus()
         }
     }
@@ -160,6 +170,7 @@ final class WindowIndex {
 
     @objc private func appActivated(_ note: Notification) {
         invalidate()
+        onFocusNow?()
         scheduleFocus()
     }
 

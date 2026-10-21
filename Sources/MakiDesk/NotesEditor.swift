@@ -1,8 +1,8 @@
 import AppKit
 
 /// The text area of the notes panel: an `NSTextView` on TextKit 1, so the
-/// line-number ruler and the tree-sitter highlighting can use the layout
-/// manager directly (T20).
+/// line-number ruler and the syntax highlighting can use the layout manager
+/// directly (T20).
 @MainActor
 final class NotesEditorView: NSView, NSTextViewDelegate {
     let scrollView = NSScrollView()
