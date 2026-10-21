@@ -40,7 +40,13 @@ struct WindowRef: Codable, Equatable, Identifiable {
 
     /// Whether two refs point at the same window (used to toggle membership).
     func matches(_ other: WindowRef) -> Bool {
-        if let a = systemIdentity, let b = other.systemIdentity, a == b { return true }
+        if let a = systemIdentity, let b = other.systemIdentity {
+            if a == b { return true }
+            // A changed window id from the same process is not a restart. Do
+            // not let a sibling with the same title steal this membership.
+            if GroupMatcher.processID(in: a) == GroupMatcher.processID(in: b),
+               GroupMatcher.processID(in: a) != nil { return false }
+        }
         if let a = bundleId, let b = other.bundleId, a == b {
             if let title, let otherTitle = other.title, title == otherTitle { return true }
             if let document, let otherDocument = other.document, document == otherDocument { return true }
@@ -107,6 +113,13 @@ struct WindowGroup: Codable, Equatable, Identifiable {
 /// same window to two members. Pure, so it is unit-tested without accessibility
 /// permissions.
 enum GroupMatcher {
+    static func processID(in systemIdentity: String?) -> String? {
+        guard let systemIdentity, let separator = systemIdentity.firstIndex(of: "-") else { return nil }
+        let prefix = systemIdentity[..<separator]
+        guard !prefix.isEmpty, prefix.allSatisfy(\.isNumber) else { return nil }
+        return String(prefix)
+    }
+
     /// One optional index into `windows` per reference, in the same order.
     static func match(_ refs: [WindowRef], to windows: [WindowIdentity]) -> [Int?] {
         // The "any window of that app" fallback is only safe when the app holds a
@@ -124,8 +137,19 @@ enum GroupMatcher {
     private static func bestMatch(
         for ref: WindowRef, in windows: [WindowIdentity], used: Set<Int>, allowLoose: Bool
     ) -> Int? {
+        let refProcessID = processID(in: ref.systemIdentity)
         func first(_ predicate: (WindowIdentity) -> Bool) -> Int? {
-            windows.indices.first { !used.contains($0) && predicate(windows[$0]) }
+            windows.indices.first { index in
+                guard !used.contains(index) else { return false }
+                let candidate = windows[index]
+                if let refID = ref.systemIdentity,
+                   refID != candidate.id,
+                   let refProcessID,
+                   processID(in: candidate.id) == refProcessID {
+                    return false
+                }
+                return predicate(candidate)
+            }
         }
 
         // 1. The exact window from this session.

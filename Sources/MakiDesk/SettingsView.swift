@@ -246,6 +246,15 @@ struct SettingsView: View {
                 }
                 if settingsTab == .panels {
             Section("Window switcher & search") {
+                Picker("Open on screen with", selection: Binding(
+                    get: { store.paletteScreenLocation },
+                    set: { store.updatePaletteScreenLocation($0) }
+                )) {
+                    ForEach(PaletteScreenLocation.allCases) { Text($0.label).tag($0) }
+                }
+                Text("Choose the display when the switcher or search opens. The panel stays on that display until closed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Show window previews", isOn: Binding(
                     get: { store.showPreview },
                     set: { store.updateShowPreview($0) }

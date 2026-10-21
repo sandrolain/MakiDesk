@@ -4,7 +4,7 @@ import AppKit
 /// line-number ruler and the syntax highlighting can use the layout manager
 /// directly (T20).
 @MainActor
-final class NotesEditorView: NSView, NSTextViewDelegate {
+final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorageDelegate {
     let scrollView = NSScrollView()
     let textView: NSTextView
     private let ruler: LineNumberRulerView
@@ -54,6 +54,7 @@ final class NotesEditorView: NSView, NSTextViewDelegate {
         ruler.startObserving()
 
         textView.delegate = self
+        textView.textStorage?.delegate = self
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
@@ -140,6 +141,10 @@ final class NotesEditorView: NSView, NSTextViewDelegate {
 
     var text: String { textView.string }
 
+    func caretPosition(at offset: Int) -> (line: Int, column: Int) {
+        ruler.caretPosition(at: offset)
+    }
+
     func focus() {
         window?.makeFirstResponder(textView)
     }
@@ -151,9 +156,14 @@ final class NotesEditorView: NSView, NSTextViewDelegate {
     // MARK: - NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {
-        ruler.invalidateLineStarts()
         ruler.needsDisplay = true
         onTextChange?(textView.string)
+    }
+
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+                     range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters) else { return }
+        ruler.recordEdit(text: textStorage.string as NSString, range: editedRange, delta: delta)
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
@@ -208,12 +218,16 @@ final class LineNumberRulerView: NSRulerView {
 
     func invalidateLineStarts() {
         lineStartsDirty = true
-        // The gutter widens as the document grows; keep it to what the last
-        // line needs, so a short note does not carry a wide empty margin.
-        let count = max(1, (textView?.string as NSString?)?.components(separatedBy: "\n").count ?? 1)
-        let digits = max(1, String(count).count)
-        let width = max(38, CGFloat(digits) * 7 + 20)
-        if abs(ruleThickness - width) > 0.5 { ruleThickness = width }
+        needsDisplay = true
+    }
+
+    func recordEdit(text: NSString, range: NSRange, delta: Int) {
+        guard !lineStartsDirty else { return }
+        guard range.location >= 0, NSMaxRange(range) <= text.length,
+              range.length - delta >= 0 else { invalidateLineStarts(); return }
+        lineStarts = NotesLineIndex.updating(lineStarts, text: text, editedRange: range, delta: delta)
+        updateWidth()
+        needsDisplay = true
     }
 
     private func rebuildLineStartsIfNeeded() {
@@ -230,6 +244,16 @@ final class LineNumberRulerView: NSRulerView {
             index = found.location + 1
         }
         lineStarts = starts
+
+        updateWidth()
+    }
+
+        // Reuse the line index built for painting. Previously each keystroke
+        // also split the entire document into an array just to size the gutter.
+    private func updateWidth() {
+        let digits = max(1, String(lineStarts.count).count)
+        let width = max(38, CGFloat(digits) * 7 + 20)
+        if abs(ruleThickness - width) > 0.5 { ruleThickness = width }
     }
 
     private func lineNumber(at character: Int) -> Int {
@@ -240,6 +264,12 @@ final class LineNumberRulerView: NSRulerView {
             if lineStarts[middle] <= character { low = middle } else { high = middle - 1 }
         }
         return low + 1
+    }
+
+    func caretPosition(at offset: Int) -> (line: Int, column: Int) {
+        rebuildLineStartsIfNeeded()
+        let line = lineNumber(at: offset)
+        return (line, offset - lineStarts[line - 1] + 1)
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {

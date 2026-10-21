@@ -85,6 +85,23 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(names, ["groups.json"])
     }
 
+    func testSaveReportsFailureInsteadOfPretendingGroupsWerePersisted() throws {
+        let blocker = directory.appendingPathComponent("not-a-directory")
+        try Data("file".utf8).write(to: blocker)
+        let store = GroupStore(fileURL: blocker.appendingPathComponent("groups.json"))
+        XCTAssertFalse(store.save([makeGroup(slot: 1, titles: ["z"])]))
+    }
+
+    func testCorruptFileDoesNotDeleteAnEarlierBackup() throws {
+        try Data("broken".utf8).write(to: fileURL)
+        let backup = fileURL.appendingPathExtension("bak")
+        try Data("previous recovery copy".utf8).write(to: backup)
+
+        XCTAssertTrue(GroupStore(fileURL: fileURL).load().isEmpty)
+        XCTAssertEqual(try Data(contentsOf: backup), Data("previous recovery copy".utf8))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.appendingPathExtension("bak-1").path))
+    }
+
     // MARK: - The refs these files hold must survive a restart
 
     func testStoredReferenceSurvivesARestartWithANewSystemIdentity() {

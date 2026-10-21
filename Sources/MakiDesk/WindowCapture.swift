@@ -19,6 +19,12 @@ enum WindowCapture {
         let windowID: CGWindowID
     }
 
+    private struct CaptureBatch {
+        let requests: [Request]
+        let maxDimension: CGFloat
+        let onImage: @MainActor (String, NSImage) -> Void
+    }
+
     // MARK: - Permission
 
     static var isAuthorized: Bool { CGPreflightScreenCaptureAccess() }
@@ -31,10 +37,45 @@ enum WindowCapture {
     private struct Cached {
         let image: NSImage
         let date: Date
+        let cost: Int
+        var lastAccess: Date
+    }
+
+    private struct CacheKey: Hashable {
+        let windowID: CGWindowID
+        let identity: String
+        let maxDimension: Int
     }
 
     private static let cacheTTL: TimeInterval = 5
-    private static var cache: [CGWindowID: Cached] = [:]
+    private static let cacheByteLimit = 64 * 1024 * 1024
+    @MainActor private static var cacheBytes = 0
+    @MainActor private static var cache: [CacheKey: Cached] = [:]
+    @MainActor private static var captureInFlight = false
+    @MainActor private static var queuedBatch: CaptureBatch?
+    @MainActor private static var captureTask: Task<Void, Never>?
+    private static let screenshotBudget = ScreenshotBudget()
+
+    private actor ScreenshotBudget {
+        private var busy = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func acquire() async {
+            if !busy { busy = true; return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+
+        func release() {
+            if waiters.isEmpty { busy = false }
+            else { waiters.removeFirst().resume() }
+        }
+    }
+
+    @MainActor
+    static func cancelPaletteCapture() {
+        queuedBatch = nil
+        captureTask?.cancel()
+    }
 
     // MARK: - Capture
 
@@ -43,6 +84,7 @@ enum WindowCapture {
     /// When `force` is true the cache TTL is bypassed so every request is
     /// re-captured (used for the live refresh while the palette is open); the
     /// fresh images are still written back to the cache.
+    @MainActor
     static func capture(
         _ requests: [Request],
         maxDimension: CGFloat = 640,
@@ -51,32 +93,79 @@ enum WindowCapture {
     ) {
         guard isAuthorized, !requests.isEmpty else { return }
         let now = Date()
+        let dimension = Int(maxDimension.rounded())
         var pending: [Request] = []
         for request in requests {
-            if !force, let hit = cache[request.windowID], now.timeIntervalSince(hit.date) < cacheTTL {
+            let cacheKey = CacheKey(windowID: request.windowID, identity: request.key, maxDimension: dimension)
+            if let hit = cache[cacheKey], force || now.timeIntervalSince(hit.date) < cacheTTL {
+                cache[cacheKey]?.lastAccess = now
                 let image = hit.image
                 let key = request.key
                 Task { @MainActor in onImage(key, image) }
+                if force { pending.append(request) }
             } else {
                 pending.append(request)
             }
         }
         guard !pending.isEmpty else { return }
+        let batch = CaptureBatch(requests: pending, maxDimension: maxDimension, onImage: onImage)
+        if captureInFlight {
+            // Keep at most one follow-up batch. A newer visible palette state
+            // replaces requests from an obsolete refresh cycle.
+            queuedBatch = batch
+            return
+        }
+        startCapture(batch)
+    }
 
-        Task.detached(priority: .userInitiated) {
-            guard let content = try? await SCShareableContent
+    @MainActor
+    private static func startCapture(_ batch: CaptureBatch) {
+        captureInFlight = true
+        let dimension = Int(batch.maxDimension.rounded())
+        captureTask = Task.detached(priority: .userInitiated) {
+            defer {
+                Task { @MainActor in
+                    captureInFlight = false
+                    captureTask = nil
+                    if let queued = queuedBatch {
+                        queuedBatch = nil
+                        startCapture(queued)
+                    }
+                }
+            }
+            guard !Task.isCancelled, let content = try? await SCShareableContent
                 .excludingDesktopWindows(false, onScreenWindowsOnly: true) else { return }
             var windowsByID: [CGWindowID: SCWindow] = [:]
             for window in content.windows { windowsByID[window.windowID] = window }
 
-            for request in pending {
+            for request in batch.requests {
+                guard !Task.isCancelled else { return }
                 guard let window = windowsByID[request.windowID] else { continue }
-                guard let image = await image(of: window, maxDimension: maxDimension) else { continue }
+                guard let image = await image(of: window, maxDimension: batch.maxDimension) else { continue }
                 await MainActor.run {
-                    cache[request.windowID] = Cached(image: image, date: Date())
-                    onImage(request.key, image)
+                    guard !Task.isCancelled else { return }
+                    let cacheKey = CacheKey(windowID: request.windowID, identity: request.key, maxDimension: dimension)
+                    insert(image, for: cacheKey)
+                    batch.onImage(request.key, image)
                 }
             }
+        }
+    }
+
+    /// Keeps recent captures within a decoded-memory budget. A full-screen
+    /// palette image cannot evict every compact-size thumbnail for the same ID.
+    @MainActor
+    private static func insert(_ image: NSImage, for key: CacheKey) {
+        let cost = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            .map { $0.bytesPerRow * $0.height } ?? 0
+        if let old = cache.removeValue(forKey: key) { cacheBytes -= old.cost }
+        guard cost <= cacheByteLimit else { return }
+        cache[key] = Cached(image: image, date: Date(), cost: cost, lastAccess: Date())
+        cacheBytes += cost
+        while cacheBytes > cacheByteLimit,
+              let oldest = cache.min(by: { $0.value.lastAccess < $1.value.lastAccess }) {
+            cacheBytes -= oldest.value.cost
+            cache.removeValue(forKey: oldest.key)
         }
     }
 
@@ -84,7 +173,7 @@ enum WindowCapture {
     /// Returns an empty dictionary when Screen Recording is unavailable, so the
     /// caller can fall back to a size-based score.
     static func scores(for requests: [Request], maxDimension: CGFloat = 400) async -> [String: Double] {
-        guard isAuthorized, !requests.isEmpty else { return [:] }
+        guard !Task.isCancelled, isAuthorized, !requests.isEmpty else { return [:] }
         guard let content = try? await SCShareableContent
             .excludingDesktopWindows(false, onScreenWindowsOnly: true) else { return [:] }
         var windowsByID: [CGWindowID: SCWindow] = [:]
@@ -92,6 +181,7 @@ enum WindowCapture {
 
         var result: [String: Double] = [:]
         for request in requests {
+            guard !Task.isCancelled else { return [:] }
             guard let window = windowsByID[request.windowID],
                   let image = await image(of: window, maxDimension: maxDimension) else { continue }
             result[request.key] = edgeEnergy(image)
@@ -111,13 +201,19 @@ enum WindowCapture {
         maxDimension: CGFloat = 1600
     ) async -> NSImage? {
         guard isAuthorized else { return nil }
-        return await Task.detached(priority: .userInitiated) {
+        let capture = Task.detached(priority: .userInitiated) { () -> NSImage? in
+            guard !Task.isCancelled else { return nil }
             guard let content = try? await SCShareableContent
                 .excludingDesktopWindows(false, onScreenWindowsOnly: false) else { return nil }
             let candidates = content.windows.filter { $0.owningApplication?.processID == pid }
             guard let window = closest(to: frame, among: candidates) else { return nil }
             return await image(of: window, maxDimension: maxDimension)
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await capture.value
+        } onCancel: {
+            capture.cancel()
+        }
     }
 
     /// The window whose geometry is nearest to `frame`. Window coordinates are
@@ -140,6 +236,9 @@ enum WindowCapture {
     }
 
     private static func image(of window: SCWindow, maxDimension: CGFloat) async -> NSImage? {
+        await screenshotBudget.acquire()
+        defer { Task { await screenshotBudget.release() } }
+        guard !Task.isCancelled else { return nil }
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCStreamConfiguration()
         let source = window.frame.size

@@ -34,7 +34,7 @@ final class WindowOutlineController {
     }
 
     /// Reads the focused window and moves or hides the border.
-    func refresh() {
+    func refresh(frontmost: WindowController.Frontmost? = nil) {
         let store = WorkspaceStore.shared
         guard store.focusBorderEnabled, AXIsProcessTrusted() else {
             hide()
@@ -56,7 +56,7 @@ final class WindowOutlineController {
         }
 
         targetWindow = nil
-        switch WindowController.frontmost() {
+        switch frontmost ?? store.recentFocusSnapshot() ?? WindowController.frontmost() {
         case let .window(info):
             guard !WindowController.isFullScreen(info.element),
                   !WindowController.isMinimized(info.element) else {

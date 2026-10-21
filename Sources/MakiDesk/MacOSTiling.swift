@@ -19,39 +19,17 @@ enum MacOSTiling {
     /// `true` when macOS tiles windows dragged with `⌥` held.
     static var optionDragEnabled: Bool {
         get {
-            // Key absent (`defaults` exits non-zero) → system default, enabled.
-            guard let raw = read(optionAcceleratorKey) else { return true }
-            return raw == "1"
+            // Key absent → system default, enabled. Reading the preference
+            // through CFPreferences avoids spawning and waiting for `defaults`
+            // on startup or whenever Settings refreshes this value.
+            guard let preferences = UserDefaults(suiteName: domain),
+                  preferences.object(forKey: optionAcceleratorKey) != nil else { return true }
+            return preferences.bool(forKey: optionAcceleratorKey)
         }
         set {
-            _ = run(["/usr/bin/defaults", "write", domain, optionAcceleratorKey,
-                     "-bool", newValue ? "true" : "false"])
-        }
-    }
-
-    private static func read(_ key: String) -> String? {
-        guard let output = run(["/usr/bin/defaults", "read", domain, key]) else { return nil }
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    /// Runs `/usr/bin/defaults …`; returns stdout on success, `nil` otherwise.
-    @discardableResult
-    private static func run(_ arguments: [String]) -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: arguments[0])
-        process.arguments = Array(arguments.dropFirst())
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            let data = stdout.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            return String(data: data, encoding: .utf8)
-        } catch {
-            return nil
+            guard let preferences = UserDefaults(suiteName: domain) else { return }
+            preferences.set(newValue, forKey: optionAcceleratorKey)
+            preferences.synchronize()
         }
     }
 }

@@ -14,6 +14,7 @@ struct MakiDeskApp: App {
 
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        ExternalApplicationFocus.shared.start()
         WorkspaceStore.shared.start()
         WindowDrag.shared.start()
         ClipboardHistory.shared.start()

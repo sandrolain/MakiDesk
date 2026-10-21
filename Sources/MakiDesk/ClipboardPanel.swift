@@ -60,6 +60,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
     private var monitor: Any?
     private var previousApp: NSRunningApplication?
     private var notesWasKey = false
+    private let focusReturn = PanelFocusReturn()
 
     var isVisible: Bool { panel?.isVisible == true }
 
@@ -96,6 +97,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         }
 
         history.start()
+        focusReturn.capture()
         previousApp = NSWorkspace.shared.frontmostApplication
         notesWasKey = NotesController.shared.isKey
         model.theme = PaletteTheme.named(UserDefaults.standard.string(forKey: "themeID") ?? "mocha")
@@ -114,11 +116,14 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         installMonitor()
     }
 
-    func hide() {
+    func hide(restoringFocus: Bool = true) {
         guard isVisible else { return }
+        let restoreFocus = focusReturn.takeRestoreAction(
+            ownsKeyboard: restoringFocus && panel?.isKeyWindow == true)
         removeMonitor()
         panel?.orderOut(nil)
         previousApp = nil
+        restoreFocus?()
     }
 
     private func buildIfNeeded() -> ClipboardPanel {
@@ -128,7 +133,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
             onPick: { [weak self] entry in self?.paste(entry) },
             onClear: { ClipboardHistory.shared.clear() },
             onShelf: { [weak self] entry in
-                self?.hide()
+                self?.hide(restoringFocus: false)
                 ShelfController.shared.add(text: entry.text)
             }
         ))
@@ -168,31 +173,39 @@ final class ClipboardController: NSObject, NSWindowDelegate {
     private func paste(_ entry: ClipboardEntry) {
         let target = previousApp
         let pasteIntoNotes = notesWasKey
-        hide()
+        let targetIsUs = target?.processIdentifier == ProcessInfo.processInfo.processIdentifier
+        hide(restoringFocus: targetIsUs)
 
         let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(entry.text, forType: .string)
+        let item = NSPasteboardItem()
+        guard item.setString(entry.text, forType: .string), pasteboard.writeObjects([item]) else {
+            HUDController.shared.show("Could not write to the clipboard", symbol: "exclamationmark.triangle.fill")
+            return
+        }
         history.markPasteboardSeen()
         history.promote(entry)
 
-        let targetIsUs = target?.bundleIdentifier == Bundle.main.bundleIdentifier
         if let target, targetIsUs == false {
             guard AXIsProcessTrusted() else {
                 HUDController.shared.show("Accessibility not granted · the text is on the clipboard",
                                           symbol: "exclamationmark.triangle.fill")
                 return
             }
-            if target.activate(options: [.activateIgnoringOtherApps]) {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { Self.postCommandV() }
+            if target.activate(options: []) {
+                let targetPID = target.processIdentifier
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    guard NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID else { return }
+                    Self.postCommandV()
+                }
                 return
             }
         }
         // The notes panel (or another text field of ours) was in front. If no
         // responder takes the paste, fall back to the open note's cursor.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard NSApp.isActive else { return }
             let handled = NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
-            if handled == false, pasteIntoNotes, NotesController.shared.isVisible {
+            if handled == false, pasteIntoNotes, NotesController.shared.isVisible, NSApp.isActive {
                 NotesController.shared.insertText(entry.text)
             }
         }
@@ -247,7 +260,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
-        if isVisible { hide() }
+        if isVisible { hide(restoringFocus: false) }
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

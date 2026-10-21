@@ -467,8 +467,8 @@ final class GeometryTests: XCTestCase {
     }
 
     func testGroupMatcherNeverReusesAWindow() {
-        // Two identical-looking TextEdit windows, saved twice: each takes a
-        // different live window.
+        // A stale duplicate reference cannot claim a sibling window after its
+        // exact runtime identity has already been used.
         let ref = WindowRef(identity: identity("5-cg1", bundle: "com.apple.TextEdit",
                                                app: "TextEdit", title: "Untitled"))
         let live = [
@@ -476,14 +476,16 @@ final class GeometryTests: XCTestCase {
             identity("5-cg2", bundle: "com.apple.TextEdit", app: "TextEdit", title: "Untitled"),
         ]
         let matches = GroupMatcher.match([ref, ref], to: live)
-        XCTAssertEqual(Set(matches.compactMap { $0 }).count, 2)
+        XCTAssertEqual(matches, [0, nil])
     }
 
     func testGroupMatcherLooseFallbackOnlyWhenUnambiguous() {
         // A single-member app may be re-found by app alone (title changed).
         let alone = WindowRef(identity: identity("7-cg1", bundle: "com.apple.Notes",
                                                  app: "Notes", title: "Old"))
-        let live = [identity("7-cg9", bundle: "com.apple.Notes", app: "Notes", title: "Renamed")]
+        // A new process id signals that the saved runtime id is from an older
+        // app session, so the single-member app fallback is safe.
+        let live = [identity("8-cg9", bundle: "com.apple.Notes", app: "Notes", title: "Renamed")]
         XCTAssertEqual(GroupMatcher.match([alone], to: live).first!, 0)
 
         // Two members of the same app: no loose match, so the missing titles
@@ -500,7 +502,10 @@ final class GeometryTests: XCTestCase {
         XCTAssertTrue(ref.matches(ref))
         let sameTitleOtherWindow = WindowRef(identity: identity("4-cg7", bundle: "com.apple.Safari",
                                                                 app: "Safari", title: "Docs"))
-        XCTAssertTrue(ref.matches(sameTitleOtherWindow))
+        XCTAssertFalse(ref.matches(sameTitleOtherWindow))
+        let afterRestart = WindowRef(identity: identity("8-cg7", bundle: "com.apple.Safari",
+                                                        app: "Safari", title: "Docs"))
+        XCTAssertTrue(ref.matches(afterRestart))
         let other = WindowRef(identity: identity("4-cg8", bundle: "com.apple.Safari",
                                                  app: "Safari", title: "Mail"))
         XCTAssertFalse(ref.matches(other))
@@ -552,6 +557,18 @@ final class GeometryTests: XCTestCase {
                 XCTAssertLessThanOrEqual(frame.maxX, screen.maxX + 0.01, "count \(count)")
                 XCTAssertLessThanOrEqual(frame.maxY, screen.maxY + 0.01, "count \(count)")
             }
+        }
+    }
+
+    func testLargeGridShrinksCellsToStayInsideTheArea() {
+        let screen = CGRect(x: 0, y: 0, width: 1000, height: 600)
+        let frames = TilingEngine.gridFrames(count: 36, in: screen, gap: 12)
+        XCTAssertEqual(frames.count, 36)
+        for frame in frames {
+            XCTAssertGreaterThanOrEqual(frame.minX, screen.minX)
+            XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
+            XCTAssertLessThanOrEqual(frame.maxX, screen.maxX + 0.01)
+            XCTAssertLessThanOrEqual(frame.maxY, screen.maxY + 0.01)
         }
     }
 

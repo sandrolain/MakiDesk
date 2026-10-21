@@ -2,6 +2,43 @@ import AppKit
 import ImageIO
 import QuartzCore
 import QuickLookUI
+import UniformTypeIdentifiers
+
+private enum ShelfTransferPayload: @unchecked Sendable {
+    case file(URL)
+    case text(String)
+    case image(NSImage)
+    case link(URL)
+}
+
+private struct ShelfTransferRequest: @unchecked Sendable {
+    let id: UUID
+    let name: String
+    let payload: ShelfTransferPayload
+    let move: Bool
+}
+
+private struct ShelfTransferResult: Sendable {
+    let id: UUID
+    let error: String?
+}
+
+private final class ShelfTransferControl: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+}
 
 // MARK: - Item
 
@@ -18,6 +55,7 @@ struct ShelfItem: Identifiable {
     let name: String
     let detail: String
     let icon: NSImage
+    var imageWriter: ShelfImageWriter? = nil
 
     static func file(_ url: URL, staged: Bool = false) -> ShelfItem {
         let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
@@ -56,7 +94,7 @@ struct ShelfItem: Identifiable {
             ? "\(Int(size.width)) × \(Int(size.height))"
             : "Image"
         return ShelfItem(content: .image(image), name: "Image", detail: detail,
-                         icon: ShelfThumbnail.image(image))
+                         icon: ShelfThumbnail.image(image), imageWriter: ShelfImageWriter(image: image))
     }
 
     static func link(_ url: URL) -> ShelfItem {
@@ -76,15 +114,8 @@ struct ShelfItem: Identifiable {
             return text as NSString
         case let .link(url):
             return url as NSURL
-        case let .image(image):
-            let item = NSPasteboardItem()
-            if let tiff = image.tiffRepresentation {
-                item.setData(tiff, forType: .tiff)
-            }
-            if let png = image.shelfPNGData {
-                item.setData(png, forType: .png)
-            }
-            return item
+        case .image:
+            return imageWriter
         }
     }
 
@@ -122,8 +153,12 @@ struct ShelfItem: Identifiable {
 
 extension NSImage {
     var shelfPNGData: Data? {
-        guard let tiff = tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
-        return rep.representation(using: .png, properties: [:])
+        guard let image = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let data = NSMutableData()
+        guard let writer = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(writer, image, nil)
+        guard CGImageDestinationFinalize(writer) else { return nil }
+        return data as Data
     }
 }
 
@@ -132,13 +167,21 @@ extension NSImage {
 @MainActor
 final class ShelfController: NSObject, NSWindowDelegate,
                              NSTableViewDataSource, NSTableViewDelegate,
-                             NSDraggingSource, QLPreviewPanelDataSource, QLPreviewPanelDelegate {
+                             NSDraggingSource, @preconcurrency QLPreviewPanelDataSource,
+                             QLPreviewPanelDelegate {
     static let shared = ShelfController()
 
     private(set) var items: [ShelfItem] = []
 
     private var panel: ShelfPanel?
     private var root: ShelfRootView?
+    private var transferInFlight = false
+    private var transferControl: ShelfTransferControl?
+    private static let maximumItems = 100
+    private static let maximumTextItemBytes = 1 * 1024 * 1024
+    private static let maximumTextPayloadBytes = 8 * 1024 * 1024
+    private static let maximumImageBytes = 64 * 1024 * 1024
+    private static let maximumImagePayloadBytes = 128 * 1024 * 1024
     private var table: ShelfTableView?
     private var scroll: NSScrollView?
     private var countLabel: NSTextField?
@@ -162,9 +205,12 @@ final class ShelfController: NSObject, NSWindowDelegate,
     private var session = UUID()
     private var openedByShake = false
     private var dropReceived = false
+    private let focusReturn = PanelFocusReturn()
 
     private var staging: URL?
     private var previewFiles: [UUID: URL] = [:]
+    private var previewGeneration: UInt64 = 0
+    private var previewLoading = false
     private let promiseQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 2
@@ -204,7 +250,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     func shutdown() {
-        hide()
+        hide(restoringFocus: false)
         if let shakeMonitor {
             NSEvent.removeMonitor(shakeMonitor)
             self.shakeMonitor = nil
@@ -222,12 +268,14 @@ final class ShelfController: NSObject, NSWindowDelegate,
     func show(at point: CGPoint?, activating: Bool) {
         if isVisible {
             if activating {
+                if panel?.isKeyWindow != true { focusReturn.capture() }
                 NSApp.activate(ignoringOtherApps: true)
                 panel?.makeKeyAndOrderFront(nil)
                 panel?.makeFirstResponder(table)
             }
             return
         }
+        focusReturn.capture()
         theme = WorkspaceStore.shared.theme
         openedByShake = activating == false
         dropReceived = false
@@ -250,7 +298,11 @@ final class ShelfController: NSObject, NSWindowDelegate,
         installKeyMonitor()
     }
 
-    func hide() {
+    func hide(restoringFocus: Bool = true) {
+        let restoreFocus = focusReturn.takeRestoreAction(
+            ownsKeyboard: restoringFocus && panel?.isKeyWindow == true)
+        previewGeneration &+= 1
+        previewLoading = false
         openedByShake = false
         dropReceived = false
         removeKeyMonitor()
@@ -259,6 +311,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         }
         panel?.orderOut(nil)
         clearAllItems()
+        restoreFocus?()
     }
 
     /// Adds text from the clipboard history (T21), opening the shelf if needed.
@@ -543,7 +596,33 @@ final class ShelfController: NSObject, NSWindowDelegate,
         if let key = item.dedupeKey, items.contains(where: { $0.dedupeKey == key }) {
             return
         }
+        guard items.count < Self.maximumItems else {
+            HUDController.shared.show("Shelf limit reached (100 items)", symbol: "exclamationmark.triangle.fill")
+            return
+        }
+        if let text = item.text {
+            let itemBytes = text.lengthOfBytes(using: .utf8)
+            let existingBytes = items.compactMap(\.text).reduce(0) { $0 + $1.lengthOfBytes(using: .utf8) }
+            guard itemBytes <= Self.maximumTextItemBytes,
+                  existingBytes + itemBytes <= Self.maximumTextPayloadBytes else {
+                HUDController.shared.show("Text exceeds the shelf memory limit", symbol: "exclamationmark.triangle.fill")
+                return
+            }
+        }
+        if case let .image(image) = item.content {
+            let imageBytes = Self.estimatedDecodedImageBytes(image)
+            let existingBytes = items.reduce(Int64(0)) { total, existing in
+                guard case let .image(existingImage) = existing.content else { return total }
+                return total + Self.estimatedDecodedImageBytes(existingImage)
+            }
+            guard imageBytes <= Self.maximumImageBytes,
+                  existingBytes + imageBytes <= Self.maximumImagePayloadBytes else {
+                HUDController.shared.show("Image exceeds the shelf memory limit", symbol: "exclamationmark.triangle.fill")
+                return
+            }
+        }
         items.append(item)
+        item.imageWriter?.prepare()
         reload()
         if let row = items.indices.last {
             table?.selectRowIndexes([row], byExtendingSelection: false)
@@ -551,7 +630,15 @@ final class ShelfController: NSObject, NSWindowDelegate,
         }
     }
 
+    private static func estimatedDecodedImageBytes(_ image: NSImage) -> Int64 {
+        let largest = image.representations.map { rep in
+            Int64(max(1, rep.pixelsWide)) * Int64(max(1, rep.pixelsHigh))
+        }.max() ?? Int64(max(1, image.size.width * 2) * max(1, image.size.height * 2))
+        return largest * 4
+    }
+
     private func clearAllItems() {
+        guard !transferInFlight else { return }
         session = UUID()
         items.removeAll()
         previewFiles.removeAll()
@@ -714,48 +801,74 @@ final class ShelfController: NSObject, NSWindowDelegate,
     // MARK: - Quick Look
 
     @objc func toggleQuickLook() {
-        guard let panel = QLPreviewPanel.shared() else { return }
-        if panel.isVisible {
-            panel.orderOut(nil)
+        guard let preview = QLPreviewPanel.shared() else { return }
+        if preview.isVisible {
+            preview.orderOut(nil)
             return
         }
-        guard let row = table?.selectedRow, row >= 0, row < items.count,
-              let url = previewURL(for: items[row]) else {
+        if previewLoading {
+            previewGeneration &+= 1
+            previewLoading = false
+            return
+        }
+        guard let row = table?.selectedRow, items.indices.contains(row), let staging else { return }
+        let item = items[row]
+        let payload: ShelfTransferPayload
+        switch item.content {
+        case let .file(url, _): payload = .file(url)
+        case let .text(text): payload = .text(text)
+        case let .image(image): payload = .image(image)
+        case .link:
             HUDController.shared.show("Nothing to preview", symbol: "eye.slash")
             return
         }
-        previewItem = url as NSURL
-        panel.dataSource = self
-        panel.delegate = self
-        panel.reloadData()
-        panel.makeKeyAndOrderFront(nil)
+        previewGeneration &+= 1
+        let generation = previewGeneration
+        let session = self.session
+        let cached = previewFiles[item.id]
+        let directory = staging.appendingPathComponent("preview-\(item.id.uuidString)", isDirectory: true)
+        let name = Self.previewName(item) + (item.imageWriter == nil ? ".txt" : ".png")
+        previewLoading = true
+        promiseQueue.addOperation { [weak self] in
+            let url: URL?
+            do {
+                if case let .file(file) = payload {
+                    url = FileManager.default.fileExists(atPath: file.path) ? file : nil
+                } else if let cached, FileManager.default.fileExists(atPath: cached.path) {
+                    url = cached
+                } else {
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    try Self.writeTransfer(ShelfTransferRequest(id: item.id, name: name,
+                                                                payload: payload, move: false), to: directory)
+                    url = directory.appendingPathComponent(name)
+                }
+            } catch { url = nil }
+            DispatchQueue.main.async {
+                guard let self, self.isVisible, self.session == session else {
+                    let obsolete = self?.staging != staging ? staging : directory
+                    DispatchQueue.global(qos: .utility).async { try? FileManager.default.removeItem(at: obsolete) }
+                    return
+                }
+                guard self.previewGeneration == generation else { return }
+                self.previewLoading = false
+                guard let url else {
+                    HUDController.shared.show("Nothing to preview", symbol: "eye.slash")
+                    return
+                }
+                self.previewFiles[item.id] = url
+                guard self.panel?.isKeyWindow == true, NSApp.isActive,
+                      let selected = self.table?.selectedRow, self.items.indices.contains(selected),
+                      self.items[selected].id == item.id else { return }
+                self.previewItem = url as NSURL
+                preview.dataSource = self
+                preview.delegate = self
+                preview.reloadData()
+                preview.makeKeyAndOrderFront(nil)
+            }
+        }
     }
 
     private var previewItem: NSURL?
-
-    private func previewURL(for item: ShelfItem) -> URL? {
-        if let file = item.fileURL, FileManager.default.fileExists(atPath: file.path) {
-            return file
-        }
-        if let cached = previewFiles[item.id] { return cached }
-        guard let staging else { return nil }
-        let directory = staging.appendingPathComponent("preview-\(item.id.uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let name = Self.previewName(item)
-        let url: URL
-        switch item.content {
-        case .text:
-            url = directory.appendingPathComponent("\(name).txt")
-            try? (item.text ?? "").write(to: url, atomically: true, encoding: .utf8)
-        case let .image(image):
-            url = directory.appendingPathComponent("\(name).png")
-            if let data = image.shelfPNGData { try? data.write(to: url) }
-        default:
-            return nil
-        }
-        previewFiles[item.id] = url
-        return url
-    }
 
     private static func previewName(_ item: ShelfItem) -> String {
         let cleaned = item.name
@@ -866,6 +979,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     @objc private func removeSelected() {
+        guard !transferInFlight else { return }
         let ids = selectedItems.map(\.id)
         for id in ids { remove(itemID: id) }
     }
@@ -877,6 +991,12 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
     @objc private func saveClicked(_ sender: NSButton) {
         let menu = NSMenu()
+        if transferInFlight {
+            let cancel = NSMenuItem(title: "Cancel Transfer", action: #selector(cancelTransfer), keyEquivalent: "")
+            cancel.target = self
+            menu.addItem(cancel)
+            menu.addItem(.separator())
+        }
         let copy = NSMenuItem(title: "Copy All to Folder…", action: #selector(copyAllToFolder), keyEquivalent: "")
         copy.target = self
         menu.addItem(copy)
@@ -889,10 +1009,14 @@ final class ShelfController: NSObject, NSWindowDelegate,
     @objc private func copyAllToFolder() { transfer(.copy) }
     @objc private func moveAllToFolder() { transfer(.move) }
 
+    @objc private func cancelTransfer() {
+        transferControl?.cancel()
+    }
+
     private enum Transfer { case copy, move }
 
     private func transfer(_ mode: Transfer) {
-        guard items.isEmpty == false, let panel else { return }
+        guard items.isEmpty == false, panel != nil, !transferInFlight else { return }
         let open = NSOpenPanel()
         open.title = mode == .copy ? "Copy the shelf to a folder" : "Move the shelf to a folder"
         open.prompt = mode == .copy ? "Copy" : "Move"
@@ -908,82 +1032,108 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     private func performTransfer(_ mode: Transfer, to folder: URL) {
-        let total = items.count
-        var failures: [Error] = []
-        var movedIDs: [UUID] = []
-        for item in items {
-            do {
-                let destination = try write(item, to: folder, move: mode == .move)
-                if mode == .move {
-                    movedIDs.append(item.id)
-                    if case let .file(url, staged) = item.content, staged {
-                        try? FileManager.default.removeItem(at: url)
-                    }
-                    _ = destination
-                }
-            } catch {
-                failures.append(error)
+        let requests = items.compactMap { item -> ShelfTransferRequest? in
+            let payload: ShelfTransferPayload
+            let fileName: String
+            switch item.content {
+            case let .file(url, _):
+                payload = .file(url)
+                fileName = url.lastPathComponent
+            case let .text(text):
+                payload = .text(text)
+                fileName = "Shelf text.txt"
+            case let .image(image):
+                payload = .image(image)
+                fileName = "Shelf image.png"
+            case let .link(url):
+                payload = .link(url)
+                fileName = "Link.webloc"
             }
+            return ShelfTransferRequest(id: item.id, name: fileName, payload: payload,
+                                        move: mode == .move)
         }
-        for id in movedIDs { remove(itemID: id) }
-        reload()
-        if let first = failures.first {
-            let alert = NSAlert()
-            alert.messageText = "Some items could not be transferred"
-            alert.informativeText = first.localizedDescription
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "OK")
-            alert.runModal()
-        } else {
-            HUDController.shared.show(
-                "\(mode == .copy ? "Copied" : "Moved") \(total - failures.count) items",
-                symbol: "folder"
-            )
+        guard requests.count == items.count, !requests.isEmpty else {
+            HUDController.shared.show("An image could not be prepared for transfer", symbol: "exclamationmark.triangle.fill")
+            return
+        }
+        transferInFlight = true
+        let control = ShelfTransferControl()
+        transferControl = control
+        HUDController.shared.show("Transferring shelf items…", symbol: "folder")
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var results: [ShelfTransferResult] = []
+            for (index, request) in requests.enumerated() {
+                guard !control.isCancelled else { break }
+                do {
+                    try Self.writeTransfer(request, to: folder)
+                    results.append(ShelfTransferResult(id: request.id, error: nil))
+                } catch {
+                    results.append(ShelfTransferResult(id: request.id, error: error.localizedDescription))
+                }
+                let completed = index + 1
+                Task { @MainActor [weak self] in
+                    self?.hintLabel?.stringValue = "Transferring \(completed) of \(requests.count)…"
+                }
+            }
+            let wasCancelled = control.isCancelled
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.transferInFlight = false
+                self.transferControl = nil
+                if mode == .move {
+                    for result in results where result.error == nil { self.remove(itemID: result.id) }
+                }
+                self.reload()
+                if wasCancelled {
+                    HUDController.shared.show("Transfer cancelled after \(results.count) of \(requests.count) items", symbol: "xmark.circle")
+                } else if let first = results.first(where: { $0.error != nil })?.error {
+                    let alert = NSAlert()
+                    alert.messageText = "Some items could not be transferred"
+                    alert.informativeText = first
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                } else {
+                    HUDController.shared.show(
+                        "\(mode == .copy ? "Copied" : "Moved") \(results.count) items",
+                        symbol: "folder"
+                    )
+                }
+            }
         }
     }
 
-    private func write(_ item: ShelfItem, to folder: URL, move: Bool) throws -> URL {
-        switch item.content {
-        case let .file(url, _):
-            let destination = uniqueURL(in: folder, name: url.lastPathComponent)
-            if move {
-                try FileManager.default.moveItem(at: url, to: destination)
-            } else {
-                try FileManager.default.copyItem(at: url, to: destination)
-            }
-            return destination
+    nonisolated private static func writeTransfer(_ request: ShelfTransferRequest, to folder: URL) throws {
+        let basename = (request.name as NSString).deletingPathExtension
+        let ext = (request.name as NSString).pathExtension
+        var destination = folder.appendingPathComponent(request.name)
+        var suffix = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            let name = ext.isEmpty ? "\(basename) \(suffix)" : "\(basename) \(suffix).\(ext)"
+            destination = folder.appendingPathComponent(name)
+            suffix += 1
+        }
+        switch request.payload {
+        case let .file(url):
+            if request.move { try FileManager.default.moveItem(at: url, to: destination) }
+            else { try FileManager.default.copyItem(at: url, to: destination) }
         case let .text(text):
-            let destination = uniqueURL(in: folder, name: "Shelf text.txt")
             try text.write(to: destination, atomically: true, encoding: .utf8)
-            return destination
         case let .image(image):
-            let destination = uniqueURL(in: folder, name: "Shelf image.png")
-            guard let data = image.shelfPNGData else {
+            guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
                 throw NSError(domain: "MakiDeskShelf", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "The image could not be written."])
+                              userInfo: [NSLocalizedDescriptionKey: "The image could not be prepared for transfer."])
             }
-            try data.write(to: destination)
-            return destination
+            guard let destinationWriter = CGImageDestinationCreateWithURL(
+                destination as CFURL, UTType.png.identifier as CFString, 1, nil
+            ) else { throw CocoaError(.fileWriteUnknown) }
+            CGImageDestinationAddImage(destinationWriter, cgImage, nil)
+            guard CGImageDestinationFinalize(destinationWriter) else { throw CocoaError(.fileWriteUnknown) }
         case let .link(url):
-            let destination = uniqueURL(in: folder, name: "Link.webloc")
-            let plist: [String: Any] = ["URL": url.absoluteString]
+            let plist: [String: String] = ["URL": url.absoluteString]
             let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
             try data.write(to: destination)
-            return destination
         }
-    }
-
-    private func uniqueURL(in folder: URL, name: String) -> URL {
-        let base = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        var candidate = folder.appendingPathComponent(name)
-        var index = 2
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            let suffix = ext.isEmpty ? "" : ".\(ext)"
-            candidate = folder.appendingPathComponent("\(base) \(index)\(suffix)")
-            index += 1
-        }
-        return candidate
     }
 
     // MARK: - Text to Notes
@@ -1014,6 +1164,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
             if QLPreviewPanel.shared()?.isVisible == true {
                 if event.keyCode == 49 || event.keyCode == 53 {
                     QLPreviewPanel.shared()?.orderOut(nil)
+                    self.panel?.makeKeyAndOrderFront(nil)
+                    self.panel?.makeFirstResponder(self.table)
                     return nil
                 }
                 return event
@@ -1121,7 +1273,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     func windowDidResignKey(_ notification: Notification) {
         // An empty shelf is just a hint: a click elsewhere dismisses it. With
         // content it stays, so a trip to another app does not lose the items.
-        if items.isEmpty { hide() }
+        if items.isEmpty { hide(restoringFocus: false) }
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

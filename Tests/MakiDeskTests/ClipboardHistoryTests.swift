@@ -4,62 +4,71 @@ import XCTest
 
 @MainActor
 final class ClipboardHistoryTests: XCTestCase {
-    private func makePasteboard() -> NSPasteboard {
-        NSPasteboard(name: NSPasteboard.Name("makidesk-clipboard-\(UUID().uuidString)"))
-    }
-
-    private func write(_ text: String, to pasteboard: NSPasteboard) {
+    private func makePasteboard() throws -> NSPasteboard {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("makidesk-clipboard-\(UUID().uuidString)"))
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        guard pasteboard.setString("probe", forType: .string) else {
+            throw XCTSkip("Named pasteboards are unavailable in this test environment")
+        }
+        return pasteboard
     }
 
-    func testCollectsNewestFirstAndDeduplicates() {
-        let pasteboard = makePasteboard()
+    private func write(_ text: String, to pasteboard: NSPasteboard) throws {
+        pasteboard.clearContents()
+        guard pasteboard.setString(text, forType: .string) else {
+            throw XCTSkip("Pasteboard write was unavailable in this test environment")
+        }
+    }
+
+    func testCollectsNewestFirstAndDeduplicates() throws {
+        let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })
         history.poll()
 
-        write("first", to: pasteboard); history.poll()
-        write("second", to: pasteboard); history.poll()
-        write("first", to: pasteboard); history.poll()
+        try write("first", to: pasteboard); history.poll()
+        try write("second", to: pasteboard); history.poll()
+        try write("first", to: pasteboard); history.poll()
 
         XCTAssertEqual(history.entries.map(\.text), ["first", "second"])
         XCTAssertEqual(history.count, 2)
     }
 
-    func testKeepsOnlyTheNewestEntries() {
-        let pasteboard = makePasteboard()
+    func testKeepsOnlyTheNewestEntries() throws {
+        let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 2, secureInput: { false })
         history.poll()
 
         for index in 1...4 {
-            write("text \(index)", to: pasteboard)
+            try write("text \(index)", to: pasteboard)
             history.poll()
         }
 
         XCTAssertEqual(history.entries.map(\.text), ["text 4", "text 3"])
     }
 
-    func testConcealedCopiesAreIgnored() {
-        let pasteboard = makePasteboard()
+    func testConcealedCopiesAreIgnored() throws {
+        let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })
         history.poll()
 
         let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
         pasteboard.clearContents()
-        pasteboard.declareTypes([.string, concealed], owner: nil)
-        pasteboard.setString("a password", forType: .string)
+        guard pasteboard.declareTypes([.string, concealed], owner: nil) > 0,
+              pasteboard.setString("a password", forType: .string) else {
+            throw XCTSkip("Pasteboard types could not be declared in this environment")
+        }
         history.poll()
 
         XCTAssertTrue(history.entries.isEmpty)
     }
 
-    func testSecureInputIsNeverRecorded() {
-        let pasteboard = makePasteboard()
+    func testSecureInputIsNeverRecorded() throws {
+        let pasteboard = try makePasteboard()
         var secure = true
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { secure })
         history.poll()
 
-        write("a password", to: pasteboard)
+        try write("a password", to: pasteboard)
         history.poll()
         XCTAssertTrue(history.entries.isEmpty)
 
@@ -68,32 +77,32 @@ final class ClipboardHistoryTests: XCTestCase {
         history.poll()
         XCTAssertTrue(history.entries.isEmpty)
 
-        write("a normal text", to: pasteboard)
+        try write("a normal text", to: pasteboard)
         history.poll()
         XCTAssertEqual(history.entries.map(\.text), ["a normal text"])
     }
 
-    func testOurOwnPasteIsNotRecordedAgain() {
-        let pasteboard = makePasteboard()
+    func testOurOwnPasteIsNotRecordedAgain() throws {
+        let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })
         history.poll()
 
-        write("one", to: pasteboard); history.poll()
+        try write("one", to: pasteboard); history.poll()
         XCTAssertEqual(history.count, 1)
 
         // Pasting writes the chosen text back to the pasteboard.
-        write("one", to: pasteboard)
+        try write("one", to: pasteboard)
         history.markPasteboardSeen()
         history.poll()
         XCTAssertEqual(history.count, 1)
     }
 
     func testPromoteMovesAnEntryBackToTheTop() throws {
-        let pasteboard = makePasteboard()
+        let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })
         history.poll()
-        write("first", to: pasteboard); history.poll()
-        write("second", to: pasteboard); history.poll()
+        try write("first", to: pasteboard); history.poll()
+        try write("second", to: pasteboard); history.poll()
 
         let older = try XCTUnwrap(history.entries.last)
         history.promote(older)
@@ -112,11 +121,11 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(ClipboardEntry(id: UUID(), text: long, date: Date()).preview.count, 121)
     }
 
-    func testClearEmptiesTheList() {
-        let pasteboard = makePasteboard()
+    func testClearEmptiesTheList() throws {
+        let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })
         history.poll()
-        write("something", to: pasteboard); history.poll()
+        try write("something", to: pasteboard); history.poll()
         XCTAssertEqual(history.count, 1)
 
         history.clear()

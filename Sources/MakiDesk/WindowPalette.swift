@@ -273,6 +273,7 @@ final class PaletteModel {
     /// Group numbers each visible window belongs to, keyed by window id: the
     /// badges drawn on the thumbnails.
     var groupBadges: [String: [Int]] = [:]
+    var isLoadingWindows = false
 
     var filtered: [ActionableWindow] {
         guard !query.isEmpty else { return items }
@@ -298,6 +299,19 @@ final class WindowPalette {
     /// Set after ⌥Q/⌥M so releasing Option does not then activate (and, for a
     /// just-minimised window, immediately un-minimise) the selection.
     private var suppressReleaseActivation = false
+    private var pendingReleaseActivation = false
+    private var loadGeneration = 0
+    private var previewGeneration = 0
+    /// Keep the opening display across key presses and async inventory updates.
+    private var presentationDisplayID: CGDirectDisplayID?
+    private var originWindowID: String?
+    private var openedBackwards = false
+    private var pendingBrowseSteps = 0
+    private var previewCosts: [String: Int] = [:]
+    private var previewDimensions: [String: CGFloat] = [:]
+    private static let previewByteLimit = 32 * 1024 * 1024
+    private var visiblePreviewIDs = Set<String>()
+    private var pendingPreviewLoad: DispatchWorkItem?
     @ObservationIgnored private weak var store: WorkspaceStore?
     let model = PaletteModel()
 
@@ -331,24 +345,30 @@ final class WindowPalette {
         model.opacity = store.paletteOpacity
         model.tintedCards = store.paletteTintedCards
         suppressReleaseActivation = false
+        pendingReleaseActivation = false
 
         let wasVisible = isVisible
+        if !wasVisible {
+            selectPresentationScreen(store.paletteScreenLocation)
+            originWindowID = store.mostRecentFocusedWindowID
+            openedBackwards = backwards
+            pendingBrowseSteps = 0
+        }
         let previousMode = model.mode
         let previousID = model.selection < model.filtered.count ? model.filtered[model.selection].id : nil
         // Opening under a still cursor must not move the selection (T28).
         hoverAnchor = NSEvent.mouseLocation
 
-        // Re-scan the window list only when the palette opens or changes mode.
-        // Cycling with ⌥Tab re-enters `show` on every key press; re-scanning and
-        // re-capturing there is what made the thumbnails blink.
-        //
-        // Opening re-reads reality rather than the index's cache: the list must
-        // hold the windows that are there now, including one opened a moment ago
-        // (T25).
-        if !wasVisible || previousMode != mode {
-            model.items = store.actionableWindows(refresh: true)
+        // Cycling with ⌥Tab re-enters `show` on every key press. Only a new open
+        // or mode change requests a refresh; the latest published snapshot is
+        // shown immediately while the refresh runs off the event path.
+        let needsRefresh = !wasVisible || previousMode != mode
+        if needsRefresh {
+            let ordered = store.orderedWindowsForPalette(store.cachedActionableWindows())
+            model.items = wasVisible ? orderedForSession(ordered) : ordered
+            model.isLoadingWindows = true
         }
-        guard !model.items.isEmpty else { hide(); return }
+        if model.items.isEmpty && !needsRefresh && !model.isLoadingWindows { hide(); return }
         pruneSelection()
 
         // The column is shown in both modes, so a group being edited stays
@@ -361,7 +381,7 @@ final class WindowPalette {
         if mode == .browse || !wasVisible { model.query = "" }
 
         if !wasVisible {
-            model.selection = backwards ? model.filtered.count - 1 : 0
+            model.selection = mode == .browse ? initialBrowseSelection() : 0
         } else if previousMode != mode {
             model.selection = 0
         } else {
@@ -393,13 +413,42 @@ final class WindowPalette {
         installMonitor()
         startRefreshTimer()
         highlightSelection()
+        if needsRefresh {
+            loadGeneration += 1
+            let generation = loadGeneration
+            WindowIndex.shared.refreshAsync { [weak self, weak store] _ in
+                guard let self, let store, self.isVisible, self.loadGeneration == generation else { return }
+                let previousID = self.selectedWindow()?.id
+                let wasWaitingForRelease = self.pendingReleaseActivation
+                let refreshed = self.orderedForSession(
+                    store.orderedWindowsForPalette(store.cachedActionableWindows()))
+                self.model.items = refreshed
+                self.model.isLoadingWindows = false
+                guard !refreshed.isEmpty else { self.hide(); return }
+                self.pruneSelection()
+                if let previousID, let index = self.model.filtered.firstIndex(where: { $0.id == previousID }) {
+                    self.model.selection = index
+                } else {
+                    self.model.selection = self.model.mode == .browse ? self.initialBrowseSelection() : 0
+                }
+                self.refreshGroupState()
+                self.updateLayout(in: panel, store: store, rescan: false)
+                self.loadPreviews(for: refreshed, refresh: false)
+                self.highlightSelection()
+                if wasWaitingForRelease {
+                    self.pendingReleaseActivation = false
+                    self.activateSelection()
+                }
+            }
+        }
     }
 
     /// Recomputes the panel geometry for the current layout mode, resizes the
     /// panel (full screen: exactly the visible frame) and re-centres it.
     private func updateLayout(in panel: NSWindow, store: WorkspaceStore, rescan: Bool) {
         let layout: PaletteLayout = store.paletteFullScreen ? .fullScreen : .compact
-        let available = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame.size
+        let screen = presentationScreen
+        let available = screen?.visibleFrame.size
             ?? CGSize(width: 1440, height: 900)
         // The column is shown in both modes, so it always takes its width off
         // the grid area; the search field and the footer are always there too,
@@ -434,17 +483,22 @@ final class WindowPalette {
                 onRecallGroup: { [weak self] slot in self?.recallGroupFromColumn(slot) },
                 onResetGroup: { [weak self] slot in self?.requestGroupReset(slot) },
                 onToggleGroupMember: { [weak self] id in self?.toggleGroupMember(id) },
-                onHoverCard: { [weak self] index in self?.pointerHovered(index) }
+                onHoverCard: { [weak self] index in self?.pointerHovered(index) },
+                onCardVisibility: { [weak self] id, visible in self?.cardVisibilityChanged(id, visible: visible) }
             ))
             hosting.frame = CGRect(origin: .zero, size: metrics.panelSize)
             panel.contentView = hosting
             self.hosting = hosting
         }
-        place(panel, store: store, layout: layout)
+        place(panel, store: store, layout: layout, screen: screen)
         if rescan { loadPreviews(for: model.items, refresh: true) }
     }
 
     func hide() {
+        loadGeneration += 1
+        previewGeneration += 1
+        pendingReleaseActivation = false
+        model.isLoadingWindows = false
         // Leaving the palette ends the group-editing mode: the ticks belong to
         // the group, so the next open starts with none.
         deselectGroup()
@@ -453,6 +507,13 @@ final class WindowPalette {
         stopRefreshTimer()
         model.query = ""
         panel?.orderOut(nil)
+        MainActor.assumeIsolated { WindowCapture.cancelPaletteCapture() }
+        model.previews.removeAll()
+        previewCosts.removeAll()
+        previewDimensions.removeAll()
+        visiblePreviewIDs.removeAll()
+        pendingPreviewLoad?.cancel()
+        pendingPreviewLoad = nil
     }
 
     /// Handles the ⌥Space hot key when the palette is already open. Carbon
@@ -494,24 +555,74 @@ final class WindowPalette {
     private func loadPreviews(for items: [ActionableWindow], refresh: Bool) {
         guard model.showPreview else {
             if !model.previews.isEmpty { model.previews = [:] }
+            previewCosts.removeAll()
+            previewDimensions.removeAll()
+            MainActor.assumeIsolated { WindowCapture.cancelPaletteCapture() }
             return
         }
         // Drop previews of windows that no longer exist, keep the rest.
         let liveIDs = Set(items.map(\.id))
-        if model.previews.keys.contains(where: { !liveIDs.contains($0) }) {
-            model.previews = model.previews.filter { liveIDs.contains($0.key) }
-        }
-        let requests = items.compactMap { window -> WindowCapture.Request? in
+        model.previews = model.previews.filter { liveIDs.contains($0.key) }
+        previewCosts = previewCosts.filter { liveIDs.contains($0.key) }
+        previewDimensions = previewDimensions.filter { liveIDs.contains($0.key) }
+        let maxDimension = previewMaxDimension
+        let selectedID = selectedWindow()?.id
+        // Selection first; other requests preserve the stable visual order.
+        let eligible = visiblePreviewIDs.isEmpty ? Set(items.prefix(12).map(\.id)) : visiblePreviewIDs
+        let prioritized = items.filter { eligible.contains($0.id) || $0.id == selectedID }
+            .sorted { $0.id == selectedID && $1.id != selectedID }
+        let requests = prioritized.compactMap { window -> WindowCapture.Request? in
             guard let id = window.windowID else { return nil }
-            if !refresh, model.previews[window.id] != nil { return nil }
+            if !refresh, model.previews[window.id] != nil,
+               previewDimensions[window.id] == maxDimension { return nil }
             return WindowCapture.Request(key: window.id, windowID: id)
         }
         guard !requests.isEmpty else { return }
+        let generation = previewGeneration
         // Full-screen cards are much larger: capture at a higher resolution so
         // the same image is not upscaled into a big thumbnail.
-        let maxDimension: CGFloat = model.metrics.layout == .fullScreen ? 1280 : 640
-        WindowCapture.capture(requests, maxDimension: maxDimension, force: refresh) { [weak self] key, image in
-            self?.model.previews[key] = image
+        MainActor.assumeIsolated { [weak self] in
+            guard let self, self.previewGeneration == generation else { return }
+            WindowCapture.capture(requests, maxDimension: maxDimension, force: refresh) { [weak self] key, image in
+                guard let self, self.isVisible, self.model.showPreview, self.previewGeneration == generation,
+                      self.previewMaxDimension == maxDimension,
+                      self.model.items.contains(where: { $0.id == key }) else { return }
+                self.model.previews[key] = image
+                self.previewDimensions[key] = maxDimension
+                self.previewCosts[key] = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    .map { $0.bytesPerRow * $0.height } ?? 0
+                self.trimPreviews(protecting: self.selectedWindow()?.id)
+            }
+        }
+    }
+
+    private var previewMaxDimension: CGFloat {
+        let limit: CGFloat = model.metrics.layout == .fullScreen ? 1280 : 640
+        return min(limit, max(160, (model.metrics.thumbnailWidth * (presentationScreen?.backingScaleFactor ?? 2)).rounded()))
+    }
+
+    private func cardVisibilityChanged(_ id: String, visible: Bool) {
+        if visible { visiblePreviewIDs.insert(id) } else { visiblePreviewIDs.remove(id) }
+        pendingPreviewLoad?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isVisible else { return }
+            self.loadPreviews(for: self.model.items, refresh: false)
+        }
+        pendingPreviewLoad = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+    }
+
+    private func trimPreviews(protecting selectedID: String?) {
+        var bytes = previewCosts.values.reduce(0, +)
+        for window in model.items.reversed() where bytes > Self.previewByteLimit && window.id != selectedID {
+            bytes -= previewCosts.removeValue(forKey: window.id) ?? 0
+            previewDimensions[window.id] = nil
+            model.previews[window.id] = nil
+        }
+        if bytes > Self.previewByteLimit, let selectedID {
+            model.previews[selectedID] = nil
+            previewCosts[selectedID] = nil
+            previewDimensions[selectedID] = nil
         }
     }
 
@@ -521,6 +632,10 @@ final class WindowPalette {
         let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
             guard let self, self.isVisible else { return }
             self.loadPreviews(for: self.model.items, refresh: true)
+            // The index is updated by AX notifications and resize commands.
+            // Read its published snapshot only; never make the timer perform
+            // a synchronous system-wide discovery while the panel is visible.
+            self.refreshWindowSnapshot()
             // Keep the column and the badges live while the palette is open, so
             // a member added or removed with the global shortcuts (or a digit)
             // shows up here too.
@@ -528,6 +643,32 @@ final class WindowPalette {
         }
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
+    }
+
+    private func refreshWindowSnapshot() {
+        guard let store else { return }
+        let refreshed = orderedForSession(store.orderedWindowsForPalette(store.cachedActionableWindows()))
+        let oldIDs = model.items.map(\.id)
+        let newIDs = refreshed.map(\.id)
+        let contentUnchanged = oldIDs == newIDs && zip(model.items, refreshed).allSatisfy { old, new in
+            old.title == new.title && old.frame == new.frame && old.minimized == new.minimized
+        }
+        guard !contentUnchanged else { return }
+
+        let selectedID = selectedWindow()?.id
+        model.items = refreshed
+        guard !refreshed.isEmpty else { hide(); return }
+        pruneSelection()
+        if let selectedID, let index = model.filtered.firstIndex(where: { $0.id == selectedID }) {
+            model.selection = index
+        } else {
+            model.selection = min(model.selection, max(0, model.filtered.count - 1))
+        }
+        refreshGroupState()
+        if model.selectedGroupSlot != nil { syncGroupTicks() }
+        updateLayout(in: panel ?? makePanel(size: .zero), store: store, rescan: false)
+        loadPreviews(for: refreshed, refresh: false)
+        highlightSelection()
     }
 
     private func stopRefreshTimer() {
@@ -540,7 +681,10 @@ final class WindowPalette {
 
     private func move(_ delta: Int) {
         let count = model.filtered.count
-        guard count > 0 else { return }
+        guard count > 0 else {
+            if model.isLoadingWindows { pendingBrowseSteps += delta }
+            return
+        }
         model.selection = (model.selection + delta + count) % count
         suppressReleaseActivation = false
         // The keyboard owns the selection from now on: a pointer standing still
@@ -618,7 +762,15 @@ final class WindowPalette {
                     suppressReleaseActivation = false
                     return true
                 }
-                activateSelection()
+                if model.isLoadingWindows {
+                    if model.items.isEmpty {
+                        pendingReleaseActivation = true
+                    } else {
+                        activateSelection()
+                    }
+                } else {
+                    activateSelection()
+                }
                 return true
             }
             return false
@@ -910,7 +1062,16 @@ final class WindowPalette {
     /// (unsaved-changes prompt) or other windows changed meanwhile.
     private func reconcileItems() {
         WindowIndex.shared.invalidate()
-        let fresh = WorkspaceStore.shared.actionableWindows()
+        let generation = loadGeneration
+        WindowIndex.shared.refreshAsync { [weak self] _ in
+            guard let self, self.isVisible, self.loadGeneration == generation else { return }
+            self.applyReconciledItems()
+        }
+    }
+
+    private func applyReconciledItems() {
+        let store = WorkspaceStore.shared
+        let fresh = orderedForSession(store.orderedWindowsForPalette(store.cachedActionableWindows()))
         guard !fresh.isEmpty else { hide(); return }
         let selectedID = selectedWindow()?.id
         model.items = fresh
@@ -935,6 +1096,19 @@ final class WindowPalette {
         activate(list[model.selection].id)
     }
 
+    private func orderedForSession(_ incoming: [ActionableWindow]) -> [ActionableWindow] {
+        let byID = Dictionary(incoming.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
+        return PaletteOrdering.stableOrder(existing: model.items.map(\.id), incoming: incoming.map(\.id))
+            .compactMap { byID[$0] }
+    }
+
+    private func initialBrowseSelection() -> Int {
+        let ids = model.filtered.map(\.id)
+        guard !ids.isEmpty else { return 0 }
+        let initial = PaletteOrdering.initialSelection(ids: ids, origin: originWindowID, backwards: openedBackwards)
+        return ((initial + pendingBrowseSteps) % ids.count + ids.count) % ids.count
+    }
+
     /// Acts on the window already in `model.items` — no second full desktop scan,
     /// and the action is never lost if an id changed meanwhile (A11). Brings an
     /// off-screen window back on screen, not just to the front.
@@ -946,8 +1120,8 @@ final class WindowPalette {
 
     /// Places the panel: full screen fills the visible frame exactly, compact is
     /// centred but shifted away from the overlay so they don't overlap.
-    private func place(_ panel: NSWindow, store: WorkspaceStore, layout: PaletteLayout) {
-        guard let screen = NSScreen.main else { return }
+    private func place(_ panel: NSWindow, store: WorkspaceStore, layout: PaletteLayout, screen: NSScreen?) {
+        guard let screen else { return }
         let frame = screen.visibleFrame
         switch layout {
         case .fullScreen:
@@ -966,6 +1140,29 @@ final class WindowPalette {
             }
             panel.setFrameOrigin(origin)
         }
+    }
+
+    private func selectPresentationScreen(_ location: PaletteScreenLocation) {
+        let screens = NSScreen.screens
+        let focusedID = NSScreen.main.flatMap(Self.displayID)
+        let focusedIndex = focusedID.flatMap { id in screens.firstIndex { Self.displayID($0) == id } }
+        let index = location.screenIndex(frames: screens.map(\.frame),
+                                         focusedIndex: focusedIndex, mouse: NSEvent.mouseLocation)
+        presentationDisplayID = index.flatMap { Self.displayID(screens[$0]) }
+    }
+
+    private var presentationScreen: NSScreen? {
+        let screens = NSScreen.screens
+        if let presentationDisplayID,
+           let screen = screens.first(where: { Self.displayID($0) == presentationDisplayID }) {
+            return screen
+        }
+        // The opening display may have been disconnected while the panel is up.
+        return NSScreen.main ?? screens.first
+    }
+
+    private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
     }
 
     private func makePanel(size: CGSize) -> PalettePanel {
@@ -1003,6 +1200,7 @@ struct PaletteView: View {
     let onToggleGroupMember: (String) -> Void
     /// The pointer moved over a card (T28).
     let onHoverCard: (Int) -> Void
+    let onCardVisibility: (String, Bool) -> Void
 
     @FocusState private var focused: Bool
 
@@ -1069,6 +1267,8 @@ struct PaletteView: View {
                                             groupSlots: model.groupBadges[window.id] ?? [],
                                             editedSlot: model.selectedGroupSlot)
                                     .id(window.id)
+                                    .onAppear { onCardVisibility(window.id, true) }
+                                    .onDisappear { onCardVisibility(window.id, false) }
                                     // The pointer chooses a card only when it is
                                     // actually moving: entering it, or moving
                                     // inside it (continuous hover is what makes
@@ -1103,6 +1303,16 @@ struct PaletteView: View {
                         .frame(maxWidth: .infinity,
                                minHeight: model.metrics.layout == .fullScreen ? model.metrics.gridAreaHeight : 0,
                                alignment: .center)
+                    }
+                    .overlay {
+                        if model.items.isEmpty && model.isLoadingWindows {
+                            VStack(spacing: 10) {
+                                ProgressView().controlSize(.small)
+                                Text("Finding windows…")
+                                    .font(.system(size: model.metrics.fontSize))
+                                    .foregroundStyle(model.theme.subtext)
+                            }
+                        }
                     }
                     .onChange(of: model.selection) { _, _ in
                         let list = model.filtered
@@ -1441,6 +1651,8 @@ private struct PaletteCard: View {
             EmptyView()
         case .minimized:
             badge(symbol: "dock.rectangle", label: "Minimized")
+        case .unavailable:
+            badge(symbol: "clock", label: "Temporarily unavailable")
         }
     }
 

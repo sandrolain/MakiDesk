@@ -12,13 +12,15 @@ final class NotesController: NSObject, NSWindowDelegate {
     private let store = NotesStore.shared
     private var isApplyingFrame = false
     private var themeObserver: NSObjectProtocol?
+    private var pendingInsertions: [String] = []
+    private let focusReturn = PanelFocusReturn()
 
     private override init() {
         super.init()
         themeObserver = NotificationCenter.default.addObserver(
             forName: .makiDeskThemeChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.content?.applyTheme()
+            Task { @MainActor [weak self] in self?.content?.applyTheme() }
         }
     }
 
@@ -30,40 +32,49 @@ final class NotesController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        if !isKey { focusReturn.capture() }
         if window == nil { build() }
         guard let window, let content else { return }
-
-        store.loadIfNeeded()
-        if store.notes.isEmpty { store.newNote() }
-        if store.selectedTab == nil || store.note(id: store.selectedTab!) == nil,
-           let first = store.notes.first {
-            store.openNote(id: first.id)
-        }
-
         content.applyTheme()
-        content.reloadEverything()
         place(window)
         applyMovability(to: window)
         content.updateToolbar()
 
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        content.focusEditor()
+        store.loadIfNeededAsync { [weak self] in
+            guard let self, let window = self.window, let content = self.content else { return }
+            if self.store.notes.isEmpty { self.store.newNote() }
+            if self.store.selectedTab == nil || self.store.note(id: self.store.selectedTab!) == nil,
+               let first = self.store.notes.first {
+                self.store.openNote(id: first.id)
+            }
+            content.reloadEverything()
+            self.place(window)
+            self.applyMovability(to: window)
+            content.updateToolbar()
+            let insertions = self.pendingInsertions
+            self.pendingInsertions.removeAll()
+            for insertion in insertions { content.insertTextAtCursor(insertion) }
+            if window.isVisible { content.focusEditor() }
+        }
     }
 
     /// Closes the panel the way the app means it: the drafts are written first,
     /// and the shelf of open tabs survives for the next time.
     func hide() {
-        guard let window else { return }
+        guard let window, window.isVisible else { return }
+        let restoreFocus = focusReturn.takeRestoreAction(ownsKeyboard: window.isKeyWindow)
         if store.anchor == nil { store.updateWindowFrame(window.frame) }
-        store.flush()
+        store.flushAsync()
         window.orderOut(nil)
+        restoreFocus?()
     }
 
     /// Inserts text at the cursor of the open note (used from the shelf, T31).
     func insertText(_ text: String) {
+        pendingInsertions.append(text)
         show()
-        content?.insertTextAtCursor(text)
     }
 
     private func build() {
@@ -301,6 +312,9 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private var highlighter: NotesHighlighter?
     private var currentID: UUID?
     private var filtered: [Note] = []
+    private var searchWork: DispatchWorkItem?
+    private var searchRevision: UInt64 = 0
+    private let searchQueue = DispatchQueue(label: "com.makidesk.notes-search", qos: .userInitiated)
     private var isRefreshing = false
 
     init(store: NotesStore) {
@@ -323,7 +337,6 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         buildMain()
         buildLayout()
         applyTheme()
-        store.loadIfNeeded()
         filtered = store.notes
 
         editor.onTextChange = { [weak self] text in
@@ -611,7 +624,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     /// Called by the controller right before the panel is shown.
     func reloadEverything() {
-        filtered = store.filtered(search.stringValue)
+        updateFilteredNotes()
         loadEditor()
         refreshChrome()
     }
@@ -662,12 +675,8 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         let selection = editor.textView.selectedRange()
         let text = editor.textView.string as NSString
         let location = min(selection.location, text.length)
-        let prefix = text.substring(to: location)
-        let line = prefix.components(separatedBy: "\n").count
-        let column = location - (prefix as NSString).range(of: "\n", options: .backwards).location
-        let columnNumber = (prefix as NSString).range(of: "\n", options: .backwards).location == NSNotFound
-            ? location + 1 : column
-        positionLabel.stringValue = "Ln \(line), Col \(columnNumber)"
+        let position = editor.caretPosition(at: location)
+        positionLabel.stringValue = "Ln \(position.line), Col \(position.column)"
     }
 
     private func updateStatus() {
@@ -707,13 +716,13 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     // MARK: - Chrome
 
-    private func refreshChrome() {
+    private func refreshChrome(refreshSearch: Bool = true) {
         guard isRefreshing == false else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
         if store.selectedTab != currentID { loadEditor() }
-        filtered = store.filtered(search.stringValue)
+        if refreshSearch { updateFilteredNotes() }
         table.reloadData()
         if let id = store.selectedTab, let row = filtered.firstIndex(where: { $0.id == id }) {
             table.selectRowIndexes([row], byExtendingSelection: false)
@@ -777,8 +786,29 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         }
     }
 
+    private func updateFilteredNotes() {
+        searchWork?.cancel()
+        searchRevision &+= 1
+        let revision = searchRevision
+        let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let snapshot = store.notes
+        guard !query.isEmpty else { filtered = snapshot; return }
+        let work = DispatchWorkItem { [weak self] in
+            let matches = snapshot.filter {
+                $0.title.localizedCaseInsensitiveContains(query) || $0.text.localizedCaseInsensitiveContains(query)
+            }
+            DispatchQueue.main.async {
+                guard let self, self.searchRevision == revision else { return }
+                self.filtered = matches
+                self.refreshChrome(refreshSearch: false)
+            }
+        }
+        searchWork = work
+        searchQueue.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
     @objc private func searchChanged() {
-        filtered = store.filtered(search.stringValue)
+        updateFilteredNotes()
         refreshChrome()
     }
 
@@ -790,7 +820,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     @objc private func newNote() {
         store.newNote()
-        filtered = store.filtered(search.stringValue)
+        updateFilteredNotes()
         refreshChrome()
         focusEditor()
     }
@@ -818,11 +848,12 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             saveAs()
             return
         }
-        do {
-            try store.saveToExternal(id)
-            updateStatus()
-        } catch {
-            present(error: error, title: "Could not save the note")
+        store.saveToExternalAsync(id) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success: self.updateStatus()
+            case let .failure(error): self.present(error: error, title: "Could not save the note")
+            }
         }
     }
 
@@ -834,12 +865,15 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         panel.canCreateDirectories = true
         panel.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .OK, let url = panel.url else { return }
-            do {
-                try self.store.saveAs(id, to: url)
-                self.loadEditor()
-                self.refreshChrome()
-            } catch {
-                self.present(error: error, title: "Could not save the note")
+            self.store.saveAsAsync(id, to: url) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case .success:
+                    self.loadEditor()
+                    self.refreshChrome()
+                case let .failure(error):
+                    self.present(error: error, title: "Could not save the note")
+                }
             }
         }
     }
@@ -931,17 +965,22 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     }
 
     private func open(urls: [URL]) {
-        var firstError: Error?
-        for url in urls {
-            do {
-                _ = try store.openExternal(url)
-            } catch {
-                if firstError == nil { firstError = error }
-            }
+        open(urls: urls, at: 0, firstError: nil)
+    }
+
+    private func open(urls: [URL], at index: Int, firstError: Error?) {
+        guard index < urls.count else {
+            updateFilteredNotes()
+            refreshChrome()
+            if let firstError { present(error: firstError, title: "Could not open the file") }
+            return
         }
-        filtered = store.filtered(search.stringValue)
-        refreshChrome()
-        if let firstError { present(error: firstError, title: "Could not open the file") }
+        store.openExternalAsync(urls[index]) { [weak self] result in
+            guard let self else { return }
+            var nextError = firstError
+            if case let .failure(error) = result, nextError == nil { nextError = error }
+            self.open(urls: urls, at: index + 1, firstError: nextError)
+        }
     }
 
     @objc private func revealCurrent() {

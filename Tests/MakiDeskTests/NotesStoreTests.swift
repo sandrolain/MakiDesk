@@ -33,6 +33,50 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.previousRunWasClean)
     }
 
+    func testAsyncFlushCannotMarkANewerEditAsSaved() async throws {
+        let directory = try makeDirectory()
+        let store = NotesStore(directory: directory)
+        let note = store.newNote()
+        store.updateText("first revision", for: note.id)
+        let finished = expectation(description: "first snapshot written")
+        store.flushAsync { finished.fulfill() }
+        store.updateText("newer revision", for: note.id)
+        await fulfillment(of: [finished], timeout: 3)
+        store.flush()
+        let reopened = NotesStore(directory: directory)
+        reopened.loadIfNeeded()
+        XCTAssertEqual(reopened.note(id: note.id)?.text, "newer revision")
+    }
+
+    func testAsyncRestoreDefersExternalReadsAndSavingHydratesOnlyItsTarget() async throws {
+        let directory = try makeDirectory()
+        let store = NotesStore(directory: directory)
+        let first = store.newNote()
+        store.updateText("original", for: first.id)
+        let firstURL = directory.appendingPathComponent("external-a.txt")
+        try store.saveAs(first.id, to: firstURL)
+        let second = store.newNote()
+        store.updateText("other document", for: second.id)
+        try store.saveAs(second.id, to: directory.appendingPathComponent("external-b.txt"))
+        store.flush()
+
+        let reopened = NotesStore(directory: directory)
+        let loaded = expectation(description: "drafts restored")
+        reopened.loadIfNeededAsync { loaded.fulfill() }
+        await fulfillment(of: [loaded], timeout: 3)
+        XCTAssertTrue(reopened.notes.allSatisfy { $0.externalBaseline == nil })
+        reopened.updateText("edited after restore", for: first.id)
+        let saved = expectation(description: "save with deferred baseline")
+        reopened.saveToExternalAsync(first.id) { result in
+            if case let .failure(error) = result { XCTFail(error.localizedDescription) }
+            saved.fulfill()
+        }
+        await fulfillment(of: [saved], timeout: 3)
+        XCTAssertEqual(try String(contentsOf: firstURL, encoding: .utf8), "edited after restore")
+        XCTAssertNil(reopened.note(id: second.id)?.externalBaseline)
+        reopened.flush()
+    }
+
     func testTabsOrderAndSelectionAreRestored() throws {
         let dir = try makeDirectory()
         let store = NotesStore(directory: dir)
@@ -92,6 +136,21 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(restored.text, "changed")
         XCTAssertEqual(restored.externalURL?.path, file.standardizedFileURL.path)
         XCTAssertFalse(restored.isDirty)
+    }
+
+    func testSavingExternalNotePreservesChangesMadeOutsideMakiDesk() throws {
+        let dir = try makeDirectory()
+        let file = dir.appendingPathComponent("shared.txt")
+        try "original".write(to: file, atomically: true, encoding: .utf8)
+        let store = NotesStore(directory: dir.appendingPathComponent("notes"))
+        store.loadIfNeeded()
+        let note = try store.openExternal(file)
+        store.updateText("my draft", for: note.id)
+        try "outside edit".write(to: file, atomically: true, encoding: .utf8)
+
+        XCTAssertThrowsError(try store.saveToExternal(note.id))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "outside edit")
+        XCTAssertEqual(store.note(id: note.id)?.text, "my draft")
     }
 
     func testDraftIsNotLostWhenTheExternalFileDisappears() throws {

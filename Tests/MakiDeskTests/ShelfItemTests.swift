@@ -67,4 +67,18 @@ final class ShelfItemTests: XCTestCase {
         image.unlockFocus()
         XCTAssertNotNil(ShelfItem.image(image).pasteboardWriter)
     }
+
+    func testImageDragPromisesRepresentationsAndProducesAValidPNGOnDemand() throws {
+        let image = NSImage(size: NSSize(width: 10, height: 10))
+        image.lockFocus()
+        NSColor.blue.setFill()
+        NSRect(x: 0, y: 0, width: 10, height: 10).fill()
+        image.unlockFocus()
+        let writer = try XCTUnwrap(ShelfItem.image(image).pasteboardWriter as? ShelfImageWriter)
+        XCTAssertEqual(writer.writableTypes(for: .general), [.png, .tiff])
+        XCTAssertTrue(writer.writingOptions(forType: .png, pasteboard: .general).contains(.promised))
+        let png = try XCTUnwrap(writer.pasteboardPropertyList(forType: .png) as? Data)
+        XCTAssertEqual(Array(png.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
+        XCTAssertEqual(writer.pasteboardPropertyList(forType: .png) as? Data, png)
+    }
 }

@@ -97,16 +97,23 @@ extension NSColor {
 /// parser from its SwiftPM product and the `highlights.scm` query compiled
 /// into the app (see `NotesGrammarQueries`).
 enum NotesGrammar {
-    private static var cache: [NotesLanguage: LanguageConfiguration] = [:]
+    /// All access, including first-time query compilation, holds this lock.
+    private final class Cache: @unchecked Sendable {
+        let lock = NSLock()
+        var values: [NotesLanguage: LanguageConfiguration] = [:]
+    }
+    private static let cache = Cache()
 
     static func configuration(for language: NotesLanguage) -> LanguageConfiguration? {
-        if let cached = cache[language] { return cached }
+        cache.lock.lock()
+        defer { cache.lock.unlock() }
+        if let cached = cache.values[language] { return cached }
         guard let (parser, query) = rawConfiguration(for: language) else { return nil }
         let tsLanguage = Language(parser())
         guard let compiled = try? Query(language: tsLanguage, data: Data(query.utf8)) else { return nil }
         let configuration = LanguageConfiguration(tsLanguage, name: language.label,
                                                   queries: [.highlights: compiled])
-        cache[language] = configuration
+        cache.values[language] = configuration
         return configuration
     }
 
@@ -143,25 +150,28 @@ final class NotesHighlighter {
     static let maximumLength = 300_000
 
     private weak var textView: NSTextView?
-    private let configuration: LanguageConfiguration
-    private let query: Query
-    private let parser = Parser()
+    private let engine: NotesSyntaxEngine
+    private let parserQueue = DispatchQueue(label: "com.makidesk.notes-syntax", qos: .userInitiated)
+    private var parserWork: DispatchWorkItem?
+    private var revision: UInt64 = 0
+    private var styledSource: String?
+    private var styledCaptures: [NotesHighlightCapture] = []
+    private var stylesCleared = false
     private var theme: NotesSyntaxTheme
     private var baseAttributes: [NSAttributedString.Key: Any]
     private var work: DispatchWorkItem?
-    private let italicFont: NSFont?
-    private let boldFont: NSFont?
+    private var italicFont: NSFont?
+    private var boldFont: NSFont?
 
     init?(textView: NSTextView, language: NotesLanguage, theme: NotesSyntaxTheme,
           baseAttributes: [NSAttributedString.Key: Any]) {
         guard let configuration = NotesGrammar.configuration(for: language),
               let query = configuration.queries[.highlights] else { return nil }
         self.textView = textView
-        self.configuration = configuration
-        self.query = query
+        guard let engine = NotesSyntaxEngine(configuration: configuration, query: query) else { return nil }
+        self.engine = engine
         self.theme = theme
         self.baseAttributes = baseAttributes
-        guard (try? parser.setLanguage(configuration.language)) != nil else { return nil }
         let font = baseAttributes[.font] as? NSFont
         italicFont = font.flatMap { NSFontManager.shared.convert($0, toHaveTrait: .italicFontMask) }
         boldFont = font.flatMap { NSFontManager.shared.convert($0, toHaveTrait: .boldFontMask) }
@@ -170,12 +180,19 @@ final class NotesHighlighter {
     func update(theme: NotesSyntaxTheme, baseAttributes: [NSAttributedString.Key: Any]) {
         self.theme = theme
         self.baseAttributes = baseAttributes
+        let font = baseAttributes[.font] as? NSFont
+        italicFont = font.flatMap { NSFontManager.shared.convert($0, toHaveTrait: .italicFontMask) }
+        boldFont = font.flatMap { NSFontManager.shared.convert($0, toHaveTrait: .boldFontMask) }
+        styledSource = nil
+        stylesCleared = false
         apply()
     }
 
     /// Called on every edit: the pass runs when the typing pauses.
     func schedule() {
         work?.cancel()
+        revision &+= 1
+        parserWork?.cancel()
         guard let textView else { return }
         guard textView.string.utf16.count <= Self.maximumLength else {
             clearStyles()
@@ -191,49 +208,171 @@ final class NotesHighlighter {
     func apply() {
         work?.cancel()
         work = nil
-        guard let textView, let storage = textView.textStorage else { return }
+        guard let textView, textView.textStorage != nil else { return }
         let string = textView.string
         guard string.utf16.count <= Self.maximumLength, string.isEmpty == false else {
             clearStyles()
             return
         }
-        guard let tree = parser.parse(string) else { return }
-
-        // Collect before touching the storage: the cursor walks the tree, and
-        // an attribute edit in the middle would only add work.
-        var captures: [(name: String, range: NSRange)] = []
-        for match in query.execute(in: tree) {
-            for capture in match.captures {
-                guard let name = capture.name else { continue }
-                captures.append((name, capture.node.range))
+        revision &+= 1
+        let currentRevision = revision
+        let engine = self.engine
+        let previous = styledSource
+        let previousCaptures = styledCaptures
+        parserWork?.cancel()
+        let task = DispatchWorkItem { [weak self] in
+            guard let captures = engine.captures(in: string) else { return }
+            let ranges = NotesHighlightDiff.changedRanges(oldSource: previous, source: string,
+                                                         old: previousCaptures, new: captures)
+            let patches = ranges.map { range in
+                (range, captures.filter { NSIntersectionRange($0.range, range).length > 0 })
+            }
+            DispatchQueue.main.async {
+                guard let self, self.revision == currentRevision,
+                      let textView = self.textView, textView.string == string,
+                      let storage = textView.textStorage else { return }
+                storage.beginEditing()
+                for (range, captures) in patches {
+                    storage.setAttributes(self.baseAttributes, range: range)
+                    for capture in captures {
+                        guard let color = self.theme.color(forCapture: capture.name) else { continue }
+                        var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: color]
+                        if capture.name.contains("comment") || capture.name.contains("emphasis") {
+                            if let font = self.italicFont { attributes[.font] = font }
+                        } else if ["keyword", "title", "strong", "heading"].contains(where: capture.name.contains) {
+                            if let font = self.boldFont { attributes[.font] = font }
+                        }
+                        storage.addAttributes(attributes, range: NSIntersectionRange(range, capture.range))
+                    }
+                }
+                storage.endEditing()
+                self.styledSource = string
+                self.styledCaptures = captures
+                self.stylesCleared = false
+                textView.typingAttributes = self.baseAttributes
             }
         }
-
-        let whole = NSRange(location: 0, length: storage.length)
-        storage.beginEditing()
-        storage.setAttributes(baseAttributes, range: whole)
-        for capture in captures {
-            guard let color = theme.color(forCapture: capture.name) else { continue }
-            var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: color]
-            if capture.name.contains("comment") || capture.name.contains("emphasis") {
-                if let italicFont { attributes[.font] = italicFont }
-            } else if capture.name.contains("keyword") || capture.name.contains("title")
-                        || capture.name.contains("strong") || capture.name.contains("heading") {
-                if let boldFont { attributes[.font] = boldFont }
-            }
-            storage.addAttributes(attributes, range: capture.range)
-        }
-        storage.endEditing()
-        textView.typingAttributes = baseAttributes
-        textView.needsDisplay = true
+        parserWork = task
+        parserQueue.async(execute: task)
     }
 
     private func clearStyles() {
+        revision &+= 1
+        parserWork?.cancel()
+        guard !stylesCleared else { return }
+        stylesCleared = true
+        styledSource = nil
+        styledCaptures.removeAll()
         guard let textView, let storage = textView.textStorage else { return }
         let whole = NSRange(location: 0, length: storage.length)
         storage.beginEditing()
         storage.setAttributes(baseAttributes, range: whole)
         storage.endEditing()
         textView.typingAttributes = baseAttributes
+    }
+
+}
+
+/// Parser and trees are accessed exclusively by the highlighter serial queue.
+private final class NotesSyntaxEngine: @unchecked Sendable {
+    private let query: Query
+    private let parser = Parser()
+    private var tree: MutableTree?
+    private var parsedSource: String?
+
+    init?(configuration: LanguageConfiguration, query: Query) {
+        self.query = query
+        guard (try? parser.setLanguage(configuration.language)) != nil else { return nil }
+    }
+
+    func captures(in source: String) -> [NotesHighlightCapture]? {
+        guard let tree = parseIncrementally(source) else { return nil }
+        return query.execute(in: tree).flatMap { match in
+            match.captures.compactMap { capture in
+                capture.name.map { NotesHighlightCapture(name: $0, range: capture.node.range) }
+            }
+        }
+    }
+
+    /// Reuses Tree-sitter's previous tree and edits only the changed span.
+    /// Captures are still recollected for the complete document so styling
+    /// stays correct when a small edit changes a surrounding syntax node.
+    private func parseIncrementally(_ source: String) -> MutableTree? {
+        guard let previous = parsedSource, let oldTree = tree else {
+            let initial = parser.parse(source)
+            parsedSource = source
+            tree = initial
+            return initial
+        }
+        if previous == source { return tree }
+
+        let oldString = previous as NSString
+        let newString = source as NSString
+        let sharedLimit = min(oldString.length, newString.length)
+        var prefixLength = 0
+        while prefixLength < sharedLimit,
+              oldString.character(at: prefixLength) == newString.character(at: prefixLength) {
+            prefixLength += 1
+        }
+        if Self.splitsSurrogatePair(oldString, at: prefixLength)
+            || Self.splitsSurrogatePair(newString, at: prefixLength) {
+            prefixLength -= 1
+        }
+        var suffixLength = 0
+        while suffixLength < oldString.length - prefixLength,
+              suffixLength < newString.length - prefixLength,
+              oldString.character(at: oldString.length - suffixLength - 1)
+                == newString.character(at: newString.length - suffixLength - 1) {
+            suffixLength += 1
+        }
+        while suffixLength > 0,
+              Self.splitsSurrogatePair(oldString, at: oldString.length - suffixLength)
+                || Self.splitsSurrogatePair(newString, at: newString.length - suffixLength) {
+            suffixLength -= 1
+        }
+
+        let oldEnd = oldString.length - suffixLength
+        let newEnd = newString.length - suffixLength
+        let edit = InputEdit(
+            startByte: prefixLength * 2,
+            oldEndByte: oldEnd * 2,
+            newEndByte: newEnd * 2,
+            startPoint: Self.treeSitterPoint(in: oldString, offset: prefixLength),
+            oldEndPoint: Self.treeSitterPoint(in: oldString, offset: oldEnd),
+            newEndPoint: Self.treeSitterPoint(in: newString, offset: newEnd)
+        )
+        oldTree.edit(edit)
+        guard let updatedTree = parser.parse(tree: oldTree, string: source) else {
+            let replacement = parser.parse(source)
+            parsedSource = source
+            tree = replacement
+            return replacement
+        }
+        parsedSource = source
+        tree = updatedTree
+        return updatedTree
+    }
+
+    private static func treeSitterPoint(in string: NSString, offset: Int) -> Point {
+        var row = 0
+        var column = 0
+        if offset > 0 {
+            for index in 0..<offset {
+                if string.character(at: index) == 10 {
+                    row += 1
+                    column = 0
+                } else {
+                    column += 1
+                }
+            }
+        }
+        return Point(row: UInt32(row), column: UInt32(column * 2))
+    }
+
+    private static func splitsSurrogatePair(_ string: NSString, at offset: Int) -> Bool {
+        guard offset > 0, offset < string.length else { return false }
+        let before = string.character(at: offset - 1)
+        let after = string.character(at: offset)
+        return (0xD800...0xDBFF).contains(before) && (0xDC00...0xDFFF).contains(after)
     }
 }

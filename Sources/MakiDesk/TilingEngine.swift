@@ -258,8 +258,11 @@ enum TilingEngine {
         let screen = area.insetBy(dx: gap, dy: gap)
         let columns = max(1, Int(ceil(sqrt(Double(count)))))
         let rows = Int(ceil(Double(count) / Double(columns)))
-        let cellWidth = max(180, (screen.width - gap * CGFloat(columns - 1)) / CGFloat(columns))
-        let cellHeight = max(140, (screen.height - gap * CGFloat(rows - 1)) / CGFloat(rows))
+        // Keep every cell inside the available area, even when there are more
+        // windows than fit at the preferred minimum size. Oversized frames
+        // silently moved windows onto neighboring displays for large groups.
+        let cellWidth = max(1, (screen.width - gap * CGFloat(columns - 1)) / CGFloat(columns))
+        let cellHeight = max(1, (screen.height - gap * CGFloat(rows - 1)) / CGFloat(rows))
         return (0..<count).map { index in
             let column = index % columns
             let row = index / columns

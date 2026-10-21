@@ -19,8 +19,9 @@ enum LegacyMigration {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: marker) else { return }
         migrateSettings(from: previousBundleID, to: defaults)
-        migrateFolder(from: previousFolder, to: currentFolder)
-        defaults.set(true, forKey: marker)
+        if migrateFolder(from: previousFolder, to: currentFolder) {
+            defaults.set(true, forKey: marker)
+        }
     }
 
     /// Copies the old bundle's preferences into the current domain, leaving any
@@ -36,16 +37,23 @@ enum LegacyMigration {
     /// Moves `Application Support/<old>` to `Application Support/<new>` when the
     /// new folder does not exist yet. Anything left in place is left on purpose:
     /// a half-moved folder is worse than a copy that can be re-done.
-    private static func migrateFolder(from oldName: String, to newName: String) {
+    @discardableResult
+    static func migrateFolder(from oldName: String, to newName: String, in base: URL? = nil) -> Bool {
         let fileManager = FileManager.default
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        let root = base ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent("Library/Application Support", isDirectory: true)
-        let old = base.appendingPathComponent(oldName, isDirectory: true)
-        let new = base.appendingPathComponent(newName, isDirectory: true)
+        let old = root.appendingPathComponent(oldName, isDirectory: true)
+        let new = root.appendingPathComponent(newName, isDirectory: true)
         guard fileManager.fileExists(atPath: old.path),
-              !fileManager.fileExists(atPath: new.path) else { return }
-        try? fileManager.createDirectory(at: base, withIntermediateDirectories: true)
-        try? fileManager.moveItem(at: old, to: new)
+              !fileManager.fileExists(atPath: new.path) else { return true }
+        do {
+            try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+            try fileManager.moveItem(at: old, to: new)
+            return true
+        } catch {
+            makiLog.error("migration: could not move legacy folder -> \(error.localizedDescription, privacy: .public)")
+            return false
+        }
     }
 }

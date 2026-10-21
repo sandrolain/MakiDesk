@@ -33,6 +33,8 @@ final class WindowDrag {
 
     private var monitor: Any?
     private var pollTimer: Timer?
+    private var pollingInterval: TimeInterval = 0
+    private var nextHitTest = Date.distantPast
     private var element: AXUIElement?
     private var area: CGRect = .zero
     /// Where the left button went down, to tell a drag from a plain click.
@@ -47,7 +49,7 @@ final class WindowDrag {
 
     func start() {
         guard monitor == nil else { return }
-        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp, .flagsChanged]) { [weak self] event in
             self?.handle(event)
         }
     }
@@ -55,8 +57,11 @@ final class WindowDrag {
     private func handle(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
+            guard WorkspaceStore.shared.dragEnabled else { return }
             downPoint = cursorPoint()
             startPolling()
+        case .flagsChanged:
+            if downPoint != nil { poll() }
         case .leftMouseUp:
             applyIfNeeded()
             reset()
@@ -67,9 +72,11 @@ final class WindowDrag {
 
     // MARK: - Polling
 
-    private func startPolling() {
+    private func startPolling(interval: TimeInterval = 1.0 / 15.0) {
+        if pollTimer != nil, pollingInterval == interval { return }
         pollTimer?.invalidate()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in self?.poll() }
+        pollingInterval = interval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.poll() }
         // `.common` keeps the timer alive across modal / tracking run-loop modes.
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
@@ -86,14 +93,15 @@ final class WindowDrag {
         }
         // Respect the master switch in Settings.
         guard WorkspaceStore.shared.dragEnabled else {
-            if active { hidePreview() }
+            reset()
             return
         }
         let cursor = cursorPoint()
         let combo = activatorHeld
-        if combo, !active {
-            begin(at: cursor)
+        if combo, !active, Date() >= nextHitTest {
+            if !begin(at: cursor) { nextHitTest = Date().addingTimeInterval(0.25) }
         }
+        startPolling(interval: combo && active ? 1.0 / 60.0 : 1.0 / 15.0)
         guard active else { return }
         guard combo else { hidePreview(); return }
 
@@ -162,6 +170,7 @@ final class WindowDrag {
     }
 
     private func reset() {
+        nextHitTest = .distantPast
         pollTimer?.invalidate()
         pollTimer = nil
         hidePreview()

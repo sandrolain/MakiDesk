@@ -38,11 +38,11 @@ enum WindowController {
     }
 
     struct WindowInfo: Identifiable {
-        let id: String
+        var id: String
         let title: String
         let appName: String
         let element: AXUIElement
-        let frame: CGRect
+        var frame: CGRect
         let pid: pid_t
         /// On-screen window number (`kCGWindowNumber`), when it could be matched.
         /// Used as the handle for ScreenCaptureKit and as a stable identity
@@ -51,6 +51,13 @@ enum WindowController {
         var minimized: Bool = false
         /// Front-to-back stacking order (0 = frontmost). `Int.max` when unknown.
         var zIndex: Int = Int.max
+        var temporarilyUnavailable = false
+    }
+
+    struct WindowInventoryRead {
+        var windows: [WindowInfo]
+        var unavailablePIDs: Set<pid_t> = []
+        var stackingOrder: [CGWindowID: Int] = [:]
     }
 
     /// Which manipulation operations a window actually supports. Electron apps
@@ -127,26 +134,41 @@ enum WindowController {
     ///   apps — unless they are real user windows with a title and a frame (see
     ///   `isAgentWindow`): an agent's settings window is listed, its widget is not.
     static func discoverWindows(includeMinimized: Bool = false) -> [WindowInfo] {
+        discoverInventory(includeMinimized: includeMinimized).windows
+    }
+
+    static func discoverInventory(includeMinimized: Bool = false, onlyPIDs: Set<pid_t>? = nil) -> WindowInventoryRead {
+        var unavailable = Set<pid_t>()
         let order = cgWindowOrder()
         // The all-windows list names a window Core Graphics knows even when it is
         // in the Dock, which is what keeps a minimised window's identity stable
         // across its siblings being reordered (T25).
         let numbers = cgWindowNumbers()
+        let orderByPID = Dictionary(grouping: order, by: \.pid)
+        let numbersByPID = Dictionary(grouping: numbers, by: \.pid)
+        let stackRanks = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($0.element.number, $0.offset) })
         let ownPID = ProcessInfo.processInfo.processIdentifier
         let discovered: [WindowInfo] = NSWorkspace.shared.runningApplications
             .filter {
                 !$0.isTerminated &&
+                (onlyPIDs?.contains($0.processIdentifier) ?? true) &&
+                $0.activationPolicy != .prohibited &&
                 $0.processIdentifier != ownPID
             }
 
             .flatMap { app -> [WindowInfo] in
                 let pid = app.processIdentifier
+                let appOrder = orderByPID[pid] ?? []
+                let appNumbers = numbersByPID[pid] ?? []
                 let agent = app.activationPolicy != .regular
                 let appElement = AXUIElementCreateApplication(pid)
+                AXUIElementSetMessagingTimeout(appElement, 0.1)
+                let deadline = Date().addingTimeInterval(0.5)
+                var encounteredTimeout = false
                 var value: CFTypeRef?
-                guard AXUIElementCopyAttributeValue(
-                    appElement, kAXWindowsAttribute as CFString, &value
-                ) == .success, let windows = value as? [AXUIElement] else {
+                let read = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &value)
+                guard read == .success, let windows = value as? [AXUIElement] else {
+                    if read == .cannotComplete || read == .failure || read == .apiDisabled { unavailable.insert(pid) }
                     return []
                 }
 
@@ -156,14 +178,26 @@ enum WindowController {
                 var claimedScreenNumbers = Set<CGWindowID>()
                 var claimedNumbers = Set<CGWindowID>()
                 return windows.enumerated().compactMap { (index, element) -> WindowInfo? in
+                    // Healthy apps with many windows must not be truncated.
+                    // Stop a slow pass only after communication has failed.
+                    guard !encounteredTimeout || Date() < deadline else { unavailable.insert(pid); return nil }
+                    AXUIElementSetMessagingTimeout(element, 0.05)
                     var titleValue: CFTypeRef?
                     let result = AXUIElementCopyAttributeValue(
                         element, kAXTitleAttribute as CFString, &titleValue
                     )
+                    if result == .cannotComplete || result == .failure {
+                        encounteredTimeout = true
+                        unavailable.insert(pid)
+                    }
                     let rawTitle = result == .success ? titleValue as? String : nil
                     let minimized = isMinimized(element)
                     if !includeMinimized, minimized { return nil }
-                    guard let frame = frame(of: element) ?? (minimized ? .zero : nil) else { return nil }
+                    guard let frame = frame(of: element) ?? (minimized ? .zero : nil) else {
+                        encounteredTimeout = true
+                        unavailable.insert(pid)
+                        return nil
+                    }
                     if isDesktopWindow(element, frame: frame) { return nil }
                     // A window of an app that is not `.regular` counts only when
                     // the window server shows it where windows live: Notification
@@ -172,15 +206,15 @@ enum WindowController {
                     // switch to or arrange (T25).
                     if agent, !isAgentWindow(subrole: attributeString(kAXSubroleAttribute, of: element),
                                              title: rawTitle, frame: frame,
-                                             layer: cgLayer(for: frame, pid: pid, in: numbers)) {
+                                             layer: cgLayer(for: frame, pid: pid, in: appNumbers)) {
                         return nil
                     }
-                    let cgID = windowNumber(for: frame, pid: pid, title: rawTitle, in: order,
+                    let cgID = windowNumber(for: frame, pid: pid, title: rawTitle, in: appOrder,
                                             used: &claimedScreenNumbers)
                     var identifier = stableID(pid: pid,
                                               identifier: attributeString(kAXIdentifierAttribute, of: element),
                                               windowNumber: windowNumber(for: frame, pid: pid, title: rawTitle,
-                                                                         in: numbers, used: &claimedNumbers),
+                                                                         in: appNumbers, used: &claimedNumbers),
                                               index: index)
                     if usedIDs.contains(identifier) {
                         identifier += "-\(index)"
@@ -195,14 +229,16 @@ enum WindowController {
                         pid: pid,
                         windowID: cgID,
                         minimized: minimized,
-                        zIndex: stackingIndex(for: pid, frame: frame, in: order)
+                        zIndex: cgID.flatMap { stackRanks[$0] } ?? Int.max,
+                        temporarilyUnavailable: result == .cannotComplete || result == .failure
                     )
                 }
             }
         // Front-to-back so array order reflects the real window stack.
-        return discovered.sorted {
+        let sorted = discovered.sorted {
             $0.zIndex == $1.zIndex ? $0.id < $1.id : $0.zIndex < $1.zIndex
         }
+        return WindowInventoryRead(windows: sorted, unavailablePIDs: unavailable, stackingOrder: stackRanks)
     }
 
     /// Whether an element is the **desktop** — or another full-screen background —
@@ -391,6 +427,7 @@ enum WindowController {
             return .none
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(appElement, 0.1)
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             appElement, kAXFocusedWindowAttribute as CFString, &raw
@@ -399,6 +436,7 @@ enum WindowController {
             return .none
         }
         let element = raw as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.1)
         guard let frame = frame(of: element) else { return .none }
         guard !isDesktopWindow(element, frame: frame) else { return .desktop }
         var titleValue: CFTypeRef?
@@ -407,10 +445,17 @@ enum WindowController {
         // gives the same number as the on-screen one — and names it even in the
         // moment it is being minimised under a click.
         var claimed = Set<CGWindowID>()
-        let cgID = windowNumber(for: frame, pid: app.processIdentifier,
+        let indexed = WindowIndex.shared.snapshot(includeMinimized: true).first {
+            $0.pid == app.processIdentifier && CFEqual($0.element, element)
+        }
+        let cgID: CGWindowID?
+        if let indexed { cgID = indexed.windowID }
+        else {
+            cgID = windowNumber(for: frame, pid: app.processIdentifier,
                                 title: titleValue as? String, in: cgWindowNumbers(), used: &claimed)
+        }
         return .window(WindowInfo(
-            id: stableID(pid: app.processIdentifier,
+            id: indexed?.id ?? stableID(pid: app.processIdentifier,
                          identifier: attributeString(kAXIdentifierAttribute, of: element),
                          windowNumber: cgID, index: 0),
             title: titleValue as? String ?? "Untitled window",

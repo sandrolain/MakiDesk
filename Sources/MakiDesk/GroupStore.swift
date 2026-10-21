@@ -67,20 +67,22 @@ struct GroupStore {
         }
     }
 
-    /// Writes the groups, creating the containing directory if needed. Failures
-    /// are logged, never thrown: groups are a convenience, and the app must keep
-    /// running even if Application Support is not writable.
-    func save(_ groups: [WindowGroup]) {
+    /// Writes the groups atomically. The caller keeps its dirty state when this
+    /// returns false so a later flush can retry without another user change.
+    @discardableResult
+    func save(_ groups: [WindowGroup]) -> Bool {
         let payload = Payload(groups: groups)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(payload) else { return }
+        guard let data = try? encoder.encode(payload) else { return false }
         do {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
             try data.write(to: fileURL, options: .atomic)
+            return true
         } catch {
             makiLog.error("groups: could not save -> \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
@@ -88,12 +90,21 @@ struct GroupStore {
         fileURL.appendingPathExtension("bak")
     }
 
-    /// Moves an unreadable file out of the way so the next save starts from a
-    /// clean state, replacing any previous backup.
+    /// Moves an unreadable file out of the way without deleting earlier
+    /// recovery copies. If the move fails, the source remains untouched.
     private func backUpCorruptFile() {
-        let backup = backUpURL()
-        try? FileManager.default.removeItem(at: backup)
-        try? FileManager.default.moveItem(at: fileURL, to: backup)
-        makiLog.error("groups: unreadable file set aside at \(backup.path, privacy: .public)")
+        let base = backUpURL()
+        var backup = base
+        var suffix = 1
+        while FileManager.default.fileExists(atPath: backup.path) {
+            backup = base.deletingPathExtension().appendingPathExtension("bak-\(suffix)")
+            suffix += 1
+        }
+        do {
+            try FileManager.default.moveItem(at: fileURL, to: backup)
+            makiLog.error("groups: unreadable file set aside at \(backup.path, privacy: .public)")
+        } catch {
+            makiLog.error("groups: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
+        }
     }
 }
