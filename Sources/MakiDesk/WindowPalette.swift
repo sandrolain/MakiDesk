@@ -484,6 +484,7 @@ final class WindowPalette {
                 onResetGroup: { [weak self] slot in self?.requestGroupReset(slot) },
                 onToggleGroupMember: { [weak self] id in self?.toggleGroupMember(id) },
                 onHoverCard: { [weak self] index in self?.pointerHovered(index) },
+                onQueryChange: { [weak self] in self?.highlightSelection() },
                 onCardVisibility: { [weak self] id, visible in self?.cardVisibilityChanged(id, visible: visible) }
             ))
             hosting.frame = CGRect(origin: .zero, size: metrics.panelSize)
@@ -718,6 +719,7 @@ final class WindowPalette {
         hoverAnchor = now
         guard moved, index != model.selection else { return }
         model.selection = index
+        highlightSelection()
     }
 
     /// Whether a pointer report is a real move: a point of jitter is not one.
@@ -1200,6 +1202,8 @@ struct PaletteView: View {
     let onToggleGroupMember: (String) -> Void
     /// The pointer moved over a card (T28).
     let onHoverCard: (Int) -> Void
+    /// Search filtering can change the selected row without changing its index.
+    let onQueryChange: () -> Void
     let onCardVisibility: (String, Bool) -> Void
 
     @FocusState private var focused: Bool
@@ -1336,7 +1340,10 @@ struct PaletteView: View {
             .fill(model.theme.background.opacity(model.opacity)))
         .overlay(RoundedRectangle(cornerRadius: model.metrics.panelCornerRadius)
             .stroke(model.theme.border, lineWidth: 1))
-        .onChange(of: model.query) { _, _ in model.selection = 0 }
+        .onChange(of: model.query) { _, _ in
+            model.selection = 0
+            onQueryChange()
+        }
         .onChange(of: model.mode) { _, mode in
             focused = mode == .search
             if mode != .search { focused = false }
@@ -1556,6 +1563,7 @@ private struct PaletteCard: View {
     private var glyphTint: Color {
         tinted ? Color(nsColor: window.color) : theme.subtext
     }
+    private var appTint: Color { Color(nsColor: window.color) }
 
     var body: some View {
         VStack(spacing: 8 * (metrics.fontSize / 12)) {
@@ -1596,14 +1604,16 @@ private struct PaletteCard: View {
             .overlay(alignment: .bottomLeading) { groupBadges }
             Text(window.title.isEmpty ? window.appName : window.title)
                 .font(.system(size: metrics.fontSize, weight: .semibold))
-                .lineLimit(1).foregroundStyle(theme.text)
+                .lineLimit(1).foregroundStyle(tinted ? appTint : theme.text)
             Text(window.appName)
-                .font(.system(size: metrics.fontSize * 0.85)).lineLimit(1).foregroundStyle(theme.subtext)
+                .font(.system(size: metrics.fontSize * 0.85)).lineLimit(1)
+                .foregroundStyle(tinted ? appTint.opacity(0.8) : theme.subtext)
         }
         .padding(10 * (metrics.fontSize / 12))
-        .background(RoundedRectangle(cornerRadius: 14).fill(selected ? theme.surfaceSelected : theme.surface))
+        .background(RoundedRectangle(cornerRadius: 14)
+            .fill(selected ? theme.surfaceSelected : (tinted ? appTint.opacity(0.10) : theme.surface)))
         .overlay(RoundedRectangle(cornerRadius: 14)
-            .stroke(selected ? theme.accent : (layoutSelected ? theme.border : .clear),
+            .stroke(selected ? theme.accent : (layoutSelected ? theme.border : (tinted ? appTint.opacity(0.42) : .clear)),
                     lineWidth: selected ? 3 : 2))
     }
 

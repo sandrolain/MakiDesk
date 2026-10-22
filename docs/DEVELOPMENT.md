@@ -138,6 +138,15 @@ Package.swift        dependency and target graph
   log show --last 10m --predicate 'process == "MakiDesk"'
   ```
 
+- Idle CPU diagnostics normally sample once a minute. To sample every five
+  seconds for ten minutes on the next launch, run
+  `defaults write com.makidesk.app IdlePerformanceDiagnostics -bool YES`, then
+  restart MakiDesk. The option resets itself after launch. Read the samples with:
+
+  ```sh
+  log stream --level info --predicate 'subsystem == "com.makidesk.app" AND category == "Idle Performance"'
+  ```
+
 - Window control is Accessibility-dependent: some windows are not resizable and
   some apps only expose a frame after a retry. `WindowController` reports those
   refusals; don't silence them.

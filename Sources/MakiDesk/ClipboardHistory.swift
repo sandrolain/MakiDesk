@@ -1,5 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
+import Darwin
+import os
 
 /// One copied text, kept in memory only (T21).
 struct ClipboardEntry: Identifiable, Equatable {
@@ -43,6 +45,11 @@ final class ClipboardHistory {
     private let secureInput: () -> Bool
     private var lastChangeCount: Int
     private var timer: Timer?
+    private let performanceLog = Logger(subsystem: "com.makidesk.app", category: "Idle Performance")
+    private var metricsWindowStarted = ContinuousClock.now
+    private var metricsPollCount: UInt64 = 0
+    private var metricsChangedCount: UInt64 = 0
+    private var metricsPollCPUTime = 0.0
 
     /// Texts are kept whole so a paste is exact; a single absurd copy (a
     /// multi-megabyte log) is not worth the memory.
@@ -84,6 +91,9 @@ final class ClipboardHistory {
     /// One look at the pasteboard. Separate from the timer so the tests can
     /// drive it without waiting.
     func poll() {
+        var cpuStart = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
+        defer { recordPoll(cpuStart: cpuStart) }
         guard secureInput() == false else {
             // Do not remember whatever a password field had for when secure
             // input turns off again.
@@ -93,12 +103,32 @@ final class ClipboardHistory {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
         lastChangeCount = count
+        metricsChangedCount += 1
 
         guard hasConcealedType() == false else { return }
         guard let text = pasteboard.string(forType: .string),
               text.isEmpty == false,
               text.count <= maximumLength else { return }
         insert(text)
+    }
+
+    /// Emits an aggregate once a minute so diagnostics add no per-poll logging
+    /// and never include clipboard contents.
+    private func recordPoll(cpuStart: timespec) {
+        metricsPollCount += 1
+        var cpuEnd = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuEnd)
+        let startNanoseconds = Double(cpuStart.tv_sec) * 1e9 + Double(cpuStart.tv_nsec)
+        let endNanoseconds = Double(cpuEnd.tv_sec) * 1e9 + Double(cpuEnd.tv_nsec)
+        metricsPollCPUTime += max(0, endNanoseconds - startNanoseconds)
+        let elapsed = metricsWindowStarted.duration(to: .now)
+        guard elapsed >= .seconds(60) else { return }
+        let cpuNanoseconds = UInt64(max(0, metricsPollCPUTime))
+        performanceLog.info("Idle clipboard metrics: polls=\(self.metricsPollCount), changed=\(self.metricsChangedCount), poll_cpu_ns=\(cpuNanoseconds)")
+        metricsWindowStarted = .now
+        metricsPollCount = 0
+        metricsChangedCount = 0
+        metricsPollCPUTime = 0
     }
 
     private func hasConcealedType() -> Bool {

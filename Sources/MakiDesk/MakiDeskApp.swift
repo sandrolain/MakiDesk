@@ -19,6 +19,7 @@ struct MakiDeskApp: App {
         WindowDrag.shared.start()
         ClipboardHistory.shared.start()
         ShelfController.shared.start()
+        IdlePerformanceMetrics.shared.start()
 
     }
 
@@ -240,19 +241,25 @@ struct MakiDeskApp: App {
                 .accessibilityLabel("MakiDesk")
                 .modifier(SettingsOpenerBridge())
         }
-        Settings {
+        Window("Settings", id: "makidesk-settings") {
             SettingsView(store: store)
         }
+        .defaultSize(width: 760, height: 720)
+        .windowResizability(.contentMinSize)
     }
 }
 
 /// Opens the Settings window on first launch and on demand. The status-item
 /// label is the only SwiftUI view that is alive before the menu is opened, so it
-/// is used to reach the `openSettings` environment action. The legacy
+/// is used to reach the `openWindow` environment action. The legacy
 /// `sendAction(Selector(("showSettingsWindow:")))` does not work for an
 /// accessory app without a main menu (it silently reaches no responder).
 private struct SettingsOpenerBridge: ViewModifier {
-    @Environment(\.openSettings) private var openSettings
+    @Environment(\.openWindow) private var openWindow
+
+    private func showSettings() {
+        openWindow(id: "makidesk-settings")
+    }
 
     func body(content: Content) -> some View {
         content
@@ -262,14 +269,13 @@ private struct SettingsOpenerBridge: ViewModifier {
                 SettingsOpenerBridge.didAttemptFirstRun = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                     makiLog.notice("FirstRun: opening setup window")
-                    openSettings()
+                    showSettings()
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .makiDeskOpenSettings)) { _ in
-                openSettings()
-                // The Settings scene orders the window front without making
-                // this accessory app active. Ask the live view to take focus
-                // now (reopen) and once more when a new window has been built.
+                showSettings()
+                // Ask the live view to take focus now (reopen) and once more
+                // when a new window has been built.
                 NotificationCenter.default.post(name: .makiDeskFocusSettings, object: nil)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     NotificationCenter.default.post(name: .makiDeskFocusSettings, object: nil)

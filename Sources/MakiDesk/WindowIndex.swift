@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Darwin
 import os
 
 /// Authoritative, cached index of application windows plus the event sources
@@ -14,6 +15,17 @@ import os
 /// - a 250 ms debounce before listeners are told the model changed;
 /// - screen-parameter change notifications.
 final class WindowIndex {
+    private struct GeometryReadRequest {
+        let element: AXUIElement
+        let revision: UInt64
+    }
+
+    private struct GeometryReadResult {
+        let request: GeometryReadRequest
+        let frame: CGRect?
+        let pid: pid_t
+    }
+
     static let shared = WindowIndex()
 
     /// Debounced: the window inventory changed (created, destroyed, hidden…).
@@ -42,8 +54,11 @@ final class WindowIndex {
     private var started = false
     private var pendingChange: DispatchWorkItem?
     private var pendingFocus: DispatchWorkItem?
-    private var pendingGeometry: [AXUIElement] = []
+    private var pendingGeometry: [GeometryReadRequest] = []
     private var pendingGeometryWork: DispatchWorkItem?
+    private var geometryReadInFlight = false
+    private var geometryRevision: UInt64 = 0
+    private let geometryReadQueue = DispatchQueue(label: "com.makidesk.window-geometry", qos: .utility)
     private var asyncRefreshInFlight = false
     private var asyncRefreshWaiters: [([WindowController.WindowInfo]) -> Void] = []
     private var inventoryRevision: UInt64 = 0
@@ -58,6 +73,10 @@ final class WindowIndex {
         subsystem: Bundle.main.bundleIdentifier ?? "com.makidesk.app",
         category: "Window Performance"
     )
+    private let idleEventLog = Logger(subsystem: "com.makidesk.app", category: "Idle Performance")
+    private let eventMetricsLock = NSLock()
+    private var eventMetrics: [String: (count: UInt64, cpuNanoseconds: Double)] = [:]
+    private var eventMetricsReportPending = false
 
     init(discover: (() -> [WindowController.WindowInfo])? = nil,
          readInventory: (() -> WindowController.WindowInventoryRead)? = nil,
@@ -130,7 +149,12 @@ final class WindowIndex {
         let discover = self.discover
         let discoverPIDs = self.discoverPIDs
         scheduleDiscovery { [weak self] in
+            var cpuStart = timespec()
+            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
             let read = scope.map { discoverPIDs($0) } ?? discover()
+            let scanPID = scope.flatMap { $0.count == 1 ? $0.first : nil } ?? 0
+            self?.recordIdleEvent(scope == nil ? "inventory_full_scan" : "inventory_pid_scan",
+                                  pid: scanPID, cpuStart: cpuStart)
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.performanceSignposter.endInterval("AX window discovery", scanInterval)
@@ -233,6 +257,8 @@ final class WindowIndex {
     private var observerAttempts: [pid_t: Int] = [:]
     private var observerLastUsed: [pid_t: Date] = [:]
     private var observedWindows: [pid_t: [AXUIElement]] = [:]
+    private var lastWorkspaceActivation: (pid: pid_t, instant: ContinuousClock.Instant)?
+    private var lastAXActivation: (pid: pid_t, instant: ContinuousClock.Instant)?
 
     private func refreshObservers() {
         guard let app = NSWorkspace.shared.frontmostApplication,
@@ -352,11 +378,27 @@ final class WindowIndex {
     /// Geometry events update only their window; a dedicated focus check runs
     /// for focus/activation events. Neither path rediscovers every window.
     private func note(notification: String, element: AXUIElement) {
+        var cpuStart = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
+        var eventPID: pid_t = 0
+        AXUIElementGetPid(element, &eventPID)
+        var eventName: String
+        if notification == kAXWindowMovedNotification as String { eventName = "ax_window_moved" }
+        else if notification == kAXWindowResizedNotification as String { eventName = "ax_window_resized" }
+        else if notification == kAXFocusedWindowChangedNotification as String { eventName = "ax_focus_changed" }
+        else if notification == kAXApplicationActivatedNotification as String { eventName = "ax_app_activated" }
+        else if notification == kAXWindowCreatedNotification as String { eventName = "ax_window_created" }
+        else if notification == kAXUIElementDestroyedNotification as String { eventName = "ax_element_destroyed" }
+        else if notification == kAXWindowMiniaturizedNotification as String { eventName = "ax_window_minimized" }
+        else if notification == kAXWindowDeminiaturizedNotification as String { eventName = "ax_window_restored" }
+        else { eventName = "ax_other" }
+        defer { recordIdleEvent(eventName, pid: eventPID, cpuStart: cpuStart) }
         if notification == kAXWindowMovedNotification as String
             || notification == kAXWindowResizedNotification as String {
-            var pid: pid_t = 0
-            AXUIElementGetPid(element, &pid)
-            if pid == NSWorkspace.shared.frontmostApplication?.processIdentifier { onGeometryNow?() }
+            if eventPID == NSWorkspace.shared.frontmostApplication?.processIdentifier,
+               NSEvent.pressedMouseButtons & 1 != 0 {
+                onGeometryNow?()
+            }
             scheduleGeometryUpdate(for: element)
             return
         }
@@ -366,9 +408,21 @@ final class WindowIndex {
         // thread on each app switch and on the first activation after launch.
         if notification == kAXFocusedWindowChangedNotification as String
             || notification == kAXApplicationActivatedNotification as String {
-            var pid: pid_t = 0
-            AXUIElementGetPid(element, &pid)
-            guard pid == NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
+            guard eventPID == NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
+            if notification == kAXApplicationActivatedNotification as String,
+               let activation = lastWorkspaceActivation,
+               activation.pid == eventPID,
+               activation.instant.duration(to: .now) < .seconds(1) {
+                // NSWorkspace already handled this app activation. Keep the
+                // debounced focus publication, but avoid repeating the AX
+                // focused-window query and focus-border refresh.
+                eventName = "ax_app_activation_deduplicated"
+                scheduleFocus()
+                return
+            }
+            if notification == kAXApplicationActivatedNotification as String {
+                lastAXActivation = (eventPID, .now)
+            }
             onFocusNow?()
             scheduleFocus()
             return
@@ -376,44 +430,130 @@ final class WindowIndex {
 
         // These events can add/remove an actionable window, so rebuild the
         // inventory after the debounce. Focus and geometry are handled above.
-        var pid: pid_t = 0
-        AXUIElementGetPid(element, &pid)
-        invalidate(pid: pid)
+        invalidate(pid: eventPID)
         scheduleChange()
+    }
+
+    private func recordIdleEvent(_ name: String, pid: pid_t, cpuStart: timespec) {
+        var cpuEnd = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuEnd)
+        let startNanoseconds = Double(cpuStart.tv_sec) * 1e9 + Double(cpuStart.tv_nsec)
+        let endNanoseconds = Double(cpuEnd.tv_sec) * 1e9 + Double(cpuEnd.tv_nsec)
+        let key = "\(name):pid=\(pid)"
+
+        eventMetricsLock.lock()
+        let previous = eventMetrics[key] ?? (0, 0)
+        eventMetrics[key] = (previous.count + 1, previous.cpuNanoseconds + max(0, endNanoseconds - startNanoseconds))
+        let shouldSchedule = !eventMetricsReportPending
+        eventMetricsReportPending = true
+        eventMetricsLock.unlock()
+
+        guard shouldSchedule else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
+            self?.reportIdleEvents()
+        }
+    }
+
+    private func reportIdleEvents() {
+        eventMetricsLock.lock()
+        let snapshot = eventMetrics
+        eventMetrics.removeAll(keepingCapacity: true)
+        eventMetricsReportPending = false
+        eventMetricsLock.unlock()
+        guard !snapshot.isEmpty else { return }
+
+        let summary = snapshot
+            .sorted { $0.value.count > $1.value.count }
+            .prefix(12)
+            .map { key, value in
+                "\(key) count=\(value.count) cpu_ns=\(Int(value.cpuNanoseconds))"
+            }
+            .joined(separator: "; ")
+        idleEventLog.info("Window event metrics (last 60s): \(summary, privacy: .public)")
     }
 
     /// Coalesces a burst of move/resize notifications into targeted frame reads.
     /// This keeps live dragging responsive without a global AX discovery pass.
     private func scheduleGeometryUpdate(for element: AXUIElement) {
-        if !pendingGeometry.contains(where: { CFEqual($0, element) }) {
-            pendingGeometry.append(element)
+        geometryRevision &+= 1
+        let request = GeometryReadRequest(element: element, revision: geometryRevision)
+        if let index = pendingGeometry.firstIndex(where: { CFEqual($0.element, element) }) {
+            pendingGeometry[index] = request
+        } else {
+            pendingGeometry.append(request)
         }
-        pendingGeometryWork?.cancel()
+
+        // Anchor the debounce to the first event in a burst. Further events
+        // replace per-window work without postponing the whole batch forever.
+        guard pendingGeometryWork == nil else { return }
         let item = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let elements = self.pendingGeometry
-            self.pendingGeometry.removeAll()
             self.pendingGeometryWork = nil
-            for element in elements {
-                guard let frame = WindowController.frame(of: element) else { continue }
-                self.updateFrame(frame, for: element)
-                self.onGeometryChanged?(element, frame)
-            }
+            self.startGeometryReadIfNeeded()
         }
         pendingGeometryWork = item
         DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: item)
     }
 
+    private func startGeometryReadIfNeeded() {
+        guard !geometryReadInFlight, !pendingGeometry.isEmpty else { return }
+        geometryReadInFlight = true
+        let requests = pendingGeometry
+        pendingGeometry.removeAll(keepingCapacity: true)
+        geometryReadQueue.async { [weak self] in
+            var cpuStart = timespec()
+            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
+            let results = requests.map { request -> GeometryReadResult in
+                var pid: pid_t = 0
+                AXUIElementGetPid(request.element, &pid)
+                return GeometryReadResult(
+                    request: request,
+                    frame: WindowController.frame(of: request.element),
+                    pid: pid
+                )
+            }
+            let pids = Set(results.map(\.pid))
+            let batchPID = pids.count == 1 ? pids.first ?? 0 : 0
+            self?.recordIdleEvent("geometry_update_batch", pid: batchPID, cpuStart: cpuStart)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.geometryReadInFlight = false
+                for result in results {
+                    let superseded = self.pendingGeometry.contains {
+                        CFEqual($0.element, result.request.element)
+                            && $0.revision > result.request.revision
+                    }
+                    guard !superseded, let frame = result.frame else { continue }
+                    self.updateFrame(frame, for: result.request.element)
+                    self.onGeometryChanged?(result.request.element, frame)
+                }
+                // At most one AX batch is running and one bounded, per-window
+                // pending set is retained while it runs.
+                if self.pendingGeometryWork == nil {
+                    self.startGeometryReadIfNeeded()
+                }
+            }
+        }
+    }
+
     private func scheduleChange() {
-        pendingChange?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.onChange?() }
+        guard pendingChange == nil else { return }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingChange = nil
+            self.onChange?()
+        }
         pendingChange = item
         DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: item)
     }
 
     private func scheduleFocus() {
-        pendingFocus?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.onFocusChange?() }
+        guard pendingFocus == nil else { return }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingFocus = nil
+            self.onFocusChange?()
+        }
         pendingFocus = item
         DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: item)
     }
@@ -421,14 +561,20 @@ final class WindowIndex {
     // MARK: - Workspace / screen notifications
 
     @objc private func appLaunched(_ note: Notification) {
+        var cpuStart = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        defer { recordIdleEvent("workspace_app_launched", pid: app?.processIdentifier ?? 0, cpuStart: cpuStart) }
         invalidate(pid: app?.processIdentifier)
         scheduleChange()
         scheduleFocus()
     }
 
     @objc private func appTerminated(_ note: Notification) {
+        var cpuStart = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
         let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        defer { recordIdleEvent("workspace_app_terminated", pid: app?.processIdentifier ?? 0, cpuStart: cpuStart) }
         if let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
             removeObserver(for: app.processIdentifier)
             onApplicationTerminated?(app.processIdentifier)
@@ -439,12 +585,26 @@ final class WindowIndex {
     }
 
     @objc private func appActivated(_ note: Notification) {
+        var cpuStart = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
+        let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        defer { recordIdleEvent("workspace_app_activated", pid: app?.processIdentifier ?? 0, cpuStart: cpuStart) }
+        let pid = app?.processIdentifier
+            ?? NSWorkspace.shared.frontmostApplication?.processIdentifier
+            ?? 0
+        let duplicatesAXActivation = pid != 0
+            && lastAXActivation?.pid == pid
+            && (lastAXActivation?.instant.duration(to: .now) ?? .seconds(1)) < .seconds(1)
+        lastWorkspaceActivation = (pid, .now)
         refreshObservers()
-        onFocusNow?()
+        if !duplicatesAXActivation { onFocusNow?() }
         scheduleFocus()
     }
 
     @objc private func screensChanged() {
+        var cpuStart = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cpuStart)
+        defer { recordIdleEvent("screen_configuration_changed", pid: 0, cpuStart: cpuStart) }
         invalidate()
         onScreenChange?()
         scheduleChange()

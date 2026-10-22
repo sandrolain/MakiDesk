@@ -139,16 +139,35 @@ final class WindowOutlineController {
         present(windowFrame: WindowController.flip(frame), level: targetLevel)
     }
 
-    /// A click can focus another window of the same app without any
-    /// activation notification, and the AX focus change can arrive late or not
-    /// at all. A global mouse-up check is an event-driven safety net that does
-    /// not depend on the app posting anything.
+    /// Publishes a frame already read by WindowIndex's background geometry
+    /// worker, avoiding another cross-process AX read on the main thread.
+    func refreshGeometry(for element: AXUIElement, frame: CGRect) {
+        guard WorkspaceStore.shared.focusBorderEnabled,
+              AXIsProcessTrusted(),
+              followTimer == nil,
+              let targetElement,
+              CFEqual(targetElement, element),
+              frame.width > 1, frame.height > 1 else { return }
+        targetLevel = windowLevel(for: targetWindowID)
+        present(windowFrame: WindowController.flip(frame), level: targetLevel)
+    }
+
+    /// A global mouse-down starts following before the first coalesced AX move
+    /// notification arrives. Mouse-up both ends the follow and resyncs focus,
+    /// including clicks that do not produce an activation notification.
     private func updatePressMonitor() {
         let shouldObserve = WorkspaceStore.shared.focusBorderEnabled && AXIsProcessTrusted()
         if shouldObserve {
             guard pressMonitor == nil else { return }
-            pressMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
-                DispatchQueue.main.async { self?.scheduleSettleRefresh() }
+            pressMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if event.type == .leftMouseDown {
+                        _ = self.beginDragFollow()
+                    } else {
+                        self.scheduleSettleRefresh()
+                    }
+                }
             }
         } else if let monitor = pressMonitor {
             NSEvent.removeMonitor(monitor)

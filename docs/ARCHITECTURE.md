@@ -68,12 +68,22 @@ a stable identity across title changes where possible. `WindowController`
 provides the AX operations and verifies a frame after setting it; apps that
 clamp or ignore a size are retried and reported (the T27 behaviour).
 
+AX move/resize events keep one pending geometry read per window. A burst is
+flushed after a fixed debounce, and frame reads run on a serial utility queue;
+newer events replace pending work, while stale results are discarded before
+the cache and UI are updated. Change and focus notifications share a fixed
+debounce window so a noisy event source cannot keep postponing publication.
+Matching AX and `NSWorkspace` app-activation events share one immediate focus
+refresh; the existing delayed focus publication still runs.
+
 `WindowOutlineController` draws the focus border in a transparent,
 click-through panel at the target window's level. Other apps' windows arrive
-through `WindowIndex`'s immediate focus and geometry events, so a drag needs one
-AX frame read rather than a timer. MakiDesk's own windows come from the key/main
-window and the `NSWindow` move, resize and focus notifications. `FocusBorder`
-owns the outset and corner arithmetic and is tested without a window server.
+through `WindowIndex`'s focus events and coalesced geometry results. During a
+drag, the border follows Window Server bounds until release; ordinary geometry
+updates reuse the frame read by the index. MakiDesk's own windows come from the
+key/main window and the `NSWindow` move, resize and focus notifications.
+`FocusBorder` owns the outset and corner arithmetic and is tested without a
+window server.
 
 The `WorkspaceStore` reads the index freshly before a command (`syncNow`) and
 keeps a model for the palette/overlay. It never assumes that a window found a

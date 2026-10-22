@@ -233,6 +233,7 @@ final class WorkspaceStore {
         WindowIndex.shared.onGeometryNow = { WindowOutlineController.shared.refreshGeometry() }
         WindowIndex.shared.onGeometryChanged = { [weak self] element, frame in
             self?.syncWindowGeometry(element: element, frame: frame)
+            WindowOutlineController.shared.refreshGeometry(for: element, frame: frame)
         }
         WindowIndex.shared.onFocusNow = { [weak self] in
             let focused = WindowController.frontmost()
@@ -796,12 +797,28 @@ final class WorkspaceStore {
         let current = target.frame.insetBy(dx: -gapHalf, dy: -gapHalf)
 
         if let outcome = ladderStep(action, area: area, current: current) {
+            // Arrow commands are discrete steps. Intermediate AX position/size
+            // writes can make constrained apps flicker and give a repeated key
+            // an unfinished frame from which to choose its next ladder state.
             switch outcome {
             case .frame(let logical):
                 applyFrame(logical.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
-                           reason: label(for: action))
+                           reason: label(for: action), animate: false, retryOnMismatch: false)
             case .minimize:
                 setMinimized(true, target: target)
+            case .screenBoundary(let direction, let fallback):
+                if let frame = frameOnAdjacentScreen(from: target.frame, direction: direction) {
+                    // Keep the frame on one display throughout the move. An
+                    // interpolated frame straddles monitors, so the next arrow
+                    // event can classify it against the wrong screen.
+                    applyFrame(frame, to: target, reason: "moved to adjacent display",
+                               animate: false, retryOnMismatch: false)
+                } else if let fallback {
+                    applyFrame(fallback.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
+                               reason: label(for: action), animate: false, retryOnMismatch: false)
+                } else {
+                    setMinimized(true, target: target)
+                }
             }
             return
         }
@@ -815,11 +832,14 @@ final class WorkspaceStore {
     private enum LadderOutcome {
         case frame(CGRect)
         case minimize
+        case screenBoundary(ScreenDirection, fallback: CGRect?)
     }
 
-    /// Steps the ladder one position. Past either end the step clamps to the
-    /// extreme state: the window is shrunk to the minimum height / minimised
-    /// (vertical), and simply stops at the first or last band (horizontal).
+    private enum ScreenDirection: Equatable { case left, right, up, down }
+
+    /// Steps the ladder one position. Beyond an edge state the caller can move
+    /// to a neighboring display, falling back to the previous clamp/minimize
+    /// behavior when no display exists in that direction.
     private func ladderStep(
         _ action: WindowController.ShortcutAction,
         area: CGRect,
@@ -833,17 +853,87 @@ final class WorkspaceStore {
         switch next {
         case .beforeStart:
             switch axis {
-            case .horizontal: return .frame(states[0])
-            case .vertical: return .frame(minHeightRect(area: area, orthogonal: orthogonal))
+            case .horizontal: return .screenBoundary(.left, fallback: states[0])
+            case .vertical:
+                return .screenBoundary(.up, fallback: minHeightRect(area: area, orthogonal: orthogonal))
             }
         case .afterEnd:
             switch axis {
-            case .horizontal: return .frame(states[states.count - 1])
-            case .vertical: return .minimize
+            case .horizontal:
+                return .screenBoundary(.right, fallback: states[states.count - 1])
+            case .vertical: return .screenBoundary(.down, fallback: nil)
             }
         case .step(let index):
             return .frame(states[index])
         }
+    }
+
+    /// Finds the nearest display in the requested direction, using the narrow
+    /// edge band there and preserving the window's size on the other axis.
+    private func frameOnAdjacentScreen(from frame: CGRect, direction: ScreenDirection) -> CGRect? {
+        let screens = NSScreen.screens.map { (screen: $0, frame: WindowController.axVisibleFrame(for: $0)) }
+        guard let source = screens.max(by: { lhs, rhs in
+            let left = lhs.frame.intersection(frame)
+            let right = rhs.frame.intersection(frame)
+            return left.width * left.height < right.width * right.height
+        }) else { return nil }
+
+        func directionalGap(_ candidate: CGRect) -> CGFloat? {
+            switch direction {
+            case .left where candidate.maxX <= source.frame.minX:
+                return source.frame.minX - candidate.maxX
+            case .right where candidate.minX >= source.frame.maxX:
+                return candidate.minX - source.frame.maxX
+            case .up where candidate.maxY <= source.frame.minY:
+                return source.frame.minY - candidate.maxY
+            case .down where candidate.minY >= source.frame.maxY:
+                return candidate.minY - source.frame.maxY
+            default:
+                return nil
+            }
+        }
+        func orthogonalDistance(_ candidate: CGRect) -> CGFloat {
+            switch direction {
+            case .left, .right:
+                if candidate.maxY < frame.minY { return frame.minY - candidate.maxY }
+                if candidate.minY > frame.maxY { return candidate.minY - frame.maxY }
+            case .up, .down:
+                if candidate.maxX < frame.minX { return frame.minX - candidate.maxX }
+                if candidate.minX > frame.maxX { return candidate.minX - frame.maxX }
+            }
+            return 0
+        }
+
+        guard let destination = screens
+            .filter({ $0.screen != source.screen })
+            .compactMap({ item -> (CGRect, CGFloat, CGFloat)? in
+                guard let gap = directionalGap(item.frame) else { return nil }
+                return (item.frame, gap, orthogonalDistance(item.frame))
+            })
+            .min(by: { lhs, rhs in
+                lhs.1 == rhs.1 ? lhs.2 < rhs.2 : lhs.1 < rhs.1
+            })?.0 else { return nil }
+
+        let edgeFraction = TilingEngine.ladder[0].fraction
+        let width = axisIsHorizontal(direction)
+            ? min(destination.width * edgeFraction, destination.width)
+            : min(frame.width, destination.width)
+        let height = axisIsHorizontal(direction)
+            ? min(frame.height, destination.height)
+            : min(destination.height * edgeFraction, destination.height)
+        var x = min(max(frame.minX, destination.minX), destination.maxX - width)
+        var y = min(max(frame.minY, destination.minY), destination.maxY - height)
+        switch direction {
+        case .left: x = destination.maxX - width
+        case .right: x = destination.minX
+        case .up: y = destination.maxY - height
+        case .down: y = destination.minY
+        }
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func axisIsHorizontal(_ direction: ScreenDirection) -> Bool {
+        direction == .left || direction == .right
     }
 
     private func minHeightRect(area: CGRect, orthogonal: ClosedRange<CGFloat>) -> CGRect {
@@ -953,7 +1043,8 @@ final class WorkspaceStore {
     /// apps impose a minimum size, take the new size a run loop later, or put
     /// their own frame back while the un-minimise animation runs. A full-screen
     /// window is left alone: it has no frame of ours to set.
-    func applyFrame(_ frame: CGRect, to target: WindowController.WindowInfo, reason: String, animate: Bool = true) {
+    func applyFrame(_ frame: CGRect, to target: WindowController.WindowInfo, reason: String,
+                    animate: Bool = true, retryOnMismatch: Bool = true) {
         guard !WindowController.isFullScreen(target.element) else {
             status = "\(target.appName) · full screen, left alone"
             return
@@ -980,7 +1071,8 @@ final class WorkspaceStore {
         frameGenerations[key] = generation
         let finish: () -> Void = { [weak self] in
             self?.verifyFrame(adjusted, target: target, reason: reason,
-                              key: key, generation: generation, attempt: 0)
+                              key: key, generation: generation, attempt: 0,
+                              retryOnMismatch: retryOnMismatch)
         }
         if animate {
             animateFrame(to: adjusted, element: target.element, key: key, completion: finish)
@@ -989,7 +1081,15 @@ final class WorkspaceStore {
             frameTimers[key] = nil
             frameLastWritten[key] = nil
             try? WindowController.setFrame(adjusted, for: target.element)
-            finish()
+            WindowOutlineController.shared.refreshGeometry(for: target.element, frame: adjusted)
+            if retryOnMismatch {
+                finish()
+            } else {
+                // Give AX-backed apps a moment to publish the write before
+                // reading their accepted frame. Arrow steps intentionally do
+                // not retry a mismatch, which can fight an app's constraints.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: finish)
+            }
         }
     }
 
@@ -1012,17 +1112,21 @@ final class WorkspaceStore {
     /// after both re-tries does the feedback declare the constraint, with the
     /// frame that was asked for and the one that is actually there.
     private func verifyFrame(_ wanted: CGRect, target: WindowController.WindowInfo,
-                             reason: String, key: String, generation: Int, attempt: Int) {
+                             reason: String, key: String, generation: Int, attempt: Int,
+                             retryOnMismatch: Bool = true) {
         // A newer command owns this window now: this check is history.
         guard frameGenerations[key] == generation else { return }
         let actual = WindowController.frame(of: target.element)
-        if let actual { WindowIndex.shared.updateFrame(actual, for: target.element) }
+        if let actual {
+            WindowIndex.shared.updateFrame(actual, for: target.element)
+            WindowOutlineController.shared.refreshGeometry(for: target.element, frame: actual)
+        }
         if let actual, withinTolerance(actual, wanted) {
             status = "\(target.appName) · \(reason)"
             showMiniMapIfEnabled(for: target, frame: wanted)
             return
         }
-        guard attempt < Self.frameRetries.count else {
+        guard retryOnMismatch, attempt < Self.frameRetries.count else {
             let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
             let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
             status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
@@ -1035,7 +1139,8 @@ final class WorkspaceStore {
         let delay = Self.frameRetries[attempt]
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             self?.verifyFrame(wanted, target: target, reason: reason,
-                              key: key, generation: generation, attempt: attempt + 1)
+                              key: key, generation: generation, attempt: attempt + 1,
+                              retryOnMismatch: retryOnMismatch)
         }
     }
 
@@ -2889,7 +2994,14 @@ final class WorkspaceStore {
 
     private func showMiniMapIfEnabled(motionFrom: [UUID: CGRect] = [:]) {
         guard showMiniMap else { return }
-        MiniMapController.shared.show(windows: windows, highlightedIDs: [], motionFrom: motionFrom)
+        let focusedID = mostRecentFocusedWindowID.flatMap { focusedSystemID in
+            windows.first(where: { $0.systemID == focusedSystemID })?.id
+        }
+        MiniMapController.shared.show(
+            windows: windows,
+            highlightedIDs: Set(focusedID.map { [$0] } ?? []),
+            motionFrom: motionFrom
+        )
     }
 
     private func showMiniMapIfEnabled(for target: WindowController.WindowInfo, frame: CGRect) {

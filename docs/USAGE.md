@@ -57,8 +57,14 @@ MakiDesk to be focused):
 **The arrow keys walk a ladder.** `⌃⌥←`/`→` step the window horizontally and
 `⌃⌥↑`/`↓` vertically through the golden/half/full positions. Horizontal steps
 change only the width and x, vertical steps only the height and y, so a window
-can be resized inside a corner without touching its other dimension. Past the
-horizontal ends the ladder stops; past the bottom it minimizes the window.
+can be resized inside a corner without touching its other dimension. Each press
+applies one position directly, and the focus border follows it immediately. Past the
+horizontal ends, another press moves the window to the nearest display in that
+direction when one is connected. Once the window reaches minimum height, another
+up/down press moves it to the nearest display above/below. If there is no display
+in the requested direction, the ladder keeps its previous edge behavior; past
+the bottom it minimizes the window. On the destination display the window uses
+the smallest width or height for the edge where it enters.
 
 **Drag to snap.** Hold the snap key while dragging a window (⌥ by default) and
 an overlay previews the frame the window will take. It snaps to the same
@@ -66,6 +72,12 @@ half/golden positions the keyboard uses. Choose the combination, or turn the ges
 off, in **Settings ▸ Windows** (Placement): six combinations are offered, with
 ⌥ as the default. Control is not offered because `⌃`-click is macOS's secondary
 click.
+
+The mini-map shows connected displays in their relative positions and sizes.
+Window boxes use solid outlines and translucent fills; the focused window has a
+more opaque fill and the theme accent around it. In the switcher, the selected
+window card also highlights its matching box in the mini-map, and its title is
+shown below the display overview.
 
 **macOS tiling.** macOS also tiles a window dragged with ⌥. Settings ▸ Windows
 detects that system switch and lets you turn it off so only MakiDesk reacts, or

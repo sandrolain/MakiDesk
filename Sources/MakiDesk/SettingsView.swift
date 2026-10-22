@@ -74,6 +74,7 @@ struct SettingsView: View {
             }
         }
         .onAppear {
+            store.completeSetup()
             store.refreshPermissionState()
             store.refreshMacOSTiling()
             excludedAppsText = store.shelfExcludedApps.joined(separator: ", ")
@@ -118,6 +119,7 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(settingsTab == tab ? theme.surfaceSelected : Color.clear)
                         )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(settingsTab == tab ? .isSelected : [])
@@ -213,12 +215,6 @@ struct SettingsView: View {
             caption("Puts every option in this window back to its default value. The confirmation asks whether your window groups go too. Onboarding completion and the macOS ⌥-tiling setting are always left untouched.")
         }
 
-        SettingsSection {
-            Button("Finish Setup") {
-                store.completeSetup()
-                NSApplication.shared.keyWindow?.close()
-            }
-        }
     }
 
     // MARK: - Windows
@@ -365,7 +361,7 @@ struct SettingsView: View {
                 get: { store.showPreview },
                 set: { store.updateShowPreview($0) }
             ))
-            Toggle("Colour previews with the app colour", isOn: Binding(
+            Toggle("Colour windows in list and canvas", isOn: Binding(
                 get: { store.paletteTintedCards },
                 set: { store.updatePaletteTintedCards($0) }
             ))
@@ -395,7 +391,7 @@ struct SettingsView: View {
                       range: 0.5...1.0, unit: "%", percent: true)
             caption("Opt-Tab opens the switcher; Opt-Space opens the same palette in search mode with the text field focused. Previews need the Screen Recording permission. The theme also colours the overlay.")
             caption("Columns: Automatic picks 2–4 by window count; a fixed number pins the grid (never more columns than windows). Max size is the largest a card may get; if the columns would overflow the screen width, cards shrink below it to fit. Preview boxes keep the screen's proportions in both modes.")
-            caption("Colour previews: off keeps the cards neutral (the app colour stays in the overlay). Full screen uses the same Opt-Tab / Opt-Space shortcuts.")
+            caption("This controls the per-app colours in the window list, card thumbnails and canvas mini-map. Turn it off for neutral windows; the focused-window outline keeps its theme colour.")
         }
     }
 
@@ -649,7 +645,7 @@ private struct ResetConfirmationView: View {
 }
 
 /// Reaches the `NSWindow` that hosts the Settings view so the window can be made
-/// resizable (the SwiftUI `Settings` scene does not always expose a resize handle),
+/// resizable and to set a minimum size,
 /// without depending on timing or on which windows happen to be visible. It also
 /// paints the titlebar and the window background with the palette theme, and
 /// switches the window appearance so native controls stay readable on dark and
@@ -673,13 +669,30 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
         func apply(_ theme: PaletteTheme) {
             self.theme = theme
             guard let window else { return }
+            configure(window)
+            // Reapply after SwiftUI finishes configuring the hosting window.
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let self, let window else { return }
+                self.configure(window)
+            }
+        }
+
+        private func configure(_ window: NSWindow) {
             window.styleMask.insert(.resizable)
             window.styleMask.remove(.fullSizeContentView)
+            let minimum = NSSize(width: 560, height: 520)
+            window.minSize = minimum
+            window.contentMinSize = minimum
+            let unbounded = CGFloat.greatestFiniteMagnitude
+            window.maxSize = NSSize(width: unbounded, height: unbounded)
+            window.contentMaxSize = NSSize(width: unbounded, height: unbounded)
             window.identifier = NSUserInterfaceItemIdentifier("MakiDeskSettingsWindow")
             window.titlebarAppearsTransparent = true
             window.title = ""
             window.titlebarSeparatorStyle = .none
-            window.isMovableByWindowBackground = true
+            // Let AppKit reserve the window edges for resizing. The titlebar
+            // remains draggable even without a visible title.
+            window.isMovableByWindowBackground = false
             window.backgroundColor = NSColor(theme.background)
             window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         }
