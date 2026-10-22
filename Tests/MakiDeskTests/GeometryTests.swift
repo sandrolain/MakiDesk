@@ -308,14 +308,90 @@ final class GeometryTests: XCTestCase {
         XCTAssertGreaterThan(metrics.fontSize, 12)
     }
 
-    func testFullScreenUsesTheSameGridAsCompact() {
-        // The layout mode must change only the size, never the grid shape.
-        let available = CGSize(width: 1440, height: 900)
-        for count in [1, 3, 4, 6, 9, 12] {
-            let compact = paletteMetrics(.compact, count: count, available: available)
-            let full = paletteMetrics(.fullScreen, count: count, available: available)
-            XCTAssertEqual(full.columns, compact.columns, "count \(count)")
-            XCTAssertEqual(full.rows, compact.rows, "count \(count)")
+    func testFullScreenGrowsTheGridToTheDisplay() {
+        // A wide display gets more columns than the compact palette uses for the
+        // same windows, so the grid does not float in the middle of the screen.
+        let available = CGSize(width: 2560, height: 1080)
+        let compact = paletteMetrics(.compact, count: 20, available: available)
+        let full = paletteMetrics(.fullScreen, count: 20, available: available)
+        XCTAssertGreaterThan(full.columns, compact.columns)
+        XCTAssertLessThanOrEqual(full.columns, 20)
+        // Cards stay within the user's maximum.
+        XCTAssertLessThanOrEqual(full.cardWidth, 250 + 0.01)
+        let gridWidth = full.gridWidth + 2 * full.padding
+        XCTAssertLessThanOrEqual(gridWidth, available.width + 1)
+    }
+
+    func testAutomaticFullScreenColumnsPreferLargerCardsThenABalancedGrid() {
+        // Raising the maximum buys bigger cards.
+        let small = paletteMetrics(.fullScreen, count: 20, maxCardWidth: 250,
+                                   available: CGSize(width: 2560, height: 1080))
+        let large = paletteMetrics(.fullScreen, count: 20, maxCardWidth: 480,
+                                   available: CGSize(width: 2560, height: 1080))
+        XCTAssertGreaterThan(large.cardWidth, small.cardWidth)
+        XCTAssertLessThanOrEqual(large.cardWidth, 480 + 0.01)
+        // Equal-size candidates leave the last row as full as possible, so the
+        // grid stays balanced instead of leaving a single card on its own row.
+        let seven = paletteMetrics(.fullScreen, count: 7,
+                                   groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                   available: CGSize(width: 2012, height: 1150))
+        XCTAssertEqual(seven.columns, 4)
+        XCTAssertEqual(seven.rows, 2)
+    }
+
+    func testFullScreenCardsAreNeverSmallerThanTheWindowedOnes() {
+        // The larger canvas may add columns, but it must never shrink a card:
+        // the full-screen palette keeps the windowed sizing as its floor.
+        for available in [CGSize(width: 1440, height: 900),
+                          CGSize(width: 2012, height: 1150),
+                          CGSize(width: 2560, height: 1080)] {
+            for maxCardWidth in [160.0, 250.0, 480.0] as [CGFloat] {
+                for count in [1, 2, 5, 7, 9, 12, 19, 20, 25] {
+                    let compact = paletteMetrics(.compact, count: count, maxCardWidth: maxCardWidth,
+                                                 groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                                 available: available)
+                    let full = paletteMetrics(.fullScreen, count: count, maxCardWidth: maxCardWidth,
+                                              groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                              available: available)
+                    XCTAssertGreaterThanOrEqual(full.cardWidth, compact.cardWidth * 0.95 - 0.5,
+                                                "count \(count), max \(maxCardWidth), \(available)")
+                }
+            }
+        }
+    }
+
+    func testFullScreenDoesNotCollapseToOneColumnWhenCardsReachTheMaximum() {
+        // A single column divides the windows evenly, but it leaves a wide
+        // display empty and grows the labels: the grid must spread instead.
+        let available = CGSize(width: 2012, height: 1150)
+        let metrics = paletteMetrics(.fullScreen, count: 19,
+                                     groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                     available: available)
+        XCTAssertGreaterThan(metrics.columns, 1)
+        XCTAssertEqual(metrics.cardWidth, 250, accuracy: 0.5)
+        XCTAssertLessThan(metrics.fontSize, 15)
+        XCTAssertLessThanOrEqual(metrics.rows, 4)
+        let usable = available.width - PaletteLayoutEngine.groupColumnWidth
+            - 2 * metrics.padding - 1
+        XCTAssertGreaterThan(metrics.gridWidth, usable * 0.5)
+    }
+
+    func testFullScreenGridAlwaysFitsTheWidth() {
+        for available in [CGSize(width: 1440, height: 900),
+                          CGSize(width: 2560, height: 1080),
+                          CGSize(width: 1280, height: 1024),
+                          CGSize(width: 1024, height: 768)] {
+            for count in [1, 2, 5, 8, 12, 20, 40] {
+                let metrics = paletteMetrics(.fullScreen, count: count,
+                                             groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                             available: available)
+                let gridWidth = metrics.gridWidth + 2 * metrics.padding
+                    + PaletteLayoutEngine.groupColumnWidth
+                XCTAssertLessThanOrEqual(gridWidth, available.width + 1,
+                                         "count \(count) on \(available)")
+                XCTAssertEqual(metrics.thumbnailWidth / metrics.thumbnailHeight,
+                               max(0.5, available.width / available.height), accuracy: 0.01)
+            }
         }
     }
 

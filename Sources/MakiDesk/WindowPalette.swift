@@ -8,7 +8,8 @@ enum PaletteMode { case browse, search }
 enum PaletteLayout: Equatable {
     /// Fixed-size cards in a panel centred on the screen.
     case compact
-    /// Cards scaled to fill the screen's visible frame (menu bar / Dock kept).
+    /// The grid grows to the visible frame (menu bar / Dock kept): more columns
+    /// on a wide display, larger cards otherwise (T13).
     case fullScreen
 }
 
@@ -63,7 +64,10 @@ enum PaletteLayoutCommand { case tile, goldenSpiral, auto, content, focus }
 /// Pure geometry for the palette panel: same inputs, same layout, so the
 /// sizing can be tested without a screen (T13).
 enum PaletteLayoutEngine {
-    /// The automatic column count for a given number of windows (2–4).
+    /// The most columns the grid can use, configured or automatic.
+    static let maximumColumns = 8
+
+    /// The automatic column count for the compact palette (2–4).
     static func automaticColumns(for itemCount: Int) -> Int {
         switch itemCount {
         case 0...4: return 2
@@ -74,7 +78,7 @@ enum PaletteLayoutEngine {
 
     /// The columns actually used: the configured count (0 = automatic), never
     /// more than the windows available and never more than `maximum`.
-    static func columns(configured: Int, itemCount: Int, maximum: Int = 8) -> Int {
+    static func columns(configured: Int, itemCount: Int, maximum: Int = maximumColumns) -> Int {
         let wanted = configured > 0 ? configured : automaticColumns(for: itemCount)
         return max(1, min(wanted, max(1, min(itemCount, maximum))))
     }
@@ -163,30 +167,74 @@ enum PaletteLayoutEngine {
         )
     }
 
-    /// Cards scaled to fill the visible frame. The **columns are the same as the
-    /// normal mode** and only the size changes, up to `maxCardWidth`. Each
-    /// preview box keeps the screen's proportions and is made as large as its
-    /// cell allows, so the grid fits without scrolling unless the boxes would
-    /// otherwise be too small (T15).
+    /// The full-screen grid uses the same sizing as the compact palette: a card
+    /// is as wide as its cell allows, up to `maxCardWidth`, and the preview keeps
+    /// the screen's proportions. The extra room therefore buys more columns at
+    /// the windowed size, or bigger cards when `maxCardWidth` allows. A grid that
+    /// fits the height is preferred, but the cards never shrink below the
+    /// windowed size to make it fit.
     private static func fullScreenMetrics(itemCount: Int,
                                           columns configuredColumns: Int,
                                           maxCardWidth: CGFloat,
                                           available: CGSize,
                                           aspect: CGFloat,
                                           groupColumnWidth: CGFloat) -> PaletteMetrics {
-        let padding: CGFloat = 40
-        let spacing: CGFloat = 24
-        // Room for the search field and the footer, which grow with the font.
-        let chrome: CGFloat = 170
-        /// Below this a box would be a stamp, so the grid is allowed to scroll.
-        let minimumThumbnailHeight: CGFloat = 90
-        let count = max(1, itemCount)
-        let columns = PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
-        let rows = (count + columns - 1) / columns
+        let compact = compactMetrics(itemCount: itemCount, columns: configuredColumns,
+                                     maxCardWidth: maxCardWidth, available: available,
+                                     aspect: aspect, groupColumnWidth: groupColumnWidth)
+        let columns = configuredColumns > 0
+            ? PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
+            : automaticFullScreenColumns(itemCount: itemCount, maxCardWidth: maxCardWidth,
+                                         available: available, aspect: aspect,
+                                         groupColumnWidth: groupColumnWidth,
+                                         minimumCardWidth: compact.cardWidth,
+                                         minimumGridWidth: compact.gridWidth)
+        let cell = fullScreenCell(itemCount: itemCount, columns: columns,
+                                  maxCardWidth: maxCardWidth, available: available,
+                                  aspect: aspect, groupColumnWidth: groupColumnWidth)
+        return PaletteMetrics(
+            layout: .fullScreen, columns: cell.columns, rows: cell.rows,
+            cardWidth: cell.cardWidth, cardHeight: cell.cardHeight,
+            thumbnailWidth: cell.thumbnailWidth, thumbnailHeight: cell.thumbnailHeight,
+            spacing: fullScreenSpacing, padding: fullScreenPadding, chrome: fullScreenChrome,
+            fontSize: cell.fontSize, iconSize: 30 * (cell.fontSize / 12),
+            badgeSize: 22 * (cell.fontSize / 12), badgeSymbolSize: 11 * (cell.fontSize / 12),
+            panelSize: CGSize(width: max(600, available.width), height: max(400, available.height)),
+            groupColumnWidth: groupColumnWidth
+        )
+    }
 
-        let cellWidth = (available.width - groupColumnWidth - 2 * padding - CGFloat(columns - 1) * spacing)
-            / CGFloat(columns)
-        let cellHeight = (available.height - chrome - 2 * padding - CGFloat(rows - 1) * spacing) / CGFloat(rows)
+    // MARK: - Full-screen grid
+
+    private static let fullScreenPadding: CGFloat = 40
+    private static let fullScreenSpacing: CGFloat = 24
+    /// Room for the search field and the footer, which grow with the font.
+    private static let fullScreenChrome: CGFloat = 170
+    /// The divider between the groups column and the grid.
+    private static let fullScreenDividerWidth: CGFloat = 1
+
+    /// Card geometry for one candidate column count. The automatic choice
+    /// compares candidates through this, so both use the same formulas.
+    private struct FullScreenCell {
+        let columns: Int
+        let rows: Int
+        let fontSize: CGFloat
+        let cardWidth: CGFloat
+        let cardHeight: CGFloat
+        let thumbnailWidth: CGFloat
+        let thumbnailHeight: CGFloat
+    }
+
+    private static func fullScreenCell(itemCount: Int,
+                                       columns: Int,
+                                       maxCardWidth: CGFloat,
+                                       available: CGSize,
+                                       aspect: CGFloat,
+                                       groupColumnWidth: CGFloat) -> FullScreenCell {
+        let count = max(1, itemCount)
+        let rows = (count + columns - 1) / columns
+        let cellWidth = (available.width - groupColumnWidth - fullScreenDividerWidth
+            - 2 * fullScreenPadding - CGFloat(columns - 1) * fullScreenSpacing) / CGFloat(columns)
 
         // A gentle font grow: the box, not the text, takes most of the extra
         // room, so enlarging the layout grows the previews first.
@@ -194,24 +242,72 @@ enum PaletteLayoutEngine {
         let cardPadding = 10 * (fontSize / 12)
         let text = textBlockHeight(fontSize: fontSize)
 
-        // Never wider than the user's maximum, never wider than the cell.
-        let innerWidth = max(80, min(cellWidth, maxCardWidth) - 2 * cardPadding)
-        let innerHeight = max(minimumThumbnailHeight, cellHeight - 2 * cardPadding - text)
-        let thumbnailWidth = max(80, min(innerWidth, innerHeight * aspect))
+        // Width decides the card, exactly as in the windowed palette: never
+        // wider than the user's maximum, never wider than the cell.
+        let cardWidth = max(80, min(cellWidth, maxCardWidth))
+        let thumbnailWidth = max(60, cardWidth - 2 * cardPadding)
         let thumbnailHeight = thumbnailWidth / aspect
-        let cardWidth = thumbnailWidth + 2 * cardPadding
-        let cardHeight = thumbnailHeight + 2 * cardPadding + text
-
-        return PaletteMetrics(
-            layout: .fullScreen, columns: columns, rows: rows,
-            cardWidth: cardWidth, cardHeight: cardHeight,
-            thumbnailWidth: thumbnailWidth, thumbnailHeight: thumbnailHeight,
-            spacing: spacing, padding: padding, chrome: chrome,
-            fontSize: fontSize, iconSize: 30 * (fontSize / 12),
-            badgeSize: 22 * (fontSize / 12), badgeSymbolSize: 11 * (fontSize / 12),
-            panelSize: CGSize(width: max(600, available.width), height: max(400, available.height)),
-            groupColumnWidth: groupColumnWidth
+        return FullScreenCell(
+            columns: columns, rows: rows, fontSize: fontSize,
+            cardWidth: cardWidth,
+            cardHeight: thumbnailHeight + 2 * cardPadding + text,
+            thumbnailWidth: thumbnailWidth, thumbnailHeight: thumbnailHeight
         )
+    }
+
+    /// The automatic full-screen column count. The grid never uses cards smaller
+    /// than the windowed palette's and never a narrower grid, so the larger
+    /// canvas cannot shrink the palette. Among those candidates a grid that fits
+    /// the height wins, then the one leaving the fewest empty slots.
+    private static func automaticFullScreenColumns(itemCount: Int,
+                                                   maxCardWidth: CGFloat,
+                                                   available: CGSize,
+                                                   aspect: CGFloat,
+                                                   groupColumnWidth: CGFloat,
+                                                   minimumCardWidth: CGFloat,
+                                                   minimumGridWidth: CGFloat) -> Int {
+        let limit = max(1, min(itemCount, maximumColumns))
+        let candidates = (1...limit).map { columns in
+            fullScreenCell(itemCount: itemCount, columns: columns, maxCardWidth: maxCardWidth,
+                           available: available, aspect: aspect,
+                           groupColumnWidth: groupColumnWidth)
+        }
+        func gridWidth(_ cell: FullScreenCell) -> CGFloat {
+            CGFloat(cell.columns) * cell.cardWidth
+                + CGFloat(max(0, cell.columns - 1)) * fullScreenSpacing
+        }
+        func gridHeight(_ cell: FullScreenCell) -> CGFloat {
+            CGFloat(cell.rows) * cell.cardHeight
+                + CGFloat(max(0, cell.rows - 1)) * fullScreenSpacing
+        }
+        // Only a grid that fits the width is usable: the groups column and its
+        // one-point divider are already taken by the layout.
+        let fitting = candidates.filter { cell in
+            gridWidth(cell) + 2 * fullScreenPadding + groupColumnWidth
+                + fullScreenDividerWidth <= available.width + 0.5
+        }
+        guard !fitting.isEmpty else { return 1 }
+
+        // The windowed card size is a floor unless the display cannot hold it.
+        // A few points of slack cover the larger full-screen padding and font,
+        // so the windowed layout still counts as "the same size".
+        let widest = fitting.map(\.cardWidth).max() ?? 0
+        let sized = fitting.filter { $0.cardWidth >= min(widest, minimumCardWidth) * 0.95 }
+        let wideEnough = sized.filter { gridWidth($0) >= minimumGridWidth * 0.98 }
+        let sizedPool = wideEnough.isEmpty ? sized : wideEnough
+        let fittingHeight = sizedPool.filter {
+            gridHeight($0) + 2 * fullScreenPadding + fullScreenChrome <= available.height + 0.5
+        }
+        let pool = fittingHeight.isEmpty ? sizedPool : fittingHeight
+
+        let count = max(1, itemCount)
+        let best = pool.max { lhs, rhs in
+            let leftEmpty = lhs.columns * lhs.rows - count
+            let rightEmpty = rhs.columns * rhs.rows - count
+            if leftEmpty != rightEmpty { return leftEmpty > rightEmpty }
+            return lhs.columns < rhs.columns
+        }
+        return best?.columns ?? 1
     }
 }
 

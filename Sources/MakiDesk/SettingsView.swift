@@ -390,7 +390,7 @@ struct SettingsView: View {
                       value: Binding(get: { store.paletteOpacity }, set: { store.updatePaletteOpacity($0) }),
                       range: 0.5...1.0, unit: "%", percent: true)
             caption("Opt-Tab opens the switcher; Opt-Space opens the same palette in search mode with the text field focused. Previews need the Screen Recording permission. The theme also colours the overlay.")
-            caption("Columns: Automatic picks 2–4 by window count; a fixed number pins the grid (never more columns than windows). Max size is the largest a card may get; if the columns would overflow the screen width, cards shrink below it to fit. Preview boxes keep the screen's proportions in both modes.")
+            caption("Columns: Automatic picks 2–4 by window count in the compact switcher, and as many as the display holds when it opens full screen, never with smaller cards than the compact layout; a fixed number pins the grid (never more columns than windows). Max size is the largest a card may get; if the columns would overflow the screen width, cards shrink below it to fit. Preview boxes keep the screen's proportions in both modes.")
             caption("This controls the per-app colours in the window list, card thumbnails and canvas mini-map. Turn it off for neutral windows; the focused-window outline keeps its theme colour.")
         }
     }
