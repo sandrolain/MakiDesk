@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/sandrolain/MakiDesk/releases"><img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-1e1e2e?style=flat-square&logo=apple&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-cba6f7?style=flat-square"></a>
-  <img alt="198 tests" src="https://img.shields.io/badge/tests-232%20passing-a6e3a1?style=flat-square">
+  <img alt="235 tests" src="https://img.shields.io/badge/tests-235%20passing-a6e3a1?style=flat-square">
   <img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-a6e3a1?style=flat-square">
 </p>
 
@@ -88,9 +88,10 @@ when it closes and never keeps your files anywhere else.
 
 ### Small details, native feel
 
-A theme that covers the panels and the overlay, configurable animations, a
-focus border, a searchable Keyboard Shortcuts window with all 58 commands, and
-Settings split into General, Windows, Layouts, Panels and Groups.
+A theme that covers the panels, the Settings window and the overlay,
+configurable animations, a focus border, a searchable Keyboard Shortcuts window
+with all 58 commands, and Settings split into General, Windows, Layouts, Panels
+and Groups.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="MakiDesk settings" width="39%">

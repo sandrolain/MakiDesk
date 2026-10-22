@@ -291,7 +291,10 @@ The Settings window is split into tabs:
 - **Panels** — shelf shake settings and the window switcher/search appearance.
 - **Groups** — rename, empty and inspect the nine groups.
 
-The selected tab is remembered. **Reset to defaults** asks whether groups,
+The selected tab is remembered. The window is painted with the selected
+palette theme — background, cards, accent and a matching light or dark
+appearance for the native controls — and takes keyboard focus when it opens.
+**Reset to defaults** asks whether groups,
 notes and clipboard history should go too; settings always reset.
 
 ## Keyboard shortcuts

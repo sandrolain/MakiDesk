@@ -663,12 +663,17 @@ final class WorkspaceStore {
         bringSettingsToFront()
     }
 
-    /// Brings the Settings window to the front and keeps it above other windows.
+    /// Brings the Settings window to the front and gives this accessory app the
+    /// keyboard focus, without touching auxiliary windows.
     func bringSettingsToFront() {
-        NSApp.activate(ignoringOtherApps: true)
+        // A floating window cannot become main, and an accessory app with no
+        // main window is not allowed to activate: Settings lives at the normal
+        // level. Only touch its own window, never an auxiliary dialog.
+        NSApp.activate()
         DispatchQueue.main.async {
-            for window in NSApp.windows where window.isVisible && !(window is NSPanel) {
-                window.level = .floating
+            let all = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }
+            let settings = all.filter { $0.identifier?.rawValue == "MakiDeskSettingsWindow" }
+            for window in (settings.isEmpty ? all.filter(\.canBecomeMain) : settings) {
                 window.makeKeyAndOrderFront(nil)
             }
         }

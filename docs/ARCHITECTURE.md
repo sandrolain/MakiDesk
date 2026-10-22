@@ -125,11 +125,14 @@ baseline; saving writes only on `⌘S`.
 
 ## Panels and settings
 
-The panels share the app theme: the switcher, notes, clipboard, shelf, HUD and
-overlay all read `PaletteTheme` and repaint on `.makiDeskThemeChanged`. Animations
+The panels share the app theme: the switcher, notes, clipboard, shelf, HUD,
+overlay and Settings all read `PaletteTheme` and repaint on
+`.makiDeskThemeChanged`. Settings keeps native controls but paints its
+background, tab bar and section cards with the theme, and flips the window
+appearance to match light or dark themes. Animations
 have one switch and one duration in Settings; macOS Reduce Motion always wins.
 The keyboard reference is a plain data catalogue (`ShortcutCatalog`) rendered by
-a searchable window. Settings is a `TabView`-style set of forms.
+a searchable window.
 
 ## Permissions
 
@@ -159,7 +162,7 @@ grid, spiral, treemap), the advisor and weights, group/scene logic, window
 identity, content scores, the palette geometry, notes persistence and external
 drafts, grammar compilation, clipboard history, shelf shake and shelf item
 behaviour, focus-border placement, and the shortcut catalogue. At the time of
-writing: **232 tests**.
+writing: **235 tests**.
 
 ## Design notes
 

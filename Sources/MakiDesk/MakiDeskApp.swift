@@ -227,8 +227,9 @@ struct MakiDeskApp: App {
             menuButton("Keyboard Shortcuts…", icon: "keyboard") {
                 ShortcutsWindowController.shared.show()
             }
-            SettingsLink {
-                Label("Settings", systemImage: "gearshape")
+            menuButton("Settings…", icon: "gearshape") {
+                NSApp.activate()
+                NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
             }
             Divider()
             menuButton("Quit MakiDesk", icon: "power") {
@@ -266,6 +267,13 @@ private struct SettingsOpenerBridge: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .makiDeskOpenSettings)) { _ in
                 openSettings()
+                // The Settings scene orders the window front without making
+                // this accessory app active. Ask the live view to take focus
+                // now (reopen) and once more when a new window has been built.
+                NotificationCenter.default.post(name: .makiDeskFocusSettings, object: nil)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    NotificationCenter.default.post(name: .makiDeskFocusSettings, object: nil)
+                }
             }
     }
 
@@ -275,6 +283,8 @@ private struct SettingsOpenerBridge: ViewModifier {
 extension Notification.Name {
     /// Requests that the Settings window be opened (see `SettingsOpenerBridge`).
     static let makiDeskOpenSettings = Notification.Name("makiDeskOpenSettings")
+    /// Asks the live Settings view to activate the app and take keyboard focus.
+    static let makiDeskFocusSettings = Notification.Name("makiDeskFocusSettings")
 }
 
 /// Notes are written while the user types, but the session (tabs, cursors,

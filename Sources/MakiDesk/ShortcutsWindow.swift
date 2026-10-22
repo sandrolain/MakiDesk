@@ -144,7 +144,7 @@ final class ShortcutsWindowController {
     func show() {
         if window == nil { build() }
         applyWindowTheme()
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
 

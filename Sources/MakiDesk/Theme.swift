@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// A colour theme for the palette, panels and overlay.
@@ -44,6 +45,17 @@ struct PaletteTheme: Identifiable, Equatable {
 
     static func named(_ id: String) -> PaletteTheme {
         all.first { $0.id == id } ?? all[0]
+    }
+
+    /// True for the eight dark themes and false for Latte. Used to give native
+    /// controls (switches, popups, titlebars) a matching appearance when a whole
+    /// window is painted with the theme, as Settings now is (T42).
+    var isDark: Bool {
+        let color = NSColor(background).usingColorSpace(.sRGB) ?? .black
+        let luminance = 0.2126 * color.redComponent
+            + 0.7152 * color.greenComponent
+            + 0.0722 * color.blueComponent
+        return luminance < 0.5
     }
 
     /// Keeps an older stored theme id from selecting nothing in Settings.
@@ -98,6 +110,19 @@ extension Color {
         Color(red: Double((value >> 16) & 0xFF) / 255,
               green: Double((value >> 8) & 0xFF) / 255,
               blue: Double(value & 0xFF) / 255)
+    }
+}
+
+/// Makes the current palette theme available to small views that paint with it
+/// (Settings sections, slider rows) without threading it through every init.
+private struct PaletteThemeKey: EnvironmentKey {
+    static let defaultValue = PaletteTheme.all[0]
+}
+
+extension EnvironmentValues {
+    var paletteTheme: PaletteTheme {
+        get { self[PaletteThemeKey.self] }
+        set { self[PaletteThemeKey.self] = newValue }
     }
 }
 
