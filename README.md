@@ -104,13 +104,6 @@ and Groups.
 **Requirements:** macOS 14 or later; Apple Silicon for the current binary (the
 source builds on Intel too); Accessibility and Screen Recording permissions.
 
-### Release
-
-Download the latest **DMG** from [Releases](https://github.com/sandrolain/MakiDesk/releases),
-open it, drag **MakiDesk** to **Applications**, then launch it and grant the two
-permissions. The first public DMG needs a Developer ID signature and Apple
-notarization; until it is on the Releases page, use the source build.
-
 ### From source
 
 ```sh
@@ -130,7 +123,7 @@ Taskfile commands and the signing notes.
 ## Quick keys
 
 | Shortcut | Action |
-|---|---|
+| --- | --- |
 | `⌥⇥` | window switcher |
 | `⌥Space` | search windows |
 | `⌃⌥W` | content-weighted layout |
