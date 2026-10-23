@@ -40,7 +40,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `WindowCapture.swift` | ScreenCaptureKit previews and the edge-energy content measure. |
 | `TilingEngine.swift` | Pure geometry: ladders, halves, quarters, grid, golden spiral, squarified treemap. |
 | `LayoutAdvisor.swift` | Pure advisor: window kinds, content measure, priors, suggested preset, reasons. |
-| `WindowPalette.swift` | `⌥⇥` / `⌥Space` switcher and search, preview cards, groups column, layout buttons. |
+| `WindowPalette.swift` | `⌥⇥` / `⌥Space` switcher and search, preview cards, applications shelf, groups column, layout buttons. |
+| `InstalledApplications.swift` | Installed `.app` inventory and pure matching for the palette shelf; own worker queue, small in-memory cache. |
 | `WindowDrag.swift`, `DragActivator.swift`, `MacOSTiling.swift` | ⌥-drag snapping, live activator, macOS tiling detection. |
 | `GroupStore.swift`, `WindowGroup.swift`, `GroupRenamePrompt.swift` | Groups: members, names, arrangement, persistence. |
 | `WindowScene.swift`, `WorkspaceStore` (focus) | Scene/focus state, send-away and undo. |
@@ -111,11 +112,16 @@ previews, so the advisor does not add a capture pass.
 
 `WindowPalette` is a SwiftUI panel with a model. Browse mode keeps the keyboard
 in the panel (no field focus); `⌥Space` enters search. `PaletteLayoutEngine` is a
-pure geometry helper for cards/columns/panel size and has its own tests.
-Previews are cached in memory, refreshed on open and periodically while the
-panel is visible. The groups column edits the real groups; ticks are the members
-of the group being edited. The footer's layout commands call the same store
-methods as the menu and keyboard.
+pure geometry helper for cards/columns/panel size and has its own tests; in
+search mode it also reserves the applications shelf. Previews are cached in
+memory, refreshed on open and periodically while the panel is visible.
+`ApplicationCatalog` scans `/Applications`, `/System/Applications` and
+`~/Applications` off the main thread, coalesces concurrent requests and publishes
+value-only `InstalledApplication` records; `ApplicationSearch` ranks them without
+I/O. Icons are loaded on the main thread only for the visible matches. The groups
+column edits the real groups; ticks are the members of the group being edited.
+The footer's layout commands call the same store methods as the menu and
+keyboard.
 
 ## Persistence
 

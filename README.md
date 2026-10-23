@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/sandrolain/MakiDesk/releases"><img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-1e1e2e?style=flat-square&logo=apple&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-cba6f7?style=flat-square"></a>
-  <img alt="235 tests" src="https://img.shields.io/badge/tests-235%20passing-a6e3a1?style=flat-square">
+  <img alt="247 tests" src="https://img.shields.io/badge/tests-247%20passing-a6e3a1?style=flat-square">
   <img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-a6e3a1?style=flat-square">
 </p>
 
@@ -45,11 +45,13 @@ editable in Settings.
 
 ### A switcher you will actually use
 
-`⌥⇥` opens live previews of every window; `⌥Space` adds a search field. Releasing
-Option or pressing Return opens the highlighted window. Pick windows for a
-layout, recall a saved group from the side column, or close/quit/minimize the
-highlighted window without leaving the grid. Previews stay current while the
-panel is open; the full-screen switcher uses the same two keys.
+`⌥⇥` opens live previews of every window; `⌥Space` adds a search field that
+filters windows and the applications installed on the Mac. Releasing
+Option or pressing Return opens the highlighted window; in the Applications
+shelf Return launches the app. Pick windows for a layout, recall a saved group
+from the side column, or close/quit/minimize the highlighted window without
+leaving the grid. Previews stay current while the panel is open; the full-screen
+switcher uses the same two keys.
 
 ### Groups, Focus and Peek
 
@@ -90,7 +92,7 @@ when it closes and never keeps your files anywhere else.
 
 A theme that covers the panels, the Settings window and the overlay,
 configurable animations, a focus border, a searchable Keyboard Shortcuts window
-with all 58 commands, and Settings split into General, Windows, Layouts, Panels
+with all 60 commands, and Settings split into General, Windows, Layouts, Panels
 and Groups.
 
 <p align="center">
@@ -125,7 +127,7 @@ Taskfile commands and the signing notes.
 | Shortcut | Action |
 | --- | --- |
 | `⌥⇥` | window switcher |
-| `⌥Space` | search windows |
+| `⌥Space` | search windows and applications |
 | `⌃⌥W` | content-weighted layout |
 | `⌥N` | notes |
 | `⌥V` | clipboard history |

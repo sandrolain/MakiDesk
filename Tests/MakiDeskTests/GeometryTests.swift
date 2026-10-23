@@ -308,6 +308,40 @@ final class GeometryTests: XCTestCase {
         XCTAssertGreaterThan(metrics.fontSize, 12)
     }
 
+    func testApplicationShelfGrowsTheCompactPanelByItsHeight() {
+        let available = CGSize(width: 1440, height: 900)
+        let without = paletteMetrics(.compact, count: 4,
+                                     groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                     available: available)
+        let withShelf = PaletteLayoutEngine.metrics(
+            itemCount: 4, layout: .compact, columns: 0, maxCardWidth: 250,
+            available: available, groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+            showsApplicationShelf: true
+        )
+        let shelf = PaletteLayoutEngine.applicationShelfHeight(for: .compact)
+        XCTAssertEqual(withShelf.chrome - without.chrome, shelf, accuracy: 0.01)
+        XCTAssertEqual(withShelf.panelSize.height - without.panelSize.height, shelf, accuracy: 0.01)
+        XCTAssertEqual(withShelf.panelSize.width, without.panelSize.width, accuracy: 0.01)
+        // The compact panel grows by the shelf, so the window grid keeps its room.
+        XCTAssertEqual(withShelf.gridAreaHeight, without.gridAreaHeight, accuracy: 0.01)
+    }
+
+    func testFullScreenApplicationShelfTakesItsRoomFromTheGrid() {
+        let available = CGSize(width: 1440, height: 900)
+        let without = paletteMetrics(.fullScreen, count: 8, available: available)
+        let withShelf = PaletteLayoutEngine.metrics(
+            itemCount: 8, layout: .fullScreen, columns: 0, maxCardWidth: 250,
+            available: available, showsApplicationShelf: true
+        )
+        XCTAssertEqual(withShelf.panelSize, without.panelSize)
+        XCTAssertEqual(withShelf.chrome - without.chrome,
+                       PaletteLayoutEngine.applicationShelfHeight(for: .fullScreen),
+                       accuracy: 0.01)
+        XCTAssertEqual(withShelf.gridAreaHeight, without.gridAreaHeight
+                       - PaletteLayoutEngine.applicationShelfHeight(for: .fullScreen),
+                       accuracy: 0.01)
+    }
+
     func testFullScreenGrowsTheGridToTheDisplay() {
         // A wide display gets more columns than the compact palette uses for the
         // same windows, so the grid does not float in the middle of the screen.

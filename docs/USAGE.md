@@ -161,6 +161,14 @@ get.
   window. `Esc` closes (if a group is being edited, it leaves the group first).
 - **Space** turns the switcher into a search with the text field focused. Type
   to filter; `↩` opens the highlighted result.
+- **Search also finds applications.** The same text filters the `.app` bundles
+  installed in `/Applications`, `/System/Applications` and `~/Applications`.
+  Matches appear in an **Applications** shelf between the field and the windows,
+  with the app icon, its name and the executable name. `↑` from the first window
+  row steps into the shelf, `←`/`→` choose an app, `↩` or a click launches it, and
+  `↓` returns to the windows. When no window matches, the first application is
+  selected already, so `↩` launches it. The inventory is read locally, kept in
+  memory and refreshed after a couple of minutes; nothing about it is stored.
 - **⌘1…9** picks a group from the column; clicking a group does the same and
   ticks its members. **⌥1…9** adds or removes the highlighted card from the
   group being edited. With a group selected, **Return** recalls it (`⌘↩` while
@@ -318,7 +326,7 @@ notes and clipboard history should go too; settings always reset.
 ## Keyboard shortcuts
 
 The full list is in the **Keyboard Shortcuts…** window (menu or Settings ▸
-General): 58 commands in groups, searchable by name or key, with the current
+General): 60 commands in groups, searchable by name or key, with the current
 theme. The main global keys:
 
 | Area | Shortcuts |
@@ -331,8 +339,9 @@ theme. The main global keys:
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H` |
 
 Pressing `⌥⇥` / `⌥Space` shows the switcher even if MakiDesk is not the active
-app. The palette's own keys are listed in the same window (arrows, `↩`, Space,
-`Esc`, `⌘1…9`, `⌥1…9`, `⌥Q`, `⌥⇧Q`, `⌥M`, `⌫`).
+app. The palette's own keys are listed in the same window (arrows, `↑`/`↓` into
+the Applications shelf, `↩`, Space, `Esc`, `⌘1…9`, `⌥1…9`, `⌥Q`, `⌥⇧Q`, `⌥M`,
+`⌫`).
 
 ## Troubleshooting
 

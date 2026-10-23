@@ -27,7 +27,8 @@ struct PaletteMetrics {
     let thumbnailHeight: CGFloat
     let spacing: CGFloat
     let padding: CGFloat
-    /// Room for the search field and the footer, whichever apply.
+    /// Room for the search field, the footer and, in search mode, the
+    /// applications shelf (whichever apply).
     let chrome: CGFloat
     let fontSize: CGFloat
     let iconSize: CGFloat
@@ -88,28 +89,40 @@ enum PaletteLayoutEngine {
     /// `columns` is the configured grid width (0 = automatic),
     /// `maxCardWidth` is the largest a card may get, in points, and
     /// `groupColumnWidth` reserves room for the groups side column (G3).
+    /// `showsApplicationShelf` adds the installed-applications row that only
+    /// search mode shows, so the panel is sized for the field it really has.
     ///
     /// One palette, one set of elements: the search field and the footer are
     /// always there, so the chrome they need is constant and the geometry does
     /// not depend on whether the palette is filtering or cycling.
     static func metrics(itemCount: Int, layout: PaletteLayout,
                         columns: Int, maxCardWidth: CGFloat,
-                        available: CGSize, groupColumnWidth: CGFloat = 0) -> PaletteMetrics {
+                        available: CGSize, groupColumnWidth: CGFloat = 0,
+                        showsApplicationShelf: Bool = false) -> PaletteMetrics {
         // The screen's own proportions drive the shape of every preview box, so
         // a box is never an over-wide or over-tall ribbon (T15).
         let aspect = max(0.5, available.width / max(1, available.height))
+        let applicationShelf = showsApplicationShelf ? applicationShelfHeight(for: layout) : 0
         switch layout {
         case .compact:
             return compactMetrics(itemCount: itemCount,
                                   columns: columns, maxCardWidth: maxCardWidth,
                                   available: available, aspect: aspect,
-                                  groupColumnWidth: groupColumnWidth)
+                                  groupColumnWidth: groupColumnWidth,
+                                  applicationShelf: applicationShelf)
         case .fullScreen:
             return fullScreenMetrics(itemCount: itemCount,
                                      columns: columns, maxCardWidth: maxCardWidth,
                                      available: available, aspect: aspect,
-                                     groupColumnWidth: groupColumnWidth)
+                                     groupColumnWidth: groupColumnWidth,
+                                     applicationShelf: applicationShelf)
         }
+    }
+
+    /// Height reserved by the applications shelf under the search field.
+    /// Full-screen cards scale their text, so their shelf gets a little more.
+    static func applicationShelfHeight(for layout: PaletteLayout) -> CGFloat {
+        layout == .fullScreen ? 112 : 92
     }
 
     /// Width of the groups side column (G3): room for the number, an optional
@@ -128,11 +141,13 @@ enum PaletteLayoutEngine {
                                        maxCardWidth: CGFloat,
                                        available: CGSize,
                                        aspect: CGFloat,
-                                       groupColumnWidth: CGFloat) -> PaletteMetrics {
+                                       groupColumnWidth: CGFloat,
+                                       applicationShelf: CGFloat) -> PaletteMetrics {
         let columns = PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
         let rows = max(1, Int(ceil(Double(max(1, itemCount)) / Double(columns))))
-        // Room for the search field (about 68 pt) and the footer (about 38 pt).
-        let chrome: CGFloat = 120
+        // Room for the search field (about 68 pt), the footer (about 38 pt) and,
+        // in search mode, the applications shelf.
+        let chrome: CGFloat = 120 + applicationShelf
         let spacing: CGFloat = 16
         let padding: CGFloat = 20
         let fontSize: CGFloat = 12
@@ -178,15 +193,18 @@ enum PaletteLayoutEngine {
                                           maxCardWidth: CGFloat,
                                           available: CGSize,
                                           aspect: CGFloat,
-                                          groupColumnWidth: CGFloat) -> PaletteMetrics {
+                                          groupColumnWidth: CGFloat,
+                                          applicationShelf: CGFloat) -> PaletteMetrics {
         let compact = compactMetrics(itemCount: itemCount, columns: configuredColumns,
                                      maxCardWidth: maxCardWidth, available: available,
-                                     aspect: aspect, groupColumnWidth: groupColumnWidth)
+                                     aspect: aspect, groupColumnWidth: groupColumnWidth,
+                                     applicationShelf: 0)
         let columns = configuredColumns > 0
             ? PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
             : automaticFullScreenColumns(itemCount: itemCount, maxCardWidth: maxCardWidth,
                                          available: available, aspect: aspect,
                                          groupColumnWidth: groupColumnWidth,
+                                         applicationShelf: applicationShelf,
                                          minimumCardWidth: compact.cardWidth,
                                          minimumGridWidth: compact.gridWidth)
         let cell = fullScreenCell(itemCount: itemCount, columns: columns,
@@ -196,7 +214,8 @@ enum PaletteLayoutEngine {
             layout: .fullScreen, columns: cell.columns, rows: cell.rows,
             cardWidth: cell.cardWidth, cardHeight: cell.cardHeight,
             thumbnailWidth: cell.thumbnailWidth, thumbnailHeight: cell.thumbnailHeight,
-            spacing: fullScreenSpacing, padding: fullScreenPadding, chrome: fullScreenChrome,
+            spacing: fullScreenSpacing, padding: fullScreenPadding,
+            chrome: fullScreenChrome + applicationShelf,
             fontSize: cell.fontSize, iconSize: 30 * (cell.fontSize / 12),
             badgeSize: 22 * (cell.fontSize / 12), badgeSymbolSize: 11 * (cell.fontSize / 12),
             panelSize: CGSize(width: max(600, available.width), height: max(400, available.height)),
@@ -264,6 +283,7 @@ enum PaletteLayoutEngine {
                                                    available: CGSize,
                                                    aspect: CGFloat,
                                                    groupColumnWidth: CGFloat,
+                                                   applicationShelf: CGFloat,
                                                    minimumCardWidth: CGFloat,
                                                    minimumGridWidth: CGFloat) -> Int {
         let limit = max(1, min(itemCount, maximumColumns))
@@ -296,7 +316,8 @@ enum PaletteLayoutEngine {
         let wideEnough = sized.filter { gridWidth($0) >= minimumGridWidth * 0.98 }
         let sizedPool = wideEnough.isEmpty ? sized : wideEnough
         let fittingHeight = sizedPool.filter {
-            gridHeight($0) + 2 * fullScreenPadding + fullScreenChrome <= available.height + 0.5
+            gridHeight($0) + 2 * fullScreenPadding + fullScreenChrome + applicationShelf
+                <= available.height + 0.5
         }
         let pool = fittingHeight.isEmpty ? sizedPool : fittingHeight
 
@@ -370,6 +391,15 @@ final class PaletteModel {
     /// badges drawn on the thumbnails.
     var groupBadges: [String: [Int]] = [:]
     var isLoadingWindows = false
+    /// Installed applications, published by `ApplicationCatalog` while the
+    /// palette is searching. Only names and bundle metadata, no file handles.
+    var applications: [InstalledApplication] = []
+    /// Icons loaded lazily for the visible matches, keyed by bundle path.
+    var applicationIcons: [String: NSImage] = [:]
+    /// The highlighted row in the applications shelf; nil means the window grid
+    /// owns the selection. The two selections are never active at once.
+    var appSelection: Int?
+    var isLoadingApplications = false
 
     var filtered: [ActionableWindow] {
         guard !query.isEmpty else { return items }
@@ -377,6 +407,13 @@ final class PaletteModel {
         return items.filter {
             $0.title.lowercased().contains(needle) || $0.appName.lowercased().contains(needle)
         }
+    }
+
+    /// Applications matching the shared query, capped for the shelf. Search mode
+    /// only: browse mode keeps the panel focused on windows.
+    var matchingApplications: [InstalledApplication] {
+        guard mode == .search else { return [] }
+        return ApplicationSearch.matches(applications, query: query)
     }
 }
 
@@ -454,6 +491,7 @@ final class WindowPalette {
         let previousID = model.selection < model.filtered.count ? model.filtered[model.selection].id : nil
         // Opening under a still cursor must not move the selection (T28).
         hoverAnchor = NSEvent.mouseLocation
+        if !wasVisible || previousMode != mode { model.appSelection = nil }
 
         // Cycling with ⌥Tab re-enters `show` on every key press. Only a new open
         // or mode change requests a refresh; the latest published snapshot is
@@ -464,7 +502,12 @@ final class WindowPalette {
             model.items = wasVisible ? orderedForSession(ordered) : ordered
             model.isLoadingWindows = true
         }
-        if model.items.isEmpty && !needsRefresh && !model.isLoadingWindows { hide(); return }
+        // Search can stay open with applications even when no window matches;
+        // browse is a window switcher and closes when there is nothing to show.
+        if mode == .browse, model.items.isEmpty, !needsRefresh, !model.isLoadingWindows {
+            hide()
+            return
+        }
         pruneSelection()
 
         // The column is shown in both modes, so a group being edited stays
@@ -500,6 +543,7 @@ final class WindowPalette {
         // larger images).
         updateLayout(in: panel, store: store, rescan: false)
         loadPreviews(for: model.items, refresh: !wasVisible)
+        if mode == .search { loadApplications() }
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
@@ -520,13 +564,14 @@ final class WindowPalette {
                     store.orderedWindowsForPalette(store.cachedActionableWindows()))
                 self.model.items = refreshed
                 self.model.isLoadingWindows = false
-                guard !refreshed.isEmpty else { self.hide(); return }
+                guard !refreshed.isEmpty || self.model.mode == .search else { self.hide(); return }
                 self.pruneSelection()
                 if let previousID, let index = self.model.filtered.firstIndex(where: { $0.id == previousID }) {
                     self.model.selection = index
                 } else {
                     self.model.selection = self.model.mode == .browse ? self.initialBrowseSelection() : 0
                 }
+                self.reconcileApplicationSelection()
                 self.refreshGroupState()
                 self.updateLayout(in: panel, store: store, rescan: false)
                 self.loadPreviews(for: refreshed, refresh: false)
@@ -556,7 +601,8 @@ final class WindowPalette {
             columns: store.paletteColumns,
             maxCardWidth: CGFloat(store.paletteMaxCardWidth),
             available: available,
-            groupColumnWidth: groupColumnWidth
+            groupColumnWidth: groupColumnWidth,
+            showsApplicationShelf: model.mode == .search
         )
         model.metrics = metrics
         model.columns = metrics.columns
@@ -580,7 +626,10 @@ final class WindowPalette {
                 onResetGroup: { [weak self] slot in self?.requestGroupReset(slot) },
                 onToggleGroupMember: { [weak self] id in self?.toggleGroupMember(id) },
                 onHoverCard: { [weak self] index in self?.pointerHovered(index) },
-                onQueryChange: { [weak self] in self?.highlightSelection() },
+                onHoverApplication: { [weak self] index in self?.pointerHoveredApplication(index) },
+                onLaunchApplication: { [weak self] id in self?.launchApplication(id) },
+                onApplicationIconNeeded: { [weak self] id in self?.loadApplicationIcon(id) },
+                onQueryChange: { [weak self] in self?.queryChanged() },
                 onCardVisibility: { [weak self] id, visible in self?.cardVisibilityChanged(id, visible: visible) }
             ))
             hosting.frame = CGRect(origin: .zero, size: metrics.panelSize)
@@ -603,6 +652,11 @@ final class WindowPalette {
         removeMonitor()
         stopRefreshTimer()
         model.query = ""
+        model.appSelection = nil
+        model.isLoadingApplications = false
+        // The inventory is small value data and stays in the catalog, but the
+        // icons are NSImages: drop them at this lifetime boundary.
+        model.applicationIcons.removeAll()
         panel?.orderOut(nil)
         MainActor.assumeIsolated { WindowCapture.cancelPaletteCapture() }
         model.previews.removeAll()
@@ -638,7 +692,10 @@ final class WindowPalette {
         model.mode = .search
         model.query = ""
         model.selection = 0
+        model.appSelection = nil
         model.focusToken += 1
+        loadApplications()
+        if let store, let panel { updateLayout(in: panel, store: store, rescan: false) }
     }
 
     /// Loads previews asynchronously off the main thread, delivering each image
@@ -754,13 +811,14 @@ final class WindowPalette {
 
         let selectedID = selectedWindow()?.id
         model.items = refreshed
-        guard !refreshed.isEmpty else { hide(); return }
+        guard !refreshed.isEmpty || model.mode == .search else { hide(); return }
         pruneSelection()
         if let selectedID, let index = model.filtered.firstIndex(where: { $0.id == selectedID }) {
             model.selection = index
         } else {
             model.selection = min(model.selection, max(0, model.filtered.count - 1))
         }
+        reconcileApplicationSelection()
         refreshGroupState()
         if model.selectedGroupSlot != nil { syncGroupTicks() }
         updateLayout(in: panel ?? makePanel(size: .zero), store: store, rescan: false)
@@ -777,6 +835,16 @@ final class WindowPalette {
     private static let refreshInterval: TimeInterval = 2
 
     private func move(_ delta: Int) {
+        if model.mode == .search, let selection = model.appSelection {
+            let applications = model.matchingApplications
+            guard !applications.isEmpty else {
+                model.appSelection = nil
+                return
+            }
+            model.appSelection = (selection + delta + applications.count) % applications.count
+            MiniMapController.shared.hide()
+            return
+        }
         let count = model.filtered.count
         guard count > 0 else {
             if model.isLoadingWindows { pendingBrowseSteps += delta }
@@ -790,7 +858,14 @@ final class WindowPalette {
         highlightSelection()
     }
 
+    /// Arrow keys in search mode walk the applications shelf and the window
+    /// grid as one column: the shelf sits just under the field, so Up from the
+    /// first window row enters it and Down from it returns to the windows.
     private func moveGrid(_ dx: Int, _ dy: Int) {
+        if model.mode == .search {
+            moveSearchGrid(dx, dy)
+            return
+        }
         let count = model.filtered.count
         guard count > 0 else { return }
         let columns = max(1, model.columns)
@@ -799,6 +874,49 @@ final class WindowPalette {
         if index >= count { index = count - 1 }
         model.selection = index
         suppressReleaseActivation = false
+        hoverAnchor = NSEvent.mouseLocation
+        highlightSelection()
+    }
+
+    private func moveSearchGrid(_ dx: Int, _ dy: Int) {
+        let applications = model.matchingApplications
+        if let selection = model.appSelection {
+            if dx != 0, !applications.isEmpty {
+                model.appSelection = min(max(selection + dx, 0), applications.count - 1)
+                hoverAnchor = NSEvent.mouseLocation
+                MiniMapController.shared.hide()
+            } else if dy > 0, !model.filtered.isEmpty {
+                model.appSelection = nil
+                model.selection = min(model.selection, model.filtered.count - 1)
+                hoverAnchor = NSEvent.mouseLocation
+                highlightSelection()
+            }
+            return
+        }
+
+        let count = model.filtered.count
+        let columns = max(1, model.columns)
+        guard count > 0 else {
+            if !applications.isEmpty {
+                model.appSelection = 0
+                MiniMapController.shared.hide()
+            }
+            return
+        }
+
+        // The applications shelf is above the grid: Up from the first row
+        // enters it, and the selection keeps its column when it comes back.
+        if dy < 0, model.selection < columns, !applications.isEmpty {
+            model.appSelection = 0
+            hoverAnchor = NSEvent.mouseLocation
+            MiniMapController.shared.hide()
+            return
+        }
+
+        var index = model.selection + dx + dy * columns
+        if index < 0 { index = 0 }
+        if index >= count { index = count - 1 }
+        model.selection = index
         hoverAnchor = NSEvent.mouseLocation
         highlightSelection()
     }
@@ -813,9 +931,21 @@ final class WindowPalette {
         let now = NSEvent.mouseLocation
         let moved = Self.pointerMoved(from: hoverAnchor, to: now)
         hoverAnchor = now
-        guard moved, index != model.selection else { return }
+        guard moved, index != model.selection || model.appSelection != nil else { return }
+        model.appSelection = nil
         model.selection = index
         highlightSelection()
+    }
+
+    /// The pointer asks for an application chip, under the same real-movement
+    /// rule as the cards so the keyboard is not overridden by a still cursor.
+    private func pointerHoveredApplication(_ index: Int) {
+        let now = NSEvent.mouseLocation
+        let moved = Self.pointerMoved(from: hoverAnchor, to: now)
+        hoverAnchor = now
+        guard moved, index != model.appSelection else { return }
+        model.appSelection = index
+        MiniMapController.shared.hide()
     }
 
     /// Whether a pointer report is a real move: a point of jitter is not one.
@@ -828,6 +958,10 @@ final class WindowPalette {
     /// the user keeps the context of where each window sits (A15).
     private func highlightSelection() {
         guard WorkspaceStore.shared.showMiniMap else { return }
+        guard model.appSelection == nil else {
+            MiniMapController.shared.hide()
+            return
+        }
         let list = model.filtered
         guard model.selection < list.count else { return }
         let selected = list[model.selection]
@@ -1022,6 +1156,9 @@ final class WindowPalette {
         }
         model.selectedGroupSlot = slot
         model.groupPendingReset = nil
+        // Editing a group is about windows: leave the applications shelf before
+        // the ticks are shown, so Return recalls instead of launching an app.
+        model.appSelection = nil
         refreshGroupRows()
         syncGroupTicks()
     }
@@ -1086,6 +1223,88 @@ final class WindowPalette {
     private func refreshGroupBadges() {
         guard let store else { return }
         model.groupBadges = store.groupSlots(among: model.items)
+    }
+
+    // MARK: - Applications shelf
+
+    /// Starts (or joins) the application scan. The first search of a session
+    /// pays for it; later searches reuse the inventory for a couple of minutes.
+    private func loadApplications() {
+        if model.applications.isEmpty { model.isLoadingApplications = true }
+        ApplicationCatalog.shared.loadIfNeeded { [weak self] applications in
+            guard let self else { return }
+            self.model.applications = applications
+            self.model.isLoadingApplications = false
+            guard self.isVisible, self.model.mode == .search else { return }
+            self.reconcileApplicationSelection()
+        }
+        // A cached catalog answers synchronously and already cleared the flag.
+        if model.applications.isEmpty, !ApplicationCatalog.shared.applications.isEmpty {
+            model.applications = ApplicationCatalog.shared.applications
+            model.isLoadingApplications = false
+            reconcileApplicationSelection()
+        } else if model.applications.isEmpty {
+            model.isLoadingApplications = ApplicationCatalog.shared.isLoading
+        }
+    }
+
+    /// Keeps the highlighted shelf row valid after a query or window change, and
+    /// hands the selection to the first application when no window matches.
+    private func reconcileApplicationSelection() {
+        guard model.mode == .search else {
+            model.appSelection = nil
+            return
+        }
+        let applications = model.matchingApplications
+        if applications.isEmpty {
+            model.appSelection = nil
+            return
+        }
+        if let selection = model.appSelection {
+            model.appSelection = min(max(0, selection), applications.count - 1)
+        } else if model.filtered.isEmpty {
+            model.appSelection = 0
+        }
+    }
+
+    /// One icon at a time, when the shelf is about to draw the chip. Loading
+    /// every match here would put Launch Services work on the typing path; the
+    /// lazy HStack asks only for the chips that are actually on screen. The
+    /// small cache is bounded and cleared when the palette closes.
+    private func loadApplicationIcon(_ id: String) {
+        guard model.applicationIcons[id] == nil,
+              let application = model.applications.first(where: { $0.id == id }) else { return }
+        model.applicationIcons[id] = NSWorkspace.shared.icon(forFile: application.path)
+        if model.applicationIcons.count > 32 {
+            let keep = Set(model.matchingApplications.map(\.id))
+            model.applicationIcons = model.applicationIcons.filter { keep.contains($0.key) }
+        }
+    }
+
+    /// The field changed: re-rank the applications and keep one selection
+    /// meaningful. Windows stay the primary choice unless none matches.
+    private func queryChanged() {
+        model.selection = 0
+        reconcileApplicationSelection()
+        if model.appSelection == nil {
+            highlightSelection()
+        } else {
+            MiniMapController.shared.hide()
+        }
+    }
+
+    private func launchApplication(_ id: String) {
+        guard let application = model.matchingApplications.first(where: { $0.id == id }) else { return }
+        hide()
+        ApplicationCatalog.shared.launch(application) { error in
+            if let error {
+                HUDController.shared.show("Could not open \(application.name)",
+                                          symbol: "exclamationmark.triangle.fill")
+                makiLog.error("application launch failed: \(error.localizedDescription, privacy: .private)")
+            } else {
+                WorkspaceStore.shared.status = "\(application.name) · launched"
+            }
+        }
     }
 
     /// Re-fits the panel after the window list shrank, so the grid and the
@@ -1170,7 +1389,7 @@ final class WindowPalette {
     private func applyReconciledItems() {
         let store = WorkspaceStore.shared
         let fresh = orderedForSession(store.orderedWindowsForPalette(store.cachedActionableWindows()))
-        guard !fresh.isEmpty else { hide(); return }
+        guard !fresh.isEmpty || model.mode == .search else { hide(); return }
         let selectedID = selectedWindow()?.id
         model.items = fresh
         pruneSelection()
@@ -1183,12 +1402,18 @@ final class WindowPalette {
         } else {
             model.selection = min(model.selection, max(0, model.filtered.count - 1))
         }
+        reconcileApplicationSelection()
         loadPreviews(for: model.items, refresh: false)
         highlightSelection()
         refreshLayout()
     }
 
     private func activateSelection() {
+        if model.mode == .search, let selection = model.appSelection,
+           selection < model.matchingApplications.count {
+            launchApplication(model.matchingApplications[selection].id)
+            return
+        }
         let list = model.filtered
         guard model.selection < list.count else { hide(); return }
         activate(list[model.selection].id)
@@ -1298,6 +1523,12 @@ struct PaletteView: View {
     let onToggleGroupMember: (String) -> Void
     /// The pointer moved over a card (T28).
     let onHoverCard: (Int) -> Void
+    /// The pointer moved over an application in the search shelf.
+    let onHoverApplication: (Int) -> Void
+    /// Launch the application with this bundle path.
+    let onLaunchApplication: (String) -> Void
+    /// Load the icon for an application chip when it first scrolls into view.
+    let onApplicationIconNeeded: (String) -> Void
     /// Search filtering can change the selected row without changing its index.
     let onQueryChange: () -> Void
     let onCardVisibility: (String, Bool) -> Void
@@ -1321,7 +1552,7 @@ struct PaletteView: View {
                     Spacer()
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass").foregroundStyle(model.theme.subtext)
-                        TextField(model.mode == .search ? "Filter windows…" : "Filter windows — ⌥Space",
+                        TextField(model.mode == .search ? "Filter windows and applications…" : "Filter windows — ⌥Space",
                                   text: $model.query)
                             .textFieldStyle(.plain)
                             .font(.system(size: 18 * scale))
@@ -1350,6 +1581,10 @@ struct PaletteView: View {
                 }
                 .padding(.vertical, 14)
 
+                if model.mode == .search {
+                    applicationShelf
+                }
+
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVGrid(columns: Array(repeating: GridItem(.fixed(model.metrics.cardWidth), spacing: model.metrics.spacing),
@@ -1360,7 +1595,7 @@ struct PaletteView: View {
                                             preview: model.previews[window.id],
                                             showPreview: model.showPreview,
                                             tinted: model.tintedCards,
-                                            selected: index == model.selection,
+                                            selected: model.appSelection == nil && index == model.selection,
                                             layoutSelected: model.selectedIDs.contains(window.id),
                                             metrics: model.metrics,
                                             theme: model.theme,
@@ -1405,13 +1640,26 @@ struct PaletteView: View {
                                alignment: .center)
                     }
                     .overlay {
-                        if model.items.isEmpty && model.isLoadingWindows {
+                        if model.filtered.isEmpty && model.isLoadingWindows {
                             VStack(spacing: 10) {
                                 ProgressView().controlSize(.small)
                                 Text("Finding windows…")
                                     .font(.system(size: model.metrics.fontSize))
                                     .foregroundStyle(model.theme.subtext)
                             }
+                        } else if model.mode == .search, !model.query.isEmpty,
+                                  model.filtered.isEmpty,
+                                  model.matchingApplications.isEmpty,
+                                  !model.isLoadingApplications {
+                            Text("No windows or applications match")
+                                .font(.system(size: model.metrics.fontSize))
+                                .foregroundStyle(model.theme.subtext)
+                        } else if model.mode == .search, !model.query.isEmpty,
+                                  model.filtered.isEmpty,
+                                  !model.matchingApplications.isEmpty {
+                            Text("No matching windows")
+                                .font(.system(size: model.metrics.fontSize))
+                                .foregroundStyle(model.theme.subtext)
                         }
                     }
                     .onChange(of: model.selection) { _, _ in
@@ -1457,6 +1705,120 @@ struct PaletteView: View {
     }
 
     private var scale: CGFloat { model.metrics.fontSize / 12 }
+
+    // MARK: - Applications shelf
+
+    /// Installed applications matching the shared query, in the space between
+    /// the field and the window grid. It is reserved in search mode so the panel
+    /// does not jump while the results change; browse mode has no shelf.
+    private var applicationShelf: some View {
+        let applications = model.matchingApplications
+        return VStack(alignment: .leading, spacing: 6 * scale) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.grid.2x2").font(.system(size: 10 * scale))
+                Text("APPLICATIONS")
+                    .font(.system(size: 10 * scale, weight: .bold))
+                    .tracking(0.6)
+                if !applications.isEmpty {
+                    Text("\(applications.count)")
+                        .font(.system(size: 10 * scale, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(model.theme.subtext.opacity(0.8))
+                }
+                Spacer()
+                if model.isLoadingApplications {
+                    ProgressView().controlSize(.mini)
+                } else if model.appSelection != nil {
+                    Text("⏎ launch")
+                        .font(.system(size: 9.5 * scale, weight: .semibold).monospaced())
+                }
+            }
+            .foregroundStyle(model.theme.subtext)
+            .padding(.horizontal, model.metrics.padding)
+
+            if applications.isEmpty {
+                Text(emptyApplicationMessage)
+                    .font(.system(size: 11 * scale))
+                    .foregroundStyle(model.theme.subtext)
+                    .padding(.horizontal, model.metrics.padding)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 8 * scale) {
+                            ForEach(Array(applications.enumerated()), id: \.element.id) { index, application in
+                                Button {
+                                    onLaunchApplication(application.id)
+                                } label: {
+                                    applicationTile(application, selected: model.appSelection == index)
+                                }
+                                .buttonStyle(.plain)
+                                .id(application.id)
+                                .onAppear { onApplicationIconNeeded(application.id) }
+                                .onHover { inside in
+                                    if inside { onHoverApplication(index) }
+                                }
+                                .onContinuousHover { phase in
+                                    if case .active = phase { onHoverApplication(index) }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, model.metrics.padding)
+                        .padding(.vertical, 2)
+                    }
+                    .onChange(of: model.appSelection) { _, selection in
+                        guard let selection, selection < applications.count else { return }
+                        proxy.scrollTo(applications[selection].id, anchor: .center)
+                    }
+                }
+            }
+        }
+        .padding(.bottom, 6 * scale)
+        .frame(height: PaletteLayoutEngine.applicationShelfHeight(for: model.metrics.layout),
+               alignment: .top)
+        .clipped()
+    }
+
+    private var emptyApplicationMessage: String {
+        if model.isLoadingApplications { return "Looking for installed applications…" }
+        if model.query.isEmpty { return "Type to search the applications installed on this Mac" }
+        return "No installed application matches"
+    }
+
+    private func applicationTile(_ application: InstalledApplication,
+                                 selected: Bool) -> some View {
+        HStack(spacing: 8 * scale) {
+            if let icon = model.applicationIcons[application.id] {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 28 * scale, height: 28 * scale)
+            } else {
+                Image(systemName: "app.dashed")
+                    .font(.system(size: 22 * scale))
+                    .frame(width: 28 * scale, height: 28 * scale)
+                    .foregroundStyle(model.theme.subtext)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(application.name)
+                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(model.theme.text)
+                Text(application.executable)
+                    .font(.system(size: 9.5 * scale).monospaced())
+                    .lineLimit(1)
+                    .foregroundStyle(model.theme.subtext)
+            }
+            .frame(maxWidth: 190 * scale, alignment: .leading)
+        }
+        .padding(.horizontal, 9 * scale)
+        .padding(.vertical, 6 * scale)
+        .background(RoundedRectangle(cornerRadius: 9 * scale)
+            .fill(selected ? model.theme.surfaceSelected : model.theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 9 * scale)
+            .stroke(selected ? model.theme.accent : model.theme.border,
+                    lineWidth: selected ? 2 : 1))
+        .contentShape(Rectangle())
+        .help("\(application.name) — \(application.path)")
+    }
 
     // MARK: - Groups column (G3)
 
@@ -1571,13 +1933,26 @@ struct PaletteView: View {
                 keyHint("1…9", "group")
                 keyHint("⌥Space", "search")
             } else {
-                keyHint("↑↓", "choose")
-                keyHint("⏎", "open")
-                keyHint("⌥Space", "next")
+                if model.appSelection != nil {
+                    keyHint("←→", "apps")
+                    keyHint("↓", "windows")
+                    keyHint("⏎", "launch")
+                } else {
+                    keyHint("↑↓", "choose")
+                    if !model.matchingApplications.isEmpty { keyHint("↑", "apps") }
+                    keyHint("⏎", "open")
+                    keyHint("⌥Space", "next")
+                }
                 keyHint("esc", "close")
             }
             Spacer()
-            if let slot = model.selectedGroupSlot {
+            if let selection = model.appSelection,
+               selection < model.matchingApplications.count {
+                Text(model.matchingApplications[selection].name)
+                    .font(.system(size: 11 * scale, weight: .semibold))
+                    .lineLimit(1)
+                    .foregroundStyle(model.theme.text)
+            } else if let slot = model.selectedGroupSlot {
                 let name = model.groupRows.first { $0.slot == slot }?.displayName ?? "Group \(slot)"
                 Text("Editing \(name) · \(model.selectedIDs.count)")
                     .font(.system(size: 11 * scale, weight: .semibold))
@@ -1589,11 +1964,13 @@ struct PaletteView: View {
                     .font(.system(size: 11 * scale))
                     .foregroundStyle(model.theme.subtext)
             }
-            commandButton("Tile", symbol: "square.grid.3x3") { onLayoutCommand(.tile) }
-            commandButton("Golden", symbol: "circle.hexagongrid") { onLayoutCommand(.goldenSpiral) }
-            commandButton("Content", symbol: "rectangle.3.group") { onLayoutCommand(.content) }
-            commandButton("Auto", symbol: "wand.and.stars") { onLayoutCommand(.auto) }
-            commandButton("Focus", symbol: "eye") { onLayoutCommand(.focus) }
+            if model.appSelection == nil {
+                commandButton("Tile", symbol: "square.grid.3x3") { onLayoutCommand(.tile) }
+                commandButton("Golden", symbol: "circle.hexagongrid") { onLayoutCommand(.goldenSpiral) }
+                commandButton("Content", symbol: "rectangle.3.group") { onLayoutCommand(.content) }
+                commandButton("Auto", symbol: "wand.and.stars") { onLayoutCommand(.auto) }
+                commandButton("Focus", symbol: "eye") { onLayoutCommand(.focus) }
+            }
         }
         .padding(.horizontal, model.metrics.padding)
         .padding(.bottom, 12 * scale)
@@ -1614,6 +1991,11 @@ struct PaletteView: View {
     }
 
     private func activateSelection() {
+        if let selection = model.appSelection,
+           selection < model.matchingApplications.count {
+            onLaunchApplication(model.matchingApplications[selection].id)
+            return
+        }
         let list = model.filtered
         if model.selection < list.count { onActivate(list[model.selection].id) }
     }

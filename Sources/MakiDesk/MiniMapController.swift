@@ -76,6 +76,14 @@ final class MiniMapController {
         startHoverTracking()
     }
 
+    /// Hides the overlay now: the palette is about to highlight an application
+    /// instead of a window, so keeping a stale window outline would mislead.
+    func hide() {
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        panel?.orderOut(nil)
+    }
+
     /// Hides the overlay as soon as the pointer moves over it.
     private func startHoverTracking() {
         hoverTimer?.invalidate()

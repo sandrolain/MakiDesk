@@ -46,6 +46,11 @@ identity asks again. A Developer ID-signed public release behaves best here.
   promise from another app, which must be materialized in a temporary folder).
 - The links you drag onto the shelf or ask Finder to reveal are opened with the
   default app; the app does not fetch them itself.
+- **Installed application bundles** in `/Applications`, `/System/Applications`
+  and `~/Applications` when the palette is searching: only `Info.plist` names,
+  the executable name, the bundle id and the bundle path, plus the icon the
+  system returns for the path. The list stays in memory and is not written to
+  disk or uploaded.
 
 ## What is stored
 
@@ -59,6 +64,7 @@ All paths are under your user account:
 | Clipboard history | RAM | Until MakiDesk quits |
 | Shelf | RAM + a temporary staging folder | Until the shelf closes |
 | Peek designation | RAM | Until the app quits |
+| Installed applications | RAM | Until the 2-minute cache refreshes or the app quits |
 | Window previews/measure | RAM | Replaced/evicted while running |
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
