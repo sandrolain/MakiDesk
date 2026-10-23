@@ -306,6 +306,29 @@ excluded bundle IDs. If you had a shelf opened by a shake and the drag ends
 without a drop, it closes itself; a shelf opened with `⌃⌥D` stays until you
 close it.
 
+## Screenshots
+
+Choose **Screenshots** in the menu-bar menu to open the screenshot library in a
+floating window that stays above other windows. It starts in Desktop and lists
+common macOS screenshot image and PDF filenames; use **Folder…** if macOS saves
+screenshots elsewhere. The folder is remembered, and the list refreshes when its
+contents change.
+
+Search by filename, click to select, Command-click to add or remove items, or
+drag a selection rectangle from empty space across multiple cards. Clicking
+empty space clears the selection. **Select All** and **Clear Selection** apply
+to the current search results. Press **Space** or click **Preview** for Quick
+Look; Space closes the preview, and Escape dismisses it. Double-click opens an
+image in its default app; **Show in Finder** reveals it. Drag a card or a multi-selection to another
+app or Finder: the destination can move the original file or copy it. Use
+**Move…** to choose a folder, or **Move to Trash** to delete the selection
+recoverably. If a destination already has the same name, MakiDesk adds a number
+to the moved filename.
+
+The segmented controls sort captures newest-first or oldest-first and group
+them as one grid, by month, or by week. The thumbnail-size slider changes the
+card size; sort order, grouping and size are remembered.
+
 ## Settings
 
 The Settings window is split into tabs:

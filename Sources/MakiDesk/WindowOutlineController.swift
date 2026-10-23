@@ -3,17 +3,20 @@ import ApplicationServices
 
 /// Draws a thin border around the focused window (T36).
 ///
-/// The border is a non-activating, click-through panel that sits just above
+/// The border uses one non-activating, click-through panel per display, just above
 /// the target's window level. Other apps' windows arrive through
 /// `WindowIndex`; MakiDesk's own windows through the key/main window and the
 /// matching `NSWindow` notifications. Both paths are event-driven, so the
-/// border follows a window while it is dragged or resized without polling.
+/// border follows live geometry while a window is dragged or resized.
 /// The panel never becomes key and never takes a click.
 final class WindowOutlineController {
     static let shared = WindowOutlineController()
 
-    private var panel: OutlinePanel?
-    private var outlineView: OutlineView?
+    private struct Surface {
+        let panel: OutlinePanel
+        let view: OutlineView
+    }
+    private var surfaces: [CGDirectDisplayID: Surface] = [:]
     private var targetElement: AXUIElement?
     private weak var targetWindow: NSWindow?
     private var targetWindowID: CGWindowID?
@@ -49,8 +52,6 @@ final class WindowOutlineController {
 
     /// `settle` marks a delayed re-read: it must not schedule another one.
     private func refresh(frontmost: WindowController.Frontmost?, settle: Bool) {
-        // A new track supersedes any drag-follow for the previous target.
-        endFollow()
         let store = WorkspaceStore.shared
         guard store.focusBorderEnabled, AXIsProcessTrusted() else {
             hide()
@@ -64,6 +65,9 @@ final class WindowOutlineController {
                 hide()
                 return
             }
+            if followTimer != nil, targetWindow === window,
+               NSEvent.pressedMouseButtons & 1 != 0 { return }
+            endFollow()
             targetElement = nil
             targetWindow = window
             targetWindowID = CGWindowID(exactly: window.windowNumber)
@@ -75,6 +79,12 @@ final class WindowOutlineController {
         targetWindow = nil
         switch frontmost ?? store.recentFocusSnapshot() ?? WindowController.frontmost() {
         case let .window(info):
+            // Repeated focus reads for this target must not replace live
+            // geometry. A genuinely different focused window can still take over.
+            if followTimer != nil, let element = targetElement,
+               CFEqual(element, info.element), targetWindowID == info.windowID,
+               NSEvent.pressedMouseButtons & 1 != 0 { return }
+            endFollow()
             guard !WindowController.isFullScreen(info.element),
                   !WindowController.isMinimized(info.element) else {
                 hide()
@@ -209,6 +219,7 @@ final class WindowOutlineController {
     /// Rounds the drag out: the ring then resyncs from the authoritative frame
     /// path once the pointer has been released.
     private func beginDragFollow() -> Bool {
+        if followTimer != nil { return true }
         let target: FollowTarget
         if targetWindow != nil {
             target = .ownWindow
@@ -253,16 +264,19 @@ final class WindowOutlineController {
             guard let window = targetWindow,
                   window.isVisible,
                   !window.isMiniaturized else {
-                endFollow()
-                refresh()
+                // Window state can be briefly unavailable during a native
+                // drag across displays. Keep the last good outline until the
+                // mouse is released instead of switching to a stale focus read.
                 return
             }
             frame = window.frame
         case let .externalWindow(windowID):
             guard let bounds = WindowController.cgFrame(windowNumber: windowID),
                   bounds.width > 1, bounds.height > 1 else {
-                endFollow()
-                refresh()
+                // Window Server snapshots can momentarily omit or report an
+                // incomplete frame while a window crosses display/Space
+                // boundaries. A missing sample is not proof the target closed;
+                // retain the last valid frame and retry on the next tick.
                 return
             }
             frame = WindowController.flip(bounds)
@@ -294,8 +308,6 @@ final class WindowOutlineController {
             hide()
             return
         }
-        outlineView?.borderWidth = CGFloat(FocusBorder.clampedWidth(store.focusBorderWidth))
-        outlineView?.borderColor = NSColor(store.theme.accent)
         refresh()
     }
 
@@ -314,7 +326,7 @@ final class WindowOutlineController {
     }
 
     private func canOutline(_ window: NSWindow) -> Bool {
-        guard window !== panel,
+        guard !surfaces.values.contains(where: { $0.panel === window }),
               window.isVisible,
               !window.isMiniaturized,
               window.canBecomeKey,
@@ -349,25 +361,39 @@ final class WindowOutlineController {
             return
         }
 
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
-        outlineView?.borderWidth = CGFloat(width)
-        outlineView?.borderColor = NSColor(WorkspaceStore.shared.theme.accent)
-
-        let levelChanged = panel.level != level
-        if levelChanged {
-            panel.level = level
+        // Keep each panel within one display. Only its clipped portion of the
+        // complete outline is drawn, so no panel changes display ownership as
+        // the target straddles screens with different backing scales or Spaces.
+        var connected: Set<CGDirectDisplayID> = []
+        for screen in NSScreen.screens {
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { continue }
+            let id = CGDirectDisplayID(number.uint32Value)
+            connected.insert(id)
+            let portion = target.intersection(screen.frame)
+            guard !portion.isNull, portion.width > 0, portion.height > 0 else {
+                surfaces[id]?.panel.orderOut(nil)
+                continue
+            }
+            let surface = surfaces[id] ?? makeSurface()
+            surfaces[id] = surface
+            let panel = surface.panel
+            let levelChanged = panel.level != level
+            if levelChanged { panel.level = level }
+            surface.view.borderWidth = CGFloat(width)
+            surface.view.borderColor = NSColor(WorkspaceStore.shared.theme.accent)
+            surface.view.outlineFrame = target.offsetBy(dx: -portion.minX, dy: -portion.minY)
+            if panel.frame != portion {
+                panel.setFrame(portion, display: false)
+            }
+            surface.view.displayIfNeeded()
+            if !panel.isVisible || levelChanged { panel.orderFrontRegardless() }
         }
-        if panel.frame != target {
-            panel.setFrame(target, display: true)
-            outlineView?.frame = panel.contentView?.bounds ?? .zero
-        }
-        if !panel.isVisible || levelChanged {
-            panel.orderFrontRegardless()
+        for id in Array(surfaces.keys) where !connected.contains(id) {
+            surfaces.removeValue(forKey: id)?.panel.orderOut(nil)
         }
     }
 
-    private func makePanel() -> OutlinePanel {
+    private func makeSurface() -> Surface {
         let panel = OutlinePanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -387,8 +413,7 @@ final class WindowOutlineController {
         let view = OutlineView(frame: .zero)
         view.autoresizingMask = [.width, .height]
         panel.contentView = view
-        outlineView = view
-        return panel
+        return Surface(panel: panel, view: view)
     }
 
     /// Keeps the panel just above an external target's window layer.
@@ -406,7 +431,7 @@ final class WindowOutlineController {
         targetWindow = nil
         targetWindowID = nil
         endFollow()
-        panel?.orderOut(nil)
+        for surface in surfaces.values { surface.panel.orderOut(nil) }
     }
 
     // MARK: - System events
@@ -480,7 +505,8 @@ final class WindowOutlineController {
     }
 
     private func handleOwnWindowEvent(named name: Notification.Name, note: Notification) {
-        guard let window = note.object as? NSWindow, window !== panel else { return }
+        guard let window = note.object as? NSWindow,
+              !surfaces.values.contains(where: { $0.panel === window }) else { return }
         switch name {
         case NSWindow.didMoveNotification,
              NSWindow.didResizeNotification,
@@ -549,6 +575,11 @@ private final class OutlinePanel: NSPanel {
 /// The stroke itself. The view stays transparent, so only the ring takes
 /// pixels; the window underneath is never dimmed or covered.
 private final class OutlineView: NSView {
+    /// The complete outline in local coordinates; drawing is clipped by this
+    /// display's view bounds, without adding a stroke along the display seam.
+    var outlineFrame: CGRect = .zero {
+        didSet { if oldValue != outlineFrame { needsDisplay = true } }
+    }
     var borderColor: NSColor = .controlAccentColor {
         didSet { needsDisplay = true }
     }
@@ -561,7 +592,7 @@ private final class OutlineView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let width = max(1, borderWidth)
         let inset = width / 2 + 1
-        let rect = bounds.insetBy(dx: inset, dy: inset)
+        let rect = outlineFrame.insetBy(dx: inset, dy: inset)
         guard rect.width > 0, rect.height > 0 else { return }
 
         let radius = FocusBorder.cornerRadius(for: rect, width: Double(width))

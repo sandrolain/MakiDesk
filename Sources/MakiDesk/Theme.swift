@@ -40,23 +40,51 @@ struct PaletteTheme: Identifiable, Equatable {
                      text: .hex(0xEBDBB2), subtext: .hex(0xD5C4A1), accent: .hex(0xD79921), border: .hex(0x665C54)),
         PaletteTheme(id: "graphite", name: "Graphite",
                      background: .hex(0x282C34), surface: .hex(0x3A3F4B), surfaceSelected: .hex(0x474E5D),
-                     text: .hex(0xABB2BF), subtext: .hex(0x8B93A1), accent: .hex(0x61AFEF), border: .hex(0x4B5263))
+                     text: .hex(0xABB2BF), subtext: .hex(0x8B93A1), accent: .hex(0x61AFEF), border: .hex(0x4B5263)),
+        PaletteTheme(id: "macos-light", name: "macOS Light",
+                     background: .hex(0xF5F5F7), surface: .hex(0xFFFFFF), surfaceSelected: .hex(0xE8E8ED),
+                     text: .hex(0x1D1D1F), subtext: .hex(0x6E6E73), accent: .hex(0x007AFF), border: .hex(0xD2D2D7)),
+        PaletteTheme(id: "macos-dark", name: "macOS Dark",
+                     background: .hex(0x1C1C1E), surface: .hex(0x2C2C2E), surfaceSelected: .hex(0x3A3A3C),
+                     text: .hex(0xF5F5F7), subtext: .hex(0xAEAEB2), accent: .hex(0x0A84FF), border: .hex(0x48484A)),
+        PaletteTheme(id: "solarized-light", name: "Solarized Light",
+                     background: .hex(0xFDF6E3), surface: .hex(0xEEE8D5), surfaceSelected: .hex(0xE3DCC8),
+                     text: .hex(0x586E75), subtext: .hex(0x657B83), accent: .hex(0x268BD2), border: .hex(0xD6CEBA)),
+        PaletteTheme(id: "solarized-dark", name: "Solarized Dark",
+                     background: .hex(0x002B36), surface: .hex(0x073642), surfaceSelected: .hex(0x164854),
+                     text: .hex(0x839496), subtext: .hex(0x93A1A1), accent: .hex(0x2AA198), border: .hex(0x28535D)),
+        PaletteTheme(id: "rose-pine", name: "Rosé Pine",
+                     background: .hex(0x191724), surface: .hex(0x1F1D2E), surfaceSelected: .hex(0x26233A),
+                     text: .hex(0xE0DEF4), subtext: .hex(0x908CAA), accent: .hex(0xC4A7E7), border: .hex(0x403D52)),
+        PaletteTheme(id: "system", name: "System",
+                     background: Color(nsColor: .windowBackgroundColor),
+                     surface: Color(nsColor: .controlBackgroundColor),
+                     surfaceSelected: Color(nsColor: .unemphasizedSelectedContentBackgroundColor),
+                     text: Color(nsColor: .labelColor),
+                     subtext: Color(nsColor: .secondaryLabelColor),
+                     accent: Color(nsColor: .controlAccentColor),
+                     border: Color(nsColor: .separatorColor))
     ]
 
     static func named(_ id: String) -> PaletteTheme {
         all.first { $0.id == id } ?? all[0]
     }
 
-    /// True for the eight dark themes and false for Latte. Used to give native
+    /// Derived from the palette luminance. Used to give native
     /// controls (switches, popups, titlebars) a matching appearance when a whole
     /// window is painted with the theme, as Settings now is (T42).
     var isDark: Bool {
+        if followsSystemAppearance {
+            return NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
         let color = NSColor(background).usingColorSpace(.sRGB) ?? .black
         let luminance = 0.2126 * color.redComponent
             + 0.7152 * color.greenComponent
             + 0.0722 * color.blueComponent
         return luminance < 0.5
     }
+
+    var followsSystemAppearance: Bool { id == "system" }
 
     /// Keeps an older stored theme id from selecting nothing in Settings.
     static func normalized(_ id: String) -> String {

@@ -60,12 +60,13 @@ All paths are under your user account:
 |---|---|---|
 | Window groups | `~/Library/Application Support/MakiDesk/groups.json` | Until you delete them or reset |
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
-| Preferences | `UserDefaults` (theme, layout weights, shelf shake, animations, switcher settings) | Until reset |
+| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings) | Until reset |
 | Clipboard history | RAM | Until MakiDesk quits |
 | Shelf | RAM + a temporary staging folder | Until the shelf closes |
 | Peek designation | RAM | Until the app quits |
 | Installed applications | RAM | Until the 2-minute cache refreshes or the app quits |
 | Window previews/measure | RAM | Replaced/evicted while running |
+| Screenshot previews | RAM | While the screenshot window is open |
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
 can remove groups, notes and clipboard history; settings always reset.
@@ -90,6 +91,15 @@ are kept in memory. File promises from Photos/Safari/Mail are the only items
 that require a temporary copy; the staging folder lives under the system
 temporary directory, is used only for the current shelf, and is deleted when
 the shelf closes. The shelf is one at a time and never persists.
+
+## Screenshot library
+
+The screenshot window lists image and PDF files with common macOS screenshot
+filename prefixes from the selected folder. It starts with Desktop; choosing a
+different folder stores that folder path in preferences. Thumbnails are created
+locally on demand and kept only in memory. Opening or revealing a file, moving
+it to another folder, and sending it to the Trash happen only after you choose
+that action; the library does not copy or upload screenshots on its own.
 
 ## Window previews
 

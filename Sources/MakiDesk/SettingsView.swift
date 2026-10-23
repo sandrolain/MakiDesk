@@ -60,7 +60,7 @@ struct SettingsView: View {
         }
         .frame(minWidth: 560, idealWidth: 700, minHeight: 520, idealHeight: 720)
         .background(theme.background)
-        .preferredColorScheme(theme.isDark ? .dark : .light)
+        .preferredColorScheme(theme.followsSystemAppearance ? nil : (theme.isDark ? .dark : .light))
         .tint(theme.accent)
         .environment(\.paletteTheme, theme)
         .toggleStyle(.switch)
@@ -349,14 +349,25 @@ struct SettingsView: View {
             caption("⌃⌥D opens the shelf near the pointer; the shake opens it during a drag. It collects files, folders, links, text and images, lets you drag them out or copy/move them to a folder, and empties when closed. Space previews, Delete removes, Esc closes. The shelf is temporary: nothing is written to disk except files promised by apps such as Photos, in a temporary folder removed on close.")
         }
 
-        SettingsSection("Window switcher & search") {
+        SettingsSection("Window switcher") {
             Picker("Open on screen with", selection: Binding(
                 get: { store.paletteScreenLocation },
                 set: { store.updatePaletteScreenLocation($0) }
             )) {
                 ForEach(PaletteScreenLocation.allCases) { Text($0.label).tag($0) }
             }
-            caption("Choose the display when the switcher or search opens. The panel stays on that display until closed.")
+            Toggle("Open the switcher full screen", isOn: Binding(
+                get: { store.paletteFullScreen },
+                set: { store.updatePaletteFullScreen($0) }
+            ))
+            caption("⌥Tab opens the switcher. Choose which display it uses; the panel stays there until closed.")
+        }
+
+        SettingsSection("Search & launch") {
+            caption("⌥Space opens the same palette in search mode with the search field focused. Search filters open windows and installed applications; the Applications shelf below the field launches an app with Return.")
+        }
+
+        SettingsSection("Previews & colours") {
             Toggle("Show window previews", isOn: Binding(
                 get: { store.showPreview },
                 set: { store.updateShowPreview($0) }
@@ -365,16 +376,19 @@ struct SettingsView: View {
                 get: { store.paletteTintedCards },
                 set: { store.updatePaletteTintedCards($0) }
             ))
-            Toggle("Open the switcher full screen", isOn: Binding(
-                get: { store.paletteFullScreen },
-                set: { store.updatePaletteFullScreen($0) }
-            ))
             Picker("Theme", selection: Binding(
                 get: { store.themeID },
                 set: { store.updateTheme($0) }
             )) {
                 ForEach(PaletteTheme.all) { Text($0.name).tag($0.id) }
             }
+            SliderRow(title: "Opacity",
+                      value: Binding(get: { store.paletteOpacity }, set: { store.updatePaletteOpacity($0) }),
+                      range: 0.5...1.0, unit: "%", percent: true)
+            caption("Previews need Screen Recording permission. The theme also colours the overlay. Window colours affect the list, thumbnails and mini-map; the focused-window outline keeps its theme colour.")
+        }
+
+        SettingsSection("Grid & card size") {
             Picker("Columns", selection: Binding(
                 get: { store.paletteColumns },
                 set: { store.updatePaletteColumns($0) }
@@ -386,12 +400,7 @@ struct SettingsView: View {
                       value: Binding(get: { store.paletteMaxCardWidth },
                                      set: { store.updatePaletteMaxCardWidth($0) }),
                       range: 160...480, step: 10, unit: " pt")
-            SliderRow(title: "Opacity",
-                      value: Binding(get: { store.paletteOpacity }, set: { store.updatePaletteOpacity($0) }),
-                      range: 0.5...1.0, unit: "%", percent: true)
-            caption("Opt-Tab opens the switcher; Opt-Space opens the same palette in search mode with the text field focused. Search filters windows and the applications installed in the standard Applications folders; the Applications shelf under the field launches them with Return. Previews need the Screen Recording permission. The theme also colours the overlay.")
-            caption("Columns: Automatic picks 2–4 by window count in the compact switcher, and as many as the display holds when it opens full screen, never with smaller cards than the compact layout; a fixed number pins the grid (never more columns than windows). Max size is the largest a card may get; if the columns would overflow the screen width, cards shrink below it to fit. Preview boxes keep the screen's proportions in both modes.")
-            caption("This controls the per-app colours in the window list, card thumbnails and canvas mini-map. Turn it off for neutral windows; the focused-window outline keeps its theme colour.")
+            caption("Automatic uses 2–4 columns in the compact switcher and as many as fit in full-screen mode. A fixed number pins the grid. Cards shrink to fit the screen, and previews keep the display's proportions.")
         }
     }
 
@@ -687,6 +696,10 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
             window.maxSize = NSSize(width: unbounded, height: unbounded)
             window.contentMaxSize = NSSize(width: unbounded, height: unbounded)
             window.identifier = NSUserInterfaceItemIdentifier("MakiDeskSettingsWindow")
+            // MakiDesk is a menu-bar app and its own windows are excluded from
+            // the window switcher. Keep Settings reachable above normal app
+            // windows after it has been opened from the menu bar.
+            window.level = .floating
             window.titlebarAppearsTransparent = true
             window.title = ""
             window.titlebarSeparatorStyle = .none
@@ -694,7 +707,9 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
             // remains draggable even without a visible title.
             window.isMovableByWindowBackground = false
             window.backgroundColor = NSColor(theme.background)
-            window.appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+            window.appearance = theme.followsSystemAppearance
+                ? nil
+                : NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         }
 
         override func viewDidMoveToWindow() {

@@ -55,6 +55,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `NotesSyntax.swift`, `NotesGrammarQueries.swift` | Syntax configuration, captures, colours, highlighter. |
 | `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text history, pasteboard poll, picker. |
 | `ShelfController.swift`, `ShelfShake.swift` | Drag shelf, file promises, Quick Look, drag out, shake detector. |
+| `ScreenshotLibrary.swift` | Screenshot inventory, Quick Look, native file drags, configurable grid, sorting, date groups and file operations. |
 | `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
 | `SettingsView.swift` | Tabbed settings, permissions, reset. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
@@ -130,9 +131,10 @@ keyboard.
 | Window groups | `~/Library/Application Support/MakiDesk/groups.json` |
 | Notes and drafts | `~/Library/Application Support/MakiDesk/Note/note-<uuid>.txt` |
 | Notes session | `…/Note/session.json` (order, cursors, languages, external paths, frame, anchor) |
-| Preferences | `UserDefaults` (theme, layout priors, shelf shake, animations, switcher, etc.) |
+| Preferences | `UserDefaults` (theme, layout priors, shelf shake, screenshot folder/view, animations, switcher, etc.) |
 | Clipboard history | Memory only; lost on quit |
 | Shelf | Memory + a temporary staging folder; removed on close |
+| Screenshot library | Original image files stay in the selected folder; previews are generated on demand in memory |
 | Peek | Session only; nothing on disk |
 
 Writes are debounced (notes 0.4 s, session 0.6 s) and flushed on hide/quit; the

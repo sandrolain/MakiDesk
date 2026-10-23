@@ -797,13 +797,13 @@ final class WorkspaceStore {
         let current = target.frame.insetBy(dx: -gapHalf, dy: -gapHalf)
 
         if let outcome = ladderStep(action, area: area, current: current) {
-            // Arrow commands are discrete steps. Intermediate AX position/size
-            // writes can make constrained apps flicker and give a repeated key
-            // an unfinished frame from which to choose its next ladder state.
+            // Arrow commands are discrete steps. Apply the final frame once,
+            // then use the bounded T27 verification retries if an app restores
+            // its old size asynchronously. A newer key press invalidates them.
             switch outcome {
             case .frame(let logical):
                 applyFrame(logical.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
-                           reason: label(for: action), animate: false, retryOnMismatch: false)
+                           reason: label(for: action), animate: false)
             case .minimize:
                 setMinimized(true, target: target)
             case .screenBoundary(let direction, let fallback):

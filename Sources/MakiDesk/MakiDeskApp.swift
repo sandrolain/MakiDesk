@@ -20,7 +20,6 @@ struct MakiDeskApp: App {
         ClipboardHistory.shared.start()
         ShelfController.shared.start()
         IdlePerformanceMetrics.shared.start()
-
     }
 
     /// A menu item whose shortcut text sits after the title. The menu has no
@@ -83,6 +82,9 @@ struct MakiDeskApp: App {
             }
             menuButton("Shelf", keys: "⌃⌥D", icon: "tray.and.arrow.down") {
                 ShelfController.shared.toggle()
+            }
+            menuButton("Screenshots", icon: "menubar.dock.rectangle") {
+                ScreenshotLibraryController.shared.show()
             }
 
             Divider()
@@ -301,6 +303,7 @@ final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             NotesStore.shared.flushIfNeeded(cleanClose: true)
             ShelfController.shared.shutdown()
+            ScreenshotLibraryController.shared.shutdown()
         }
     }
 }

@@ -88,6 +88,15 @@ drag everything out or one row, copy or move it to a folder, or send the selecte
 text straight to the open note. The shelf is temporary by design: it empties
 when it closes and never keeps your files anywhere else.
 
+### Keep screenshots out of the desktop clutter
+
+Open **Screenshots** from the menu bar to browse captures in the macOS save
+folder (Desktop by default). Search, select several, drag them out, open or
+reveal them in Finder, preview with Space, move them to another folder, or send
+them to the Trash. Resize the cards, sort by date, or group captures by month
+or week. Choose a different screenshot folder when macOS is configured to save
+captures somewhere else; the list refreshes when files change.
+
 ### Small details, native feel
 
 A theme that covers the panels, the Settings window and the overlay,

@@ -2039,15 +2039,34 @@ private struct PaletteCard: View {
         tinted ? Color(nsColor: window.color) : theme.surface
     }
     private var glyphTint: Color {
-        tinted ? Color(nsColor: window.color) : theme.subtext
+        tinted ? appTint : theme.subtext
     }
-    private var appTint: Color { Color(nsColor: window.color) }
+    /// Dark themes need a brighter per-app edge: the original palette colour
+    /// can be too close to the card background, especially for blue and purple.
+    /// Preserve its hue while lifting only the dark-theme presentation colour.
+    private var appTint: Color {
+        guard theme.isDark,
+              let color = window.color.usingColorSpace(.sRGB)
+        else { return Color(nsColor: window.color) }
+
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        return Color(nsColor: NSColor(
+            hue: hue,
+            saturation: min(saturation, 0.72),
+            brightness: max(brightness, 0.96),
+            alpha: 1
+        ))
+    }
 
     var body: some View {
         VStack(spacing: 8 * (metrics.fontSize / 12)) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(surfaceTint.opacity(dimmed ? 0.10 : 0.22))
+                    .fill(surfaceTint.opacity(dimmed ? 0.06 : 0.12))
                 if showPreview, let preview {
                     Image(nsImage: preview)
                         .resizable()
@@ -2082,16 +2101,16 @@ private struct PaletteCard: View {
             .overlay(alignment: .bottomLeading) { groupBadges }
             Text(window.title.isEmpty ? window.appName : window.title)
                 .font(.system(size: metrics.fontSize, weight: .semibold))
-                .lineLimit(1).foregroundStyle(tinted ? appTint : theme.text)
+                .lineLimit(1).foregroundStyle(theme.text)
             Text(window.appName)
                 .font(.system(size: metrics.fontSize * 0.85)).lineLimit(1)
-                .foregroundStyle(tinted ? appTint.opacity(0.8) : theme.subtext)
+                .foregroundStyle(theme.subtext)
         }
         .padding(10 * (metrics.fontSize / 12))
         .background(RoundedRectangle(cornerRadius: 14)
             .fill(selected ? theme.surfaceSelected : (tinted ? appTint.opacity(0.10) : theme.surface)))
         .overlay(RoundedRectangle(cornerRadius: 14)
-            .stroke(selected ? theme.accent : (layoutSelected ? theme.border : (tinted ? appTint.opacity(0.42) : .clear)),
+            .stroke(selected ? theme.accent : (layoutSelected ? theme.border : (tinted ? appTint.opacity(theme.isDark ? 0.82 : 0.42) : .clear)),
                     lineWidth: selected ? 3 : 2))
     }
 
