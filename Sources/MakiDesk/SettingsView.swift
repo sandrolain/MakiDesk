@@ -687,8 +687,14 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
         }
 
         private func configure(_ window: NSWindow) {
-            window.styleMask.insert(.resizable)
-            window.styleMask.remove(.fullSizeContentView)
+            // Keep the full-size content and hide the title instead of removing
+            // `.fullSizeContentView`: removing it after SwiftUI has laid out
+            // the hosted view leaves that view stretched under the titlebar, so
+            // the header is clipped and the titlebar no longer receives the
+            // drags that move the window. With the flag kept and the title
+            // hidden, SwiftUI insets the content below the traffic lights and
+            // the empty titlebar strip stays draggable.
+            window.styleMask.insert([.resizable, .fullSizeContentView])
             let minimum = NSSize(width: 560, height: 520)
             window.minSize = minimum
             window.contentMinSize = minimum
@@ -701,6 +707,7 @@ private struct SettingsWindowConfigurator: NSViewRepresentable {
             // windows after it has been opened from the menu bar.
             window.level = .floating
             window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.title = ""
             window.titlebarSeparatorStyle = .none
             // Let AppKit reserve the window edges for resizing. The titlebar
