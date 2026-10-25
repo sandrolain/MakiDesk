@@ -159,14 +159,44 @@ final class ShelfDropzoneStripView: NSView {
     }
 }
 
+/// A passive image drawer. `NSImageView` has its own drag behaviour: it can
+/// become the drag destination when the pointer is over a symbol, even when its
+/// `hitTest` is overridden. A plain view that draws the image has none of that
+/// and keeps the whole tile as the drop target.
+private final class ShelfDropzoneIconView: NSView {
+    var image: NSImage? {
+        didSet { needsDisplay = true }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let image, bounds.width > 0, bounds.height > 0,
+              image.size.width > 0, image.size.height > 0 else { return }
+        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+        let rect = NSRect(x: (bounds.width - size.width) / 2,
+                          y: (bounds.height - size.height) / 2,
+                          width: size.width, height: size.height)
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1,
+                   respectFlipped: true,
+                   hints: [.interpolation: NSImageInterpolation.high.rawValue])
+    }
+}
+
+private final class ShelfPassiveTextField: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 /// One tile: icon, two-line name, hover ring. It is not clickable; the drop is
 /// the interaction, so it exposes a group with its name for assistive tools.
 final class ShelfDropzoneTileView: NSView {
     let zone: DropzoneConfig
 
-    private let iconView = NSImageView()
-    private let emojiLabel = NSTextField(labelWithString: "")
-    private let nameLabel = NSTextField(labelWithString: "")
+    private let iconView = ShelfDropzoneIconView()
+    private let emojiLabel = ShelfPassiveTextField(labelWithString: "")
+    private let nameLabel = ShelfPassiveTextField(labelWithString: "")
     private var theme: PaletteTheme
 
     var isHovered = false {
@@ -188,8 +218,6 @@ final class ShelfDropzoneTileView: NSView {
         self.theme = theme
         super.init(frame: .zero)
 
-        iconView.imageScaling = .scaleProportionallyUpOrDown
-        iconView.imageAlignment = .alignCenter
         emojiLabel.alignment = .center
         emojiLabel.font = .systemFont(ofSize: 26)
         emojiLabel.drawsBackground = false
@@ -226,14 +254,14 @@ final class ShelfDropzoneTileView: NSView {
     func applyTheme(_ theme: PaletteTheme) {
         self.theme = theme
         nameLabel.textColor = NSColor(theme.text)
-        iconView.contentTintColor = NSColor(theme.text)
+        configureIcon()
         needsDisplay = true
     }
 
     private func configureIcon() {
         switch zone.icon {
         case let .symbol(name):
-            iconView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+            iconView.image = symbolImage(named: name)
             iconView.isHidden = false
             emojiLabel.isHidden = true
         case let .emoji(value):
@@ -250,11 +278,19 @@ final class ShelfDropzoneTileView: NSView {
                 iconView.image = image
                 iconView.isHidden = false
             } else {
-                iconView.image = NSImage(systemSymbolName: "doc", accessibilityDescription: nil)
+                iconView.image = symbolImage(named: "doc")
                 iconView.isHidden = false
             }
             emojiLabel.isHidden = true
         }
+    }
+
+    private func symbolImage(named name: String) -> NSImage? {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else {
+            return nil
+        }
+        let configuration = NSImage.SymbolConfiguration(paletteColors: [NSColor(theme.text)])
+        return image.withSymbolConfiguration(configuration) ?? image
     }
 
     override func layout() {
@@ -273,6 +309,14 @@ final class ShelfDropzoneTileView: NSView {
         iconView.frame = NSRect(x: (bounds.width - icon.width) / 2, y: iconY,
                                 width: icon.width, height: icon.height)
         emojiLabel.frame = iconView.frame
+    }
+
+    /// The icon and the labels are passive. Without this, AppKit can make one
+    /// of them the drag destination when the pointer is over the artwork, so
+    /// the strip stops receiving `draggingUpdated` and the tile loses its
+    /// hover ring and its drop. The whole tile must be the hit view.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
     }
 
     override func draw(_ dirtyRect: NSRect) {

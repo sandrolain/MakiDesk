@@ -124,3 +124,26 @@ final class ShelfDropzoneStripTests: XCTestCase {
         }
     }
 }
+
+extension ShelfDropzoneStripTests {
+    func testTileAbsorbsHitsSoIconAndLabelsDoNotStealTheDrag() {
+        let tile = ShelfDropzoneTileView(zone: zone("One"), theme: PaletteTheme.all[0])
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 88, height: 88))
+        tile.frame = container.bounds
+        container.addSubview(tile)
+        tile.layoutSubtreeIfNeeded()
+
+        // The point is over the icon area, which used to be an NSImageView.
+        XCTAssertTrue(tile.hitTest(NSPoint(x: 44, y: 70)) === tile)
+        XCTAssertTrue(tile.hitTest(NSPoint(x: 44, y: 20)) === tile)
+        XCTAssertNil(tile.hitTest(NSPoint(x: -4, y: -4)))
+
+        // The image and the labels must be invisible to hit-testing too: a
+        // registered subview would otherwise steal the drag even if the tile
+        // returns itself for its own bounds.
+        for subview in tile.subviews {
+            let point = NSPoint(x: subview.frame.midX, y: subview.frame.midY)
+            XCTAssertNil(subview.hitTest(point))
+        }
+    }
+}
