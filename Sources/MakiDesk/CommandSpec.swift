@@ -240,6 +240,14 @@ struct CommandResolver {
         }
     }
 
+    /// Expands one path template (for example a preset's checked output) with
+    /// the same placeholder rules as an argv token. It is not tokenized and
+    /// unknown braces stay literal; a multi-value placeholder is rejected
+    /// because the result must be a single path.
+    func resolvePathTemplate(_ template: String, payload: CommandPayload) throws -> String {
+        try expandToken(template, payload: payload)
+    }
+
     // MARK: - Environment
 
     private func resolveEnvironment(spec: CommandSpec,

@@ -195,6 +195,14 @@ final class ShelfController: NSObject, NSWindowDelegate,
     private var headerSeparator: NSView?
     private var footerSeparator: NSView?
     private var hintLabel: NSTextField?
+    private var dropzoneStrip: ShelfDropzoneStripView?
+    private var dropzoneStripHeight: NSLayoutConstraint?
+    private var dropzoneStripVisible = false
+    /// Bumped on every external mouse-down so a delayed strip hide from the
+    /// previous drag cannot hide the strip during the next one.
+    private var dragSequence = 0
+    private var dragProbeChangeCount = -1
+    private static let dropzoneStripHeightValue = ShelfDropzoneStripView.preferredHeight
 
     private var theme = PaletteTheme.all[0]
     private var themeObserver: NSObjectProtocol?
@@ -246,7 +254,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         shakeMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
         ) { [weak self] event in
-            DispatchQueue.main.async { self?.handleShake(event) }
+            DispatchQueue.main.async { self?.handleDragEvent(event) }
         }
     }
 
@@ -284,6 +292,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let panel = buildIfNeeded()
         applyTheme()
         reload()
+        refreshDropzones()
         place(panel, near: point)
         if activating {
             NSApp.activate(ignoringOtherApps: true)
@@ -300,6 +309,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     func hide(restoringFocus: Bool = true) {
+        setDropzoneStripVisible(false)
         let restoreFocus = focusReturn.takeRestoreAction(
             ownsKeyboard: restoringFocus && panel?.isKeyWindow == true)
         previewGeneration &+= 1
@@ -347,7 +357,28 @@ final class ShelfController: NSObject, NSWindowDelegate,
         root.wantsLayer = true
         root.layer?.cornerRadius = 12
         root.layer?.masksToBounds = true
-        root.onDrop = { [weak self] pasteboard in self?.accept(pasteboard) ?? false }
+        root.onDropAt = { [weak self] point, pasteboard in
+            self?.performDrop(at: point, pasteboard: pasteboard) ?? false
+        }
+        root.onDragUpdate = { [weak self] point, pasteboard in
+            self?.dropzoneDragUpdate(at: point, pasteboard: pasteboard) ?? .copy
+        }
+        root.onDragExit = { [weak self] in
+            self?.dropzoneStrip?.setHovered(nil)
+            // Keep the strip while the drag is alive: hiding it on a brief exit
+            // and relying on the next mouse-dragged event to rebuild it added a
+            // window where a drop could still land on the shelf. The mouse-up
+            // (outside or after the drop) is the reliable end.
+        }
+        root.onDragEnd = { [weak self] in
+            self?.dropzoneStrip?.setHovered(nil)
+            // Defer even this: `draggingEnded` is documented after
+            // `performDragOperation`, but a hide in the same turn must never
+            // win over the drop that is still being delivered.
+            DispatchQueue.main.async { [weak self] in
+                self?.setDropzoneStripVisible(false)
+            }
+        }
         panel.contentView = root
 
         let header = ShelfHeaderView()
@@ -423,7 +454,11 @@ final class ShelfController: NSObject, NSWindowDelegate,
         hint.font = .systemFont(ofSize: 9)
         hint.alignment = .right
 
-        for view in [header, footer, separatorTop, separatorBottom, scroll, empty] {
+        let strip = ShelfDropzoneStripView()
+        strip.isHidden = true
+        let stripHeight = strip.heightAnchor.constraint(equalToConstant: 0)
+
+        for view in [header, footer, separatorTop, separatorBottom, scroll, empty, strip] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
@@ -463,7 +498,12 @@ final class ShelfController: NSObject, NSWindowDelegate,
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: separatorTop.bottomAnchor),
-            scroll.bottomAnchor.constraint(equalTo: separatorBottom.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: strip.topAnchor),
+
+            strip.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            strip.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            strip.bottomAnchor.constraint(equalTo: separatorBottom.topAnchor),
+            stripHeight,
 
             separatorBottom.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             separatorBottom.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -512,6 +552,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
         self.headerSeparator = separatorTop
         self.footerSeparator = separatorBottom
         self.hintLabel = hint
+        self.dropzoneStrip = strip
+        self.dropzoneStripHeight = stripHeight
         return panel
     }
 
@@ -519,7 +561,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let origin = point ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(origin) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return nil }
-        let size = Self.size
+        let size = currentSize
         var x = origin.x + 18
         var y = origin.y - size.height / 2
         if x + size.width > visible.maxX { x = origin.x - size.width - 18 }
@@ -554,6 +596,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     private func applyTheme() {
         guard let root else { return }
         root.layer?.backgroundColor = NSColor(theme.background).cgColor
+        dropzoneStrip?.applyTheme(theme)
         root.needsLayout = true
 
         for label in [emptyLabel, hintLabel] {
@@ -1262,7 +1305,410 @@ final class ShelfController: NSObject, NSWindowDelegate,
         }
     }
 
+    // MARK: - Dropzones
+
+    private var currentSize: NSSize {
+        NSSize(width: Self.size.width,
+               height: Self.size.height + (dropzoneStripVisible ? Self.dropzoneStripHeightValue : 0))
+    }
+
+    private func refreshDropzones() {
+        let coordinator = DropzoneCoordinator.shared
+        coordinator.reloadIfNeeded()
+        let zones = coordinator.zones.filter(\.enabled)
+        dropzoneStrip?.update(zones: zones, theme: theme)
+        dropzoneStrip?.setCompatibility([:])
+        dragProbeChangeCount = -1
+        if zones.isEmpty { setDropzoneStripVisible(false) }
+    }
+
+    private func setDropzoneStripVisible(_ visible: Bool) {
+        guard let strip = dropzoneStrip, let height = dropzoneStripHeight else { return }
+        let shouldShow = visible && strip.zoneCount > 0
+        guard shouldShow != dropzoneStripVisible else { return }
+        dropzoneStripVisible = shouldShow
+        strip.isHidden = shouldShow == false
+        height.constant = shouldShow ? Self.dropzoneStripHeightValue : 0
+        if shouldShow { strip.scrollToLeading() }
+        strip.setHovered(nil)
+        if shouldShow == false { strip.setCompatibility([:]) }
+        // Resize around the panel's current position. Re-placing it with
+        // `targetFrame(near: NSEvent.mouseLocation)` here moved the shelf toward
+        // the pointer the moment a drag started; the pointer is usually outside
+        // the panel then, so the shelf jumped away and the release became a
+        // shelf drop (or hit the gutter). Keep the bottom-left instead: the
+        // strip is inserted above the footer and the panel grows upward, which
+        // is exactly reversed when the strip hides.
+        guard let panel else { return }
+        var frame = panel.frame
+        frame.size.height = Self.size.height + (shouldShow ? Self.dropzoneStripHeightValue : 0)
+        if let screen = NSScreen.screens.first(where: {
+            $0.frame.contains(NSPoint(x: frame.midX, y: panel.frame.midY))
+        }) ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            frame.origin.x = min(max(frame.origin.x, visible.minX + 8),
+                                 visible.maxX - frame.width - 8)
+            frame.origin.y = min(max(frame.origin.y, visible.minY + 8),
+                                 visible.maxY - frame.height - 8)
+        }
+        panel.setFrame(frame, display: true)
+    }
+
+    /// During the drag the matcher works on types only: no file is read. A
+    /// promise keeps every zone active because its type is unknown until the
+    /// drop, and the coordinator validates the real payload then.
+    private func dropzoneDragUpdate(at point: NSPoint, pasteboard: NSPasteboard) -> NSDragOperation {
+        guard let strip = dropzoneStrip else { return .copy }
+        let firstEntry = dropzoneStripVisible == false
+        if firstEntry {
+            // The strip is still hidden. Load the zones and remove the ones that
+            // do not accept this drag before it appears, so the user never sees
+            // an incompatible tile (or a hole left by hiding it afterwards).
+            refreshDropzones()
+            _ = updateDropzoneCompatibility(pasteboard)
+            setDropzoneStripVisible(true)
+            // Showing the strip changes the panel height and the tile frames;
+            // force one layout pass before hit-testing this same point.
+            root?.layoutSubtreeIfNeeded()
+        } else if updateDropzoneCompatibility(pasteboard) {
+            // The drag types changed: reflow the remaining tiles before the
+            // next hit-test.
+            root?.layoutSubtreeIfNeeded()
+        }
+        let local = strip.convert(point, from: root)
+        guard let zone = strip.zone(at: local) else {
+            strip.setHovered(nil)
+            // The strip owns its whole band: the gutters are not a drop target
+            // for the shelf list just above it.
+            return strip.frame.contains(point) ? [] : .copy
+        }
+        strip.setHovered(zone.id)
+        return strip.isZoneCompatible(zone.id) ? .copy : []
+    }
+
+    @discardableResult
+    private func updateDropzoneCompatibility(_ pasteboard: NSPasteboard) -> Bool {
+        guard let strip = dropzoneStrip, pasteboard.changeCount != dragProbeChangeCount else { return false }
+        dragProbeChangeCount = pasteboard.changeCount
+        guard let items = dragItems(from: pasteboard) else {
+            strip.setCompatibility([:])
+            return true
+        }
+        var map: [UUID: Bool] = [:]
+        for zone in DropzoneCoordinator.shared.zones where zone.enabled {
+            map[zone.id] = DropzoneMatcher.match(items, zone: zone).isAccepted
+        }
+        strip.setCompatibility(map)
+        return true
+    }
+
+    private func dragItems(from pasteboard: NSPasteboard) -> [DropItemInfo]? {
+        // A promised file has no type yet: keep every zone available and let
+        // the real validation decide.
+        let promiseTypes = NSFilePromiseReceiver.readableDraggedTypes
+        if pasteboard.types?.contains(where: { promiseTypes.contains($0.rawValue) }) == true {
+            return nil
+        }
+        var items: [DropItemInfo] = []
+        var index = 0
+        let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingFileURLsOnly: true
+        ]) as? [URL] ?? []
+        for url in fileURLs {
+            let uti: String?
+            if url.hasDirectoryPath {
+                uti = "public.folder"
+            } else {
+                uti = url.pathExtension.isEmpty
+                    ? nil
+                    : UTType(filenameExtension: url.pathExtension)?.identifier
+            }
+            items.append(DropItemInfo(kind: .file, uti: uti, name: url.lastPathComponent, index: index))
+            index += 1
+        }
+        if fileURLs.isEmpty, isImageDrag(pasteboard) {
+            items.append(DropItemInfo(kind: .image, name: "Image", index: index))
+            index += 1
+        }
+        if fileURLs.isEmpty {
+            let urls = (pasteboard.readObjects(forClasses: [NSURL.self], options: [
+                .urlReadingFileURLsOnly: false
+            ]) as? [URL] ?? []).filter { $0.isFileURL == false && ($0.scheme == "http" || $0.scheme == "https") }
+            for url in urls {
+                items.append(DropItemInfo(kind: .url, name: url.host ?? url.absoluteString, index: index))
+                index += 1
+            }
+            if urls.isEmpty, pasteboard.string(forType: .string)?.isEmpty == false {
+                items.append(DropItemInfo(kind: .text, name: "Text", index: index))
+            }
+        }
+        return items.isEmpty ? nil : items
+    }
+
+    private func isImageDrag(_ pasteboard: NSPasteboard) -> Bool {
+        let types = pasteboard.types ?? []
+        return types.contains(.tiff) || types.contains(.png)
+    }
+
+    /// A drop on a tile runs its zone; everything else keeps adding to the
+    /// shelf.
+    private func performDrop(at point: NSPoint, pasteboard: NSPasteboard) -> Bool {
+        if dropzoneStripVisible, let strip = dropzoneStrip {
+            let local = strip.convert(point, from: root)
+            if let zone = strip.zone(at: local) {
+                strip.setHovered(nil)
+                dropReceived = true
+                guard strip.isZoneCompatible(zone.id) else {
+                    HUDController.shared.show("This dropzone does not accept these items",
+                                              symbol: "nosign", duration: 2.5)
+                    setDropzoneStripVisible(false)
+                    return true
+                }
+                startDropzone(zone, pasteboard: pasteboard)
+                return true
+            }
+            if strip.frame.contains(point) {
+                strip.setHovered(nil)
+                dropReceived = true
+                HUDController.shared.show(strip.visibleZoneCount == 0
+                                          ? "No dropzone accepts these items"
+                                          : "Drop on a dropzone tile",
+                                          symbol: "arrow.up.left", duration: 2)
+                setDropzoneStripVisible(false)
+                return true
+            }
+        }
+        return accept(pasteboard)
+    }
+
+    private func startDropzone(_ zone: DropzoneConfig, pasteboard: NSPasteboard) {
+        var drop = dropzoneDrop(from: pasteboard)
+        drop.sourceApp = dragSourceBundle
+
+        let receivers = pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self],
+                                               options: nil) as? [NSFilePromiseReceiver] ?? []
+        guard receivers.isEmpty == false else {
+            leaveShelfForDropzone()
+            runDropzone(zone, drop: drop)
+            return
+        }
+
+        // Promised files go to their own directory: `hide()` clears the shelf
+        // staging, and this drop must outlive the panel.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiDesk-DropzoneDrop-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let lock = NSLock()
+        var urls: [URL] = []
+        var failure: String?
+        let group = DispatchGroup()
+        HUDController.shared.show("Receiving files…", symbol: "arrow.down.circle", duration: 4)
+        for receiver in receivers {
+            group.enter()
+            receiver.receivePromisedFiles(atDestination: directory, options: [:],
+                                          operationQueue: promiseQueue) { url, error in
+                lock.lock()
+                if let error {
+                    failure = error.localizedDescription
+                } else {
+                    urls.append(url)
+                }
+                lock.unlock()
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) { [weak self] in
+            guard let self else { return }
+            lock.lock()
+            let received = urls
+            let error = failure
+            lock.unlock()
+            if let error {
+                try? FileManager.default.removeItem(at: directory)
+                HUDController.shared.show("Could not receive the files: \(Self.short(error))",
+                                          symbol: "exclamationmark.triangle", duration: 3.5)
+                return
+            }
+            drop.files.append(contentsOf: received)
+            self.leaveShelfForDropzone()
+            self.runDropzone(zone, drop: drop, cleanup: directory)
+        }
+    }
+
+    /// A zone drop does not throw away what the shelf already holds: an empty,
+    /// transient shelf closes; one with items stays and only loses the strip.
+    private func leaveShelfForDropzone() {
+        dropReceived = true
+        setDropzoneStripVisible(false)
+        if items.isEmpty { hide() }
+    }
+
+    private func dropzoneDrop(from pasteboard: NSPasteboard) -> DropzoneDrop {
+        var drop = DropzoneDrop()
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingFileURLsOnly: true
+        ]) as? [URL] ?? []
+        if files.isEmpty == false {
+            drop.files = files
+            return drop
+        }
+        if let image = NSImage(pasteboard: pasteboard), let data = image.shelfPNGData {
+            drop.images = [.init(data: data, name: "Image")]
+            return drop
+        }
+        let urls = (pasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingFileURLsOnly: false
+        ]) as? [URL] ?? []).filter { $0.isFileURL == false && ($0.scheme == "http" || $0.scheme == "https") }
+        if urls.isEmpty == false {
+            drop.urls = urls
+            return drop
+        }
+        if let text = pasteboard.string(forType: .string), text.isEmpty == false {
+            drop.text = text
+        }
+        return drop
+    }
+
+    private func runDropzone(_ zone: DropzoneConfig, drop: DropzoneDrop, cleanup: URL? = nil) {
+        HUDController.shared.show("Running \(zone.name)…", symbol: "bolt.fill", duration: 1.2)
+        Task { @MainActor [weak self] in
+            let coordinator = DropzoneCoordinator.shared
+            var outcome = await coordinator.run(zoneID: zone.id, drop: drop)
+            if case let .needsConfirmation(pending) = outcome {
+                guard let self, self.confirmDropzoneRun(pending) else {
+                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                    return
+                }
+                coordinator.confirm(zoneID: pending.id)
+                outcome = await coordinator.run(zoneID: pending.id, drop: drop, confirmed: true)
+            }
+            if case let .needsOverwriteConfirmation(pending, path) = outcome {
+                guard let self else {
+                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                    return
+                }
+                guard self.confirmDropzoneOverwrite(pending, path: path) else {
+                    HUDController.shared.show("\(pending.name) cancelled",
+                                              symbol: "xmark.circle", duration: 2)
+                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                    return
+                }
+                outcome = await coordinator.run(zoneID: pending.id, drop: drop,
+                                                confirmed: true, confirmedOverwrite: true)
+            }
+            self?.report(outcome, zone: zone)
+            if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+        }
+    }
+
+    private func confirmDropzoneOverwrite(_ zone: DropzoneConfig, path: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Replace an existing file?"
+        alert.informativeText = """
+        “\(zone.name)” may replace:
+
+        \(path)
+
+        Continue?
+        """
+        alert.addButton(withTitle: "Run Anyway")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func confirmDropzoneRun(_ zone: DropzoneConfig) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Run “\(zone.name)”?"
+        alert.informativeText = """
+        This dropzone runs:
+        \(zone.command.line)
+
+        Only run commands you trust.
+        """
+        alert.addButton(withTitle: "Run")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func report(_ outcome: DropzoneCoordinator.Outcome, zone: DropzoneConfig) {
+        switch outcome {
+        case let .rejected(reason):
+            HUDController.shared.show(Self.short(reason.errorDescription ?? "Drop rejected"),
+                                      symbol: "nosign", duration: 2.5)
+        case let .failed(message):
+            HUDController.shared.show("\(zone.name): \(Self.short(message))",
+                                      symbol: "exclamationmark.triangle", duration: 3.5)
+        case .needsConfirmation, .needsOverwriteConfirmation:
+            break
+        case let .finished(result):
+            if result.succeeded {
+                if zone.feedback.notifyOnSuccess {
+                    HUDController.shared.show("\(zone.name) done", symbol: "checkmark.circle.fill")
+                }
+                if zone.feedback.revealOutput {
+                    let output = result.workDirectory.appendingPathComponent("output", isDirectory: true)
+                    if FileManager.default.fileExists(atPath: output.path) {
+                        NSWorkspace.shared.activateFileViewerSelecting([output])
+                    }
+                }
+            } else if result.cancelled {
+                HUDController.shared.show("\(zone.name) cancelled", symbol: "xmark.circle")
+            } else if result.timedOut {
+                HUDController.shared.show("\(zone.name) timed out",
+                                          symbol: "clock.badge.exclamationmark", duration: 3)
+            } else {
+                let detail = Self.firstLine(result.stderrExcerpt)
+                HUDController.shared.show("\(zone.name) failed\(detail.isEmpty ? "" : ": \(detail)")",
+                                          symbol: "exclamationmark.triangle", duration: 3.5)
+            }
+        }
+    }
+
+    private static func firstLine(_ text: String) -> String {
+        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        return short(line)
+    }
+
+    private static func short(_ text: String) -> String {
+        let limit = 140
+        guard text.count > limit else { return text }
+        return String(text.prefix(limit)) + "…"
+    }
+
     // MARK: - Shake
+
+    private func handleDragEvent(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown:
+            // A new drag starts clean: the strip was not shown yet, and any
+            // compatibility map from the previous drag must not survive.
+            dragSequence &+= 1
+            dragProbeChangeCount = -1
+            setDropzoneStripVisible(false)
+        case .leftMouseUp:
+            // Do not hide the strip in the same turn as the mouse-up: AppKit is
+            // still delivering the drop to `performDragOperation`, and hiding
+            // the strip first made every zone drop fall through to the shelf.
+            // The drop itself hides it immediately; otherwise let the drag end
+            // first and hide shortly after.
+            if panel?.frame.contains(NSEvent.mouseLocation) == true {
+                let sequence = dragSequence
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self, self.dragSequence == sequence else { return }
+                    self.setDropzoneStripVisible(false)
+                }
+            } else {
+                setDropzoneStripVisible(false)
+            }
+        default:
+            break
+        }
+        handleShake(event)
+    }
 
     private func handleShake(_ event: NSEvent) {
         switch event.type {
@@ -1346,7 +1792,12 @@ final class ShelfHeaderView: NSView {
 // MARK: - Views
 
 final class ShelfRootView: NSView {
-    var onDrop: ((NSPasteboard) -> Bool)?
+    var onDropAt: ((NSPoint, NSPasteboard) -> Bool)?
+    var onDragUpdate: ((NSPoint, NSPasteboard) -> NSDragOperation)?
+    var onDragExit: (() -> Void)?
+    var onDragEnd: (() -> Void)?
+
+    private var isPerformingDrop = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1360,15 +1811,29 @@ final class ShelfRootView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        .copy
+        onDragUpdate?(convert(sender.draggingLocation, from: nil), sender.draggingPasteboard) ?? .copy
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        .copy
+        onDragUpdate?(convert(sender.draggingLocation, from: nil), sender.draggingPasteboard) ?? .copy
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDragExit?()
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        onDrop?(sender.draggingPasteboard) ?? false
+        isPerformingDrop = true
+        defer { isPerformingDrop = false }
+        return onDropAt?(convert(sender.draggingLocation, from: nil), sender.draggingPasteboard) ?? false
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        // Do not collapse the strip while the drop is being delivered; the
+        // handler hides it when the drop is actually processed. This runs for
+        // a cancelled drag too, which is the deterministic cleanup.
+        guard isPerformingDrop == false else { return }
+        onDragEnd?()
     }
 }
 

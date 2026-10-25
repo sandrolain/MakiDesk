@@ -14,6 +14,10 @@ struct DropzoneConfig: Codable, Identifiable, Equatable, Sendable {
     var enabled: Bool
     var accepts: DropzoneAccept
     var command: CommandSpec
+    /// Optional path template checked before a run. If it already exists, the
+    /// app asks before executing a command that may replace it. Presets that
+    /// write next to the source set this; a custom command can leave it empty.
+    var expectedOutput: String?
     var feedback: DropFeedback
     /// Hash of what was confirmed; `nil` means the first run still needs a
     /// confirmation. Recomputed from the command, so editing it asks again.
@@ -26,6 +30,7 @@ struct DropzoneConfig: Codable, Identifiable, Equatable, Sendable {
          enabled: Bool = true,
          accepts: DropzoneAccept = DropzoneAccept(),
          command: CommandSpec = CommandSpec(),
+         expectedOutput: String? = nil,
          feedback: DropFeedback = DropFeedback(),
          confirmedCommandHash: String? = nil,
          createdAt: Date? = Date()) {
@@ -35,6 +40,7 @@ struct DropzoneConfig: Codable, Identifiable, Equatable, Sendable {
         self.enabled = enabled
         self.accepts = accepts
         self.command = command
+        self.expectedOutput = expectedOutput
         self.feedback = feedback
         self.confirmedCommandHash = confirmedCommandHash
         self.createdAt = createdAt
@@ -50,6 +56,7 @@ struct DropzoneConfig: Codable, Identifiable, Equatable, Sendable {
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         accepts = try container.decodeIfPresent(DropzoneAccept.self, forKey: .accepts) ?? DropzoneAccept()
         command = try container.decodeIfPresent(CommandSpec.self, forKey: .command) ?? CommandSpec()
+        expectedOutput = try container.decodeIfPresent(String.self, forKey: .expectedOutput)
         feedback = try container.decodeIfPresent(DropFeedback.self, forKey: .feedback) ?? DropFeedback()
         confirmedCommandHash = try container.decodeIfPresent(String.self, forKey: .confirmedCommandHash)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)

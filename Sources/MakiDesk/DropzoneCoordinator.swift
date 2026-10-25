@@ -42,6 +42,9 @@ struct DropzonePrepared: Equatable, Sendable {
     let command: ResolvedCommand
     let itemCount: Int
     let manifestFile: URL
+    /// The absolute path of the zone's declared output, expanded with this
+    /// drop's placeholders. `nil` means the zone does not check for conflicts.
+    let expectedOutput: String?
 }
 
 /// Turns a drop into files and a command. All the file-system work happens off
@@ -184,7 +187,24 @@ enum DropzonePreparer {
         payload.manifestFile = manifestFile.path
 
         let command = try resolver.resolve(zone.command, payload: payload)
-        return DropzonePrepared(command: command, itemCount: items.count, manifestFile: manifestFile)
+
+        let expectedOutput: String?
+        if let template = zone.expectedOutput?.trimmingCharacters(in: .whitespacesAndNewlines),
+           template.isEmpty == false {
+            if let expanded = try? resolver.resolvePathTemplate(template, payload: payload) {
+                let path = (expanded as NSString).expandingTildeInPath
+                expectedOutput = path.hasPrefix("/")
+                    ? path
+                    : command.workingDirectory.appendingPathComponent(path).path
+            } else {
+                expectedOutput = nil
+            }
+        } else {
+            expectedOutput = nil
+        }
+
+        return DropzonePrepared(command: command, itemCount: items.count,
+                                manifestFile: manifestFile, expectedOutput: expectedOutput)
     }
 
     private static func kinds(in items: [DropItemInfo]) -> [String] {
@@ -237,6 +257,9 @@ final class DropzoneCoordinator {
         /// The command changed since the last confirmation: ask the user, then
         /// call `confirm` and run again.
         case needsConfirmation(DropzoneConfig)
+        /// The declared output path already exists: ask before running a
+        /// command that may replace it.
+        case needsOverwriteConfirmation(DropzoneConfig, path: String)
         case finished(CommandResult)
         case failed(String)
     }
@@ -283,8 +306,14 @@ final class DropzoneCoordinator {
     func reloadIfNeeded() {
         let modification = store.modificationDate()
         guard modification != lastModification else { return }
+        reload()
+    }
+
+    /// Reads the file again unconditionally, for a factory reset or an explicit
+    /// edit. Safe to call when the file is missing.
+    func reload() {
         snapshot = store.load()
-        lastModification = modification
+        lastModification = store.modificationDate()
     }
 
     func match(_ items: [DropItemInfo], zoneID: UUID) -> DropzoneMatch? {
@@ -299,6 +328,8 @@ final class DropzoneCoordinator {
         snapshot.zones[index].markConfirmed()
         if case let .failure(error) = store.save(snapshot.zones) {
             makiLog.error("dropzones: could not store the confirmation: \(error.localizedDescription, privacy: .public)")
+        } else {
+            NotificationCenter.default.post(name: .makiDeskDropzonesChanged, object: nil)
         }
         lastModification = store.modificationDate()
     }
@@ -312,7 +343,8 @@ final class DropzoneCoordinator {
     /// ends; a rejected drop never starts a process.
     func run(zoneID: UUID,
              drop: DropzoneDrop,
-             confirmed: Bool = false) async -> Outcome {
+             confirmed: Bool = false,
+             confirmedOverwrite: Bool = false) async -> Outcome {
         // Read the file again at drop time: permissions and contents may have
         // changed since the last edit, and a trust decision must be current.
         snapshot = store.load()
@@ -350,6 +382,14 @@ final class DropzoneCoordinator {
                 let prepared = try await DropzonePreparer.prepare(zone: zone, drop: drop,
                                                                   items: accepted,
                                                                   workDirectory: workDirectory)
+                if let expected = prepared.expectedOutput,
+                   confirmedOverwrite == false,
+                   fileManager.fileExists(atPath: expected) {
+                    // Nothing ran: discard the prepared payload and ask again
+                    // with `confirmedOverwrite` when the user accepts.
+                    try? fileManager.removeItem(at: workDirectory)
+                    return .needsOverwriteConfirmation(zone, path: expected)
+                }
                 let result = try await runner.run(prepared.command, id: runID,
                                                   includeStdout: zone.feedback.showOutput == .stdout)
                 if shouldKeep(prepared, zone: zone) == false {

@@ -14,8 +14,9 @@
 **The Mac desktop, under control.** MakiDesk is a native menu-bar app for macOS
 14+ that arranges the windows you already have — no fake canvas, no second
 desktop. Tiling that adapts to what you are reading, saved window groups, a live
-switcher, notes with syntax highlighting, clipboard history and a drag shelf,
-all in one place. No account, no cloud, no telemetry.
+switcher, notes with syntax highlighting, clipboard history, a drag shelf and
+configurable command dropzones, all in one place. No account, no cloud, no
+telemetry.
 
 <p align="center">
   <img src="docs/assets/notes.png" alt="MakiDesk notes panel with a searchable list and syntax highlighting" width="90%">
@@ -88,6 +89,17 @@ drag everything out or one row, copy or move it to a folder, or send the selecte
 text straight to the open note. The shelf is temporary by design: it empties
 when it closes and never keeps your files anywhere else.
 
+**Dropzones** (Settings ▸ Dropzones) go one step further: each one is a command
+you write, run on what you drop on its tile in the strip that appears under the
+shelf. Choose files, folders, images, text or links; use placeholders such as
+`{paths}`, `{textfile}` and `{outdir}`; try it from Settings. Start from a command
+preset (Reveal, ZIP, image conversion, checksums and more), pick an SF Symbol or
+emoji from a preview list, and only compatible zones appear while you drag. The
+first run, and the first run after the command changes, asks for confirmation;
+a preset that writes next to the source (ZIP) checks the target and asks before
+replacing an existing file. The Shortcuts picker only prefills `shortcuts run
+<UUID>`: the zone runs any CLI command.
+
 ### Keep screenshots out of the desktop clutter
 
 Open **Screenshots** from the menu bar to browse captures in the macOS save
@@ -101,8 +113,8 @@ captures somewhere else; the list refreshes when files change.
 
 A theme that covers the panels, the Settings window and the overlay,
 configurable animations, a focus border, a searchable Keyboard Shortcuts window
-with all 60 commands, and Settings split into General, Windows, Layouts, Panels
-and Groups.
+with all 60 commands, and Settings split into General, Windows, Layouts, Panels,
+Groups and Dropzones.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="MakiDesk settings" width="39%">

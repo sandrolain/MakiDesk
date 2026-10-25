@@ -5,7 +5,7 @@ struct SettingsView: View {
     @Bindable var store: WorkspaceStore
 
     private enum SettingsTab: String, CaseIterable, Identifiable {
-        case general, windows, layouts, panels, groups
+        case general, windows, layouts, panels, groups, dropzones
 
         var id: String { rawValue }
 
@@ -16,6 +16,7 @@ struct SettingsView: View {
             case .layouts: return "Layouts"
             case .panels: return "Panels"
             case .groups: return "Groups"
+            case .dropzones: return "Dropzones"
             }
         }
     }
@@ -23,6 +24,8 @@ struct SettingsView: View {
     @AppStorage("settingsTab") private var settingsTab: SettingsTab = .general
     @State private var showResetConfirmation = false
     @State private var excludedAppsText = ""
+    /// Owned here, not by the tab, so switching tabs does not throw away a draft.
+    @StateObject private var dropzoneEditor = DropzoneEditorModel()
 
     private static let gapOptions: [Double] = [0, 2, 4, 8, 12, 16, 24, 32, 48, 64]
 
@@ -42,21 +45,29 @@ struct SettingsView: View {
             Rectangle()
                 .fill(theme.border.opacity(0.6))
                 .frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch settingsTab {
-                    case .general: generalTab
-                    case .windows: windowsTab
-                    case .layouts: layoutsTab
-                    case .panels: panelsTab
-                    case .groups: groupsTab
+            if settingsTab == .dropzones {
+                DropzoneSettingsView(model: dropzoneEditor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        switch settingsTab {
+                        case .general: generalTab
+                        case .windows: windowsTab
+                        case .layouts: layoutsTab
+                        case .panels: panelsTab
+                        case .groups: groupsTab
+                        case .dropzones: EmptyView()
+                        }
                     }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .id(settingsTab)
             }
-            .id(settingsTab)
         }
         .frame(minWidth: 560, idealWidth: 700, minHeight: 520, idealHeight: 720)
         .background(theme.background)
@@ -447,7 +458,7 @@ struct SettingsView: View {
 /// A themed replacement for the grouped `Form` boxes: a title, a card in the
 /// theme surface colour and the rows inside it. It keeps the native controls
 /// (switches, popups, sliders) and only paints around them.
-private struct SettingsSection<Content: View>: View {
+struct SettingsSection<Content: View>: View {
     @Environment(\.paletteTheme) private var theme
 
     private let title: String?
@@ -593,6 +604,8 @@ private struct ResetConfirmationView: View {
     @State private var includeGroups = false
     @State private var includeNotes = false
     @State private var includeClipboard = false
+    @State private var includeDropzones = false
+    @State private var dropzoneCount = 0
 
     private var groupCount: Int { store.groups.count }
     private var noteCount: Int { NotesStore.shared.noteCount }
@@ -625,6 +638,10 @@ private struct ResetConfirmationView: View {
                        isOn: $includeClipboard)
                     .disabled(clipboardCount == 0)
                     .help("Empties the in-memory clipboard history. Nothing is written to disk, and the history is lost when the app quits anyway.")
+                Toggle(dropzoneCount == 1 ? "Dropzones (1)" : "Dropzones (\(dropzoneCount))",
+                       isOn: $includeDropzones)
+                    .disabled(dropzoneCount == 0)
+                    .help("Deletes every dropzone command. A command that is already running is not stopped. A file written by a newer MakiDesk is left alone.")
             }
             .toggleStyle(.checkbox)
 
@@ -642,6 +659,7 @@ private struct ResetConfirmationView: View {
                     if includeGroups { scope.insert(.groups) }
                     if includeNotes { scope.insert(.notes) }
                     if includeClipboard { scope.insert(.clipboard) }
+                    if includeDropzones { scope.insert(.dropzones) }
                     onReset(scope)
                 }
                 .keyboardShortcut(.defaultAction)
@@ -650,6 +668,10 @@ private struct ResetConfirmationView: View {
         .padding(20)
         .frame(width: 400)
         .background(theme.background)
+        .onAppear {
+            let snapshot = DropzoneStore().load()
+            dropzoneCount = snapshot.canSave ? snapshot.zones.count : 0
+        }
     }
 }
 

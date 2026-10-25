@@ -579,7 +579,7 @@ final class WorkspaceStore {
     /// that is what the reset is — while the data that is **not** a setting is a
     /// tick the user makes in the confirmation. What a future panel keeps adds
     /// its own case here and its own tick there: notes (T20), the clipboard
-    /// history (T21).
+    /// history (T21), the dropzones (T44).
     struct ResetScope: OptionSet {
         let rawValue: Int
         static let settings = ResetScope(rawValue: 1 << 0)
@@ -590,6 +590,9 @@ final class WorkspaceStore {
         static let notes = ResetScope(rawValue: 1 << 2)
         /// The in-memory clipboard history (T21).
         static let clipboard = ResetScope(rawValue: 1 << 3)
+        /// The dropzone commands (T44). A file written by a newer version is
+        /// left alone.
+        static let dropzones = ResetScope(rawValue: 1 << 4)
     }
 
     /// Restores the settings to their default values, going through the same
@@ -609,6 +612,15 @@ final class WorkspaceStore {
         }
         if scope.contains(.clipboard) {
             MainActor.assumeIsolated { ClipboardHistory.shared.clear() }
+        }
+        if scope.contains(.dropzones) {
+            let removed = DropzoneStore().remove()
+            MainActor.assumeIsolated {
+                DropzoneCoordinator.shared.reload()
+                if removed {
+                    NotificationCenter.default.post(name: .makiDeskDropzonesReset, object: nil)
+                }
+            }
         }
         if scope.contains(.groups), !groups.isEmpty {
             leaveScene()

@@ -9,6 +9,7 @@ titles, previews, notes, clipboard contents or files anywhere.
 - [What is stored](#what-is-stored)
 - [Clipboard](#clipboard)
 - [Shelf](#shelf)
+- [Dropzones](#dropzones)
 - [Window previews](#window-previews)
 - [Revoking and removing](#revoking-and-removing)
 
@@ -44,6 +45,10 @@ identity asks again. A Developer ID-signed public release behaves best here.
 - Files and URLs **only when you drop them on the shelf or open them in Notes**.
   The app keeps references to those files, not copies (the exception is a file
   promise from another app, which must be materialized in a temporary folder).
+- **Dropped content for a dropzone**, only when you drop it on a zone: the app
+  prepares the files, images, text or links in the run folder and passes their
+  paths or the text to the command you configured. The command itself decides
+  what to read and whether to use the network; MakiDesk does not upload it.
 - The links you drag onto the shelf or ask Finder to reveal are opened with the
   default app; the app does not fetch them itself.
 - **Installed application bundles** in `/Applications`, `/System/Applications`
@@ -59,6 +64,8 @@ All paths are under your user account:
 | Data | Location | Lifetime |
 |---|---|---|
 | Window groups | `~/Library/Application Support/MakiDesk/groups.json` | Until you delete them or reset |
+| Dropzones and icons | `…/MakiDesk/dropzones.json` (0600) and `…/MakiDesk/DropzoneIcons/` | Until you delete them or reset |
+| Dropzone runs | `~/Library/Caches/MakiDesk/DropzoneRuns/<run>/` | Removed when the run ends unless kept or revealed |
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings) | Until reset |
 | Clipboard history | RAM | Until MakiDesk quits |
@@ -69,7 +76,8 @@ All paths are under your user account:
 | Screenshot previews | RAM | While the screenshot window is open |
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
-can remove groups, notes and clipboard history; settings always reset.
+can remove groups, notes, clipboard history and dropzones; settings always
+reset.
 
 ## Clipboard
 
@@ -91,6 +99,23 @@ are kept in memory. File promises from Photos/Safari/Mail are the only items
 that require a temporary copy; the staging folder lives under the system
 temporary directory, is used only for the current shelf, and is deleted when
 the shelf closes. The shelf is one at a time and never persists.
+
+## Dropzones
+
+Dropzones are **commands you write**, not scripts shipped with MakiDesk. The
+app runs them with your user privileges and does not sandbox them: a command
+can read anything you can, start other programs, and use the network exactly as
+the same line would in Terminal. Before the first run, and after any change to
+the command, mode, stdin, environment or working directory, MakiDesk shows the
+line and asks for confirmation.
+
+The configuration is a private (`0600`) file under Application Support; a
+symlinked or group-writable file is shown but never run, and a file written by a
+newer version is read-only. Dropped items are materialized under the run folder
+in `~/Library/Caches/MakiDesk/`, which also holds stdout, stderr and `output/`;
+it is removed when the run ends unless you keep or reveal it. The Shortcuts
+picker only reads `shortcuts list` to prefill a command; it does not run or
+inspect the shortcut's actions.
 
 ## Screenshot library
 
@@ -114,7 +139,8 @@ per-kind weights only.
 - Revoke Accessibility or Screen Recording in System Settings at any time; the
   corresponding features stop working, the rest of the app remains usable.
 - **Uninstall**: quit MakiDesk, drag it to the Trash, then remove
-  `~/Library/Application Support/MakiDesk/` if you do not want the groups and
-  notes. The factory reset is in Settings ▸ General.
+  `~/Library/Application Support/MakiDesk/` (groups, notes, dropzones and their
+  icons) and `~/Library/Caches/MakiDesk/` (kept dropzone run folders) if you do
+  not want them. The factory reset is in Settings ▸ General.
 - For a security report, open an issue in the repository or contact the
   maintainer listed in the README.

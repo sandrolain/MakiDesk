@@ -129,6 +129,25 @@ struct DropzoneStore {
         (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate]) as? Date
     }
 
+    /// Deletes the configuration for a factory reset. A file written by a newer
+    /// version is left in place; a missing file is already the goal.
+    @discardableResult
+    func remove() -> Bool {
+        guard load().canSave else {
+            makiLog.error("dropzones: reset left a newer file in place")
+            return false
+        }
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            return true
+        } catch {
+            let code = (error as NSError).code
+            if code == CocoaError.fileNoSuchFile.rawValue { return true }
+            makiLog.error("dropzones: could not remove the configuration")
+            return false
+        }
+    }
+
     // MARK: - Writing
 
     func save(_ zones: [DropzoneConfig]) -> Result<Void, StoreError> {

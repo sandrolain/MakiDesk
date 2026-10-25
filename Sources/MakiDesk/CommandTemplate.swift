@@ -7,6 +7,8 @@ import Foundation
 enum CommandPlaceholder: String, CaseIterable, Sendable {
     case paths
     case path
+    /// Folder containing the first path, for output placed next to the source.
+    case parent
     case text
     case textfile
     case urls
@@ -32,6 +34,10 @@ enum CommandPlaceholder: String, CaseIterable, Sendable {
             return .multiple(payload.paths)
         case .path:
             return payload.paths.first.map { .single($0) }
+        case .parent:
+            return payload.paths.first.map {
+                URL(fileURLWithPath: $0).deletingLastPathComponent().path
+            }.map { .single($0) }
         case .text:
             return payload.text.map { .single($0) }
         case .textfile:

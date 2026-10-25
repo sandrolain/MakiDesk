@@ -94,6 +94,31 @@ final class DropzoneCoordinatorTests: XCTestCase {
         XCTAssertEqual(runner.records.count, 1)
     }
 
+    func testExistingDeclaredOutputAsksBeforeRunning() async throws {
+        let source = try imageFile("photo.png")
+        let archive = directory.appendingPathComponent("archive.zip")
+        try "old archive".write(to: archive, atomically: true, encoding: .utf8)
+
+        var zone = confirmedImageZone()
+        zone.expectedOutput = "{parent}/archive.zip"
+        zone.markConfirmed()
+        try save(zone)
+        let id = coordinator.zones[0].id
+        let drop = DropzoneDrop(files: [source])
+
+        let first = await coordinator.run(zoneID: id, drop: drop)
+        guard case let .needsOverwriteConfirmation(pending, path) = first else {
+            return XCTFail("expected an overwrite confirmation, got \(first)")
+        }
+        XCTAssertEqual(pending.id, id)
+        XCTAssertEqual(path, archive.path)
+        XCTAssertTrue(runner.records.isEmpty)
+
+        let second = await coordinator.run(zoneID: id, drop: drop, confirmedOverwrite: true)
+        guard case .finished = second else { return XCTFail("expected a run, got \(second)") }
+        XCTAssertEqual(runner.records.count, 1)
+    }
+
     func testCommandChangeAsksForConfirmationAgain() async throws {
         var zone = confirmedImageZone()
         zone.command.line = "echo first"

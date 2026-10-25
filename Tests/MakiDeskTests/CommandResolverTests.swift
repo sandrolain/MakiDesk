@@ -47,6 +47,30 @@ final class CommandResolverTests: XCTestCase {
         XCTAssertNil(command.stdinFile)
     }
 
+    func testPathTemplateExpandsTheParentPlaceholder() throws {
+        let path = try resolver.resolvePathTemplate("{parent}/archive.zip", payload: payload {
+            $0.paths = ["/tmp/a b/photo.png"]
+        })
+        XCTAssertEqual(path, "/tmp/a b/archive.zip")
+        XCTAssertThrowsError(try resolver.resolvePathTemplate("{paths}", payload: payload {
+            $0.paths = ["/tmp/a", "/tmp/b"]
+        }))
+    }
+
+    func testParentPlaceholderIsTheFirstFilePathFolder() throws {
+        let command = try resolve("/bin/echo {parent}/archive.zip", payload: payload {
+            $0.paths = ["/tmp/a b/photo.png", "/elsewhere/other.png"]
+        })
+        XCTAssertEqual(command.arguments, ["/tmp/a b/archive.zip"])
+    }
+
+    func testParentPlaceholderWithoutAPathIsReported() {
+        XCTAssertThrowsError(try resolve("/bin/echo {parent}")) { error in
+            XCTAssertEqual(error as? CommandResolutionError,
+                           .missingPlaceholderValue("parent"))
+        }
+    }
+
     func testEmbeddedSinglePlaceholderIsSubstituted() throws {
         let command = try resolve("/bin/echo --out={outdir}/x --name={name}",
                                   payload: payload {

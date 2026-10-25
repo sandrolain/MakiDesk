@@ -150,11 +150,44 @@ final class DropzoneStoreTests: XCTestCase {
         XCTAssertNotNil(store.modificationDate())
     }
 
+    func testExpectedOutputRoundTripsAndOlderFilesDefaultToNil() throws {
+        var withOutput = zone()
+        withOutput.expectedOutput = "{parent}/archive.zip"
+        try store.save([withOutput]).get()
+        XCTAssertEqual(store.load().zones.first?.expectedOutput, "{parent}/archive.zip")
+
+        let older = #"{"version":1,"zones":[{"name":"A","command":{"line":"echo hi"}}]}"#
+        try older.write(to: store.fileURL, atomically: true, encoding: .utf8)
+        XCTAssertNil(store.load().zones.first?.expectedOutput)
+    }
+
     func testUnknownJSONKeysAreIgnored() throws {
         let json = #"{"version":1,"zones":[{"name":"A","command":{"line":"echo hi"},"future":true}]}"#
         try json.write(to: store.fileURL, atomically: true, encoding: .utf8)
         let snapshot = store.load()
         XCTAssertEqual(snapshot.state, .loaded)
         XCTAssertEqual(snapshot.zones.first?.name, "A")
+    }
+
+    func testRemoveDeletesTheFileAndIsIdempotent() throws {
+        XCTAssertTrue(store.remove())
+        XCTAssertTrue(store.remove())
+        XCTAssertEqual(store.load().state, .missing)
+    }
+
+    func testRemoveLeavesAFutureVersionInPlace() throws {
+        let contents = #"{"version":99,"zones":[]}"#
+        try contents.write(to: store.fileURL, atomically: true, encoding: .utf8)
+        XCTAssertFalse(store.remove())
+        XCTAssertEqual(try String(contentsOf: store.fileURL, encoding: .utf8), contents)
+    }
+
+    func testRemoveDeletesAnUntrustedFile() throws {
+        try store.save([zone()]).get()
+        try FileManager.default.setAttributes([.posixPermissions: 0o666],
+                                              ofItemAtPath: store.fileURL.path)
+        XCTAssertEqual(store.load().state, .untrustedPermissions)
+        XCTAssertTrue(store.remove())
+        XCTAssertEqual(store.load().state, .missing)
     }
 }

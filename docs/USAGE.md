@@ -15,6 +15,7 @@ through Accessibility.
 - [Notes](#notes)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
+- [Dropzones](#dropzones)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Troubleshooting](#troubleshooting)
@@ -306,6 +307,66 @@ excluded bundle IDs. If you had a shelf opened by a shake and the drag ends
 without a drop, it closes itself; a shelf opened with `⌃⌥D` stays until you
 close it.
 
+## Dropzones
+
+A dropzone is a command you write, run on what you drop on its tile. The strip
+appears under the shelf when the drag reaches it, already filtered to the zones
+that accept the current items — incompatible zones are not shown at all (if none
+match, the strip says so). Releasing outside a visible tile cancels the drop.
+Dropping on a zone runs the command and does not keep the items on the shelf
+unless the shelf was empty. Configure the zones in **Settings ▸ Dropzones**.
+
+- **Name and icon.** The icon can be an SF Symbol chosen from a searchable
+  preview list, an emoji chosen from a grid, or an image file copied into
+  `Application Support/MakiDesk/DropzoneIcons/`.
+- **What it accepts.** Files and folders, images (pixel data dragged from apps),
+  text, links; optional UTIs such as `public.image` or `com.adobe.pdf`, a
+  minimum/maximum item count, and whether a partly matching drop is refused or
+  filtered to the matching items.
+- **The command.** *Arguments* mode tokenizes the line and runs it without a
+  shell: pipes and redirects are plain text. *Shell* mode runs it with
+  `/bin/zsh -lc`; placeholders are quoted for you, and quotes around a
+  placeholder are refused.
+- **Presets.** *Presets…* offers starting points for files (Reveal in Finder,
+  Open, ZIP next to the first file, Unzip, Terminal), images (PNG, JPEG, resize
+  to 1600 px), the clipboard (copy paths, names or dropped text), and inspection
+  (SHA-256, line count, paths, manifest). Applying one replaces the command line
+  and output settings, leaves the accepted kinds and limits unchanged, and runs
+  nothing. The ZIP preset writes `archive.zip` next to the first dropped file
+  and asks before replacing it if it already exists.
+- **Placeholders.** `{paths}`, `{path}`, `{parent}`, `{text}`, `{textfile}`,
+  `{urls}`, `{urlsfile}`, `{manifest}`, `{workdir}`, `{outdir}`, `{name}`,
+  `{count}`. `{parent}` is the folder containing the first dropped item, handy
+  for writing output next to the source. `{paths}` and `{urls}` expand to one
+  argument per item and must be a whole argument; unknown braces stay literal,
+  so `awk '{print $1}'` and `jq '{title}'` work. *Preview Resolution* shows the
+  final command with sample items.
+- **Runtime.** Standard input can be nothing, the dropped text as a file, or
+  the JSON manifest. Set a timeout, a working directory and `KEY=VALUE`
+  environment variables; `MAKIDESK_*` variables describe the run.
+- **Results.** Output goes to `output/` inside the run folder; a notice reports
+  the exit code, stderr and a short stdout excerpt, and can reveal the folder.
+  The run folder lives under `~/Library/Caches/MakiDesk/DropzoneRuns/` and is
+  removed when the command ends unless you keep or reveal it. Cancelling stops
+  waiting for the command; a Shortcut may keep running inside Shortcuts.
+- **Existing output.** The optional *Check an output path before running* field
+  (Runtime) makes the run ask **Run Anyway / Cancel** when that path already
+  exists. The ZIP preset fills it with `{parent}/archive.zip`. MakiDesk can only
+  guard the path you declare: a custom command that writes somewhere else is
+  not intercepted, so for those use a shell `[ -e … ]` guard or a unique name.
+- **Confirmation.** The first run, and the first run after the command, mode,
+  stdin, environment or working directory changes, asks before executing.
+  *Shortcuts…* only fills the line with `shortcuts run <UUID>` and an
+  `--input-path` for the zone; it never runs anything by itself.
+- *Test with a File…* saves valid changes and runs the command on a chosen file
+  (or image) exactly like a drop. *Duplicate* makes a new zone that asks for
+  confirmation again.
+
+The zones live in `~/Library/Application Support/MakiDesk/dropzones.json`
+(mode 0600). A symlinked or group-writable file is shown but never run; a file
+written by a newer MakiDesk is read-only. **Reset to defaults** can delete the
+dropzones with their own tick.
+
 ## Screenshots
 
 Choose **Screenshots** in the menu-bar menu to open the screenshot library in a
@@ -339,12 +400,14 @@ The Settings window is split into tabs:
 - **Layouts** — suggested layout behaviour and the seven content weights.
 - **Panels** — shelf shake settings and the window switcher/search appearance.
 - **Groups** — rename, empty and inspect the nine groups.
+- **Dropzones** — the commands run by dropping on the shelf strip: accepted
+  kinds, command and placeholders, runtime, feedback, and *Test*.
 
 The selected tab is remembered. The window is painted with the selected
 palette theme — background, cards, accent and a matching light or dark
 appearance for the native controls — and takes keyboard focus when it opens.
-**Reset to defaults** asks whether groups,
-notes and clipboard history should go too; settings always reset.
+**Reset to defaults** asks whether groups, notes, clipboard history and
+dropzones should go too; settings always reset.
 
 ## Keyboard shortcuts
 
