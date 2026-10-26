@@ -360,6 +360,7 @@ final class NotesStoreTests: XCTestCase {
         await fulfillment(of: [flushed], timeout: 3)
 
         XCTAssertNotNil(store.persistenceError)
+        XCTAssertNotNil(store.persistenceError(for: note.id))
         XCTAssertEqual(store.note(id: note.id)?.text, "keep this draft")
     }
 
@@ -387,6 +388,8 @@ final class NotesStoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: invalidDirectory, withIntermediateDirectories: true)
         await fulfillment(of: [recovered], timeout: 5)
         XCTAssertNil(store.persistenceError)
+        XCTAssertNil(store.persistenceError(for: note.id))
+        XCTAssertTrue(store.failedDraftIDs.isEmpty)
     }
 
     func testQuittingWithoutEverOpeningNotesLeavesNoFolder() throws {

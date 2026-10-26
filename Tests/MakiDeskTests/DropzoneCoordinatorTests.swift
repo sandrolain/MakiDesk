@@ -86,8 +86,9 @@ final class DropzoneCoordinatorTests: XCTestCase {
         guard case .needsConfirmation = first else { return XCTFail("expected a confirmation") }
         XCTAssertTrue(runner.records.isEmpty)
 
-        XCTAssertTrue(coordinator.confirm(zoneID: id,
-                                          approvedCommandHash: DropzoneConfig.confirmationHash(for: coordinator.zones[0].command)))
+        XCTAssertEqual(coordinator.confirm(zoneID: id,
+                                           approvedCommandHash: DropzoneConfig.confirmationHash(for: coordinator.zones[0].command)),
+                       .confirmed)
         XCTAssertFalse(coordinator.zones[0].requiresConfirmation)
 
         let second = await coordinator.run(zoneID: id, drop: DropzoneDrop(files: [try imageFile()]))
@@ -151,9 +152,15 @@ final class DropzoneCoordinatorTests: XCTestCase {
         XCTAssertNoThrow(try store.save([changed]).get())
         coordinator.reload()
 
-        XCTAssertFalse(coordinator.confirm(zoneID: pending.id, approvedCommandHash: hashPresented))
+        XCTAssertEqual(coordinator.confirm(zoneID: pending.id, approvedCommandHash: hashPresented),
+                       .commandChanged)
         XCTAssertTrue(coordinator.zones[0].requiresConfirmation)
         XCTAssertTrue(runner.records.isEmpty)
+    }
+
+    func testConfirmingAMissingZoneIsUnavailable() {
+        XCTAssertEqual(coordinator.confirm(zoneID: UUID(), approvedCommandHash: "none"),
+                       .unavailable)
     }
 
     func testOverwriteConfirmationOnlyAuthorizesPresentedPath() async throws {
@@ -199,10 +206,9 @@ final class DropzoneCoordinatorTests: XCTestCase {
         await gate.resume()
         let outcome = await task.value
 
-        guard case let .failed(message) = outcome else {
+        guard case .cancelled = outcome else {
             return XCTFail("expected cancellation, got \(outcome)")
         }
-        XCTAssertTrue(message.localizedCaseInsensitiveContains("cancel"))
         XCTAssertTrue(runner.records.isEmpty)
         XCTAssertTrue(coordinator.runningZones.isEmpty)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: runRoot.path).isEmpty)

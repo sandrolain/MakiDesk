@@ -1581,13 +1581,25 @@ final class ShelfController: NSObject, NSWindowDelegate,
                     return
                 }
                 let hash = DropzoneConfig.confirmationHash(for: pending.command)
-                guard coordinator.confirm(zoneID: pending.id, approvedCommandHash: hash) else {
+                switch coordinator.confirm(zoneID: pending.id, approvedCommandHash: hash) {
+                case .confirmed:
+                    outcome = await coordinator.run(zoneID: pending.id, drop: drop)
+                case .commandChanged:
                     HUDController.shared.show("\(pending.name) changed during confirmation; try again",
                                               symbol: "exclamationmark.triangle", duration: 3)
                     if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
+                case .unavailable:
+                    HUDController.shared.show("\(pending.name) is no longer available",
+                                              symbol: "questionmark.circle", duration: 3)
+                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                    return
+                case let .saveFailed(message):
+                    HUDController.shared.show("Could not save the confirmation for \(pending.name): \(Self.short(message))",
+                                              symbol: "externaldrive.badge.xmark", duration: 3.5)
+                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                    return
                 }
-                outcome = await coordinator.run(zoneID: pending.id, drop: drop)
             }
             if case let .needsOverwriteConfirmation(pending, path) = outcome {
                 guard let self else {
@@ -1651,6 +1663,9 @@ final class ShelfController: NSObject, NSWindowDelegate,
         case let .rejected(reason):
             HUDController.shared.show(Self.short(reason.errorDescription ?? "Drop rejected"),
                                       symbol: "nosign", duration: 2.5)
+        case .cancelled:
+            HUDController.shared.show("\(zone.name) cancelled",
+                                      symbol: "xmark.circle", duration: 2)
         case let .failed(message):
             HUDController.shared.show("\(zone.name): \(Self.short(message))",
                                       symbol: "exclamationmark.triangle", duration: 3.5)

@@ -150,6 +150,21 @@ final class NotesStore {
     private(set) var openTabs: [UUID] = []
     private(set) var selectedTab: UUID?
     private(set) var persistenceError: String?
+    /// Notes whose last draft write failed. A failure of the shared session
+    /// (tabs, cursor, window frame) has no note, so it stays in
+    /// `persistenceError` and applies to the whole panel.
+    private(set) var failedDraftIDs: Set<UUID> = []
+
+    /// What to show for one note: its own failed draft, or the session-level
+    /// error when no single note is to blame. A note that saved cleanly shows
+    /// nothing even while another one is failing.
+    func persistenceError(for id: UUID) -> String? {
+        if failedDraftIDs.contains(id) {
+            return "Not saved. Changes remain in memory and will retry automatically."
+        }
+        guard failedDraftIDs.isEmpty else { return nil }
+        return persistenceError
+    }
 
     /// Frame of the notes panel, remembered across launches. While the panel
     /// is anchored to a screen edge this keeps the floating frame to return to.
@@ -781,6 +796,7 @@ final class NotesStore {
         draftWork[id] = nil
         draftRevision[id, default: 0] &+= 1
         pendingDrafts.remove(id)
+        failedDraftIDs.remove(id)
         if let tabIndex = openTabs.firstIndex(of: id) {
             openTabs.remove(at: tabIndex)
         }
@@ -847,6 +863,7 @@ final class NotesStore {
         anchor = nil
         lastCleanClose = true
         persistenceError = nil
+        failedDraftIDs.removeAll()
         onChange?()
         invalidatedLoadCompletions.forEach { $0() }
     }
@@ -936,9 +953,11 @@ final class NotesStore {
                 switch result {
                 case .success:
                     self.pendingDrafts.remove(id)
+                    self.failedDraftIDs.remove(id)
                     if self.pendingDrafts.isEmpty { self.clearPersistenceError() }
                 case .failure:
                     self.pendingDrafts.insert(id)
+                    self.failedDraftIDs.insert(id)
                     self.reportPersistenceFailure()
                 }
             }
@@ -953,10 +972,12 @@ final class NotesStore {
         do {
             try draftIOQueue.sync { try Self.writeDraft(note, to: directory) }
             pendingDrafts.remove(id)
+            failedDraftIDs.remove(id)
             if pendingDrafts.isEmpty { clearPersistenceError() }
         } catch {
             // Keep the draft pending so the next edit/flush can retry it.
             pendingDrafts.insert(id)
+            failedDraftIDs.insert(id)
             reportPersistenceFailure()
         }
     }
@@ -1008,9 +1029,13 @@ final class NotesStore {
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                for (id, succeeded) in results where succeeded &&
-                    self.draftRevision[id, default: 0] == revisions[id, default: 0] {
-                    self.pendingDrafts.remove(id)
+                for (id, succeeded) in results {
+                    if succeeded,
+                       self.draftRevision[id, default: 0] == revisions[id, default: 0] {
+                        self.pendingDrafts.remove(id)
+                    }
+                    if succeeded { self.failedDraftIDs.remove(id) }
+                    else { self.failedDraftIDs.insert(id) }
                 }
                 if results.contains(where: { !$0.1 }) || !sessionSaved {
                     self.reportPersistenceFailure()
@@ -1117,8 +1142,9 @@ final class NotesStore {
         persistenceRetryWork?.cancel()
         persistenceRetryWork = nil
         persistenceRetryAttempt = 0
-        guard persistenceError != nil else { return }
+        guard persistenceError != nil || failedDraftIDs.isEmpty == false else { return }
         persistenceError = nil
+        failedDraftIDs.removeAll()
         onChange?()
     }
 

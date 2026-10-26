@@ -713,7 +713,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         }
 
         let state: (text: String, color: NSColor, tooltip: String?)
-        if let error = store.persistenceError {
+        if let error = store.persistenceError(for: note.id) {
             state = ("Not saved", .systemRed, error)
         } else if !note.textLoaded {
             state = (note.textLoadFailed ? "Could not load note" : "Loading note…",

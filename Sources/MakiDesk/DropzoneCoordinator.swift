@@ -261,7 +261,19 @@ final class DropzoneCoordinator {
         /// command that may replace it.
         case needsOverwriteConfirmation(DropzoneConfig, path: String)
         case finished(CommandResult)
+        /// The run stopped before starting a process, on purpose.
+        case cancelled
         case failed(String)
+    }
+
+    /// Why a confirmation was accepted or refused. The caller needs the reason
+    /// to say the right thing: a changed command and a failed write are not the
+    /// same problem.
+    enum ConfirmationOutcome: Equatable {
+        case confirmed
+        case commandChanged
+        case unavailable
+        case saveFailed(String)
     }
 
     static let shared = DropzoneCoordinator()
@@ -331,24 +343,26 @@ final class DropzoneCoordinator {
 
     /// Stores the confirmation only if the command still matches what was shown.
     @discardableResult
-    func confirm(zoneID: UUID, approvedCommandHash: String) -> Bool {
+    func confirm(zoneID: UUID, approvedCommandHash: String) -> ConfirmationOutcome {
         snapshot = store.load()
         lastModification = store.modificationDate()
-        guard snapshot.isRunnable else { return false }
-        guard let index = snapshot.zones.firstIndex(where: { $0.id == zoneID }) else { return false }
+        guard snapshot.isRunnable else { return .unavailable }
+        guard let index = snapshot.zones.firstIndex(where: { $0.id == zoneID }) else {
+            return .unavailable
+        }
         guard DropzoneConfig.confirmationHash(for: snapshot.zones[index].command) == approvedCommandHash else {
             reload()
-            return false
+            return .commandChanged
         }
         snapshot.zones[index].markConfirmed()
         if case let .failure(error) = store.save(snapshot.zones) {
             makiLog.error("dropzones: could not store the confirmation: \(error.localizedDescription, privacy: .public)")
-            return false
+            return .saveFailed(error.localizedDescription)
         } else {
             NotificationCenter.default.post(name: .makiDeskDropzonesChanged, object: nil)
         }
         lastModification = store.modificationDate()
-        return true
+        return .confirmed
     }
 
     func cancel(zoneID: UUID) async {
@@ -388,7 +402,7 @@ final class DropzoneCoordinator {
         }
 
         let items = await DropzonePreparer.itemInfos(for: drop)
-        guard !cancellation.isCancelled else { return .failed("The dropzone run was cancelled.") }
+        guard !cancellation.isCancelled else { return .cancelled }
         switch DropzoneMatcher.match(items, zone: zone) {
         case let .rejected(reason):
             return .rejected(reason)
@@ -403,7 +417,7 @@ final class DropzoneCoordinator {
                 let prepared = try await preparePayload(zone, drop, accepted, workDirectory)
                 guard !cancellation.isCancelled else {
                     try? fileManager.removeItem(at: workDirectory)
-                    return .failed("The dropzone run was cancelled.")
+                    return .cancelled
                 }
                 if let expected = prepared.expectedOutput,
                    confirmedOverwritePath != expected,

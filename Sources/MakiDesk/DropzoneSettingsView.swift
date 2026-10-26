@@ -428,16 +428,21 @@ struct DropzoneSettingsView: View {
             if case let .needsConfirmation(pending) = outcome {
                 if confirmRun(pending) {
                     let hash = DropzoneConfig.confirmationHash(for: pending.command)
-                    if DropzoneCoordinator.shared.confirm(zoneID: zone.id,
-                                                          approvedCommandHash: hash) {
+                    switch DropzoneCoordinator.shared.confirm(zoneID: zone.id,
+                                                              approvedCommandHash: hash) {
+                    case .confirmed:
                         model.reload()
                         outcome = await DropzoneCoordinator.shared.run(zoneID: zone.id,
                                                                       drop: drop)
-                    } else {
+                    case .commandChanged:
                         outcome = .failed("The command changed while confirmation was open. Review it and try again.")
+                    case .unavailable:
+                        outcome = .failed("The dropzone is no longer available.")
+                    case let .saveFailed(message):
+                        outcome = .failed("The confirmation could not be saved: \(message)")
                     }
                 } else {
-                    outcome = .failed("Cancelled before running.")
+                    outcome = .cancelled
                 }
             }
             if case let .needsOverwriteConfirmation(pending, path) = outcome {
@@ -446,7 +451,7 @@ struct DropzoneSettingsView: View {
                                                                   drop: drop,
                                                                   confirmedOverwritePath: path)
                 } else {
-                    outcome = .failed("Cancelled before replacing the file.")
+                    outcome = .cancelled
                 }
             }
             if case .needsConfirmation = outcome {
@@ -542,6 +547,12 @@ struct DropzoneSettingsView: View {
                                       title: "The drop was refused",
                                       succeeded: false,
                                       message: reason.errorDescription ?? "The drop was refused.",
+                                      outputURL: nil)
+        case .cancelled:
+            return DropzoneTestResult(zoneName: zone.name,
+                                      title: "Test cancelled",
+                                      succeeded: false,
+                                      message: "The run was cancelled before the command started.",
                                       outputURL: nil)
         case let .failed(message):
             return DropzoneTestResult(zoneName: zone.name,
