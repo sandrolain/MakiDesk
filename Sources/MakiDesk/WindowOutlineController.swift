@@ -487,21 +487,23 @@ final class WindowOutlineController {
             observers.append(NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] note in
-                self?.handleOwnWindowEvent(named: name, note: note)
+                MainActor.assumeIsolated {
+                    self?.handleOwnWindowEvent(named: name, note: note)
+                }
             })
         }
 
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.scheduleRefresh(after: 0.05)
+            MainActor.assumeIsolated { self?.scheduleRefresh(after: 0.05) }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
             // The other app's activation may arrive before or after this one;
             // refresh instead of hiding so the border can hand over cleanly.
-            self?.scheduleRefresh(after: 0.05)
+            MainActor.assumeIsolated { self?.scheduleRefresh(after: 0.05) }
         })
     }
 

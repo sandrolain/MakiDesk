@@ -262,8 +262,11 @@ final class WorkspaceStore {
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.clearPeek(announce: false)
-            self?.flushArrangement()
+            // Registered on the main queue: the callbacks below are main-actor.
+            MainActor.assumeIsolated {
+                self?.clearPeek(announce: false)
+                self?.flushArrangement()
+            }
         }
         // The peek overlay must not outlive the desktop it was shown on: a lock
         // or a sleep takes the key away, and the release that would have closed
@@ -271,12 +274,12 @@ final class WorkspaceStore {
         systemObservers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.hidePeek()
+            MainActor.assumeIsolated { self?.hidePeek() }
         })
         systemObservers.append(DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main
         ) { [weak self] _ in
-            self?.hidePeek()
+            MainActor.assumeIsolated { self?.hidePeek() }
         })
     }
 
@@ -319,7 +322,7 @@ final class WorkspaceStore {
     private func scheduleTrustPoll() {
         guard trustTimer == nil else { return }
         trustTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            self?.checkTrust()
+            MainActor.assumeIsolated { self?.checkTrust() }
         }
     }
 
@@ -1294,25 +1297,29 @@ final class WorkspaceStore {
         let duration = 0.18
         frameLastWritten[key] = start.integral
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
-            guard let self else { timer.invalidate(); return }
-            let t = min(max((ProcessInfo.processInfo.systemUptime - startTime) / duration, 0), 1)
-            let eased = 1 - pow(1 - t, 3)
-            let frame = CGRect(
-                x: start.minX + (target.minX - start.minX) * eased,
-                y: start.minY + (target.minY - start.minY) * eased,
-                width: start.width + (target.width - start.width) * eased,
-                height: start.height + (target.height - start.height) * eased
-            ).integral
-            let previous = self.frameLastWritten[key] ?? start.integral
-            if t >= 1 {
-                timer.invalidate()
-                self.frameTimers[key] = nil
-                self.frameLastWritten[key] = nil
-                WindowController.setFrameAsync(target, for: element, identity: key,
-                                               completion: { completion?() })
-            } else if frame.origin != previous.origin || frame.size != previous.size {
-                self.frameLastWritten[key] = frame
-                WindowController.setFrameAsync(frame, for: element, identity: key)
+            // The timer is scheduled on the main run loop; the animation state
+            // and the frame writes belong to the store's main actor.
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let t = min(max((ProcessInfo.processInfo.systemUptime - startTime) / duration, 0), 1)
+                let eased = 1 - pow(1 - t, 3)
+                let frame = CGRect(
+                    x: start.minX + (target.minX - start.minX) * eased,
+                    y: start.minY + (target.minY - start.minY) * eased,
+                    width: start.width + (target.width - start.width) * eased,
+                    height: start.height + (target.height - start.height) * eased
+                ).integral
+                let previous = self.frameLastWritten[key] ?? start.integral
+                if t >= 1 {
+                    timer.invalidate()
+                    self.frameTimers[key] = nil
+                    self.frameLastWritten[key] = nil
+                    WindowController.setFrameAsync(target, for: element, identity: key,
+                                                   completion: { completion?() })
+                } else if frame.origin != previous.origin || frame.size != previous.size {
+                    self.frameLastWritten[key] = frame
+                    WindowController.setFrameAsync(frame, for: element, identity: key)
+                }
             }
         }
         frameTimers[key] = timer
@@ -1839,7 +1846,8 @@ final class WorkspaceStore {
     private func scheduleArrangementFlush() {
         arrangementFlushTimer?.invalidate()
         arrangementFlushTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
-            self?.flushArrangement()
+            // The timer runs on the main run loop, where the store is isolated.
+            MainActor.assumeIsolated { self?.flushArrangement() }
         }
     }
 
@@ -1859,7 +1867,7 @@ final class WorkspaceStore {
     private func scheduleArrangementRetry() {
         arrangementFlushTimer?.invalidate()
         arrangementFlushTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
-            self?.flushArrangement()
+            MainActor.assumeIsolated { self?.flushArrangement() }
         }
     }
 
@@ -2594,9 +2602,11 @@ final class WorkspaceStore {
         peekWatchdog?.invalidate()
         peekWatchdog = Timer.scheduledTimer(withTimeInterval: peekHold.holdWatchdog + 0.5,
                                             repeats: false) { [weak self] _ in
-            guard let self, self.peekHold.hasExpired else { return }
-            self.status = "Peek closed (the key release was lost)"
-            self.hidePeek()
+            MainActor.assumeIsolated {
+                guard let self, self.peekHold.hasExpired else { return }
+                self.status = "Peek closed (the key release was lost)"
+                self.hidePeek()
+            }
         }
     }
 
@@ -2807,7 +2817,8 @@ final class WorkspaceStore {
         pendingLayoutSet = set
         pendingLayoutTimer?.invalidate()
         pendingLayoutTimer = Timer.scheduledTimer(withTimeInterval: Self.layoutOfferSeconds, repeats: false) {
-            [weak self] _ in self?.clearPendingLayout()
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.clearPendingLayout() }
         }
         HUDController.shared.show(
             "Suggested: \(advice.layout.label) · \(Self.layoutSummary(set))\n\(advice.reason)\nRun Auto again to apply",

@@ -671,6 +671,9 @@ private struct ResetConfirmationView: View {
         .onAppear {
             let snapshot = DropzoneStore().load()
             dropzoneCount = snapshot.canSave ? snapshot.zones.count : 0
+            // The note count must include notes that were never opened in this
+            // run; the restore reads metadata only and publishes asynchronously.
+            NotesStore.shared.loadIfNeededAsync {}
         }
     }
 }

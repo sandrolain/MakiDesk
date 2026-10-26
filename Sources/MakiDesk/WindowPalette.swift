@@ -785,16 +785,20 @@ final class WindowPalette {
     private func startRefreshTimer() {
         guard refreshTimer == nil else { return }
         let timer = Timer(timeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
-            guard let self, self.isVisible else { return }
-            self.loadPreviews(for: self.model.items, refresh: true)
-            // The index is updated by AX notifications and resize commands.
-            // Read its published snapshot only; never make the timer perform
-            // a synchronous system-wide discovery while the panel is visible.
-            self.refreshWindowSnapshot()
-            // Keep the column and the badges live while the palette is open, so
-            // a member added or removed with the global shortcuts (or a digit)
-            // shows up here too.
-            self.refreshGroupState()
+            // Added to RunLoop.main below: the refresh reads and publishes UI
+            // state, including palette previews, on the main actor.
+            MainActor.assumeIsolated {
+                guard let self, self.isVisible else { return }
+                self.loadPreviews(for: self.model.items, refresh: true)
+                // The index is updated by AX notifications and resize commands.
+                // Read its published snapshot only; never make the timer perform
+                // a synchronous system-wide discovery while the panel is visible.
+                self.refreshWindowSnapshot()
+                // Keep the column and the badges live while the palette is open, so
+                // a member added or removed with the global shortcuts (or a digit)
+                // shows up here too.
+                self.refreshGroupState()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer

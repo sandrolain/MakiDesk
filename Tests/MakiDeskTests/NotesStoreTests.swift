@@ -78,6 +78,24 @@ final class NotesStoreTests: XCTestCase {
         reopened.flush()
     }
 
+    func testNoteCountDoesNotStartASynchronousRestore() async throws {
+        let directory = try makeDirectory()
+        let writer = NotesStore(directory: directory)
+        let note = writer.newNote()
+        writer.updateText("Restored later", for: note.id)
+        writer.flush()
+
+        let store = NotesStore(directory: directory)
+        // Reading the count must not read the folder: that is what used to
+        // block the main thread when the reset sheet appeared.
+        XCTAssertEqual(store.noteCount, 0)
+
+        let restored = expectation(description: "metadata restored")
+        store.loadIfNeededAsync { restored.fulfill() }
+        await fulfillment(of: [restored], timeout: 3)
+        XCTAssertEqual(store.noteCount, 1)
+    }
+
     func testAsyncRestoreLoadsBodiesOnDemandAndSearchesUnloadedText() async throws {
         let directory = try makeDirectory()
         let writer = NotesStore(directory: directory)

@@ -889,9 +889,11 @@ final class NotesStore {
         }
     }
 
+    /// The number of restored notes. Reading it never touches the disk: the
+    /// metadata restore is started explicitly by the panel and by the reset
+    /// sheet, so a count read during rendering cannot block the main thread.
     var noteCount: Int {
-        loadIfNeeded()
-        return notes.count
+        notes.count
     }
 
     // MARK: - Persistence

@@ -77,7 +77,10 @@ final class WindowDrag {
         if pollTimer != nil, pollingInterval == interval { return }
         pollTimer?.invalidate()
         pollingInterval = interval
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.poll() }
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            // Added to RunLoop.main below: the poll reads UI state on main.
+            MainActor.assumeIsolated { self?.poll() }
+        }
         // `.common` keeps the timer alive across modal / tracking run-loop modes.
         RunLoop.main.add(timer, forMode: .common)
         pollTimer = timer
