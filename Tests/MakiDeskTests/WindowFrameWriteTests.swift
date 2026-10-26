@@ -4,6 +4,38 @@ import XCTest
 
 @MainActor
 final class WindowFrameWriteTests: XCTestCase {
+    func testOwnProcessDetection() {
+        XCTAssertTrue(WindowController.isOwnProcess(AXUIElementCreateApplication(getpid())))
+        // A pid that is not this process, whether or not it exists.
+        XCTAssertFalse(WindowController.isOwnProcess(AXUIElementCreateApplication(12345)))
+    }
+
+    func testOurOwnWindowsNeverReachTheFrameWorker() async {
+        let writer = RecordedFrameWriter()
+        let coordinator = AXFrameWriteCoordinator { frame, _, _, order in
+            writer.write(frame, order: order)
+        }
+        coordinator.enqueue(CGRect(x: 0, y: 0, width: 10, height: 10),
+                            element: AXUIElementCreateApplication(getpid()),
+                            identity: "own-window", order: .positionThenSize,
+                            completion: nil)
+        // Nothing may be written from the worker queue; this is the crash guard.
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(writer.frames.isEmpty)
+    }
+
+    func testOwnWindowFrameWriteCompletesOnTheMainActor() async {
+        let written = expectation(description: "frame write completed")
+        // An application element refuses position and size, but the point is the
+        // synchronous main-actor path: it must not dispatch to the AX queue.
+        WindowController.setFrameAsync(CGRect(x: 0, y: 0, width: 10, height: 10),
+                                       for: AXUIElementCreateApplication(getpid()),
+                                       identity: "own-window") {
+            written.fulfill()
+        }
+        await fulfillment(of: [written], timeout: 2)
+    }
+
     func testWritesAreSerializedAndIntermediateFramesAreCoalesced() async {
         let writer = RecordedFrameWriter()
         let coordinator = AXFrameWriteCoordinator { frame, _, _, order in

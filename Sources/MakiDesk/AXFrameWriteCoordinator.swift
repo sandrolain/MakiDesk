@@ -47,6 +47,13 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
     func enqueue(_ frame: CGRect, element: AXUIElement, identity: String,
                  order: WindowController.FrameWriteOrder,
                  completion: (@MainActor () -> Void)?) {
+        // Our own windows must never reach this queue: AppKit runs the write
+        // in-process and its text input invalidation asserts the main thread.
+        // `WindowController.setFrameAsync` keeps them on the main actor.
+        guard WindowController.isOwnProcess(element) == false else {
+            makiLog.error("frame write for our own window reached a worker queue identity=\(identity, privacy: .public)")
+            return
+        }
         lock.lock()
         let state = states[identity] ?? State(identity: identity)
         states[identity] = state

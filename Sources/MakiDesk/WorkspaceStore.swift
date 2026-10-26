@@ -1128,7 +1128,7 @@ final class WorkspaceStore {
                               key: key, generation: generation, attempt: 0,
                               retryOnMismatch: retryOnMismatch)
         }
-        if animate && effectiveAnimationsEnabled {
+        if animate && effectiveAnimationsEnabled && target.pid != Self.ownPID {
             animateFrame(to: adjusted, element: target.element, key: key,
                          generation: generation, completion: finish)
         } else {
@@ -1148,6 +1148,10 @@ final class WorkspaceStore {
             }
         }
     }
+
+    /// The only process whose windows must never be written from a worker
+    /// queue: AppKit services its own Accessibility writes on the main thread.
+    private static let ownPID = ProcessInfo.processInfo.processIdentifier
 
     /// Counts frame commands per window, so a re-try belonging to an older
     /// command never writes over a newer one (T27).
@@ -1184,41 +1188,60 @@ final class WorkspaceStore {
                              retryOnMismatch: Bool = true) {
         // A newer command owns this window now: this check is history.
         guard frameGenerations[key] == generation else { return }
+        if target.pid == Self.ownPID {
+            // Reading our own window's frame runs AppKit in-process too, so it
+            // stays on the main thread with the write it verifies.
+            applyVerification(WindowController.frame(of: target.element), wanted: wanted,
+                              target: target, reason: reason, key: key,
+                              generation: generation, attempt: attempt,
+                              retryOnMismatch: retryOnMismatch)
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let actual = WindowController.frame(of: target.element)
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.frameGenerations[key] == generation else { return }
-                if let actual {
-                    WindowIndex.shared.updateFrame(actual, for: target.element)
-                    WindowOutlineController.shared.refreshGeometry(for: target.element, frame: actual)
-                }
-                if let actual, self.withinTolerance(actual, wanted) {
-                    self.pendingFrameTargets[key] = nil
-                    makiLog.notice("frame verified window=\(key, privacy: .public) attempt=\(attempt, privacy: .public) actual=(\(Int(actual.minX)),\(Int(actual.minY)),\(Int(actual.width)),\(Int(actual.height)))")
-                    self.status = "\(target.appName) · \(reason)"
-                    self.showMiniMapIfEnabled(for: target, frame: wanted)
-                    return
-                }
-                guard retryOnMismatch, attempt < Self.frameRetries.count else {
-                    self.pendingFrameTargets[key] = nil
-                    let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
-                    let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
-                    let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
-                    makiLog.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
-                    self.status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
-                    HUDController.shared.show("\(target.appName) keeps its own size\nasked \(asked) · got \(got)",
-                                              symbol: "exclamationmark.triangle.fill")
-                    self.showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
-                    return
-                }
-                self.retryFrame(wanted, target: target, attempt: attempt, key: key) {
-                    let delay = Self.frameRetries[attempt]
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                        self?.verifyFrame(wanted, target: target, reason: reason,
-                                          key: key, generation: generation, attempt: attempt + 1,
-                                          retryOnMismatch: retryOnMismatch)
-                    }
-                }
+                guard let self else { return }
+                self.applyVerification(actual, wanted: wanted, target: target, reason: reason,
+                                       key: key, generation: generation, attempt: attempt,
+                                       retryOnMismatch: retryOnMismatch)
+            }
+        }
+    }
+
+    private func applyVerification(_ actual: CGRect?, wanted: CGRect,
+                                   target: WindowController.WindowInfo, reason: String,
+                                   key: String, generation: Int, attempt: Int,
+                                   retryOnMismatch: Bool) {
+        guard frameGenerations[key] == generation else { return }
+        if let actual {
+            WindowIndex.shared.updateFrame(actual, for: target.element)
+            WindowOutlineController.shared.refreshGeometry(for: target.element, frame: actual)
+        }
+        if let actual, withinTolerance(actual, wanted) {
+            pendingFrameTargets[key] = nil
+            makiLog.notice("frame verified window=\(key, privacy: .public) attempt=\(attempt, privacy: .public) actual=(\(Int(actual.minX)),\(Int(actual.minY)),\(Int(actual.width)),\(Int(actual.height)))")
+            status = "\(target.appName) · \(reason)"
+            showMiniMapIfEnabled(for: target, frame: wanted)
+            return
+        }
+        guard retryOnMismatch, attempt < Self.frameRetries.count else {
+            pendingFrameTargets[key] = nil
+            let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
+            let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
+            let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
+            makiLog.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
+            status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
+            HUDController.shared.show("\(target.appName) keeps its own size\nasked \(asked) · got \(got)",
+                                      symbol: "exclamationmark.triangle.fill")
+            showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
+            return
+        }
+        retryFrame(wanted, target: target, attempt: attempt, key: key) {
+            let delay = Self.frameRetries[attempt]
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.verifyFrame(wanted, target: target, reason: reason,
+                                  key: key, generation: generation, attempt: attempt + 1,
+                                  retryOnMismatch: retryOnMismatch)
             }
         }
     }
@@ -1255,6 +1278,10 @@ final class WorkspaceStore {
     func applyDraggedFrame(_ frame: CGRect, element: AXUIElement) {
         var pid: pid_t = 0
         AXUIElementGetPid(element, &pid)
+        // The tiling drag is for other applications. Our own panels are placed
+        // by their controllers, and an in-process AX write would have to run on
+        // the main thread (see `WindowController.isOwnProcess`).
+        guard pid != Self.ownPID else { return }
         let target = WindowController.WindowInfo(
             id: "", title: "", appName: appName(for: pid) ?? "Window",
             element: element, frame: frame, pid: pid

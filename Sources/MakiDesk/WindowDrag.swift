@@ -128,6 +128,10 @@ final class WindowDrag {
     @discardableResult
     private func begin(at point: CGPoint) -> Bool {
         guard let hit = WindowController.window(at: point) else { return false }
+        // Our own panels are placed by their controllers, and an in-process AX
+        // write for them belongs to the main thread: never start a tile drag on
+        // one (see `WindowController.isOwnProcess`).
+        guard hit.pid != ProcessInfo.processInfo.processIdentifier else { return false }
         active = true
         element = hit.element
         area = WindowController.axVisibleFrame(for: WindowController.screen(forAXFrame: hit.frame))

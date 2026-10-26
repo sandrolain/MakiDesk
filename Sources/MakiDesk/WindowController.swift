@@ -534,12 +534,34 @@ enum WindowController {
         }
     }
 
+    /// Whether an Accessibility element belongs to this process. Moving or
+    /// resizing one of our own windows means AppKit runs the write in-process,
+    /// and its Accessibility entry point invalidates the text input context on
+    /// the calling thread: that must be the main thread.
+    static func isOwnProcess(_ element: AXUIElement) -> Bool {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success else { return false }
+        return pid == ProcessInfo.processInfo.processIdentifier
+    }
+
     /// Queues frame writes away from the main actor. Pending intermediate
     /// frames for the same logical window are coalesced, and writes remain
     /// serialized until their position and size updates finish.
+    @MainActor
     static func setFrameAsync(_ frame: CGRect, for element: AXUIElement,
                               identity: String, order: FrameWriteOrder = .positionThenSize,
                               completion: (@MainActor () -> Void)? = nil) {
+        if isOwnProcess(element) {
+            // A worker queue cannot write our own window: AppKit services the
+            // write here and the text input manager asserts the main queue.
+            do {
+                try setFrame(frame, for: element)
+            } catch {
+                makiLog.error("frame write to our own window failed error=\(error.localizedDescription, privacy: .public)")
+            }
+            completion?()
+            return
+        }
         AXFrameWriteCoordinator.shared.enqueue(frame, element: element,
                                                identity: identity, order: order, completion: completion)
     }
