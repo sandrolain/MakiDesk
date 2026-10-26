@@ -177,6 +177,9 @@ final class NotesStore {
     var onChange: (() -> Void)?
 
     let directory: URL
+    /// Writes text to an external file. Injected so a test can hold a save in
+    /// flight and observe what a stale completion is allowed to publish.
+    private let writeExternal: @Sendable (String, URL, UInt) throws -> Void
     private var didLoad = false
     private var loadInFlight = false
     private var loadGeneration: UInt64 = 0
@@ -193,8 +196,12 @@ final class NotesStore {
     private var lastCleanClose = true
     private var externalStateLoads: [UUID: [@MainActor @Sendable () -> Void]] = [:]
 
-    init(directory: URL? = nil) {
+    init(directory: URL? = nil,
+         writeExternal: (@Sendable (String, URL, UInt) throws -> Void)? = nil) {
         self.directory = directory ?? Self.defaultDirectory
+        self.writeExternal = writeExternal ?? { text, url, encoding in
+            try Self.write(text: text, to: url, encoding: encoding)
+        }
     }
 
     static var defaultDirectory: URL {
@@ -601,7 +608,7 @@ final class NotesStore {
         // after this save would otherwise restore older text and make the
         // next save undo what was just written.
         try write(notes[index])
-        try Self.write(text: text, to: url, encoding: notes[index].externalEncoding)
+        try writeExternal(text, url, notes[index].externalEncoding)
         notes[index].externalBaseline = text
         notes[index].updatedAt = Date()
         scheduleSession()
@@ -641,6 +648,7 @@ final class NotesStore {
         let association = associationRevision(for: id)
         let associationRevision = association.snapshot()
         let draftDirectory = directory
+        let writer = self.writeExternal
         draftIOQueue.async { [weak self] in
             let result = Result<Void, Error> {
                 guard association.matches(associationRevision) else { throw CancellationError() }
@@ -656,7 +664,7 @@ final class NotesStore {
                 guard association.matches(associationRevision) else { throw CancellationError() }
                 try Self.writeDraft(snapshot, to: draftDirectory)
                 guard association.matches(associationRevision) else { throw CancellationError() }
-                try Self.write(text: snapshot.text, to: url, encoding: snapshot.externalEncoding)
+                try writer(snapshot.text, url, snapshot.externalEncoding)
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -684,7 +692,7 @@ final class NotesStore {
         guard let index = noteIndex(id: id) else { return }
         _ = associationRevision(for: id).advance()
         let text = notes[index].text
-        try Self.write(text: text, to: url, encoding: String.Encoding.utf8.rawValue)
+        try writeExternal(text, url, String.Encoding.utf8.rawValue)
         try write(notes[index])
         notes[index].externalURL = url.standardizedFileURL
         notes[index].externalBaseline = text
@@ -719,13 +727,14 @@ final class NotesStore {
         let association = associationRevision(for: id)
         let associationRevision = association.advance()
         let draftDirectory = directory
+        let writer = self.writeExternal
         draftIOQueue.async { [weak self] in
             let result = Result<Void, Error> {
                 guard association.matches(associationRevision) else { throw CancellationError() }
                 let accessed = standardizedURL.startAccessingSecurityScopedResource()
                 defer { if accessed { standardizedURL.stopAccessingSecurityScopedResource() } }
-                try Self.write(text: snapshot.text, to: standardizedURL,
-                               encoding: String.Encoding.utf8.rawValue)
+                try writer(snapshot.text, standardizedURL,
+                           String.Encoding.utf8.rawValue)
                 guard association.matches(associationRevision) else { throw CancellationError() }
                 try Self.writeDraft(snapshot, to: draftDirectory)
             }

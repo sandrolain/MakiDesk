@@ -27,6 +27,16 @@ enum AXEnhancedUIController {
         }
     }
 
+    /// Whether the attribute this call disabled must be put back afterwards.
+    /// Chromium keeps it off (restoring it triggers expensive web accessibility
+    /// work); assistive technology always wins, so anything we disabled is
+    /// restored.
+    static func shouldRestoreEnhancedUI(wasEnabled: Bool, isChromium: Bool,
+                                        assistiveTechnology: Bool) -> Bool {
+        guard wasEnabled else { return false }
+        return assistiveTechnology || !isChromium
+    }
+
     static func applicationDidTerminate(pid: pid_t) {
         processLocks.remove(pid: pid)
     }
@@ -62,8 +72,14 @@ enum AXEnhancedUIController {
             let disabled = wasEnabled && AXUIElementSetAttributeValue(
                 application, enhancedUIAttribute, kCFBooleanFalse
             ) == .success
-            let restore = builtInAssistiveTechnologyEnabled
-                || !isChromiumBundle(NSRunningApplication(processIdentifier: pid)?.bundleIdentifier)
+            // One Accessibility round-trip per frame write is accepted here:
+            // the flag can change while the app is open, and caching it would
+            // either skip a restore or restore an attribute we never disabled.
+            let restore = Self.shouldRestoreEnhancedUI(
+                wasEnabled: wasEnabled,
+                isChromium: isChromiumBundle(NSRunningApplication(processIdentifier: pid)?.bundleIdentifier),
+                assistiveTechnology: builtInAssistiveTechnologyEnabled
+            )
 
             defer {
                 if disabled && restore {

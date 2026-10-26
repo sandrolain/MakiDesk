@@ -156,6 +156,42 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: secondURL, encoding: .utf8), "draft")
     }
 
+    func testAStaleSaveAsCannotPublishAfterANewerOneStarts() async throws {
+        let directory = try makeDirectory()
+        let gate = SaveAsWriterGate()
+        let store = NotesStore(directory: directory.appendingPathComponent("Notes")) { text, url, _ in
+            try gate.write(text, to: url)
+        }
+        let note = store.newNote()
+        store.updateText("draft", for: note.id)
+        let firstURL = directory.appendingPathComponent("first.txt")
+        let secondURL = directory.appendingPathComponent("second.txt")
+
+        let firstDone = expectation(description: "stale save finished")
+        store.saveAsAsync(note.id, to: firstURL) { _ in firstDone.fulfill() }
+        let started = await gate.waitForFirstWrite()
+        XCTAssertEqual(started, .success)
+
+        // The second request advances the association while the first write is
+        // still blocked.
+        let secondDone = expectation(description: "second save finished")
+        store.saveAsAsync(note.id, to: secondURL) { _ in secondDone.fulfill() }
+
+        gate.releaseFirst.signal()
+        await fulfillment(of: [firstDone], timeout: 3)
+
+        // The first write reached the disk, but its completion belongs to an
+        // association that no longer exists: it must not claim the note.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstURL.path))
+        XCTAssertNil(store.note(id: note.id)?.externalURL)
+
+        gate.releaseSecond.signal()
+        await fulfillment(of: [secondDone], timeout: 3)
+        XCTAssertEqual(store.note(id: note.id)?.externalURL, secondURL.standardizedFileURL)
+        XCTAssertEqual(store.note(id: note.id)?.externalBaseline, "draft")
+        XCTAssertEqual(try String(contentsOf: secondURL, encoding: .utf8), "draft")
+    }
+
     func testTabsOrderAndSelectionAreRestored() throws {
         let dir = try makeDirectory()
         let store = NotesStore(directory: dir)
@@ -470,5 +506,40 @@ final class NotesStoreTests: XCTestCase {
                                 "\(language.label) has no compiled highlight query")
             }
         }
+    }
+}
+
+/// Holds the first two external writes in flight so a test can decide when each
+/// one finishes, and therefore observe what a stale completion publishes.
+private final class SaveAsWriterGate: @unchecked Sendable {
+    let firstStarted = DispatchSemaphore(value: 0)
+    let releaseFirst = DispatchSemaphore(value: 0)
+    let secondStarted = DispatchSemaphore(value: 0)
+    let releaseSecond = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var calls = 0
+
+    func waitForFirstWrite() async -> DispatchTimeoutResult {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: self.firstStarted.wait(timeout: .now() + 3))
+            }
+        }
+    }
+
+    func write(_ text: String, to url: URL) throws {
+        lock.lock()
+        calls += 1
+        let call = calls
+        lock.unlock()
+
+        if call == 1 {
+            firstStarted.signal()
+            releaseFirst.wait()
+        } else if call == 2 {
+            secondStarted.signal()
+            releaseSecond.wait()
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 }
