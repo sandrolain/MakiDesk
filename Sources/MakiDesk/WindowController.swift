@@ -3,6 +3,10 @@ import ApplicationServices
 import Carbon.HIToolbox
 
 enum WindowController {
+    enum FrameWriteOrder: Equatable, Sendable {
+        case positionThenSize
+        case sizeThenPosition
+    }
     enum ShortcutAction: Equatable {
         case leftHalf, rightHalf, topHalf, bottomHalf
         case topLeft, topRight, bottomLeft, bottomRight
@@ -524,8 +528,20 @@ enum WindowController {
     }
 
     static func setFrame(_ frame: CGRect, for element: AXUIElement) throws {
-        try setPosition(frame.origin, for: element)
-        try setSize(frame.size, for: element)
+        try AXEnhancedUIController.performFrameAdjustment(for: element) {
+            try setPosition(frame.origin, for: element)
+            try setSize(frame.size, for: element)
+        }
+    }
+
+    /// Queues frame writes away from the main actor. Pending intermediate
+    /// frames for the same logical window are coalesced, and writes remain
+    /// serialized until their position and size updates finish.
+    static func setFrameAsync(_ frame: CGRect, for element: AXUIElement,
+                              identity: String, order: FrameWriteOrder = .positionThenSize,
+                              completion: (@MainActor () -> Void)? = nil) {
+        AXFrameWriteCoordinator.shared.enqueue(frame, element: element,
+                                               identity: identity, order: order, completion: completion)
     }
 
     /// Sizes a window without touching its position. Kept apart from the move

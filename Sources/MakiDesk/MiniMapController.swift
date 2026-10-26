@@ -5,6 +5,7 @@ private let miniMapDisplayMargin: CGFloat = 8
 private let miniMapCanvasInset: CGFloat = 8
 private let miniMapCaptionHeight: CGFloat = 24
 
+@MainActor
 final class MiniMapController {
     static let shared = MiniMapController()
 
@@ -88,16 +89,18 @@ final class MiniMapController {
     private func startHoverTracking() {
         hoverTimer?.invalidate()
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] timer in
-            guard let self, let panel = self.panel, panel.isVisible else {
-                timer.invalidate()
-                self?.hoverTimer = nil
-                return
-            }
-            if panel.frame.contains(NSEvent.mouseLocation) {
-                self.hideWorkItem?.cancel()
-                panel.orderOut(nil)
-                timer.invalidate()
-                self.hoverTimer = nil
+            Task { @MainActor [weak self] in
+                guard let self, let panel = self.panel, panel.isVisible else {
+                    timer.invalidate()
+                    self?.hoverTimer = nil
+                    return
+                }
+                if panel.frame.contains(NSEvent.mouseLocation) {
+                    self.hideWorkItem?.cancel()
+                    panel.orderOut(nil)
+                    timer.invalidate()
+                    self.hoverTimer = nil
+                }
             }
         }
     }

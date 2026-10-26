@@ -5,6 +5,7 @@ import AppKit
 /// Who a layout command arranges, and what it says about the rest (T24), plus
 /// the identity a window keeps between reads (T25). Both are pure rules, so they
 /// are checked here rather than on a running desktop.
+@MainActor
 final class LayoutCandidatesTests: XCTestCase {
 
     // MARK: - Who is arranged

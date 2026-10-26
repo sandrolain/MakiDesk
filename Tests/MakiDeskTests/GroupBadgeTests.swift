@@ -5,6 +5,7 @@ import AppKit
 /// The group numbers the palette prints on the thumbnails: `groupSlots` turns
 /// the saved references back into "this live window is in groups 1 and 3", with
 /// each group matched on its own, so a window can appear in several at once.
+@MainActor
 final class GroupBadgeTests: XCTestCase {
     private var directory: URL!
     private var store: WorkspaceStore!

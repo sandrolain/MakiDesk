@@ -7,6 +7,7 @@ import SwiftUI
 /// no keystroke, and the mouse passes straight through — so the window on
 /// screen, and the app in use, keep everything they had. Modelled on
 /// `HUDController`'s non-activating panel.
+@MainActor
 final class PeekPanel {
     static let shared = PeekPanel()
 

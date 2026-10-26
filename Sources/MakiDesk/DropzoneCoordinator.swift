@@ -273,17 +273,25 @@ final class DropzoneCoordinator {
     private let runner: CommandRunning
     private let runRoot: URL
     private let fileManager: FileManager
+    private let preparePayload: (DropzoneConfig, DropzoneDrop, [DropItemInfo], URL) async throws -> DropzonePrepared
     private var runIdentifiers: [UUID: UUID] = [:]
+    private var runCancellations: [UUID: CommandCancellation] = [:]
     private var lastModification: Date?
 
     init(store: DropzoneStore = DropzoneStore(),
          runner: CommandRunning = CommandRunner.shared,
          runRoot: URL = DropzoneCoordinator.defaultRunRoot,
-         fileManager: FileManager = .default) {
+         fileManager: FileManager = .default,
+         preparePayload: @escaping (DropzoneConfig, DropzoneDrop, [DropItemInfo], URL) async throws -> DropzonePrepared = {
+             zone, drop, items, directory in
+             try await DropzonePreparer.prepare(zone: zone, drop: drop, items: items,
+                                                workDirectory: directory)
+         }) {
         self.store = store
         self.runner = runner
         self.runRoot = runRoot
         self.fileManager = fileManager
+        self.preparePayload = preparePayload
         self.snapshot = store.load()
         self.lastModification = store.modificationDate()
     }
@@ -321,21 +329,31 @@ final class DropzoneCoordinator {
         return DropzoneMatcher.match(items, zone: zone)
     }
 
-    /// Stores the confirmation so a changed command asks again, but the same
-    /// one runs without a second prompt.
-    func confirm(zoneID: UUID) {
-        guard let index = snapshot.zones.firstIndex(where: { $0.id == zoneID }) else { return }
+    /// Stores the confirmation only if the command still matches what was shown.
+    @discardableResult
+    func confirm(zoneID: UUID, approvedCommandHash: String) -> Bool {
+        snapshot = store.load()
+        lastModification = store.modificationDate()
+        guard snapshot.isRunnable else { return false }
+        guard let index = snapshot.zones.firstIndex(where: { $0.id == zoneID }) else { return false }
+        guard DropzoneConfig.confirmationHash(for: snapshot.zones[index].command) == approvedCommandHash else {
+            reload()
+            return false
+        }
         snapshot.zones[index].markConfirmed()
         if case let .failure(error) = store.save(snapshot.zones) {
             makiLog.error("dropzones: could not store the confirmation: \(error.localizedDescription, privacy: .public)")
+            return false
         } else {
             NotificationCenter.default.post(name: .makiDeskDropzonesChanged, object: nil)
         }
         lastModification = store.modificationDate()
+        return true
     }
 
     func cancel(zoneID: UUID) async {
         guard let runID = runIdentifiers[zoneID] else { return }
+        runCancellations[zoneID]?.cancel()
         await runner.cancel(runID)
     }
 
@@ -343,8 +361,7 @@ final class DropzoneCoordinator {
     /// ends; a rejected drop never starts a process.
     func run(zoneID: UUID,
              drop: DropzoneDrop,
-             confirmed: Bool = false,
-             confirmedOverwrite: Bool = false) async -> Outcome {
+             confirmedOverwritePath: String? = nil) async -> Outcome {
         // Read the file again at drop time: permissions and contents may have
         // changed since the last edit, and a trust decision must be current.
         snapshot = store.load()
@@ -359,31 +376,37 @@ final class DropzoneCoordinator {
         guard runningZones.contains(zoneID) == false else {
             return .failed("This dropzone is already running.")
         }
+        let runID = UUID()
+        let cancellation = CommandCancellation()
+        runningZones.insert(zoneID)
+        runIdentifiers[zoneID] = runID
+        runCancellations[zoneID] = cancellation
+        defer {
+            runningZones.remove(zoneID)
+            runIdentifiers[zoneID] = nil
+            runCancellations[zoneID] = nil
+        }
 
         let items = await DropzonePreparer.itemInfos(for: drop)
+        guard !cancellation.isCancelled else { return .failed("The dropzone run was cancelled.") }
         switch DropzoneMatcher.match(items, zone: zone) {
         case let .rejected(reason):
             return .rejected(reason)
         case let .accepted(accepted):
-            guard zone.requiresConfirmation == false || confirmed else {
+            guard zone.requiresConfirmation == false else {
                 return .needsConfirmation(zone)
             }
 
-            let runID = UUID()
             let workDirectory = runRoot.appendingPathComponent(runID.uuidString, isDirectory: true)
-            runningZones.insert(zoneID)
-            runIdentifiers[zoneID] = runID
-            defer {
-                runningZones.remove(zoneID)
-                runIdentifiers[zoneID] = nil
-            }
 
             do {
-                let prepared = try await DropzonePreparer.prepare(zone: zone, drop: drop,
-                                                                  items: accepted,
-                                                                  workDirectory: workDirectory)
+                let prepared = try await preparePayload(zone, drop, accepted, workDirectory)
+                guard !cancellation.isCancelled else {
+                    try? fileManager.removeItem(at: workDirectory)
+                    return .failed("The dropzone run was cancelled.")
+                }
                 if let expected = prepared.expectedOutput,
-                   confirmedOverwrite == false,
+                   confirmedOverwritePath != expected,
                    fileManager.fileExists(atPath: expected) {
                     // Nothing ran: discard the prepared payload and ask again
                     // with `confirmedOverwrite` when the user accepts.
@@ -391,7 +414,8 @@ final class DropzoneCoordinator {
                     return .needsOverwriteConfirmation(zone, path: expected)
                 }
                 let result = try await runner.run(prepared.command, id: runID,
-                                                  includeStdout: zone.feedback.showOutput == .stdout)
+                                                  includeStdout: zone.feedback.showOutput == .stdout,
+                                                  cancellation: cancellation)
                 if shouldKeep(prepared, zone: zone) == false {
                     try? fileManager.removeItem(at: workDirectory)
                 }

@@ -4,6 +4,7 @@ import AppKit
 /// text field, so this is a small modal prompt: no extra window to keep alive and
 /// no state to outlive the call. An empty field clears the custom name, which is
 /// the only way back to "Group N".
+@MainActor
 enum GroupRenamePrompt {
     static func present(slot: Int, store: WorkspaceStore) {
         let alert = NSAlert()

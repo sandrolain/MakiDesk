@@ -32,6 +32,7 @@ enum WindowState: Equatable {
 }
 
 @Observable
+@MainActor
 final class WorkspaceStore {
     var windows: [WorkspaceWindow] = []
     var selectedID: UUID?
@@ -181,6 +182,7 @@ final class WorkspaceStore {
     @ObservationIgnored private var arrangementDirty = false
     @ObservationIgnored private var arrangementFlushTimer: Timer?
     @ObservationIgnored private var terminateObserver: NSObjectProtocol?
+    @ObservationIgnored private var enhancedUIActivationObserver: NSObjectProtocol?
 
     /// What is on screen, in use, as the one record the scene commands work
     /// from: leaving it, undoing back to it, sending one more window to the tray.
@@ -222,6 +224,7 @@ final class WorkspaceStore {
         loadGroups()
         WindowIndex.shared.start()
         WindowOutlineController.shared.start()
+        startEnhancedUIHandling()
         WindowIndex.shared.onChange = { [weak self] in
             self?.syncModel()
             WindowOutlineController.shared.refresh()
@@ -247,6 +250,7 @@ final class WorkspaceStore {
         WindowIndex.shared.onApplicationTerminated = { [weak self] pid in
             self?.iconCache[pid] = nil
             self?.recentFocusedWindowIDs.removeAll { $0.hasPrefix("\(pid)-") }
+            AXEnhancedUIController.applicationDidTerminate(pid: pid)
         }
         startGlobalShortcuts()
         checkTrust()
@@ -274,6 +278,42 @@ final class WorkspaceStore {
         ) { [weak self] _ in
             self?.hidePeek()
         })
+    }
+
+    private func startEnhancedUIHandling() {
+        guard enhancedUIActivationObserver == nil else { return }
+        enhancedUIActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
+                return
+            }
+            let pid = application.processIdentifier
+            let bundleIdentifier = application.bundleIdentifier
+            Task { @MainActor [weak self] in
+                self?.scheduleEnhancedUIDisable(pid: pid, bundleIdentifier: bundleIdentifier)
+            }
+        }
+        if let application = NSWorkspace.shared.frontmostApplication {
+            scheduleEnhancedUIDisable(pid: application.processIdentifier,
+                                      bundleIdentifier: application.bundleIdentifier)
+        }
+    }
+
+    private func scheduleEnhancedUIDisable(pid: pid_t, bundleIdentifier: String?) {
+        guard AXEnhancedUIController.isChromiumBundle(bundleIdentifier),
+              !NSWorkspace.shared.isVoiceOverEnabled,
+              !NSWorkspace.shared.isSwitchControlEnabled else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
+            Task { @MainActor [weak self] in
+                guard self != nil, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+                DispatchQueue.global(qos: .utility).async {
+                    AXEnhancedUIController.disableForChromiumApplication(pid: pid)
+                }
+            }
+        }
     }
 
     private func scheduleTrustPoll() {
@@ -802,11 +842,15 @@ final class WorkspaceStore {
         // invalidate and rediscover every window here: that global AX scan can
         // block the hotkey for seconds. `applyFrame` updates the local model for
         // this window, and WindowIndex notifications keep other changes fresh.
-        let screen = WindowController.screen(forAXFrame: target.frame)
+        // AX may still expose the previous frame while an earlier keyboard
+        // command is queued. Continue the ladder from the latest requested
+        // frame so rapid key presses do not repeat a step.
+        let tilingTarget = targetWithPendingFrame(target)
+        let screen = WindowController.screen(forAXFrame: tilingTarget.frame)
         let gapHalf = gap / 2
         let visible = WindowController.axVisibleFrame(for: screen)
         let area = visible
-        let current = target.frame.insetBy(dx: -gapHalf, dy: -gapHalf)
+        let current = tilingTarget.frame.insetBy(dx: -gapHalf, dy: -gapHalf)
 
         if let outcome = ladderStep(action, area: area, current: current) {
             // Arrow commands are discrete steps. Apply the final frame once,
@@ -819,12 +863,12 @@ final class WorkspaceStore {
             case .minimize:
                 setMinimized(true, target: target)
             case .screenBoundary(let direction, let fallback):
-                if let frame = frameOnAdjacentScreen(from: target.frame, direction: direction) {
+                if let frame = frameOnAdjacentScreen(from: tilingTarget.frame, direction: direction) {
                     // Keep the frame on one display throughout the move. An
                     // interpolated frame straddles monitors, so the next arrow
                     // event can classify it against the wrong screen.
                     applyFrame(frame, to: target, reason: "moved to adjacent display",
-                               animate: false, retryOnMismatch: false)
+                               animate: false)
                 } else if let fallback {
                     applyFrame(fallback.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
                                reason: label(for: action), animate: false, retryOnMismatch: false)
@@ -880,8 +924,9 @@ final class WorkspaceStore {
         }
     }
 
-    /// Finds the nearest display in the requested direction, using the narrow
-    /// edge band there and preserving the window's size on the other axis.
+    /// Finds the nearest display in the requested direction and preserves the
+    /// current size when it fits, so a constrained app can move without first
+    /// accepting a resize.
     private func frameOnAdjacentScreen(from frame: CGRect, direction: ScreenDirection) -> CGRect? {
         let screens = NSScreen.screens.map { (screen: $0, frame: WindowController.axVisibleFrame(for: $0)) }
         guard let source = screens.max(by: { lhs, rhs in
@@ -926,13 +971,9 @@ final class WorkspaceStore {
                 lhs.1 == rhs.1 ? lhs.2 < rhs.2 : lhs.1 < rhs.1
             })?.0 else { return nil }
 
-        let edgeFraction = TilingEngine.ladder[0].fraction
-        let width = axisIsHorizontal(direction)
-            ? min(destination.width * edgeFraction, destination.width)
-            : min(frame.width, destination.width)
-        let height = axisIsHorizontal(direction)
-            ? min(frame.height, destination.height)
-            : min(destination.height * edgeFraction, destination.height)
+        let size = TilingEngine.sizeFitting(frame.size, in: destination)
+        let width = size.width
+        let height = size.height
         var x = min(max(frame.minX, destination.minX), destination.maxX - width)
         var y = min(max(frame.minY, destination.minY), destination.maxY - height)
         switch direction {
@@ -942,10 +983,6 @@ final class WorkspaceStore {
         case .down: y = destination.minY
         }
         return CGRect(x: x, y: y, width: width, height: height)
-    }
-
-    private func axisIsHorizontal(_ direction: ScreenDirection) -> Bool {
-        direction == .left || direction == .right
     }
 
     private func minHeightRect(area: CGRect, orthogonal: ClosedRange<CGFloat>) -> CGRect {
@@ -1081,26 +1118,30 @@ final class WorkspaceStore {
         let key = animationKey(for: target)
         let generation = (frameGenerations[key] ?? 0) + 1
         frameGenerations[key] = generation
+        pendingFrameTargets[key] = adjusted
+        makiLog.notice("frame command window=\(key, privacy: .public) app=\(target.appName, privacy: .public) reason=\(reason, privacy: .public) requested=(\(Int(adjusted.minX)),\(Int(adjusted.minY)),\(Int(adjusted.width)),\(Int(adjusted.height))) generation=\(generation, privacy: .public)")
         let finish: () -> Void = { [weak self] in
             self?.verifyFrame(adjusted, target: target, reason: reason,
                               key: key, generation: generation, attempt: 0,
                               retryOnMismatch: retryOnMismatch)
         }
-        if animate {
-            animateFrame(to: adjusted, element: target.element, key: key, completion: finish)
+        if animate && effectiveAnimationsEnabled {
+            animateFrame(to: adjusted, element: target.element, key: key,
+                         generation: generation, completion: finish)
         } else {
             frameTimers[key]?.invalidate()
             frameTimers[key] = nil
             frameLastWritten[key] = nil
-            try? WindowController.setFrame(adjusted, for: target.element)
-            WindowOutlineController.shared.refreshGeometry(for: target.element, frame: adjusted)
-            if retryOnMismatch {
-                finish()
-            } else {
-                // Give AX-backed apps a moment to publish the write before
-                // reading their accepted frame. Arrow steps intentionally do
-                // not retry a mismatch, which can fight an app's constraints.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: finish)
+            WindowController.setFrameAsync(adjusted, for: target.element, identity: key) {
+                WindowOutlineController.shared.refreshGeometry(for: target.element, frame: adjusted)
+                if retryOnMismatch {
+                    finish()
+                } else {
+                    // Give AX-backed apps a moment to publish the write before
+                    // reading their accepted frame. Arrow steps intentionally do
+                    // not retry a mismatch, which can fight an app's constraints.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: finish)
+                }
             }
         }
     }
@@ -1108,6 +1149,18 @@ final class WorkspaceStore {
     /// Counts frame commands per window, so a re-try belonging to an older
     /// command never writes over a newer one (T27).
     @ObservationIgnored private var frameGenerations: [String: Int] = [:]
+    @ObservationIgnored private var pendingFrameTargets: [String: CGRect] = [:]
+
+    private func targetWithPendingFrame(_ target: WindowController.WindowInfo) -> WindowController.WindowInfo {
+        var updated = target
+        updated.frame = Self.tilingFrame(actual: target.frame,
+                                         pending: pendingFrameTargets[animationKey(for: target)])
+        return updated
+    }
+
+    static func tilingFrame(actual: CGRect, pending: CGRect?) -> CGRect {
+        pending ?? actual
+    }
 
     /// How long to wait before each re-try of a frame that did not stick (T27),
     /// so a command settles in about half a second and never makes a window
@@ -1128,43 +1181,56 @@ final class WorkspaceStore {
                              retryOnMismatch: Bool = true) {
         // A newer command owns this window now: this check is history.
         guard frameGenerations[key] == generation else { return }
-        let actual = WindowController.frame(of: target.element)
-        if let actual {
-            WindowIndex.shared.updateFrame(actual, for: target.element)
-            WindowOutlineController.shared.refreshGeometry(for: target.element, frame: actual)
-        }
-        if let actual, withinTolerance(actual, wanted) {
-            status = "\(target.appName) · \(reason)"
-            showMiniMapIfEnabled(for: target, frame: wanted)
-            return
-        }
-        guard retryOnMismatch, attempt < Self.frameRetries.count else {
-            let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
-            let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
-            status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
-            HUDController.shared.show("\(target.appName) keeps its own size\nasked \(asked) · got \(got)",
-                                      symbol: "exclamationmark.triangle.fill")
-            showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
-            return
-        }
-        retryFrame(wanted, target: target, attempt: attempt)
-        let delay = Self.frameRetries[attempt]
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.verifyFrame(wanted, target: target, reason: reason,
-                              key: key, generation: generation, attempt: attempt + 1,
-                              retryOnMismatch: retryOnMismatch)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let actual = WindowController.frame(of: target.element)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.frameGenerations[key] == generation else { return }
+                if let actual {
+                    WindowIndex.shared.updateFrame(actual, for: target.element)
+                    WindowOutlineController.shared.refreshGeometry(for: target.element, frame: actual)
+                }
+                if let actual, self.withinTolerance(actual, wanted) {
+                    self.pendingFrameTargets[key] = nil
+                    makiLog.notice("frame verified window=\(key, privacy: .public) attempt=\(attempt, privacy: .public) actual=(\(Int(actual.minX)),\(Int(actual.minY)),\(Int(actual.width)),\(Int(actual.height)))")
+                    self.status = "\(target.appName) · \(reason)"
+                    self.showMiniMapIfEnabled(for: target, frame: wanted)
+                    return
+                }
+                guard retryOnMismatch, attempt < Self.frameRetries.count else {
+                    self.pendingFrameTargets[key] = nil
+                    let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
+                    let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
+                    let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
+                    makiLog.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
+                    self.status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
+                    HUDController.shared.show("\(target.appName) keeps its own size\nasked \(asked) · got \(got)",
+                                              symbol: "exclamationmark.triangle.fill")
+                    self.showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
+                    return
+                }
+                self.retryFrame(wanted, target: target, attempt: attempt, key: key) {
+                    let delay = Self.frameRetries[attempt]
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                        self?.verifyFrame(wanted, target: target, reason: reason,
+                                          key: key, generation: generation, attempt: attempt + 1,
+                                          retryOnMismatch: retryOnMismatch)
+                    }
+                }
+            }
         }
     }
 
     /// The first re-try writes the size before the position: an app that refuses
     /// a size while it is being moved accepts it on its own; the second writes
     /// whole points (T27).
-    private func retryFrame(_ wanted: CGRect, target: WindowController.WindowInfo, attempt: Int) {
+    private func retryFrame(_ wanted: CGRect, target: WindowController.WindowInfo, attempt: Int,
+                            key: String, completion: @escaping @MainActor () -> Void) {
         if attempt == 0 {
-            try? WindowController.setSize(wanted.size, for: target.element)
-            try? WindowController.setPosition(wanted.origin, for: target.element)
+            WindowController.setFrameAsync(wanted, for: target.element, identity: key,
+                                           order: .sizeThenPosition, completion: completion)
         } else {
-            try? WindowController.setFrame(wanted.integral, for: target.element)
+            WindowController.setFrameAsync(wanted.integral, for: target.element,
+                                           identity: key, completion: completion)
         }
     }
 
@@ -1200,24 +1266,35 @@ final class WorkspaceStore {
     /// Smoothly animates a window's frame (position + size). Each window has its
     /// own timer, so overlapping animations do not cancel each other, and the
     /// completion is always delivered (A3).
-    private func animateFrame(to target: CGRect, element: AXUIElement, key: String, completion: (() -> Void)? = nil) {
+    private func animateFrame(to target: CGRect, element: AXUIElement, key: String,
+                              generation: Int, completion: (@MainActor () -> Void)? = nil) {
         frameTimers[key]?.invalidate()
         frameTimers[key] = nil
         frameLastWritten[key] = nil
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            try? WindowController.setFrame(target, for: element)
-            completion?()
-            return
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let start = reduceMotion ? nil : WindowController.frame(of: element)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.frameGenerations[key] == generation else { return }
+                guard !reduceMotion, let start else {
+                    WindowController.setFrameAsync(target, for: element, identity: key,
+                                                   completion: { completion?() })
+                    return
+                }
+                self.startFrameAnimation(from: start, to: target, element: element,
+                                         key: key, completion: completion)
+            }
         }
-        guard let start = WindowController.frame(of: element) else {
-            try? WindowController.setFrame(target, for: element)
-            completion?()
-            return
-        }
+    }
+
+    private func startFrameAnimation(from start: CGRect, to target: CGRect,
+                                     element: AXUIElement, key: String,
+                                     completion: (@MainActor () -> Void)?) {
         let startTime = ProcessInfo.processInfo.systemUptime
         let duration = 0.18
         frameLastWritten[key] = start.integral
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
             let t = min(max((ProcessInfo.processInfo.systemUptime - startTime) / duration, 0), 1)
             let eased = 1 - pow(1 - t, 3)
             let frame = CGRect(
@@ -1226,31 +1303,16 @@ final class WorkspaceStore {
                 width: start.width + (target.width - start.width) * eased,
                 height: start.height + (target.height - start.height) * eased
             ).integral
-            let writeStarted = ProcessInfo.processInfo.systemUptime
-            let previous = self?.frameLastWritten[key] ?? start.integral
-            do {
-                if frame.origin != previous.origin { try WindowController.setPosition(frame.origin, for: element) }
-                if frame.size != previous.size { try WindowController.setSize(frame.size, for: element) }
-                self?.frameLastWritten[key] = frame
-            } catch {
-                // Verification below reports constraints; do not queue more
-                // intermediate frames for an app that is refusing writes.
+            let previous = self.frameLastWritten[key] ?? start.integral
+            if t >= 1 {
                 timer.invalidate()
-                self?.frameTimers[key] = nil
-                self?.frameLastWritten[key] = nil
-                completion?()
-                return
-            }
-            let exceededBudget = ProcessInfo.processInfo.systemUptime - writeStarted > 1.0 / 30.0
-            if t >= 1 || exceededBudget {
-                timer.invalidate()
-                self?.frameTimers[key] = nil
-                self?.frameLastWritten[key] = nil
-                if exceededBudget {
-                    if target.origin != frame.origin { try? WindowController.setPosition(target.origin, for: element) }
-                    if target.size != frame.size { try? WindowController.setSize(target.size, for: element) }
-                }
-                completion?()
+                self.frameTimers[key] = nil
+                self.frameLastWritten[key] = nil
+                WindowController.setFrameAsync(target, for: element, identity: key,
+                                               completion: { completion?() })
+            } else if frame.origin != previous.origin || frame.size != previous.size {
+                self.frameLastWritten[key] = frame
+                WindowController.setFrameAsync(frame, for: element, identity: key)
             }
         }
         frameTimers[key] = timer

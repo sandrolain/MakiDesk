@@ -64,6 +64,7 @@ final class NotesStoreTests: XCTestCase {
         let loaded = expectation(description: "drafts restored")
         reopened.loadIfNeededAsync { loaded.fulfill() }
         await fulfillment(of: [loaded], timeout: 3)
+        XCTAssertTrue(reopened.notes.allSatisfy { !$0.textLoaded })
         XCTAssertTrue(reopened.notes.allSatisfy { $0.externalBaseline == nil })
         reopened.updateText("edited after restore", for: first.id)
         let saved = expectation(description: "save with deferred baseline")
@@ -75,6 +76,66 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: firstURL, encoding: .utf8), "edited after restore")
         XCTAssertNil(reopened.note(id: second.id)?.externalBaseline)
         reopened.flush()
+    }
+
+    func testAsyncRestoreLoadsBodiesOnDemandAndSearchesUnloadedText() async throws {
+        let directory = try makeDirectory()
+        let writer = NotesStore(directory: directory)
+        let first = writer.newNote()
+        writer.updateText("Lazy title\nneedle in body", for: first.id)
+        let second = writer.newNote()
+        writer.updateText("Another note\nother content", for: second.id)
+        writer.flush()
+
+        let store = NotesStore(directory: directory)
+        let restored = expectation(description: "metadata restored")
+        store.loadIfNeededAsync { restored.fulfill() }
+        await fulfillment(of: [restored], timeout: 3)
+        let unloaded = try XCTUnwrap(store.note(id: first.id))
+        XCTAssertFalse(unloaded.textLoaded)
+        XCTAssertEqual(unloaded.text, "")
+        XCTAssertEqual(unloaded.title, "Lazy title")
+
+        let searchDone = expectation(description: "unloaded body search")
+        var matchIDs: [UUID] = []
+        store.searchNoteIDsAsync("needle") { ids in
+            matchIDs = ids
+            searchDone.fulfill()
+        }
+        await fulfillment(of: [searchDone], timeout: 3)
+        XCTAssertEqual(matchIDs, [first.id])
+        XCTAssertFalse(try XCTUnwrap(store.note(id: first.id)).textLoaded)
+
+        let bodyLoaded = expectation(description: "selected body loaded")
+        store.loadTextAsync(for: first.id) { bodyLoaded.fulfill() }
+        await fulfillment(of: [bodyLoaded], timeout: 3)
+        let loadedNote = try XCTUnwrap(store.note(id: first.id))
+        XCTAssertTrue(loadedNote.textLoaded)
+        XCTAssertEqual(loadedNote.text, "Lazy title\nneedle in body")
+    }
+
+    func testOnlyTheLatestAsyncSaveAsUpdatesTheExternalAssociation() async throws {
+        let directory = try makeDirectory()
+        let store = NotesStore(directory: directory.appendingPathComponent("Notes"))
+        let note = store.newNote()
+        store.updateText("draft", for: note.id)
+        let firstURL = directory.appendingPathComponent("first.txt")
+        let secondURL = directory.appendingPathComponent("second.txt")
+
+        let firstFinished = expectation(description: "first Save As finished")
+        let secondFinished = expectation(description: "second Save As finished")
+        store.saveAsAsync(note.id, to: firstURL) { result in
+            if case let .failure(error) = result { XCTFail(error.localizedDescription) }
+            firstFinished.fulfill()
+        }
+        store.saveAsAsync(note.id, to: secondURL) { result in
+            if case let .failure(error) = result { XCTFail(error.localizedDescription) }
+            secondFinished.fulfill()
+        }
+        await fulfillment(of: [firstFinished, secondFinished], timeout: 3)
+
+        XCTAssertEqual(store.note(id: note.id)?.externalURL, secondURL.standardizedFileURL)
+        XCTAssertEqual(try String(contentsOf: secondURL, encoding: .utf8), "draft")
     }
 
     func testTabsOrderAndSelectionAreRestored() throws {
@@ -198,14 +259,16 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.filtered("  ").count, 2)
     }
 
-    func testFactoryResetDeletesEveryNote() throws {
+    func testFactoryResetDeletesEveryNote() async throws {
         let dir = try makeDirectory()
         let store = NotesStore(directory: dir)
         let note = store.newNote()
         store.updateText("to be deleted", for: note.id)
         store.flush()
 
-        store.deleteAllNotes()
+        let deleted = expectation(description: "reset purge finished")
+        store.deleteAllNotes { deleted.fulfill() }
+        await fulfillment(of: [deleted], timeout: 3)
 
         XCTAssertEqual(store.noteCount, 0)
         XCTAssertTrue(store.openTabs.isEmpty)
@@ -229,7 +292,7 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.note(id: shebang.id)?.title, "#!/bin/sh")
     }
 
-    func testFactoryResetAlsoSweepsNotesThatWereNeverLoaded() throws {
+    func testFactoryResetAlsoSweepsNotesThatWereNeverLoaded() async throws {
         let dir = try makeDirectory()
         let writer = NotesStore(directory: dir)
         let note = writer.newNote()
@@ -239,10 +302,73 @@ final class NotesStoreTests: XCTestCase {
 
         // A second store that never loaded must still clear the folder.
         let cleaner = NotesStore(directory: dir)
-        cleaner.deleteAllNotes()
+        let deleted = expectation(description: "unloaded reset purge finished")
+        cleaner.deleteAllNotes { deleted.fulfill() }
+        await fulfillment(of: [deleted], timeout: 3)
 
         XCTAssertEqual(cleaner.noteCount, 0)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
+    func testFactoryResetInvalidatesAnInFlightAsyncRestore() async throws {
+        let dir = try makeDirectory()
+        let writer = NotesStore(directory: dir)
+        let note = writer.newNote()
+        writer.updateText("restore must not resurrect this", for: note.id)
+        writer.flush()
+
+        let store = NotesStore(directory: dir)
+        let restoreReturned = expectation(description: "pending restore caller released by reset")
+        store.loadIfNeededAsync { restoreReturned.fulfill() }
+        let purgeFinished = expectation(description: "reset purge finished")
+        store.deleteAllNotes { purgeFinished.fulfill() }
+
+        await fulfillment(of: [restoreReturned, purgeFinished], timeout: 3)
+        XCTAssertEqual(store.noteCount, 0)
+        XCTAssertTrue(store.openTabs.isEmpty)
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
+    func testAsyncFlushReportsAndRetainsFailedPersistence() async throws {
+        let base = try makeDirectory()
+        let invalidDirectory = base.appendingPathComponent("not-a-directory")
+        try Data("file".utf8).write(to: invalidDirectory)
+        let store = NotesStore(directory: invalidDirectory)
+        let note = store.newNote()
+        store.updateText("keep this draft", for: note.id)
+
+        let flushed = expectation(description: "failed flush reported")
+        store.flushAsync { flushed.fulfill() }
+        await fulfillment(of: [flushed], timeout: 3)
+
+        XCTAssertNotNil(store.persistenceError)
+        XCTAssertEqual(store.note(id: note.id)?.text, "keep this draft")
+    }
+
+    func testFailedPersistenceRetriesAutomaticallyAfterDirectoryRecovers() async throws {
+        let base = try makeDirectory()
+        let invalidDirectory = base.appendingPathComponent("not-a-directory")
+        try Data("file".utf8).write(to: invalidDirectory)
+        let store = NotesStore(directory: invalidDirectory)
+        let note = store.newNote()
+        store.updateText("retry this draft", for: note.id)
+
+        let failedFlush = expectation(description: "initial flush fails")
+        let recovered = expectation(description: "automatic retry succeeds")
+        store.onChange = {
+            if store.persistenceError == nil,
+               FileManager.default.fileExists(atPath: invalidDirectory.appendingPathComponent("note-\(note.id.uuidString.lowercased()).txt").path) {
+                recovered.fulfill()
+            }
+        }
+        store.flushAsync { failedFlush.fulfill() }
+        await fulfillment(of: [failedFlush], timeout: 3)
+        XCTAssertNotNil(store.persistenceError)
+
+        try FileManager.default.removeItem(at: invalidDirectory)
+        try FileManager.default.createDirectory(at: invalidDirectory, withIntermediateDirectories: true)
+        await fulfillment(of: [recovered], timeout: 5)
+        XCTAssertNil(store.persistenceError)
     }
 
     func testQuittingWithoutEverOpeningNotesLeavesNoFolder() throws {

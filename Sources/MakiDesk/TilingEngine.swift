@@ -106,6 +106,12 @@ enum TilingEngine {
                height: relative.height * area.height)
     }
 
+    /// Keeps a window's size when moving it between displays, shrinking only
+    /// when the destination cannot contain the current frame.
+    static func sizeFitting(_ size: CGSize, in bounds: CGRect) -> CGSize {
+        CGSize(width: min(size.width, bounds.width), height: min(size.height, bounds.height))
+    }
+
     /// The half / golden band nearest to a normalised position `t` (0 = start
     /// edge, 1 = end edge) on one axis: the edge you are closest to, and the
     /// closest of `snapFractions`. The further from an edge, the wider the band,

@@ -12,6 +12,28 @@ enum NotesStoreError: LocalizedError {
     }
 }
 
+/// Revision for a note's external-file association. Workers can check whether a
+/// queued save is still current without reading MainActor-owned store state.
+private final class ExternalAssociationRevision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+
+    func advance() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        value &+= 1
+        return value
+    }
+
+    func snapshot() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func matches(_ revision: UInt64) -> Bool { snapshot() == revision }
+}
+
 /// One note: a buffer that lives on disk as a draft even when it has never
 /// been saved anywhere (`Application Support/MakiDesk/Note/note-<id>.txt`).
 ///
@@ -20,6 +42,9 @@ enum NotesStoreError: LocalizedError {
 struct Note: Identifiable, Equatable, Sendable {
     let id: UUID
     var text: String
+    var textLoaded = true
+    var textLoadFailed = false
+    var titlePreview: String?
     /// The file the note was opened from or saved to, when there is one.
     var externalURL: URL?
     /// Text of the external file as it was when we read or last saved it.
@@ -36,7 +61,7 @@ struct Note: Identifiable, Equatable, Sendable {
 
     /// Whether the draft differs from the external file.
     var isDirty: Bool {
-        guard externalURL != nil else { return false }
+        guard textLoaded, externalURL != nil else { return false }
         return text != externalBaseline
     }
 
@@ -46,6 +71,7 @@ struct Note: Identifiable, Equatable, Sendable {
         if let name = externalURL?.lastPathComponent, name.isEmpty == false {
             return name
         }
+        if !textLoaded { return titlePreview ?? "Untitled" }
         var title = "Untitled"
         text.enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byLines) { line, _, _, stop in
             var trimmed = (line ?? "").trimmingCharacters(in: .whitespaces)
@@ -123,6 +149,7 @@ final class NotesStore {
     private(set) var notes: [Note] = []
     private(set) var openTabs: [UUID] = []
     private(set) var selectedTab: UUID?
+    private(set) var persistenceError: String?
 
     /// Frame of the notes panel, remembered across launches. While the panel
     /// is anchored to a screen edge this keeps the floating frame to return to.
@@ -137,14 +164,19 @@ final class NotesStore {
     let directory: URL
     private var didLoad = false
     private var loadInFlight = false
-    private var loadCompletions: [() -> Void] = []
+    private var loadGeneration: UInt64 = 0
+    private var loadCompletions: [@MainActor @Sendable () -> Void] = []
+    private var textLoadCompletions: [UUID: [@MainActor @Sendable () -> Void]] = [:]
     private var pendingDrafts: Set<UUID> = []
     private var draftWork: [UUID: DispatchWorkItem] = [:]
     private var draftRevision: [UUID: UInt64] = [:]
+    private var externalAssociationRevisions: [UUID: ExternalAssociationRevision] = [:]
     private let draftIOQueue = DispatchQueue(label: "com.makidesk.notes-draft-io", qos: .utility)
     private var sessionWork: DispatchWorkItem?
+    private var persistenceRetryWork: DispatchWorkItem?
+    private var persistenceRetryAttempt = 0
     private var lastCleanClose = true
-    private var externalStateLoads: [UUID: [() -> Void]] = [:]
+    private var externalStateLoads: [UUID: [@MainActor @Sendable () -> Void]] = [:]
 
     init(directory: URL? = nil) {
         self.directory = directory ?? Self.defaultDirectory
@@ -166,7 +198,7 @@ final class NotesStore {
 
     /// Starts restoration without blocking the panel's first presentation.
     /// Concurrent callers join the same load and are called back on MainActor.
-    func loadIfNeededAsync(completion: @escaping () -> Void) {
+    func loadIfNeededAsync(completion: @escaping @MainActor @Sendable () -> Void) {
         if didLoad {
             completion()
             return
@@ -174,11 +206,12 @@ final class NotesStore {
         loadCompletions.append(completion)
         guard !loadInFlight else { return }
         loadInFlight = true
+        let generation = loadGeneration
         let directory = self.directory
         draftIOQueue.async { [weak self] in
-            let snapshot = Self.readSnapshot(from: directory, readExternalBaselines: false)
+            let snapshot = Self.readSnapshot(from: directory, readBodies: false, readExternalBaselines: false)
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.loadGeneration == generation else { return }
                 self.apply(snapshot)
                 self.didLoad = true
                 self.loadInFlight = false
@@ -199,7 +232,8 @@ final class NotesStore {
         let session: Session?
     }
 
-    nonisolated private static func readSnapshot(from directory: URL, readExternalBaselines: Bool = true) -> LoadedSnapshot {
+    nonisolated private static func readSnapshot(from directory: URL, readBodies: Bool = true,
+                                                 readExternalBaselines: Bool = true) -> LoadedSnapshot {
         let fm = FileManager.default
         try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let session = readSession(at: directory)
@@ -211,13 +245,21 @@ final class NotesStore {
         for file in files where file.lastPathComponent.hasPrefix("note-") && file.pathExtension == "txt" {
             let name = file.deletingPathExtension().lastPathComponent
             let raw = String(name.dropFirst("note-".count))
-            guard let id = UUID(uuidString: raw),
-                  let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            guard let id = UUID(uuidString: raw) else { continue }
+            let text: String
+            if readBodies {
+                guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                text = contents
+            } else {
+                text = ""
+            }
             let values = try? file.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
             let created = values?.creationDate ?? Date.distantPast
             let modified = values?.contentModificationDate ?? created
             let meta = metadata[id]
-            var note = Note(id: id, text: text, externalURL: nil, externalBaseline: nil,
+            var note = Note(id: id, text: text, textLoaded: readBodies,
+                            titlePreview: readBodies ? nil : (meta?.title ?? readTitlePreview(at: file)),
+                            externalURL: nil, externalBaseline: nil,
                             externalEncoding: String.Encoding.utf8.rawValue,
                             languageID: meta?.language ?? "plain", cursor: meta?.cursor ?? 0,
                             createdAt: created, updatedAt: modified)
@@ -232,6 +274,65 @@ final class NotesStore {
         }
         loaded.sort { $0.updatedAt > $1.updatedAt }
         return LoadedSnapshot(notes: loaded, session: session)
+    }
+
+    nonisolated private static func readTitlePreview(at url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 4096) else { return nil }
+        let prefix = String(decoding: data, as: UTF8.self)
+        let firstLine = prefix.split(whereSeparator: \.isNewline).first.map(String.init) ?? prefix
+        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        let title = trimmed.hasPrefix("# ") ? String(trimmed.dropFirst(2)) : trimmed
+        return title.count > 48 ? String(title.prefix(48)) + "…" : title
+    }
+
+    /// Loads one selected note body on the persistence worker. Concurrent
+    /// requests for the same note join a single read and publish by generation.
+    func loadTextAsync(for id: UUID, completion: (@MainActor @Sendable () -> Void)? = nil) {
+        guard let note = note(id: id) else { completion?(); return }
+        if note.textLoaded { completion?(); return }
+        if var callbacks = textLoadCompletions[id] {
+            if let completion { callbacks.append(completion) }
+            textLoadCompletions[id] = callbacks
+            return
+        }
+        textLoadCompletions[id] = completion.map { [$0] } ?? []
+        let generation = loadGeneration
+        let draftURL = fileURL(for: id)
+        let url = note.externalURL
+        draftIOQueue.async { [weak self] in
+            let text = try? String(contentsOf: draftURL, encoding: .utf8)
+            var encoding = note.externalEncoding
+            var baseline: String?
+            if let url {
+                let accessed = url.startAccessingSecurityScopedResource()
+                defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                baseline = Self.readText(at: url, encoding: &encoding)
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.loadGeneration == generation, let index = self.noteIndex(id: id),
+                   self.notes[index].textLoaded == false {
+                    if let text {
+                        self.notes[index].text = text
+                        self.notes[index].textLoaded = true
+                        self.notes[index].textLoadFailed = false
+                        self.notes[index].titlePreview = nil
+                        if self.notes[index].externalURL == url, url != nil {
+                            self.notes[index].externalBaseline = baseline
+                            self.notes[index].externalEncoding = encoding
+                        }
+                    } else {
+                        self.notes[index].textLoadFailed = true
+                    }
+                    self.onChange?()
+                }
+                let callbacks = self.textLoadCompletions.removeValue(forKey: id) ?? []
+                callbacks.forEach { $0() }
+            }
+        }
     }
 
     private func apply(_ snapshot: LoadedSnapshot) {
@@ -347,6 +448,9 @@ final class NotesStore {
         guard let index = noteIndex(id: id), notes[index].text != text else { return }
         let oldTitle = notes[index].title
         notes[index].text = text
+        notes[index].textLoaded = true
+        notes[index].textLoadFailed = false
+        notes[index].titlePreview = nil
         notes[index].updatedAt = Date()
         draftRevision[id, default: 0] &+= 1
         let newTitle = notes[index].title
@@ -416,8 +520,11 @@ final class NotesStore {
     /// Reads a user-selected file away from the main actor, then inserts the
     /// resulting draft on the main actor. The synchronous overload remains
     /// useful to deterministic store tests and non-interactive callers.
-    func openExternalAsync(_ url: URL, completion: @escaping (Result<Note, Error>) -> Void) {
-        loadIfNeeded()
+    func openExternalAsync(_ url: URL, completion: @escaping @MainActor @Sendable (Result<Note, Error>) -> Void) {
+        guard didLoad else {
+            loadIfNeededAsync { [weak self] in self?.openExternalAsync(url, completion: completion) }
+            return
+        }
         let standardizedURL = url.standardizedFileURL
         if let existing = notes.first(where: {
             $0.externalURL?.standardizedFileURL.path == standardizedURL.path
@@ -466,6 +573,7 @@ final class NotesStore {
     /// Writes the draft back to the external file (`⌘S`).
     func saveToExternal(_ id: UUID) throws {
         guard let index = noteIndex(id: id), let url = notes[index].externalURL else { return }
+        _ = associationRevision(for: id).advance()
         let text = notes[index].text
         var currentEncoding = notes[index].externalEncoding
         guard let currentText = Self.readText(at: url, encoding: &currentEncoding) else {
@@ -488,9 +596,19 @@ final class NotesStore {
     /// Saves a snapshot off the main actor. If the note changes while the
     /// write is running, its newer buffer remains dirty against the snapshot
     /// that was actually written.
-    func saveToExternalAsync(_ id: UUID, completion: @escaping (Result<Void, Error>) -> Void) {
+    func saveToExternalAsync(_ id: UUID, completion: @escaping @MainActor @Sendable (Result<Void, Error>) -> Void) {
         guard let index = noteIndex(id: id), let url = notes[index].externalURL else {
             completion(.success(()))
+            return
+        }
+        guard notes[index].textLoaded else {
+            loadTextAsync(for: id) { [weak self] in
+                guard let self, self.note(id: id)?.textLoaded == true else {
+                    completion(.failure(NotesStoreError.externalFileUnavailable(url.lastPathComponent)))
+                    return
+                }
+                self.saveToExternalAsync(id, completion: completion)
+            }
             return
         }
         if notes[index].externalBaseline == nil {
@@ -505,9 +623,12 @@ final class NotesStore {
         }
         let snapshot = notes[index]
         let revision = draftRevision[id, default: 0]
+        let association = associationRevision(for: id)
+        let associationRevision = association.snapshot()
         let draftDirectory = directory
         draftIOQueue.async { [weak self] in
             let result = Result<Void, Error> {
+                guard association.matches(associationRevision) else { throw CancellationError() }
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
                 var encoding = snapshot.externalEncoding
@@ -517,11 +638,18 @@ final class NotesStore {
                 guard currentText == snapshot.externalBaseline else {
                     throw NotesStoreError.externalFileChanged(url.lastPathComponent)
                 }
+                guard association.matches(associationRevision) else { throw CancellationError() }
                 try Self.writeDraft(snapshot, to: draftDirectory)
+                guard association.matches(associationRevision) else { throw CancellationError() }
                 try Self.write(text: snapshot.text, to: url, encoding: snapshot.externalEncoding)
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard association.matches(associationRevision),
+                      self.note(id: id)?.externalURL?.standardizedFileURL == url.standardizedFileURL else {
+                    completion(.success(()))
+                    return
+                }
                 if case .success = result, let currentIndex = self.noteIndex(id: id) {
                     self.notes[currentIndex].externalBaseline = snapshot.text
                     if self.draftRevision[id, default: 0] == revision {
@@ -539,6 +667,7 @@ final class NotesStore {
     /// `⌘S` on a note without a file: it becomes a real file (T20).
     func saveAs(_ id: UUID, to url: URL) throws {
         guard let index = noteIndex(id: id) else { return }
+        _ = associationRevision(for: id).advance()
         let text = notes[index].text
         try Self.write(text: text, to: url, encoding: String.Encoding.utf8.rawValue)
         try write(notes[index])
@@ -553,25 +682,44 @@ final class NotesStore {
         onChange?()
     }
 
-    func saveAsAsync(_ id: UUID, to url: URL, completion: @escaping (Result<Void, Error>) -> Void) {
+    func saveAsAsync(_ id: UUID, to url: URL,
+                     completion: @escaping @MainActor @Sendable (Result<Void, Error>) -> Void) {
         guard let index = noteIndex(id: id) else {
             completion(.success(()))
+            return
+        }
+        guard notes[index].textLoaded else {
+            loadTextAsync(for: id) { [weak self] in
+                guard let self, self.note(id: id)?.textLoaded == true else {
+                    completion(.failure(CocoaError(.fileReadUnknown)))
+                    return
+                }
+                self.saveAsAsync(id, to: url, completion: completion)
+            }
             return
         }
         let snapshot = notes[index]
         let standardizedURL = url.standardizedFileURL
         let revision = draftRevision[id, default: 0]
+        let association = associationRevision(for: id)
+        let associationRevision = association.advance()
         let draftDirectory = directory
         draftIOQueue.async { [weak self] in
             let result = Result<Void, Error> {
+                guard association.matches(associationRevision) else { throw CancellationError() }
                 let accessed = standardizedURL.startAccessingSecurityScopedResource()
                 defer { if accessed { standardizedURL.stopAccessingSecurityScopedResource() } }
                 try Self.write(text: snapshot.text, to: standardizedURL,
                                encoding: String.Encoding.utf8.rawValue)
+                guard association.matches(associationRevision) else { throw CancellationError() }
                 try Self.writeDraft(snapshot, to: draftDirectory)
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard association.matches(associationRevision) else {
+                    completion(.success(()))
+                    return
+                }
                 if case .success = result, let currentIndex = self.noteIndex(id: id) {
                     self.notes[currentIndex].externalURL = standardizedURL
                     self.notes[currentIndex].externalBaseline = snapshot.text
@@ -593,7 +741,7 @@ final class NotesStore {
 
     /// Re-reads the external file when the baseline was never read (it may
     /// have appeared since the note was restored) or when it disappeared.
-    func refreshExternalState(_ id: UUID, completion: (() -> Void)? = nil) {
+    func refreshExternalState(_ id: UUID, completion: (@MainActor @Sendable () -> Void)? = nil) {
         guard let note = note(id: id), let url = note.externalURL else { completion?(); return }
         if externalStateLoads[id] != nil {
             if let completion { externalStateLoads[id]?.append(completion) }
@@ -627,6 +775,8 @@ final class NotesStore {
 
     func deleteNote(_ id: UUID) {
         guard let index = noteIndex(id: id) else { return }
+        _ = associationRevision(for: id).advance()
+        externalAssociationRevisions[id] = nil
         draftWork[id]?.cancel()
         draftWork[id] = nil
         draftRevision[id, default: 0] &+= 1
@@ -657,35 +807,48 @@ final class NotesStore {
     }
 
     /// What the factory reset deletes when the notes tick is on (T20/T23).
-    func deleteAllNotes() {
-        loadIfNeeded()
+    func deleteAllNotes(completion: (@MainActor @Sendable () -> Void)? = nil) {
+        // A read may already be queued on the serial I/O worker. Invalidate its
+        // publication before scheduling the purge so an old snapshot cannot
+        // repopulate this model after reset.
+        loadGeneration &+= 1
+        loadInFlight = false
+        didLoad = true
+        let invalidatedLoadCompletions = loadCompletions
+        loadCompletions.removeAll()
         draftWork.values.forEach { $0.cancel() }
         draftWork.removeAll()
         pendingDrafts.removeAll()
         for id in Array(draftRevision.keys) { draftRevision[id, default: 0] &+= 1 }
-        draftIOQueue.sync {}
+        for revision in externalAssociationRevisions.values { _ = revision.advance() }
+        externalAssociationRevisions.removeAll()
         sessionWork?.cancel()
         sessionWork = nil
-        for note in notes {
-            try? FileManager.default.removeItem(at: fileURL(for: note.id))
-        }
-        // Also sweep anything the model never got to load: a reset must not
-        // leave drafts behind for the next launch to find.
-        if let files = try? FileManager.default.contentsOfDirectory(at: directory,
-                                                                    includingPropertiesForKeys: nil,
-                                                                    options: [.skipsHiddenFiles]) {
-            for file in files where file.pathExtension == "txt" && file.lastPathComponent.hasPrefix("note-") {
-                try? FileManager.default.removeItem(at: file)
+        let directory = self.directory
+        draftIOQueue.async {
+            // Sweep drafts not present in the in-memory model too; a reset must
+            // not leave an unloaded body to reappear on the next launch.
+            if let files = try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                        includingPropertiesForKeys: nil,
+                                                                        options: [.skipsHiddenFiles]) {
+                for file in files where file.pathExtension == "txt" && file.lastPathComponent.hasPrefix("note-") {
+                    try? FileManager.default.removeItem(at: file)
+                }
+            }
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent("session.json"))
+            if let completion {
+                Task { @MainActor in completion() }
             }
         }
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent("session.json"))
         notes.removeAll()
         openTabs.removeAll()
         selectedTab = nil
         windowFrame = nil
         anchor = nil
         lastCleanClose = true
+        persistenceError = nil
         onChange?()
+        invalidatedLoadCompletions.forEach { $0() }
     }
 
     // MARK: - Titles, search
@@ -700,6 +863,32 @@ final class NotesStore {
         }
     }
 
+    /// Searches unloaded note bodies on the I/O worker without retaining them
+    /// in memory. The returned IDs preserve sidebar order.
+    func searchNoteIDsAsync(_ query: String, completion: @escaping @MainActor @Sendable ([UUID]) -> Void) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let snapshot = notes
+        guard !trimmed.isEmpty else { completion(snapshot.map(\.id)); return }
+        let directory = self.directory
+        draftIOQueue.async { [weak self] in
+            let matches = snapshot.compactMap { note -> UUID? in
+                if note.title.localizedCaseInsensitiveContains(trimmed) { return note.id }
+                let body: String?
+                if note.textLoaded {
+                    body = note.text
+                } else {
+                    let url = directory.appendingPathComponent("note-\(note.id.uuidString.lowercased()).txt")
+                    body = try? String(contentsOf: url, encoding: .utf8)
+                }
+                return body?.localizedCaseInsensitiveContains(trimmed) == true ? note.id : nil
+            }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                completion(matches.filter { self.note(id: $0) != nil })
+            }
+        }
+    }
+
     var noteCount: Int {
         loadIfNeeded()
         return notes.count
@@ -709,6 +898,13 @@ final class NotesStore {
 
     private func fileURL(for id: UUID) -> URL {
         directory.appendingPathComponent("note-\(id.uuidString.lowercased()).txt")
+    }
+
+    private func associationRevision(for id: UUID) -> ExternalAssociationRevision {
+        if let revision = externalAssociationRevisions[id] { return revision }
+        let revision = ExternalAssociationRevision()
+        externalAssociationRevisions[id] = revision
+        return revision
     }
 
     private func scheduleDraft(_ id: UUID) {
@@ -738,8 +934,10 @@ final class NotesStore {
                 switch result {
                 case .success:
                     self.pendingDrafts.remove(id)
+                    if self.pendingDrafts.isEmpty { self.clearPersistenceError() }
                 case .failure:
                     self.pendingDrafts.insert(id)
+                    self.reportPersistenceFailure()
                 }
             }
         }
@@ -753,9 +951,11 @@ final class NotesStore {
         do {
             try draftIOQueue.sync { try Self.writeDraft(note, to: directory) }
             pendingDrafts.remove(id)
+            if pendingDrafts.isEmpty { clearPersistenceError() }
         } catch {
             // Keep the draft pending so the next edit/flush can retry it.
             pendingDrafts.insert(id)
+            reportPersistenceFailure()
         }
     }
 
@@ -778,7 +978,7 @@ final class NotesStore {
 
     /// Interactive panel dismissal must not wait for all pending file I/O.
     /// Termination still uses the synchronous flush below as a durability fence.
-    func flushAsync(completion: (() -> Void)? = nil) {
+    func flushAsync(completion: (@MainActor @Sendable () -> Void)? = nil) {
         guard didLoad else { completion?(); return }
         draftWork.values.forEach { $0.cancel() }
         draftWork.removeAll()
@@ -789,14 +989,31 @@ final class NotesStore {
         sessionWork?.cancel()
         sessionWork = nil
         draftIOQueue.async { [weak self] in
-            let saved = drafts.compactMap { note -> UUID? in
-                (try? Self.writeDraft(note, to: directory)) != nil ? note.id : nil
+            let results = drafts.map { note -> (UUID, Bool) in
+                do {
+                    try Self.writeDraft(note, to: directory)
+                    return (note.id, true)
+                } catch {
+                    return (note.id, false)
+                }
             }
-            try? Self.writeSessionSnapshot(session, to: directory)
+            let sessionSaved: Bool
+            do {
+                try Self.writeSessionSnapshot(session, to: directory)
+                sessionSaved = true
+            } catch {
+                sessionSaved = false
+            }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                for id in saved where self.draftRevision[id, default: 0] == revisions[id, default: 0] {
+                for (id, succeeded) in results where succeeded &&
+                    self.draftRevision[id, default: 0] == revisions[id, default: 0] {
                     self.pendingDrafts.remove(id)
+                }
+                if results.contains(where: { !$0.1 }) || !sessionSaved {
+                    self.reportPersistenceFailure()
+                } else {
+                    self.clearPersistenceError()
                 }
                 completion?()
             }
@@ -824,7 +1041,11 @@ final class NotesStore {
             guard let self else { return }
             self.sessionWork = nil
             self.draftIOQueue.async {
-                try? Self.writeSessionSnapshot(snapshot, to: directory)
+                let succeeded = (try? Self.writeSessionSnapshot(snapshot, to: directory)) != nil
+                Task { @MainActor [weak self] in
+                    if succeeded, self?.pendingDrafts.isEmpty == true { self?.clearPersistenceError() }
+                    else { self?.reportPersistenceFailure() }
+                }
             }
         }
         sessionWork = work
@@ -838,6 +1059,7 @@ final class NotesStore {
             var cursor: Int
             var externalPath: String?
             var encoding: UInt?
+            var title: String?
         }
         var notes: [Meta]
         var tabs: [UUID]
@@ -860,13 +1082,15 @@ final class NotesStore {
         } catch {
             // A later state change or clean shutdown retries the session write.
             sessionWork = nil
+            reportPersistenceFailure()
         }
     }
 
     private func makeSession(cleanClose: Bool) -> Session {
         let metas = notes.map { note in
             Session.Meta(id: note.id, language: note.languageID, cursor: note.cursor,
-                         externalPath: note.externalURL?.path, encoding: note.externalEncoding)
+                         externalPath: note.externalURL?.path, encoding: note.externalEncoding,
+                         title: note.title)
         }
         return Session(notes: metas, tabs: openTabs, selected: selectedTab,
                        frame: windowFrame, anchor: anchor, cleanClose: cleanClose)
@@ -876,6 +1100,39 @@ final class NotesStore {
         let data = try JSONEncoder().encode(session)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: directory.appendingPathComponent("session.json"), options: .atomic)
+    }
+
+    private func reportPersistenceFailure() {
+        let message = "Could not save notes. Changes remain in memory and will retry automatically."
+        if persistenceError != message {
+            persistenceError = message
+            onChange?()
+        }
+        schedulePersistenceRetry()
+    }
+
+    private func clearPersistenceError() {
+        persistenceRetryWork?.cancel()
+        persistenceRetryWork = nil
+        persistenceRetryAttempt = 0
+        guard persistenceError != nil else { return }
+        persistenceError = nil
+        onChange?()
+    }
+
+    /// Retries failed draft/session writes with bounded exponential backoff.
+    /// A successful flush cancels the pending retry and resets the delay.
+    private func schedulePersistenceRetry() {
+        guard persistenceRetryWork == nil else { return }
+        let delay = min(pow(2.0, Double(persistenceRetryAttempt)), 60.0)
+        persistenceRetryAttempt = min(persistenceRetryAttempt + 1, 6)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.persistenceRetryWork = nil
+            self.flushAsync()
+        }
+        persistenceRetryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     nonisolated private static func readText(at url: URL, encoding: inout UInt) -> String? {

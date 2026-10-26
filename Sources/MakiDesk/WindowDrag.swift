@@ -25,6 +25,7 @@ import SwiftUI
 /// inset as the keyboard), so the preview always matches the frame finally
 /// applied, which goes through `WorkspaceStore.applyDraggedFrame`.
 /// so the model and overlay stay in sync.
+@MainActor
 final class WindowDrag {
     static let shared = WindowDrag()
 

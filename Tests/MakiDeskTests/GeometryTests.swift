@@ -2,6 +2,7 @@ import XCTest
 import AppKit
 @testable import MakiDesk
 
+@MainActor
 final class GeometryTests: XCTestCase {
     private let area = CGRect(x: 0, y: 0, width: 1000, height: 600)
     private let minor = 1 - 1 / TilingEngine.phi
@@ -37,6 +38,31 @@ final class GeometryTests: XCTestCase {
             XCTAssertEqual(rect.minX, 0, accuracy: 0.01)
             XCTAssertEqual(rect.width, area.width, accuracy: 0.01)
         }
+    }
+
+    func testPendingFrameIsUsedWhenAXStillReportsPreviousVerticalSize() {
+        let states = TilingEngine.ladderRects(area: area, axis: .vertical, orthogonal: 0...1000)
+        let staleAXFrame = states[2]
+        let latestRequestedFrame = states[3]
+
+        let current = WorkspaceStore.tilingFrame(actual: staleAXFrame, pending: latestRequestedFrame)
+
+        XCTAssertEqual(TilingEngine.slot(of: current, area: area, axis: .vertical, states: states), .step(3))
+        XCTAssertEqual(WorkspaceStore.tilingFrame(actual: staleAXFrame, pending: nil), staleAXFrame)
+    }
+
+    func testMovingBetweenDisplaysPreservesCurrentSizeWhenItFits() {
+        let current = CGSize(width: 1496, height: 405)
+        let destination = CGRect(x: 0, y: 0, width: 1512, height: 1050)
+
+        XCTAssertEqual(TilingEngine.sizeFitting(current, in: destination), current)
+    }
+
+    func testMovingBetweenDisplaysClampsOnlyWhenDestinationIsSmaller() {
+        let current = CGSize(width: 1800, height: 1200)
+        let destination = CGRect(x: 0, y: 0, width: 1512, height: 1050)
+
+        XCTAssertEqual(TilingEngine.sizeFitting(current, in: destination), CGSize(width: 1512, height: 1050))
     }
 
     func testEdgeSlotPicksNearestHalfOrGoldenBand() {

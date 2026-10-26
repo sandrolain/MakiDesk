@@ -4,6 +4,7 @@ import SwiftUI
 /// A small, non-activating notification that confirms a group action (added /
 /// removed / recalled), on the model of the system volume indicator. Purely
 /// visual: it ignores the mouse and disappears on its own.
+@MainActor
 final class HUDController {
     static let shared = HUDController()
 

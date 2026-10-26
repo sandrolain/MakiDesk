@@ -5,6 +5,7 @@ import AppKit
 /// The order the golden spiral hands out its slots in: the window with the most
 /// visual content gets the widest one, and when no capture score is available
 /// (no Screen Recording permission) the biggest window does.
+@MainActor
 final class ContentOrderingTests: XCTestCase {
     private func window(_ id: String, _ width: CGFloat, _ height: CGFloat) -> ActionableWindow {
         ActionableWindow(id: id, title: id, appName: "Example",

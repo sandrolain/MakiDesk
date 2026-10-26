@@ -9,6 +9,7 @@ import ApplicationServices
 /// matching `NSWindow` notifications. Both paths are event-driven, so the
 /// border follows live geometry while a window is dragged or resized.
 /// The panel never becomes key and never takes a click.
+@MainActor
 final class WindowOutlineController {
     static let shared = WindowOutlineController()
 
@@ -234,7 +235,7 @@ final class WindowOutlineController {
         followLastFrame = .zero
         // `.common` so it keeps running inside a native drag's tracking loop.
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.followTick()
+            Task { @MainActor [weak self] in self?.followTick() }
         }
         RunLoop.main.add(timer, forMode: .common)
         followTimer = timer
@@ -453,19 +454,19 @@ final class WindowOutlineController {
             observers.append(workspace.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] _ in
-                self?.handle(name)
+                Task { @MainActor [weak self] in self?.handle(name) }
             })
         }
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.handleScreenChange()
+            Task { @MainActor [weak self] in self?.handleScreenChange() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .makiDeskThemeChanged, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.applySettings()
+            Task { @MainActor [weak self] in self?.applySettings() }
         })
 
         for name in [

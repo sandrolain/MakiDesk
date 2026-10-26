@@ -421,6 +421,7 @@ final class PaletteModel {
 /// previews, navigable with the keyboard or the mouse. The filter field only
 /// exists in search mode — with Opt+Tab the user holds Option to keep cycling,
 /// so a text field would be meaningless (E1).
+@MainActor
 final class WindowPalette {
     static let shared = WindowPalette()
 

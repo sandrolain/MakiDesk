@@ -12,7 +12,7 @@ Read only the relevant paths before editing:
 | --- | --- |
 | App lifecycle, shortcuts, settings | `MakiDeskApp.swift`, `ShortcutManager.swift`, `SettingsView.swift` |
 | Commands and model orchestration | `WorkspaceStore.swift` |
-| AX discovery, identity, events, frame operations | `WindowIndex.swift`, `WindowController.swift` |
+| AX discovery, identity, events, frame operations | `WindowIndex.swift`, `WindowController.swift`, `AXFrameWriteCoordinator.swift` |
 | Geometry and layout | `CanvasCore.swift`, `TilingEngine.swift`, `LayoutAdvisor.swift`, `WindowScene.swift`, `WindowGroup.swift` |
 | Switcher, ordering, screen choice | `WindowPalette.swift`, `PaletteOrdering.swift`, `PaletteScreenLocation.swift` |
 | Captures and overlays | `WindowCapture.swift`, `WindowOutlineController.swift`, `MiniMapController.swift`, `PeekController.swift`, `PeekPanel.swift` |
@@ -23,7 +23,7 @@ Read only the relevant paths before editing:
 
 Swift files above are under `Sources/MakiDesk/`; tests are under `Tests/MakiDeskTests/`. Package/dependency configuration is in `Package.swift` and `Package.resolved`; bundling/signing commands are in `Taskfile.yml`; app metadata is in `Resources/Info.plist`.
 
-For performance or lifecycle work, read the relevant findings and the **final implementation ledger** in [the residual analysis](docs/analisi-performance-residua-2026-10-21.md). Earlier sections and [the original analysis](docs/analisi-performance-bug-2026-10-21.md) are historical evidence; line numbers and status may be stale. Verify claims against current code.
+For performance or lifecycle work, read the findings and current implementation ledger in [the 2026-10-26 analysis](docs/analisi-ottimizzazioni-refactoring-bug-2026-10-26.md). Verify historical claims against current code.
 
 ## Workflow and change scope
 

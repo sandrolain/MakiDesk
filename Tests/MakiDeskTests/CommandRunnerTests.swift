@@ -167,6 +167,34 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertFalse(stillThere, "the grandchild survived cancellation")
     }
 
+    func testCancelKillsTermIgnoringDescendantAfterLeaderExits() async throws {
+        let id = UUID()
+        let childFile = workdir.appendingPathComponent("term-ignoring-child.pid")
+        let script = "(/bin/sh -c 'trap \"\" TERM; echo $$ > term-ignoring-child.pid; while :; do /bin/sleep 1; done') & trap 'exit 0' TERM; wait"
+        let task = Task { try await runner.run(self.shell(script), id: id) }
+
+        var childPID: pid_t?
+        for _ in 0..<40 where childPID == nil {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if let text = try? String(contentsOf: childFile, encoding: .utf8),
+               let value = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                childPID = pid_t(value)
+            }
+        }
+        let child = try XCTUnwrap(childPID, "the TERM-ignoring child did not start")
+        await runner.cancel(id)
+        let result = try await task.value
+        XCTAssertTrue(result.cancelled)
+
+        var stillThere = true
+        for _ in 0..<40 where stillThere {
+            if kill(child, 0) == -1, errno == ESRCH { stillThere = false } else {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        XCTAssertFalse(stillThere, "the TERM-ignoring descendant survived cancellation")
+    }
+
     // MARK: - Failures
 
     func testMissingExecutableThrowsASpawnError() async {

@@ -5,6 +5,7 @@ import XCTest
 /// going back to "Group N"), the labels and empty checks, and what the factory
 /// reset does with the groups: kept by default, cleared when the confirmation
 /// asks for it.
+@MainActor
 final class GroupMenuTests: XCTestCase {
     private var directory: URL!
     private var store: WorkspaceStore!

@@ -86,7 +86,8 @@ final class DropzoneCoordinatorTests: XCTestCase {
         guard case .needsConfirmation = first else { return XCTFail("expected a confirmation") }
         XCTAssertTrue(runner.records.isEmpty)
 
-        coordinator.confirm(zoneID: id)
+        XCTAssertTrue(coordinator.confirm(zoneID: id,
+                                          approvedCommandHash: DropzoneConfig.confirmationHash(for: coordinator.zones[0].command)))
         XCTAssertFalse(coordinator.zones[0].requiresConfirmation)
 
         let second = await coordinator.run(zoneID: id, drop: DropzoneDrop(files: [try imageFile()]))
@@ -114,7 +115,8 @@ final class DropzoneCoordinatorTests: XCTestCase {
         XCTAssertEqual(path, archive.path)
         XCTAssertTrue(runner.records.isEmpty)
 
-        let second = await coordinator.run(zoneID: id, drop: drop, confirmedOverwrite: true)
+        let second = await coordinator.run(zoneID: id, drop: drop,
+                                            confirmedOverwritePath: archive.path)
         guard case .finished = second else { return XCTFail("expected a run, got \(second)") }
         XCTAssertEqual(runner.records.count, 1)
     }
@@ -133,6 +135,77 @@ final class DropzoneCoordinatorTests: XCTestCase {
         let outcome = await coordinator.run(zoneID: changed.id,
                                             drop: DropzoneDrop(files: [try imageFile()]))
         guard case .needsConfirmation = outcome else { return XCTFail("expected a new confirmation") }
+    }
+
+    func testConfirmationIsRejectedIfCommandChangesWhileDialogIsOpen() async throws {
+        var zone = DropzoneConfig(name: "Images",
+                                  accepts: DropzoneAccept(kinds: [.files], utis: ["public.image"]),
+                                  command: CommandSpec(line: "echo first"))
+        zone.confirmedCommandHash = nil
+        try save(zone)
+        let pending = coordinator.zones[0]
+        let hashPresented = DropzoneConfig.confirmationHash(for: pending.command)
+
+        var changed = pending
+        changed.command.line = "echo second"
+        XCTAssertNoThrow(try store.save([changed]).get())
+        coordinator.reload()
+
+        XCTAssertFalse(coordinator.confirm(zoneID: pending.id, approvedCommandHash: hashPresented))
+        XCTAssertTrue(coordinator.zones[0].requiresConfirmation)
+        XCTAssertTrue(runner.records.isEmpty)
+    }
+
+    func testOverwriteConfirmationOnlyAuthorizesPresentedPath() async throws {
+        let source = try imageFile()
+        let archive = directory.appendingPathComponent("archive.zip")
+        try "existing".write(to: archive, atomically: true, encoding: .utf8)
+        var zone = confirmedImageZone()
+        zone.expectedOutput = "{parent}/archive.zip"
+        try save(zone)
+
+        let approved = await coordinator.run(zoneID: zone.id, drop: DropzoneDrop(files: [source]))
+        guard case let .needsOverwriteConfirmation(_, path) = approved else {
+            return XCTFail("expected overwrite confirmation")
+        }
+        let wrongPath = await coordinator.run(zoneID: zone.id, drop: DropzoneDrop(files: [source]),
+                                              confirmedOverwritePath: directory.appendingPathComponent("other.zip").path)
+        guard case .needsOverwriteConfirmation = wrongPath else {
+            return XCTFail("a different path must not be implicitly approved")
+        }
+        XCTAssertTrue(runner.records.isEmpty)
+        let accepted = await coordinator.run(zoneID: zone.id, drop: DropzoneDrop(files: [source]),
+                                              confirmedOverwritePath: path)
+        guard case .finished = accepted else { return XCTFail("expected approved path to run") }
+    }
+
+    func testCancelDuringPreparationPreventsCommandSpawnAndCleansWorkDirectory() async throws {
+        let gate = DropzonePreparationGate()
+        try save(confirmedImageZone())
+        let zone = coordinator.zones[0]
+        coordinator = DropzoneCoordinator(store: store, runner: runner, runRoot: runRoot) {
+            zone, drop, items, workDirectory in
+            await gate.pause()
+            return try await DropzonePreparer.prepare(zone: zone, drop: drop, items: items,
+                                                      workDirectory: workDirectory)
+        }
+
+        let image = try imageFile()
+        let task = Task {
+            await coordinator.run(zoneID: zone.id, drop: DropzoneDrop(files: [image]))
+        }
+        await gate.waitUntilStarted()
+        await coordinator.cancel(zoneID: zone.id)
+        await gate.resume()
+        let outcome = await task.value
+
+        guard case let .failed(message) = outcome else {
+            return XCTFail("expected cancellation, got \(outcome)")
+        }
+        XCTAssertTrue(message.localizedCaseInsensitiveContains("cancel"))
+        XCTAssertTrue(runner.records.isEmpty)
+        XCTAssertTrue(coordinator.runningZones.isEmpty)
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: runRoot.path).isEmpty)
     }
 
     // MARK: - Preparation
@@ -251,6 +324,29 @@ final class DropzoneCoordinatorTests: XCTestCase {
     }
 }
 
+private actor DropzonePreparationGate {
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var preparationWaiter: CheckedContinuation<Void, Never>?
+
+    func pause() async {
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+        await withCheckedContinuation { preparationWaiter = $0 }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func resume() {
+        preparationWaiter?.resume()
+        preparationWaiter = nil
+    }
+}
+
 // MARK: - Test doubles
 
 /// Records what the coordinator resolved and lets a test decide whether the
@@ -279,10 +375,11 @@ final class RecordingRunner: CommandRunning, @unchecked Sendable {
 
     var cancelled: [UUID] { withLock { storedCancelled } }
 
-    func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool) async throws -> CommandResult {
+    func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool,
+             cancellation: CommandCancellation?) async throws -> CommandResult {
         let settings = withLock { () -> (Error?, Bool) in
             storedRecords.append(Record(command: command, id: id, includeStdout: includeStdout))
-            return (error, writeOutput)
+            return (self.error, self.writeOutput)
         }
         let (error, writeOutput) = settings
 

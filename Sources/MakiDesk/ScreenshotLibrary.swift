@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import ImageIO
 import Observation
 import QuickLookUI
@@ -13,6 +14,7 @@ struct ScreenshotFile: Identifiable, Sendable {
 
     var id: String { path }
     var url: URL { URL(fileURLWithPath: path) }
+    var thumbnailRevision: String { "\(path)|\(modified.timeIntervalSince1970)|\(byteCount)" }
 }
 
 enum ScreenshotSortOrder: String, CaseIterable, Identifiable {
@@ -36,7 +38,7 @@ struct ScreenshotSection: Identifiable {
     let files: [ScreenshotFile]
 }
 
-private struct ScreenshotScan: Sendable {
+struct ScreenshotScan: Sendable {
     let files: [ScreenshotFile]
     let error: String?
 }
@@ -44,6 +46,7 @@ private struct ScreenshotScan: Sendable {
 @Observable
 @MainActor
 final class ScreenshotLibraryModel {
+    typealias DirectoryScanner = @Sendable (String, [String], Set<String>) -> ScreenshotScan
     private(set) var folderURL: URL
     private(set) var files: [ScreenshotFile] = []
     private(set) var selectedPaths: Set<String> = []
@@ -56,6 +59,10 @@ final class ScreenshotLibraryModel {
     var thumbnailScale: Double = 1
 
     private var scanGeneration: UInt64 = 0
+    private var scanInFlight = false
+    private var refreshPending = false
+    private var isPresented = false
+    private let scanDirectory: DirectoryScanner
     private var watcher: DispatchSourceFileSystemObject?
     private var refreshWork: DispatchWorkItem?
 
@@ -68,16 +75,21 @@ final class ScreenshotLibraryModel {
         "png", "jpg", "jpeg", "tif", "tiff", "pdf"
     ]
 
-    init() {
+    init(folderURL overrideFolderURL: URL? = nil, scanner: DirectoryScanner? = nil) {
         sortOrder = ScreenshotSortOrder(rawValue: UserDefaults.standard.string(forKey: "screenshotLibrarySort") ?? "") ?? .newestFirst
         grouping = ScreenshotGrouping(rawValue: UserDefaults.standard.string(forKey: "screenshotLibraryGrouping") ?? "") ?? .month
         thumbnailScale = min(max(UserDefaults.standard.object(forKey: "screenshotLibraryScale") as? Double ?? 1, 0.75), 1.6)
-        if let path = UserDefaults.standard.string(forKey: Self.folderKey),
+        if let overrideFolderURL {
+            folderURL = overrideFolderURL.standardizedFileURL
+        } else if let path = UserDefaults.standard.string(forKey: Self.folderKey),
            FileManager.default.fileExists(atPath: path) {
             folderURL = URL(fileURLWithPath: path, isDirectory: true)
         } else {
             folderURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
                 ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop", isDirectory: true)
+        }
+        scanDirectory = scanner ?? { path, prefixes, extensions in
+            Self.scan(path: path, prefixes: prefixes, extensions: extensions)
         }
     }
 
@@ -135,11 +147,16 @@ final class ScreenshotLibraryModel {
     }
 
     func show() {
+        isPresented = true
         refresh()
         startWatching()
     }
 
     func hide() {
+        isPresented = false
+        scanGeneration &+= 1
+        refreshPending = false
+        isLoading = false
         refreshWork?.cancel()
         refreshWork = nil
         stopWatching()
@@ -195,22 +212,43 @@ final class ScreenshotLibraryModel {
     }
 
     func refresh() {
+        guard isPresented else { return }
+        guard !scanInFlight else {
+            // Many file events can arrive during a slow directory walk. Keep
+            // one fresh scan for the latest folder and discard this result.
+            scanGeneration &+= 1
+            refreshPending = true
+            isLoading = true
+            return
+        }
+        startScan()
+    }
+
+    private func startScan() {
+        guard isPresented else { return }
+        scanInFlight = true
+        refreshPending = false
         scanGeneration &+= 1
         let generation = scanGeneration
         let path = folderURL.path
         isLoading = true
         let prefixes = Self.screenshotPrefixes
         let extensions = Self.imageExtensions
+        let scanDirectory = self.scanDirectory
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let result = Self.scan(path: path, prefixes: prefixes, extensions: extensions)
+            let result = scanDirectory(path, prefixes, extensions)
             Task { @MainActor [weak self] in
-                guard let self, self.scanGeneration == generation,
-                      self.folderURL.path == path else { return }
-                self.files = result.files
-                self.selectedPaths.formIntersection(Set(result.files.map(\.path)))
-                self.isLoading = false
-                self.message = result.error
+                guard let self else { return }
+                self.scanInFlight = false
+                if self.isPresented, self.scanGeneration == generation,
+                   self.folderURL.path == path {
+                    self.files = result.files
+                    self.selectedPaths.formIntersection(Set(result.files.map(\.path)))
+                    self.isLoading = false
+                    self.message = result.error
+                }
+                if self.isPresented, self.refreshPending { self.startScan() }
             }
         }
     }
@@ -353,6 +391,7 @@ final class ScreenshotLibraryModel {
     }
 
     private func scheduleRefresh() {
+        guard isPresented else { return }
         refreshWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.refresh() }
         refreshWork = work
@@ -766,6 +805,22 @@ private struct ScreenshotCardFramesKey: PreferenceKey {
     }
 }
 
+private enum ScreenshotThumbnailDecoder {
+    private static let semaphore = DispatchSemaphore(value: 3)
+
+    static func decode(at path: String) -> CGImage? {
+        semaphore.wait()
+        defer { semaphore.signal() }
+        let url = URL(fileURLWithPath: path)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 640,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ] as CFDictionary)
+    }
+}
+
 private struct ScreenshotCard: View {
     @Bindable var model: ScreenshotLibraryModel
     let file: ScreenshotFile
@@ -785,13 +840,21 @@ private struct ScreenshotCard: View {
             content: cardFace
         )
         .frame(width: width, height: 190 * scale)
-        .task(id: file.path) {
+        .task(id: file.thumbnailRevision) {
+            thumbnail = nil
             let path = file.path
-            let data = await Task.detached(priority: .utility) {
-                Self.thumbnailData(at: path)
-            }.value
-            guard !Task.isCancelled, let data else { return }
-            thumbnail = NSImage(data: data)
+            let worker = Task.detached(priority: .utility) { () -> CGImage? in
+                guard !Task.isCancelled else { return nil }
+                return ScreenshotThumbnailDecoder.decode(at: path)
+            }
+            let image = await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+            guard !Task.isCancelled, let image else { return }
+            thumbnail = NSImage(cgImage: image,
+                                size: NSSize(width: image.width, height: image.height))
         }
 
     }
@@ -836,21 +899,6 @@ private struct ScreenshotCard: View {
         }
     }
 
-    nonisolated private static func thumbnailData(at path: String) -> Data? {
-        let url = URL(fileURLWithPath: path)
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: 640,
-                kCGImageSourceCreateThumbnailWithTransform: true
-              ] as CFDictionary) else { return nil }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else {
-            return nil
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        return CGImageDestinationFinalize(destination) ? data as Data : nil
-    }
 }
 
 private struct ScreenshotCardDragHost<Content: View>: NSViewRepresentable {

@@ -34,8 +34,28 @@ enum CommandRunError: Error, Equatable, LocalizedError {
 }
 
 protocol CommandRunning: Sendable {
-    func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool) async throws -> CommandResult
+    func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool,
+             cancellation: CommandCancellation?) async throws -> CommandResult
     func cancel(_ id: UUID) async
+}
+
+/// A per-run cancellation flag shared between the coordinator and runner so a
+/// cancel during payload preparation is still observed before process spawn.
+final class CommandCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
 }
 
 /// Runs a `ResolvedCommand` off the main thread, in its own process group.
@@ -63,15 +83,22 @@ actor CommandRunner: CommandRunning {
                                             attributes: .concurrent)
     private let timerQueue = DispatchQueue(label: "MakiDesk.CommandRunner.timer", qos: .utility)
 
-    func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool = false) async throws -> CommandResult {
+    func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool = false,
+             cancellation: CommandCancellation? = nil) async throws -> CommandResult {
         try prepareDirectories(command)
         let stdoutFile = command.workDirectory.appendingPathComponent(Self.stdoutName)
         let stderrFile = command.workDirectory.appendingPathComponent(Self.stderrName)
 
+        let started = DispatchTime.now().uptimeNanoseconds
+        if cancellation?.isCancelled == true {
+            return CommandResult(exitCode: nil, termSignal: nil, timedOut: false, cancelled: true,
+                                 duration: 0, workDirectory: command.workDirectory,
+                                 stdoutFile: stdoutFile, stderrFile: stderrFile,
+                                 stdoutExcerpt: nil, stderrExcerpt: "")
+        }
         let pid = try spawn(command, stdout: stdoutFile, stderr: stderrFile)
         let process = ProcessRun(pid: pid)
         running[id] = process
-        let started = DispatchTime.now().uptimeNanoseconds
 
         let timeoutItem = scheduleTimeout(command: command, process: process)
 
@@ -249,6 +276,7 @@ private final class ProcessRun: @unchecked Sendable {
     private var timedOut = false
     private var cancelled = false
     private var terminating = false
+    private var escalation: DispatchWorkItem?
 
     init(pid: pid_t) {
         self.pid = pid
@@ -259,15 +287,16 @@ private final class ProcessRun: @unchecked Sendable {
     /// real exit status meaningful.
     func finish() -> (timedOut: Bool, cancelled: Bool) {
         lock.lock()
-        defer { lock.unlock() }
         isFinished = true
-        return (timedOut, cancelled)
-    }
-
-    var running: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return isFinished == false
+        let shouldKillRemainingGroup = terminating
+        escalation?.cancel()
+        escalation = nil
+        let result = (timedOut, cancelled)
+        lock.unlock()
+        // The leader may exit on SIGTERM while a child ignores it. Reap the
+        // leader, then make sure the rest of its process group also terminates.
+        if shouldKillRemainingGroup { _ = kill(-pid, SIGKILL) }
+        return result
     }
 
     /// Sends `SIGTERM` to the process group once, then `SIGKILL` after the
@@ -283,14 +312,21 @@ private final class ProcessRun: @unchecked Sendable {
         case .timedOut: timedOut = true
         case .cancelled: cancelled = true
         }
-        let finishedFlag = { [weak self] in self?.running == false }
+        let escalation = DispatchWorkItem { [weak self] in self?.escalateIfLeaderRunning() }
+        self.escalation = escalation
         lock.unlock()
 
         kill(-pid, SIGTERM)
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + grace) {
-            if finishedFlag() == false {
-                kill(-self.pid, SIGKILL)
-            }
-        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + grace, execute: escalation)
+    }
+
+    /// A living leader keeps its process-group ID anchored. If it exits on
+    /// SIGTERM first, finish() immediately kills any remaining descendants and
+    /// cancels this delayed escalation.
+    private func escalateIfLeaderRunning() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isFinished else { return }
+        if kill(-pid, 0) == 0 || errno == EPERM { kill(-pid, SIGKILL) }
     }
 }

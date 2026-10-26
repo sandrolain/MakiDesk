@@ -21,20 +21,33 @@ struct DropzoneSettingsView: View {
     @State private var testResult: DropzoneTestResult?
     @State private var testingZoneID: UUID?
     @State private var isCancelling = false
+    @State private var preferredSidebarWidth: CGFloat = 225
+    @State private var sidebarDragOrigin: CGFloat?
 
     var body: some View {
         VStack(spacing: 0) {
             header
+                .fixedSize(horizontal: false, vertical: true)
             if hasBanner { banners }
             Rectangle()
                 .fill(theme.border.opacity(0.5))
                 .frame(height: 1)
-            HSplitView {
-                sidebar
-                detail
+            GeometryReader { geometry in
+                let sidebarWidth = min(preferredSidebarWidth,
+                                       max(0, geometry.size.width - 307))
+                HStack(spacing: 0) {
+                    sidebar
+                        .frame(width: sidebarWidth)
+                    sidebarDivider(width: sidebarWidth, availableWidth: geometry.size.width)
+                    detail
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height,
+                       alignment: .topLeading)
+                .clipped()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .sheet(isPresented: $showingShortcuts) {
             DropzoneShortcutPicker(model: model) { shortcut in
                 apply(shortcut)
@@ -182,6 +195,23 @@ struct DropzoneSettingsView: View {
 
     // MARK: - Sidebar
 
+    private func sidebarDivider(width: CGFloat, availableWidth: CGFloat) -> some View {
+        Rectangle()
+            .fill(theme.border.opacity(0.5))
+            .frame(width: 1)
+            .frame(width: 7)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let origin = sidebarDragOrigin ?? width
+                    sidebarDragOrigin = origin
+                    let maximum = max(190, min(270, availableWidth - 307))
+                    preferredSidebarWidth = min(max(190, origin + value.translation.width), maximum)
+                }
+                .onEnded { _ in sidebarDragOrigin = nil })
+            .accessibilityLabel("Dropzone list divider")
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -236,7 +266,7 @@ struct DropzoneSettingsView: View {
                 .padding(.horizontal, 4)
         }
         .padding(10)
-        .frame(minWidth: 190, idealWidth: 225, maxWidth: 270, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.background)
     }
 
@@ -397,11 +427,15 @@ struct DropzoneSettingsView: View {
             var outcome = await DropzoneCoordinator.shared.run(zoneID: zone.id, drop: drop)
             if case let .needsConfirmation(pending) = outcome {
                 if confirmRun(pending) {
-                    DropzoneCoordinator.shared.confirm(zoneID: zone.id)
-                    model.reload()
-                    outcome = await DropzoneCoordinator.shared.run(zoneID: zone.id,
-                                                                  drop: drop,
-                                                                  confirmed: true)
+                    let hash = DropzoneConfig.confirmationHash(for: pending.command)
+                    if DropzoneCoordinator.shared.confirm(zoneID: zone.id,
+                                                          approvedCommandHash: hash) {
+                        model.reload()
+                        outcome = await DropzoneCoordinator.shared.run(zoneID: zone.id,
+                                                                      drop: drop)
+                    } else {
+                        outcome = .failed("The command changed while confirmation was open. Review it and try again.")
+                    }
                 } else {
                     outcome = .failed("Cancelled before running.")
                 }
@@ -410,11 +444,15 @@ struct DropzoneSettingsView: View {
                 if confirmOverwrite(pending, path: path) {
                     outcome = await DropzoneCoordinator.shared.run(zoneID: pending.id,
                                                                   drop: drop,
-                                                                  confirmed: true,
-                                                                  confirmedOverwrite: true)
+                                                                  confirmedOverwritePath: path)
                 } else {
                     outcome = .failed("Cancelled before replacing the file.")
                 }
+            }
+            if case .needsConfirmation = outcome {
+                outcome = .failed("The command changed during confirmation. Run the test again to review it.")
+            } else if case .needsOverwriteConfirmation = outcome {
+                outcome = .failed("The output changed during confirmation. Run the test again to review it.")
             }
             testingZoneID = nil
             isCancelling = false

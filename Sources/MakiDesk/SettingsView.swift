@@ -186,7 +186,7 @@ struct SettingsView: View {
         }
 
         SettingsSection("Animations") {
-            Toggle("Animate lists and panels", isOn: Binding(
+            Toggle("Animate lists, panels and window resizing", isOn: Binding(
                 get: { store.animationsEnabled },
                 set: { store.updateAnimationsEnabled($0) }
             ))
@@ -195,7 +195,7 @@ struct SettingsView: View {
                                      set: { store.updateAnimationDuration($0) }),
                       range: 0.08...0.6, step: 0.02, unit: " s", decimals: 2)
                 .disabled(!store.animationsEnabled)
-            caption("Used when a second shake moves the shelf, and when the window switcher and clipboard scroll to the selection. macOS Reduce Motion always wins.")
+            caption("Controls shelf movement, window resizing, switcher transitions and clipboard scrolling. MakiDesk keeps enhanced Accessibility UI disabled for Chromium apps; VoiceOver and Switch Control are respected. macOS Reduce Motion always wins.")
         }
 
         SettingsSection("Reference") {

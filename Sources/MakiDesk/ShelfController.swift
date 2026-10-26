@@ -691,6 +691,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         session = UUID()
         items.removeAll()
         previewFiles.removeAll()
+        ShelfImageWriter.clearCache()
         removeStaging()
         table?.reloadData()
         countLabel?.stringValue = "0 items"
@@ -1579,8 +1580,14 @@ final class ShelfController: NSObject, NSWindowDelegate,
                     if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
                 }
-                coordinator.confirm(zoneID: pending.id)
-                outcome = await coordinator.run(zoneID: pending.id, drop: drop, confirmed: true)
+                let hash = DropzoneConfig.confirmationHash(for: pending.command)
+                guard coordinator.confirm(zoneID: pending.id, approvedCommandHash: hash) else {
+                    HUDController.shared.show("\(pending.name) changed during confirmation; try again",
+                                              symbol: "exclamationmark.triangle", duration: 3)
+                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                    return
+                }
+                outcome = await coordinator.run(zoneID: pending.id, drop: drop)
             }
             if case let .needsOverwriteConfirmation(pending, path) = outcome {
                 guard let self else {
@@ -1594,7 +1601,12 @@ final class ShelfController: NSObject, NSWindowDelegate,
                     return
                 }
                 outcome = await coordinator.run(zoneID: pending.id, drop: drop,
-                                                confirmed: true, confirmedOverwrite: true)
+                                                confirmedOverwritePath: path)
+            }
+            if case .needsConfirmation = outcome {
+                outcome = .failed("The command changed during confirmation. Drop the item again to review it.")
+            } else if case .needsOverwriteConfirmation = outcome {
+                outcome = .failed("The output changed during confirmation. Drop the item again to review it.")
             }
             self?.report(outcome, zone: zone)
             if let cleanup { try? FileManager.default.removeItem(at: cleanup) }

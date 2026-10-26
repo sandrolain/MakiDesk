@@ -649,6 +649,24 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             highlighter = nil
             editor.isHidden = true
             emptyLabel.isHidden = false
+            emptyLabel.stringValue = "No note open — ⌘T for a new note"
+            updateStatus()
+            return
+        }
+        guard note.textLoaded else {
+            currentID = id
+            highlighter = nil
+            editor.setText("", cursor: 0)
+            editor.isHidden = true
+            emptyLabel.stringValue = note.textLoadFailed ? "Could not load note" : "Loading note…"
+            emptyLabel.isHidden = false
+            if !note.textLoadFailed {
+                store.loadTextAsync(for: id) { [weak self] in
+                    guard let self, self.store.selectedTab == id,
+                          self.store.note(id: id)?.textLoaded == true else { return }
+                    self.reloadEverything()
+                }
+            }
             updateStatus()
             return
         }
@@ -695,7 +713,12 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         }
 
         let state: (text: String, color: NSColor, tooltip: String?)
-        if let url = note.externalURL {
+        if let error = store.persistenceError {
+            state = ("Not saved", .systemRed, error)
+        } else if !note.textLoaded {
+            state = (note.textLoadFailed ? "Could not load note" : "Loading note…",
+                     note.textLoadFailed ? .systemRed : theme.subtext, nil)
+        } else if let url = note.externalURL {
             if note.externalBaseline == nil {
                 state = ("File missing · draft only", .systemRed, url.path)
             } else if note.isDirty {
@@ -762,6 +785,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     }
 
     private func detail(for note: Note) -> String {
+        guard note.textLoaded else { return "Loading…" }
         let count = note.text.count
         let size = count == 1 ? "1 character" : "\(count) characters"
         if note.externalURL != nil {
@@ -794,12 +818,10 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         let snapshot = store.notes
         guard !query.isEmpty else { filtered = snapshot; return }
         let work = DispatchWorkItem { [weak self] in
-            let matches = snapshot.filter {
-                $0.title.localizedCaseInsensitiveContains(query) || $0.text.localizedCaseInsensitiveContains(query)
-            }
-            DispatchQueue.main.async {
+            guard let self else { return }
+            self.store.searchNoteIDsAsync(query) { [weak self] ids in
                 guard let self, self.searchRevision == revision else { return }
-                self.filtered = matches
+                self.filtered = ids.compactMap { self.store.note(id: $0) }
                 self.refreshChrome(refreshSearch: false)
             }
         }
@@ -844,6 +866,10 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     @objc private func save() {
         guard let id = currentID, let note = store.note(id: id) else { return }
+        if note.textLoadFailed {
+            present(error: CocoaError(.fileReadUnknown), title: "Could not load the note")
+            return
+        }
         if note.externalURL == nil {
             saveAs()
             return
@@ -859,6 +885,14 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     private func saveAs() {
         guard let id = currentID, let note = store.note(id: id), let window = view.window else { return }
+        if note.textLoadFailed {
+            present(error: CocoaError(.fileReadUnknown), title: "Could not load the note")
+            return
+        }
+        guard note.textLoaded else {
+            store.loadTextAsync(for: id) { [weak self] in self?.saveAs() }
+            return
+        }
         let panel = NSSavePanel()
         panel.title = "Save Note"
         panel.nameFieldStringValue = suggestedFileName(for: note)
@@ -997,9 +1031,17 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     /// (and can be recovered from the Finder), an external file is untouched.
     private func closeNote(_ id: UUID) {
         guard let note = store.note(id: id) else { return }
+        if note.textLoadFailed {
+            present(error: CocoaError(.fileReadUnknown), title: "Could not load the note")
+            return
+        }
+        if note.externalURL != nil, !note.textLoaded {
+            store.loadTextAsync(for: id) { [weak self] in self?.closeNote(id) }
+            return
+        }
         // Only a draft that would be lost needs a question: a clean file is
         // not touched, so closing its note is immediate.
-        if let url = note.externalURL, note.isDirty || note.externalBaseline == nil {
+        if let url = note.externalURL, note.isDirty || (note.textLoaded && note.externalBaseline == nil) {
             let alert = NSAlert()
             alert.messageText = "Close “\(note.title)”?"
             alert.informativeText = "The note is a draft of \(url.lastPathComponent). The file is not deleted; the draft and its link to the file are removed."
