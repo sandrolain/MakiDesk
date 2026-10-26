@@ -566,6 +566,26 @@ enum WindowController {
                                                identity: identity, order: order, completion: completion)
     }
 
+    /// Position-only variant for a live drag: the size is left alone, and
+    /// repeated points coalesce in the same per-window queue as frame writes.
+    @MainActor
+    static func setPositionAsync(_ origin: CGPoint, for element: AXUIElement,
+                                 identity: String,
+                                 completion: (@MainActor () -> Void)? = nil) {
+        if isOwnProcess(element) {
+            do {
+                try setPosition(origin, for: element)
+            } catch {
+                makiLog.error("position write to our own window failed error=\(error.localizedDescription, privacy: .public)")
+            }
+            completion?()
+            return
+        }
+        AXFrameWriteCoordinator.shared.enqueuePosition(origin, element: element,
+                                                       identity: identity,
+                                                       completion: completion)
+    }
+
     /// Sizes a window without touching its position. Kept apart from the move
     /// because some apps accept a size only when it is not written in the same
     /// breath as a position (T27).

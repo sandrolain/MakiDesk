@@ -67,12 +67,136 @@ final class WindowFrameWriteTests: XCTestCase {
         XCTAssertEqual(writer.maximumConcurrentWrites, 1)
     }
 
+    func testPositionWritesCoalesceAndSerialize() async {
+        let writer = RecordedPositionWriter()
+        let coordinator = AXFrameWriteCoordinator(frameWriter: { _, _, _, _ in },
+                                                  positionWriter: { origin, _ in writer.write(origin) })
+        let element = AXUIElementCreateApplication(12345)
+
+        coordinator.enqueuePosition(CGPoint(x: 0, y: 0), element: element, identity: "window-A")
+        let firstStarted = await wait(for: writer.firstStarted)
+        XCTAssertEqual(firstStarted, .success)
+
+        coordinator.enqueuePosition(CGPoint(x: 10, y: 0), element: element, identity: "window-A")
+        let finished = expectation(description: "last position written")
+        coordinator.enqueuePosition(CGPoint(x: 20, y: 0), element: element, identity: "window-A") {
+            finished.fulfill()
+        }
+        writer.releaseFirst.signal()
+        await fulfillment(of: [finished], timeout: 3)
+
+        XCTAssertEqual(writer.positions.map(\.x), [0, 20])
+        XCTAssertEqual(writer.maximumConcurrentWrites, 1)
+    }
+
+    func testPositionAndFrameForTheSameWindowSerialize() async {
+        let writer = RecordedWriteSequence()
+        let coordinator = AXFrameWriteCoordinator(
+            frameWriter: { _, _, _, _ in writer.record("frame") },
+            positionWriter: { _, _ in writer.record("position") }
+        )
+        let element = AXUIElementCreateApplication(12345)
+
+        coordinator.enqueue(CGRect(x: 0, y: 0, width: 100, height: 100),
+                            element: element, identity: "window-A",
+                            order: .positionThenSize, completion: nil)
+        let firstStarted = await wait(for: writer.firstStarted)
+        XCTAssertEqual(firstStarted, .success)
+
+        let finished = expectation(description: "position written after the frame")
+        coordinator.enqueuePosition(CGPoint(x: 50, y: 50), element: element,
+                                    identity: "window-A") { finished.fulfill() }
+        writer.releaseFirst.signal()
+        await fulfillment(of: [finished], timeout: 3)
+
+        XCTAssertEqual(writer.calls, ["frame", "position"])
+        XCTAssertEqual(writer.maximumConcurrentWrites, 1)
+    }
+
     private func wait(for semaphore: DispatchSemaphore) async -> DispatchTimeoutResult {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
                 continuation.resume(returning: semaphore.wait(timeout: .now() + 3))
             }
         }
+    }
+}
+
+private final class RecordedPositionWriter: @unchecked Sendable {
+    let firstStarted = DispatchSemaphore(value: 0)
+    let releaseFirst = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var storedPositions: [CGPoint] = []
+    private var activeWrites = 0
+    private var maximumActiveWrites = 0
+
+    var positions: [CGPoint] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedPositions
+    }
+
+    var maximumConcurrentWrites: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return maximumActiveWrites
+    }
+
+    func write(_ origin: CGPoint) {
+        lock.lock()
+        storedPositions.append(origin)
+        activeWrites += 1
+        maximumActiveWrites = max(maximumActiveWrites, activeWrites)
+        let isFirst = storedPositions.count == 1
+        lock.unlock()
+
+        if isFirst {
+            firstStarted.signal()
+            releaseFirst.wait()
+        }
+
+        lock.lock()
+        activeWrites -= 1
+        lock.unlock()
+    }
+}
+
+private final class RecordedWriteSequence: @unchecked Sendable {
+    let firstStarted = DispatchSemaphore(value: 0)
+    let releaseFirst = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var storedCalls: [String] = []
+    private var activeWrites = 0
+    private var maximumActiveWrites = 0
+
+    var calls: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedCalls
+    }
+
+    var maximumConcurrentWrites: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return maximumActiveWrites
+    }
+
+    func record(_ label: String) {
+        lock.lock()
+        storedCalls.append(label)
+        activeWrites += 1
+        maximumActiveWrites = max(maximumActiveWrites, activeWrites)
+        let isFirst = storedCalls.count == 1
+        lock.unlock()
+
+        if isFirst {
+            firstStarted.signal()
+            releaseFirst.wait()
+        }
+
+        lock.lock()
+        activeWrites -= 1
+        lock.unlock()
     }
 }
 

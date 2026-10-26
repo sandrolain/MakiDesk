@@ -1265,6 +1265,17 @@ final class WorkspaceStore {
             && abs(a.width - b.width) <= Self.frameTolerance && abs(a.height - b.height) <= Self.frameTolerance
     }
 
+    /// The identity the frame write coordinator uses for a model window. It
+    /// matches `animationKey(for:)`, so a keyboard animation and a mini-map
+    /// drag for the same window serialize on one queue instead of racing.
+    private func frameIdentity(for window: WorkspaceWindow) -> String? {
+        if let systemID = window.systemID, systemID.isEmpty == false { return systemID }
+        guard let element = elements[window.id] else { return nil }
+        var pid: pid_t = 0
+        AXUIElementGetPid(element, &pid)
+        return "pid-\(pid)-element-\(CFHash(element))"
+    }
+
     /// Timers are keyed by logical identity, not by the transient AX element
     /// instance, so a repeated command animates one timer per window.
     private func animationKey(for target: WindowController.WindowInfo) -> String {
@@ -2671,13 +2682,14 @@ final class WorkspaceStore {
                 return hit.width >= 2 && hit.height >= 2
             }
             if onScreen { continue }
-            guard let element = elements[windows[index].id] else { continue }
+            guard let element = elements[windows[index].id],
+                  let identity = frameIdentity(for: windows[index]) else { continue }
             let width = min(frame.width, primary.width)
             let height = min(frame.height, primary.height)
             let x = min(max(frame.minX, primary.minX), primary.maxX - width)
             let y = min(max(frame.minY, primary.minY), primary.maxY - height)
             let rect = CGRect(x: x, y: y, width: width, height: height)
-            try? WindowController.setFrame(rect, for: element)
+            WindowController.setFrameAsync(rect, for: element, identity: identity)
             rememberArrangement(rect, ofModelWindowAt: index)
             windows[index].x = rect.minX
             windows[index].y = rect.minY
@@ -3040,17 +3052,16 @@ final class WorkspaceStore {
         guard index < windows.count else { return }
         windows[index].x = point.x
         windows[index].y = point.y
-        guard let element = elements[windows[index].id] else { return }
-        do {
-            try WindowController.setPosition(point, for: element)
-            // A drag on the mini map is a manual move like any other: it counts
-            // as where the group's window is now (T15).
-            rememberArrangement(CGRect(x: point.x, y: point.y,
-                                       width: windows[index].width, height: windows[index].height),
-                                ofModelWindowAt: index)
-        } catch {
-            status = "Move failed: \(error.localizedDescription)"
-        }
+        guard let element = elements[windows[index].id],
+              let identity = frameIdentity(for: windows[index]) else { return }
+        // Serialized with keyboard animations for the same window; the write
+        // happens off the pointer's event path.
+        WindowController.setPositionAsync(point, for: element, identity: identity)
+        // A drag on the mini map is a manual move like any other: it counts as
+        // where the group's window is now (T15).
+        rememberArrangement(CGRect(x: point.x, y: point.y,
+                                   width: windows[index].width, height: windows[index].height),
+                            ofModelWindowAt: index)
     }
 
     // MARK: - Colors
