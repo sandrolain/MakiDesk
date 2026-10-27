@@ -91,8 +91,11 @@ sRGB, so they match other colour tools.
 ### Measure anything on screen
 
 Press `⌃⌥R` and drag: live width, height, ΔX/ΔY, diagonal, angle and area,
-snapped to real window and display edges and centres. Release to pin the
-readout, copy it from its badge, and dismiss it with ✕ or Clear Measurements.
+snapped to real window and display edges and centres, with a dashed magnetic
+guide before the drag, locked on press, and on the snapped side while dragging.
+Release to pin
+the readout, copy it from its badge, and dismiss it with ✕ or Clear
+Measurements.
 `⇧` keeps a square, `⌥` measures from the centre; points, device pixels and
 estimated millimetres or inches are in Settings.
 

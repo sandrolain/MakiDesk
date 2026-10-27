@@ -35,6 +35,10 @@ final class ScreenRegionSelector {
     struct SnapInfo: Equatable, Sendable {
         var axisX = false
         var axisY = false
+        /// Every candidate the sides snapped to, in global coordinates, for the
+        /// magnetic guides (T39).
+        var edgesX: [CGFloat] = []
+        var edgesY: [CGFloat] = []
 
         static let none = SnapInfo()
     }
@@ -55,6 +59,15 @@ final class ScreenRegionSelector {
         /// Apply ⇧ (square) and ⌥ (from the centre) while dragging. Off for
         /// text recognition and the colour picker.
         var respectsModifiers = false
+        /// Show the magnetic guides while the pointer is near a candidate,
+        /// before the drag starts. Used by the ruler (T39).
+        var showsSnapHover = false
+        /// Only the sides the pointer is dragging snap; the anchor corner stays
+        /// fixed. Without it, both sides compete and the rectangle can flicker
+        /// between the snap and the start position (T39).
+        var snapsMovingSidesOnly = false
+        /// Draw the other sides of the window that produced a snap, faintly.
+        var showsSnapContext = false
         /// Replaces the default hint on the display with the pointer.
         var hint: String?
         /// Replaces the default accessibility label of each overlay.
@@ -117,6 +130,13 @@ final class ScreenRegionSelector {
     private var activeDisplayID: CGDirectDisplayID?
     private var snapEdgesX: [CGFloat] = []
     private var snapEdgesY: [CGFloat] = []
+    private var snapWindowFrames: [CGRect] = []
+    private var snapStateX = ScreenRegionGeometry.SnapAxisState.none
+    private var snapStateY = ScreenRegionGeometry.SnapAxisState.none
+    /// The candidate the press point was locked to, if any (T39): the visible
+    /// hover guide becomes the anchor instead of being ignored.
+    private var originEdgeX: CGFloat?
+    private var originEdgeY: CGFloat?
 
     private var snapshot: (display: ScreenRegionDisplay, image: CGImage)?
     private var snapshotRequest: CGDirectDisplayID?
@@ -202,6 +222,9 @@ final class ScreenRegionSelector {
 
         if let active {
             ensureSnapshot(for: active)
+            // Show the magnetic reference immediately if the pointer already
+            // rests near an edge, without waiting for the first move (T39).
+            updateHoverGuides(at: local(pointer, in: active), display: active)
         }
     }
 
@@ -259,9 +282,64 @@ final class ScreenRegionSelector {
         // A fresh crosshair must not stay behind on the screen we left.
         for other in overlays where other.display.id != displayID {
             other.view.setPointer(nil)
+            other.view.snapGuides = .none
         }
         activeDisplayID = displayID
         ensureSnapshot(for: overlay.display)
+        updateHoverGuides(at: point, display: overlay.display)
+    }
+
+    /// The magnetic reference before the drag: the nearest candidate within
+    /// the snap tolerance, so the user sees what a side would catch (T39).
+    private func updateHoverGuides(at point: CGPoint, display: ScreenRegionDisplay) {
+        guard options.showsSnapHover, let overlay = overlay(for: display.id) else { return }
+        let globalPoint = global(point, in: display)
+        // Only candidates on this display can be guides: an off-screen window
+        // edge would promise a line that is never drawn.
+        let origin = ScreenRegionGeometry.snappedOrigin(
+            globalPoint, edgesX: snapEdgesX, edgesY: snapEdgesY,
+            tolerance: snapTolerance, limits: display.frame
+        )
+        let edgeX = origin.edgeX
+        let edgeY = origin.edgeY
+        let info = SnapInfo(axisX: edgeX != nil, axisY: edgeY != nil,
+                            edgesX: edgeX.map { [$0] } ?? [],
+                            edgesY: edgeY.map { [$0] } ?? [])
+        overlay.view.snapGuides = guides(for: info, display: display, pointer: globalPoint)
+    }
+
+    /// Primary guides for every snapped side, plus the faint outline of the
+    /// window that produced them (T39).
+    private func guides(for info: SnapInfo, display: ScreenRegionDisplay,
+                        pointer: CGPoint? = nil) -> SnapGuides {
+        var context: CGRect?
+        if options.showsSnapContext {
+            let candidates = snapWindowFrames.filter { $0.intersects(display.frame) }
+            context = contextFrame(for: info, in: candidates)
+            if context == nil, let pointer, info.axisX || info.axisY {
+                context = candidates
+                    .filter { $0.contains(pointer) }
+                    .min { $0.width * $0.height < $1.width * $1.height }
+            }
+        }
+        return SnapGuides(
+            xs: info.edgesX.map { $0 - display.frame.minX },
+            ys: info.edgesY.map { $0 - display.frame.minY },
+            context: context?.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
+        )
+    }
+
+    private func contextFrame(for info: SnapInfo, in frames: [CGRect]) -> CGRect? {
+        let xFrames = info.edgesX.compactMap {
+            ScreenRegionGeometry.frame(owningEdge: $0, axis: .x, in: frames)
+        }
+        let yFrames = info.edgesY.compactMap {
+            ScreenRegionGeometry.frame(owningEdge: $0, axis: .y, in: frames)
+        }
+        if let both = xFrames.first(where: { candidate in yFrames.contains(candidate) }) {
+            return both
+        }
+        return xFrames.first ?? yFrames.first
     }
 
     private func dragBegan(_ point: CGPoint, displayID: CGDirectDisplayID) {
@@ -269,10 +347,33 @@ final class ScreenRegionSelector {
         overlay.window.makeKeyAndOrderFront(nil)
         overlay.window.makeFirstResponder(overlay.view)
         activeDisplayID = displayID
-        dragStart = global(point, in: overlay.display)
+        let press = global(point, in: overlay.display)
+        if options.snapsMovingSidesOnly {
+            // Lock the press point to the guide the user can see. The anchor
+            // never re-snaps during the drag, so it cannot flicker; the moving
+            // side keeps its own hysteresis.
+            let origin = ScreenRegionGeometry.snappedOrigin(
+                press, edgesX: snapEdgesX, edgesY: snapEdgesY,
+                tolerance: snapTolerance, limits: overlay.display.frame
+            )
+            originEdgeX = origin.edgeX
+            originEdgeY = origin.edgeY
+            dragStart = origin.point
+        } else {
+            originEdgeX = nil
+            originEdgeY = nil
+            dragStart = press
+        }
         currentRect = nil
         currentSnap = .none
+        snapStateX = .none
+        snapStateY = .none
         overlay.view.setSelection(nil, label: nil)
+        // Match the visible guides to the press, not to the previous hover.
+        let pressInfo = SnapInfo(axisX: originEdgeX != nil, axisY: originEdgeY != nil,
+                                 edgesX: originEdgeX.map { [$0] } ?? [],
+                                 edgesY: originEdgeY.map { [$0] } ?? [])
+        overlay.view.snapGuides = guides(for: pressInfo, display: overlay.display)
         onChange?(nil, .none)
         ensureSnapshot(for: overlay.display)
     }
@@ -289,17 +390,48 @@ final class ScreenRegionSelector {
             centered: options.respectsModifiers && flags.contains(.option),
             square: options.respectsModifiers && flags.contains(.shift)
         )
-        var visual = ScreenRegionGeometry.clamped(raw, to: overlay.display)
+        // Clamp first, then round and snap: a candidate outside the display can
+        // no longer fight with the clamp (T39).
+        var visual = ScreenRegionGeometry.rounded(
+            ScreenRegionGeometry.clamped(raw, to: overlay.display))
         var snapInfo = SnapInfo.none
         if visual.width >= ScreenRegionGeometry.minimumSide,
            visual.height >= ScreenRegionGeometry.minimumSide {
-            let snap = ScreenRegionGeometry.snapped(visual,
-                                                    edgesX: snapEdgesX, edgesY: snapEdgesY,
-                                                    tolerance: snapTolerance)
-            // A window edge can sit outside the display (a window dragged partly
-            // off-screen), so the snapped result is clamped again.
-            visual = ScreenRegionGeometry.clamped(snap.rect, to: overlay.display)
-            snapInfo = SnapInfo(axisX: snap.snappedX, axisY: snap.snappedY)
+            let movingX = options.snapsMovingSidesOnly
+                ? (low: raw.minX < dragStart.x, high: raw.maxX > dragStart.x)
+                : (true, true)
+            let movingY = options.snapsMovingSidesOnly
+                ? (low: raw.minY < dragStart.y, high: raw.maxY > dragStart.y)
+                : (true, true)
+            let snap = ScreenRegionGeometry.snapped(
+                visual,
+                edgesX: snapEdgesX, edgesY: snapEdgesY,
+                tolerance: snapTolerance,
+                limits: overlay.display.frame,
+                movingX: movingX, movingY: movingY,
+                previousX: snapStateX, previousY: snapStateY,
+                releaseTolerance: snapTolerance + 4
+            )
+            visual = snap.rect
+            snapStateX = snap.stateX
+            snapStateY = snap.stateY
+            // The locked origin stays on screen as a guide for the whole drag.
+            var edgesX = snap.edgesX
+            if let originEdgeX, edgesX.contains(originEdgeX) == false {
+                edgesX.append(originEdgeX)
+                edgesX.sort()
+            }
+            var edgesY = snap.edgesY
+            if let originEdgeY, edgesY.contains(originEdgeY) == false {
+                edgesY.append(originEdgeY)
+                edgesY.sort()
+            }
+            snapInfo = SnapInfo(axisX: edgesX.isEmpty == false,
+                                axisY: edgesY.isEmpty == false,
+                                edgesX: edgesX, edgesY: edgesY)
+        } else {
+            snapStateX = .none
+            snapStateY = .none
         }
         let isValid = visual.width >= ScreenRegionGeometry.minimumSide
             && visual.height >= ScreenRegionGeometry.minimumSide
@@ -310,6 +442,14 @@ final class ScreenRegionSelector {
                 ?? ScreenRegionGeometry.sizeLabel(for: rect, scale: overlay.display.scale)
         }
         overlay.view.setSelection(local(visual, in: overlay.display), label: label)
+        // Before the rectangle is big enough, keep the origin guides visible:
+        // the press locked them, and dropping them for a few points made the
+        // first movement look like the snap had been lost (T39).
+        let originInfo = SnapInfo(axisX: originEdgeX != nil, axisY: originEdgeY != nil,
+                                  edgesX: originEdgeX.map { [$0] } ?? [],
+                                  edgesY: originEdgeY.map { [$0] } ?? [])
+        overlay.view.snapGuides = guides(for: isValid ? currentSnap : originInfo,
+                                         display: overlay.display)
         onChange?(currentRect, currentSnap)
     }
 
@@ -456,11 +596,14 @@ final class ScreenRegionSelector {
 
     private func prepareSnapEdges(displays: [ScreenRegionDisplay]) {
         var frames = displays.map(\.frame)
+        var windows: [CGRect] = []
         if snapToWindows {
             // A published snapshot, never a discovery: the overlay is opened
             // from an interactive command and must not wait for Accessibility.
-            frames += WindowIndex.shared.snapshot().map { WindowController.flip($0.frame) }
+            windows = WindowIndex.shared.snapshot().map { WindowController.flip($0.frame) }
+            frames += windows
         }
+        snapWindowFrames = windows
         let edges = ScreenRegionGeometry.edges(of: frames)
         if options.snapToCenters {
             snapEdgesX = (edges.x + frames.map(\.midX)).sorted()
@@ -469,6 +612,8 @@ final class ScreenRegionSelector {
             snapEdgesX = edges.x
             snapEdgesY = edges.y
         }
+        snapStateX = .none
+        snapStateY = .none
     }
 
     private static func availableDisplays() -> [ScreenRegionDisplay] {

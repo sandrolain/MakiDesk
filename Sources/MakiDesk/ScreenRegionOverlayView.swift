@@ -1,5 +1,15 @@
 import AppKit
 
+/// Where the magnetic guides are, in the overlay's local coordinates (T39).
+struct SnapGuides: Equatable {
+    /// Every snapped side, one full-screen line each.
+    var xs: [CGFloat] = []
+    var ys: [CGFloat] = []
+    /// The window that produced a snap: its other sides are drawn faintly.
+    var context: CGRect?
+    static let none = SnapGuides()
+}
+
 /// One screen's overlay in the shared region selector (T49): dims the screen,
 /// draws the crosshair, the selection rectangle with its size, and a loupe fed
 /// by the still capture.
@@ -25,6 +35,10 @@ final class ScreenRegionOverlayView: NSView {
     /// How dark the overlay makes the screen; the ruler asks for a lighter dim.
     var dimAlpha: CGFloat = 0.45 {
         didSet { needsDisplay = true }
+    }
+    /// Full-height/full-width guides at the snapped edges, set while dragging.
+    var snapGuides = SnapGuides.none {
+        didSet { if oldValue != snapGuides { needsDisplay = true } }
     }
 
     var onPointerMoved: ((CGPoint) -> Void)?
@@ -98,6 +112,7 @@ final class ScreenRegionOverlayView: NSView {
     override func mouseExited(with event: NSEvent) {
         guard selection == nil else { return }
         setPointer(nil)
+        snapGuides = .none
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -150,17 +165,98 @@ final class ScreenRegionOverlayView: NSView {
             path.windingRule = .evenOdd
             dim.setFill()
             path.fill()
+            drawSnapGuides(selection)
             drawSelectionBorder(selection)
             drawHandles(selection)
             drawSizeLabel(selection)
         } else {
             dim.setFill()
             bounds.fill()
+            drawSnapGuides(nil)
             drawHint()
         }
 
         drawCrosshair()
         drawLoupe()
+    }
+
+    /// A dashed accent line for every snapped side and a magnet dot on it. The
+    /// window that produced the snap contributes a faint outline of its other
+    /// sides. Without a selection this is the hover preview (T39).
+    private func drawSnapGuides(_ selection: CGRect?) {
+        if let context = snapGuides.context {
+            drawContextOutline(context)
+        }
+        for x in snapGuides.xs where x >= bounds.minX - 1 && x <= bounds.maxX + 1 {
+            drawGuideLine(from: CGPoint(x: x, y: bounds.minY),
+                          to: CGPoint(x: x, y: bounds.maxY))
+            if let selection {
+                drawSnapDot(at: CGPoint(x: x, y: selection.midY))
+            } else if let pointer {
+                drawSnapDot(at: CGPoint(x: x, y: pointer.y))
+            }
+        }
+        for y in snapGuides.ys where y >= bounds.minY - 1 && y <= bounds.maxY + 1 {
+            drawGuideLine(from: CGPoint(x: bounds.minX, y: y),
+                          to: CGPoint(x: bounds.maxX, y: y))
+            if let selection {
+                drawSnapDot(at: CGPoint(x: selection.midX, y: y))
+            } else if let pointer {
+                drawSnapDot(at: CGPoint(x: pointer.x, y: y))
+            }
+        }
+    }
+
+    /// A thin, faint outline of the snapped window; the primary bright lines
+    /// cover the sides that actually snapped.
+    private func drawContextOutline(_ rect: CGRect) {
+        let line = NSBezierPath()
+        line.lineWidth = 1
+        line.setLineDash([2, 5], count: 2, phase: 0)
+        let top = min(rect.maxY, bounds.maxY)
+        let bottom = max(rect.minY, bounds.minY)
+        let left = max(rect.minX, bounds.minX)
+        let right = min(rect.maxX, bounds.maxX)
+        guard right > left, top > bottom else { return }
+        for x in [rect.minX, rect.maxX]
+        where snapGuides.xs.allSatisfy({ abs($0 - x) >= 0.5 }) && x >= bounds.minX && x <= bounds.maxX {
+            line.move(to: CGPoint(x: x, y: bottom))
+            line.line(to: CGPoint(x: x, y: top))
+        }
+        for y in [rect.minY, rect.maxY]
+        where snapGuides.ys.allSatisfy({ abs($0 - y) >= 0.5 }) && y >= bounds.minY && y <= bounds.maxY {
+            line.move(to: CGPoint(x: left, y: y))
+            line.line(to: CGPoint(x: right, y: y))
+        }
+        accentColor.withAlphaComponent(0.34).setStroke()
+        line.stroke()
+    }
+
+    private func drawGuideLine(from start: CGPoint, to end: CGPoint) {
+        let glow = NSBezierPath()
+        glow.move(to: start)
+        glow.line(to: end)
+        glow.lineWidth = 3
+        accentColor.withAlphaComponent(0.22).setStroke()
+        glow.stroke()
+
+        let line = NSBezierPath()
+        line.move(to: start)
+        line.line(to: end)
+        line.lineWidth = 1
+        line.setLineDash([5, 4], count: 2, phase: 0)
+        accentColor.withAlphaComponent(0.95).setStroke()
+        line.stroke()
+    }
+
+    private func drawSnapDot(at point: CGPoint) {
+        let dot = CGRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8)
+        NSColor.black.withAlphaComponent(0.6).setFill()
+        NSBezierPath(ovalIn: dot.insetBy(dx: -1.5, dy: -1.5)).fill()
+        accentColor.setFill()
+        NSBezierPath(ovalIn: dot).fill()
+        NSColor.white.withAlphaComponent(0.9).setFill()
+        NSBezierPath(ovalIn: dot.insetBy(dx: 2.5, dy: 2.5)).fill()
     }
 
     private func drawCrosshair() {

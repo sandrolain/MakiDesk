@@ -58,6 +58,9 @@ final class ScreenRegionGeometryTests: XCTestCase {
         XCTAssertEqual(result.rect, CGRect(x: 100, y: 100, width: 198, height: 125))
         XCTAssertTrue(result.snappedX)
         XCTAssertTrue(result.snappedY)
+        // The guides are drawn on the candidate the side moved to.
+        XCTAssertEqual(result.edgesX, [298])
+        XCTAssertEqual(result.edgesY, [225])
     }
 
     func testSnapIgnoresEdgesBeyondTheTolerance() {
@@ -68,6 +71,8 @@ final class ScreenRegionGeometryTests: XCTestCase {
         XCTAssertEqual(result.rect, rect)
         XCTAssertFalse(result.snappedX)
         XCTAssertFalse(result.snappedY)
+        XCTAssertEqual(result.edgesX, [])
+        XCTAssertEqual(result.edgesY, [])
     }
 
     func testSnapNeverCollapsesTheRectangle() {
@@ -81,6 +86,125 @@ final class ScreenRegionGeometryTests: XCTestCase {
         XCTAssertEqual(result.rect, rect)
         XCTAssertFalse(result.snappedX)
         XCTAssertFalse(result.snappedY)
+        XCTAssertEqual(result.edgesX, [])
+        XCTAssertEqual(result.edgesY, [])
+    }
+
+    // MARK: - Sticky snap and guides (T39)
+
+    func testOnlyMovingSidesSnap() {
+        // The anchor side is 2 pt from an edge; dragging up/right must not move
+        // it, so the rectangle cannot jump back to the start.
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 120)
+        let result = ScreenRegionGeometry.snapped(
+            rect, edgesX: [98, 302], edgesY: [98, 225], tolerance: 6,
+            movingX: (low: false, high: true),
+            movingY: (low: false, high: true)
+        )
+        XCTAssertEqual(result.rect, CGRect(x: 100, y: 100, width: 202, height: 125))
+        XCTAssertEqual(result.edgesX, [302])
+        XCTAssertEqual(result.edgesY, [225])
+        XCTAssertNil(result.stateX.lowEdge)
+        XCTAssertEqual(result.stateX.highEdge, 302)
+    }
+
+    func testHysteresisKeepsASideSnappedUntilItPullsAway() {
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 120)
+        let first = ScreenRegionGeometry.snapped(
+            rect, edgesX: [302], edgesY: [], tolerance: 6,
+            movingX: (low: false, high: true), movingY: (false, false),
+            releaseTolerance: 10
+        )
+        XCTAssertEqual(first.stateX.highEdge, 302)
+
+        // Still within the release distance: stay on the edge.
+        let held = ScreenRegionGeometry.snapped(
+            CGRect(x: 100, y: 100, width: 208, height: 120),
+            edgesX: [302], edgesY: [], tolerance: 6,
+            movingX: (low: false, high: true), movingY: (false, false),
+            previousX: first.stateX, releaseTolerance: 10
+        )
+        XCTAssertEqual(held.rect.maxX, 302)
+
+        // Pulled farther than the release distance: let go.
+        let released = ScreenRegionGeometry.snapped(
+            CGRect(x: 100, y: 100, width: 220, height: 120),
+            edgesX: [302], edgesY: [], tolerance: 6,
+            movingX: (low: false, high: true), movingY: (false, false),
+            previousX: held.stateX, releaseTolerance: 10
+        )
+        XCTAssertEqual(released.rect.maxX, 320)
+        XCTAssertNil(released.stateX.highEdge)
+    }
+
+    func testBothSidesCanSnapToDifferentEdges() {
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 120)
+        let result = ScreenRegionGeometry.snapped(
+            rect, edgesX: [98, 303], edgesY: [], tolerance: 6
+        )
+        XCTAssertEqual(result.rect, CGRect(x: 98, y: 100, width: 205, height: 120))
+        XCTAssertEqual(result.edgesX, [98, 303])
+    }
+
+    func testCandidatesOutsideTheDisplayAreIgnored() {
+        let rect = CGRect(x: 100, y: 100, width: 200, height: 120)
+        let result = ScreenRegionGeometry.snapped(
+            rect, edgesX: [98, 305], edgesY: [], tolerance: 6,
+            limits: CGRect(x: 100, y: 0, width: 200, height: 400)
+        )
+        XCTAssertEqual(result.rect.minX, 100)
+        XCTAssertEqual(result.edgesX, [])
+    }
+
+    func testRoundedSidesQuantiseTheRectangle() {
+        let rect = CGRect(x: 10.4, y: 20.6, width: 100.2, height: 40.1)
+        XCTAssertEqual(ScreenRegionGeometry.rounded(rect),
+                       CGRect(x: 10, y: 21, width: 101, height: 40))
+    }
+
+    func testFrameOwningAnEdgePrefersTheWindowOverTheDisplay() {
+        let display = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let window = CGRect(x: 0, y: 100, width: 200, height: 300)
+        XCTAssertEqual(ScreenRegionGeometry.frame(owningEdge: 0, axis: .x,
+                                                  in: [display, window]), window)
+        XCTAssertEqual(ScreenRegionGeometry.frame(owningEdge: 800, axis: .y,
+                                                  in: [display, window]), display)
+        XCTAssertNil(ScreenRegionGeometry.frame(owningEdge: 42, axis: .x, in: [display, window]))
+    }
+
+    func testSnappedOriginLocksTheVisibleGuide() {
+        let limits = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let both = ScreenRegionGeometry.snappedOrigin(
+            CGPoint(x: 98, y: 202), edgesX: [100, 250], edgesY: [200, 280],
+            tolerance: 6, limits: limits
+        )
+        XCTAssertEqual(both.point, CGPoint(x: 100, y: 200))
+        XCTAssertEqual(both.edgeX, 100)
+        XCTAssertEqual(both.edgeY, 200)
+
+        let oneAxis = ScreenRegionGeometry.snappedOrigin(
+            CGPoint(x: 120, y: 97), edgesX: [100], edgesY: [200], tolerance: 6, limits: limits
+        )
+        XCTAssertEqual(oneAxis.point, CGPoint(x: 120, y: 97))
+        XCTAssertNil(oneAxis.edgeX)
+        XCTAssertNil(oneAxis.edgeY)
+    }
+
+    func testSnappedOriginIgnoresCandidatesOutsideTheDisplay() {
+        let limits = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let origin = ScreenRegionGeometry.snappedOrigin(
+            CGPoint(x: 202, y: 100), edgesX: [210], edgesY: [],
+            tolerance: 10, limits: limits
+        )
+        XCTAssertEqual(origin.point, CGPoint(x: 202, y: 100))
+        XCTAssertNil(origin.edgeX)
+    }
+
+    func testNearestEdgeFindsTheHoverCandidateWithinTolerance() {
+        XCTAssertEqual(ScreenRegionGeometry.nearestEdge(to: 100, in: [90, 104], tolerance: 6), 104)
+        XCTAssertEqual(ScreenRegionGeometry.nearestEdge(to: 94, in: [90, 104], tolerance: 6), 90)
+        XCTAssertNil(ScreenRegionGeometry.nearestEdge(to: 100, in: [90, 110], tolerance: 6))
+        XCTAssertNil(ScreenRegionGeometry.nearestEdge(to: 100, in: [], tolerance: 6))
     }
 
     func testEdgesAreSortedAndUnique() {

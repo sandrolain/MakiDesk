@@ -468,7 +468,17 @@ measurement in place with a small badge that copies the values or dismisses it.
 
 - `⇧` keeps a square, `⌥` measures out from the centre (both can combine).
 - Values snap within 6 pt to window and display edges **and centres**; the
-  badge says which axis snapped.
+  badge says which axis snapped. A dashed accent guide with a magnet dot shows
+  the candidate as the pointer approaches it, before the drag, and stays on the
+  snapped side while dragging. The other sides of the window that produced the
+  snap are outlined faintly, so the whole window is readable.
+- The snap is sticky: once a side catches an edge it stays there until the
+  pointer pulls it about 10 pt away, which avoids flicker on the tolerance
+  boundary. Only the sides you are dragging snap; the starting corner stays
+  where you pressed.
+- Pressing locks the guide that is visible: if the pointer is on a dashed line,
+  the measurement starts exactly on that edge or centre, so the first movement
+  cannot miss it.
 - A measurement stays until its ✕ or **Measure ▸ Clear Measurements**; up to
   eight at once. Nothing is written to disk.
 - **Settings ▸ Panels ▸ Measure** or **Measure ▸ Units** chooses points (exact),

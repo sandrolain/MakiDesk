@@ -50,6 +50,9 @@ final class MeasureController {
         options.dimAlpha = 0.12
         options.snapToCenters = true
         options.respectsModifiers = true
+        options.showsSnapHover = true
+        options.snapsMovingSidesOnly = true
+        options.showsSnapContext = true
         options.hint = "Drag to measure · ⇧ square · ⌥ centre · Esc to cancel"
         options.accessibilityLabel = "Measure an area of the screen"
         options.label = { rect, display, snap in

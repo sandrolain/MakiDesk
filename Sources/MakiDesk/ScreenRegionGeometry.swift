@@ -25,10 +25,31 @@ enum ScreenRegionGeometry {
     /// A selection shorter than this on either side is a click, not a region.
     static let minimumSide: CGFloat = 4
 
+    /// The locked edges of one axis between drag events: hysteresis keeps a
+    /// side on its candidate until the pointer pulls it away (T39).
+    struct SnapAxisState: Equatable, Sendable {
+        var lowEdge: CGFloat?
+        var highEdge: CGFloat?
+
+        static let none = SnapAxisState()
+    }
+
+    /// Which axis a guide belongs to, for matching a frame to an edge.
+    enum Axis: Sendable {
+        case x
+        case y
+    }
+
     struct SnapResult: Equatable {
         var rect: CGRect
         var snappedX: Bool
         var snappedY: Bool
+        /// Every candidate the two sides moved to, in global coordinates.
+        var edgesX: [CGFloat]
+        var edgesY: [CGFloat]
+        /// The locks to pass back on the next move, so a side stays snapped.
+        var stateX: SnapAxisState
+        var stateY: SnapAxisState
     }
 
     // MARK: - Rectangles
@@ -69,7 +90,10 @@ enum ScreenRegionGeometry {
     /// Keeps a selection inside one display. A drag that leaves the display is
     /// clipped, never wrapped or moved to another screen.
     static func clamped(_ rect: CGRect, to display: ScreenRegionDisplay) -> CGRect {
-        let bounds = display.frame
+        clamped(rect, to: display.frame)
+    }
+
+    static func clamped(_ rect: CGRect, to bounds: CGRect) -> CGRect {
         let minX = max(bounds.minX, rect.minX)
         let minY = max(bounds.minY, rect.minY)
         let maxX = min(bounds.maxX, rect.maxX)
@@ -78,42 +102,139 @@ enum ScreenRegionGeometry {
                       width: max(0, maxX - minX), height: max(0, maxY - minY))
     }
 
-    /// Pulls one side per axis to the nearest candidate edge, but only within
-    /// `tolerance` and never so far that the rectangle drops below `minimum`.
-    /// The closest side wins, so grabbing a window corner feels like the corner
-    /// snaps and not the opposite edge.
+    /// Rounds the two sides of `rect` to whole points before snapping: sub-pixel
+    /// jitter at the tolerance boundary would otherwise make the rectangle
+    /// flicker between snapped and free (T39).
+    static func rounded(_ rect: CGRect) -> CGRect {
+        let minX = rect.minX.rounded()
+        let minY = rect.minY.rounded()
+        let maxX = rect.maxX.rounded()
+        let maxY = rect.maxY.rounded()
+        return CGRect(x: minX, y: minY,
+                      width: max(0, maxX - minX), height: max(0, maxY - minY))
+    }
+
+    /// The frame that owns an edge, preferring the smallest one (a window over
+    /// its display) for the contextual outline (T39).
+    static func frame(owningEdge value: CGFloat, axis: Axis,
+                      in frames: [CGRect]) -> CGRect? {
+        var best: CGRect?
+        for frame in frames {
+            let candidates: [CGFloat] = axis == .x
+                ? [frame.minX, frame.midX, frame.maxX]
+                : [frame.minY, frame.midY, frame.maxY]
+            guard candidates.contains(where: { abs($0 - value) < 0.5 }) else { continue }
+            let area = frame.width * frame.height
+            let bestArea = best.map { $0.width * $0.height } ?? .greatestFiniteMagnitude
+            if area < bestArea { best = frame }
+        }
+        return best
+    }
+
+    /// Pulls the moving sides to the nearest candidate, one per side, with
+    /// optional hysteresis and display limits. Only moving sides snap, so the
+    /// corner where the drag started cannot steal the snap and make the
+    /// rectangle jump between two positions (T39). The defaults (both sides
+    /// moving, no limits) keep the behaviour used by text recognition.
     static func snapped(_ rect: CGRect,
                         edgesX: [CGFloat], edgesY: [CGFloat],
                         tolerance: CGFloat,
-                        minimum: CGFloat = minimumSide) -> SnapResult {
-        let x = snapAxis(min: rect.minX, max: rect.maxX, to: edgesX,
-                         tolerance: tolerance, minimum: minimum)
-        let y = snapAxis(min: rect.minY, max: rect.maxY, to: edgesY,
-                         tolerance: tolerance, minimum: minimum)
-        return SnapResult(rect: CGRect(x: x.min, y: y.min,
-                                       width: x.max - x.min, height: y.max - y.min),
-                          snappedX: x.snapped, snappedY: y.snapped)
+                        minimum: CGFloat = minimumSide,
+                        limits: CGRect? = nil,
+                        movingX: (low: Bool, high: Bool) = (true, true),
+                        movingY: (low: Bool, high: Bool) = (true, true),
+                        previousX: SnapAxisState = .none,
+                        previousY: SnapAxisState = .none,
+                        releaseTolerance: CGFloat? = nil) -> SnapResult {
+        let release = releaseTolerance ?? tolerance
+        let x = snapAxis(low: rect.minX, high: rect.maxX, to: edgesX,
+                         movingLow: movingX.low, movingHigh: movingX.high,
+                         previous: previousX, tolerance: tolerance, release: release,
+                         limits: limits.map { $0.minX...$0.maxX }, minimum: minimum)
+        let y = snapAxis(low: rect.minY, high: rect.maxY, to: edgesY,
+                         movingLow: movingY.low, movingHigh: movingY.high,
+                         previous: previousY, tolerance: tolerance, release: release,
+                         limits: limits.map { $0.minY...$0.maxY }, minimum: minimum)
+        return SnapResult(
+            rect: CGRect(x: x.low, y: y.low, width: x.high - x.low, height: y.high - y.low),
+            snappedX: x.edges.isEmpty == false,
+            snappedY: y.edges.isEmpty == false,
+            edgesX: x.edges, edgesY: y.edges,
+            stateX: x.state, stateY: y.state
+        )
     }
 
-    private static func snapAxis(min low: CGFloat, max high: CGFloat,
-                                 to edges: [CGFloat], tolerance: CGFloat,
-                                 minimum: CGFloat) -> (min: CGFloat, max: CGFloat, snapped: Bool) {
-        var best: (distance: CGFloat, edge: CGFloat, movesLow: Bool)?
-        for edge in edges {
-            for (value, movesLow) in [(low, true), (high, false)] {
+    private static func snapAxis(low: CGFloat, high: CGFloat,
+                                 to edges: [CGFloat],
+                                 movingLow: Bool, movingHigh: Bool,
+                                 previous: SnapAxisState,
+                                 tolerance: CGFloat, release: CGFloat,
+                                 limits: ClosedRange<CGFloat>?,
+                                 minimum: CGFloat)
+        -> (low: CGFloat, high: CGFloat, edges: [CGFloat], state: SnapAxisState) {
+        func isAllowed(_ edge: CGFloat) -> Bool {
+            guard let limits else { return true }
+            return edge >= limits.lowerBound && edge <= limits.upperBound
+        }
+        func nearest(to value: CGFloat) -> CGFloat? {
+            var best: (distance: CGFloat, edge: CGFloat)?
+            for edge in edges where isAllowed(edge) {
                 let distance = abs(edge - value)
                 guard distance <= tolerance else { continue }
-                if best == nil || distance < best!.distance {
-                    best = (distance, edge, movesLow)
-                }
+                if best == nil || distance < best!.distance { best = (distance, edge) }
             }
+            return best?.edge
         }
-        guard let best else { return (low, high, false) }
-        let newLow = best.movesLow ? best.edge : low
-        let newHigh = best.movesLow ? high : best.edge
-        // Snapping two sides onto the same edge would collapse the rectangle.
-        guard newHigh - newLow >= minimum else { return (low, high, false) }
-        return (newLow, newHigh, true)
+        func side(_ raw: CGFloat, moving: Bool,
+                  locked: CGFloat?) -> (value: CGFloat, edge: CGFloat?) {
+            guard moving else { return (raw, nil) }
+            if let locked, abs(raw - locked) <= release, isAllowed(locked) {
+                return (locked, locked)
+            }
+            if let edge = nearest(to: raw) { return (edge, edge) }
+            return (raw, nil)
+        }
+        let lowSide = side(low, moving: movingLow, locked: previous.lowEdge)
+        let highSide = side(high, moving: movingHigh, locked: previous.highEdge)
+        // Two sides on the same edge would collapse the rectangle: refuse the
+        // snap instead of producing a sliver.
+        guard highSide.value - lowSide.value >= minimum else {
+            return (low, high, [], .none)
+        }
+        return (lowSide.value, highSide.value,
+                [lowSide.edge, highSide.edge].compactMap { $0 }.sorted(),
+                SnapAxisState(lowEdge: lowSide.edge, highEdge: highSide.edge))
+    }
+
+    /// The closest candidate within `tolerance`, for the magnetic hover
+    /// preview (T39). `nil` when nothing is close enough.
+    static func nearestEdge(to value: CGFloat, in edges: [CGFloat],
+                            tolerance: CGFloat) -> CGFloat? {
+        var best: (distance: CGFloat, edge: CGFloat)?
+        for edge in edges {
+            let distance = abs(edge - value)
+            guard distance <= tolerance else { continue }
+            if best == nil || distance < best!.distance { best = (distance, edge) }
+        }
+        return best?.edge
+    }
+
+    /// The press point after the magnetic guides lock on screen: the visible
+    /// hover candidate becomes the anchor of the drag (T39). Candidates outside
+    /// `limits` are ignored, so an off-screen window edge cannot move the
+    /// anchor outside the display.
+    static func snappedOrigin(_ point: CGPoint,
+                              edgesX: [CGFloat], edgesY: [CGFloat],
+                              tolerance: CGFloat,
+                              limits: CGRect) -> (point: CGPoint,
+                                                  edgeX: CGFloat?, edgeY: CGFloat?) {
+        let x = nearestEdge(to: point.x,
+                            in: edgesX.filter { $0 >= limits.minX && $0 <= limits.maxX },
+                            tolerance: tolerance)
+        let y = nearestEdge(to: point.y,
+                            in: edgesY.filter { $0 >= limits.minY && $0 <= limits.maxY },
+                            tolerance: tolerance)
+        return (CGPoint(x: x ?? point.x, y: y ?? point.y), x, y)
     }
 
     /// Every vertical and horizontal line worth snapping to, sorted and unique.
