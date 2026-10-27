@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import ImageIO
 import SwiftUI
 
 // MARK: - Model
@@ -427,10 +428,8 @@ private struct ClipboardRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "text.alignleft")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(selected ? theme.accent : theme.subtext)
-                .frame(width: 14)
+            leading
+                .frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.preview)
                     .font(.system(size: 12.5))
@@ -455,5 +454,90 @@ private struct ClipboardRow: View {
         .contextMenu {
             Button("Add to Shelf") { onShelf(entry) }
         }
+    }
+
+    @ViewBuilder
+    private var leading: some View {
+        switch entry.previewKind {
+        case let .color(color):
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(red: Double(color.red) / 255,
+                            green: Double(color.green) / 255,
+                            blue: Double(color.blue) / 255))
+                .overlay(RoundedRectangle(cornerRadius: 4)
+                    .stroke(theme.border.opacity(0.9), lineWidth: 1))
+                .frame(width: 16, height: 16)
+                .help("Colour \(color.hex)")
+                .accessibilityLabel("Colour \(color.hex)")
+        case let .image(url):
+            ClipboardThumbnail(url: url)
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .help(url.lastPathComponent)
+        case .text:
+            Image(systemName: "text.alignleft")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(selected ? theme.accent : theme.subtext)
+        }
+    }
+}
+
+/// A small thumbnail for a copied image path, loaded off the main thread and
+/// cached. A missing or unreadable file keeps the photo placeholder.
+private struct ClipboardThumbnail: View {
+    let url: URL
+    @State private var image: CGImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .task(id: url) {
+            image = await ClipboardThumbnailLoader.shared.thumbnail(for: url)
+        }
+    }
+}
+
+/// One background task per path, a bounded cache, and no disk work on the main
+/// thread: the clipboard panel can list a path on a slow volume.
+actor ClipboardThumbnailLoader {
+    static let shared = ClipboardThumbnailLoader()
+
+    private var cache: [String: CGImage] = [:]
+    private var unavailable = Set<String>()
+    private var pending: [String: Task<CGImage?, Never>] = [:]
+    private let limit = 32
+
+    func thumbnail(for url: URL) async -> CGImage? {
+        let key = url.standardizedFileURL.path
+        if let cached = cache[key] { return cached }
+        if unavailable.contains(key) { return nil }
+        if let pending = pending[key] { return await pending.value }
+        let task = Task.detached(priority: .utility) { () -> CGImage? in
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 48,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+            ] as CFDictionary)
+        }
+        pending[key] = task
+        let image = await task.value
+        pending[key] = nil
+        if let image {
+            if cache.count >= limit { cache.removeAll(keepingCapacity: true) }
+            cache[key] = image
+        } else {
+            unavailable.insert(key)
+        }
+        return image
     }
 }

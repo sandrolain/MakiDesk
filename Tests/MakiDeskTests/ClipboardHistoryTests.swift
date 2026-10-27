@@ -131,4 +131,46 @@ final class ClipboardHistoryTests: XCTestCase {
         history.clear()
         XCTAssertTrue(history.entries.isEmpty)
     }
+
+    // MARK: - Row previews (T36)
+
+    func testColourTextsAreRecognisedForTheSwatch() {
+        guard case let .color(hex) = ClipboardPreview(text: " #a1b2c3 ") else {
+            return XCTFail("expected a colour preview")
+        }
+        XCTAssertEqual(hex.hex, "#A1B2C3")
+        guard case .color = ClipboardPreview(text: "hsl(210, 50%, 33%)") else {
+            return XCTFail("expected an HSL colour preview")
+        }
+        guard case .color = ClipboardPreview(text: "rgba(10, 20, 30, 0.5)") else {
+            return XCTFail("expected an RGBA colour preview")
+        }
+    }
+
+    func testImagePathsAreRecognisedForTheThumbnail() {
+        guard case let .image(url) = ClipboardPreview(text: "/Users/example/Desktop/Shot.png") else {
+            return XCTFail("expected an image preview")
+        }
+        XCTAssertEqual(url.lastPathComponent, "Shot.png")
+        guard case let .image(tilde) = ClipboardPreview(text: "~/Pictures/photo.jpeg") else {
+            return XCTFail("expected a tilde image preview")
+        }
+        XCTAssertFalse(tilde.path.hasPrefix("~"))
+        guard case let .image(fileURL) = ClipboardPreview(text: "file:///tmp/capture.heic") else {
+            return XCTFail("expected a file URL preview")
+        }
+        XCTAssertEqual(fileURL.path, "/tmp/capture.heic")
+    }
+
+    func testOrdinaryTextAndRemoteLinksStayText() {
+        XCTAssertEqual(ClipboardPreview(text: "hello"), .text)
+        XCTAssertEqual(ClipboardPreview(text: "https://example.com/photo.png"), .text)
+        XCTAssertEqual(ClipboardPreview(text: "/tmp/notes.txt"), .text)
+        XCTAssertEqual(ClipboardPreview(text: ""), .text)
+    }
+
+    func testEntryExposesThePreviewKind() {
+        let entry = ClipboardEntry(id: UUID(), text: "#00FF00", date: Date())
+        XCTAssertEqual(entry.previewKind, .color(SampledColor(red: 0, green: 255, blue: 0)))
+    }
 }

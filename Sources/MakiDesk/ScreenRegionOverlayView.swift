@@ -15,6 +15,10 @@ final class ScreenRegionOverlayView: NSView {
     var showsLoupe = true {
         didSet { needsDisplay = true }
     }
+    /// The colour picker shows the sampled colour next to the loupe (T36).
+    var showsColorPreview = false {
+        didSet { needsDisplay = true }
+    }
     var hintText: String? {
         didSet { needsDisplay = true }
     }
@@ -30,6 +34,8 @@ final class ScreenRegionOverlayView: NSView {
     private var selectionLabel: String?
     private var snapshot: CGImage?
     private var snapshotDisplaySize: CGSize = .zero
+    private var sampledPixel: (x: Int, y: Int)?
+    private var sampledColor: SampledColor?
     private var trackingArea: NSTrackingArea?
 
     private let dimAlpha: CGFloat = 0.45
@@ -60,6 +66,8 @@ final class ScreenRegionOverlayView: NSView {
     func setSnapshot(_ image: CGImage?, displaySize: CGSize) {
         snapshot = image
         snapshotDisplaySize = displaySize
+        sampledPixel = nil
+        sampledColor = nil
         needsDisplay = true
     }
 
@@ -298,5 +306,61 @@ final class ScreenRegionOverlayView: NSView {
         mark.move(to: CGPoint(x: rect.midX, y: rect.midY - 5))
         mark.line(to: CGPoint(x: rect.midX, y: rect.midY + 5))
         mark.stroke()
+
+        if showsColorPreview,
+           let color = colorUnderPointer(centerX: centerX, centerY: centerY) {
+            drawColorPreview(below: rect, color: color)
+        }
+    }
+
+    /// The exact pixel under the pointer, cached by position: the loupe redraws
+    /// on every mouse move.
+    private func colorUnderPointer(centerX: CGFloat, centerY: CGFloat) -> SampledColor? {
+        guard let snapshot else { return nil }
+        let x = min(max(0, Int(centerX)), max(0, snapshot.width - 1))
+        let y = min(max(0, Int(centerY)), max(0, snapshot.height - 1))
+        if let sampledPixel, sampledPixel.x == x, sampledPixel.y == y {
+            return sampledColor
+        }
+        guard let pixel = snapshot.cropping(to: CGRect(x: x, y: y, width: 1, height: 1)),
+              let color = SampledColor(image: pixel) else { return nil }
+        sampledPixel = (x, y)
+        sampledColor = color
+        return color
+    }
+
+    /// A square with the sampled colour and its hex value, beside the loupe.
+    private func drawColorPreview(below loupe: CGRect, color: SampledColor) {
+        let side: CGFloat = 26
+        let gap: CGFloat = 6
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let text = color.hex as NSString
+        let textSize = text.size(withAttributes: attributes)
+        let width = min(bounds.width - loupeMargin * 2, side + gap + textSize.width + 12)
+        var y = loupe.minY - side - 8
+        if y < loupeMargin { y = loupe.maxY + 8 }
+        let bar = CGRect(x: loupe.minX, y: y, width: width, height: side)
+
+        NSColor.black.withAlphaComponent(0.68).setFill()
+        NSBezierPath(roundedRect: bar, xRadius: 7, yRadius: 7).fill()
+
+        let swatch = CGRect(x: bar.minX + 4, y: bar.minY + 4, width: side - 8, height: side - 8)
+        NSColor(srgbRed: CGFloat(color.red) / 255,
+                green: CGFloat(color.green) / 255,
+                blue: CGFloat(color.blue) / 255,
+                alpha: 1).setFill()
+        NSBezierPath(roundedRect: swatch, xRadius: 3, yRadius: 3).fill()
+        NSColor.white.withAlphaComponent(0.35).setStroke()
+        let edge = NSBezierPath(roundedRect: swatch.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: 3, yRadius: 3)
+        edge.lineWidth = 1
+        edge.stroke()
+
+        text.draw(at: CGPoint(x: swatch.maxX + gap,
+                              y: bar.midY - textSize.height / 2),
+                  withAttributes: attributes)
     }
 }

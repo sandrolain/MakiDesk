@@ -22,12 +22,55 @@ final class ColorSamplerTests: XCTestCase {
         XCTAssertEqual(color.hex, "#123456")
         XCTAssertEqual(color.hexWithAlpha, "#123456FF")
         XCTAssertEqual(color.rgb, "rgb(18, 52, 86)")
+        XCTAssertEqual(color.rgba, "rgba(18, 52, 86, 1.00)")
+        XCTAssertEqual(color.hsl, "hsl(210, 65%, 20%)")
+        XCTAssertEqual(color.hsla, "hsla(210, 65%, 20%, 1.00)")
         XCTAssertEqual(color.nsColor,
                        "NSColor(srgbRed: 0.071, green: 0.204, blue: 0.337, alpha: 1.000)")
         XCTAssertEqual(ColorClipboardFormat.hex.string(for: color), "#123456")
         XCTAssertEqual(ColorClipboardFormat.rgb.string(for: color), "rgb(18, 52, 86)")
+        XCTAssertEqual(ColorClipboardFormat.rgba.string(for: color), "rgba(18, 52, 86, 1.00)")
+        XCTAssertEqual(ColorClipboardFormat.hsl.string(for: color), "hsl(210, 65%, 20%)")
+        XCTAssertEqual(ColorClipboardFormat.hsla.string(for: color), "hsla(210, 65%, 20%, 1.00)")
         XCTAssertEqual(ColorClipboardFormat.hexWithAlpha.string(for: color), "#123456FF")
         XCTAssertEqual(ColorClipboardFormat.nsColor.string(for: color), color.nsColor)
+    }
+
+    func testParsesHexAndFunctionalNotations() throws {
+        XCTAssertEqual(SampledColor(parsing: "#0f0"), SampledColor(red: 0, green: 255, blue: 0))
+        XCTAssertEqual(SampledColor(parsing: "#00FF0080"),
+                       SampledColor(red: 0, green: 255, blue: 0, alpha: 128))
+        XCTAssertEqual(SampledColor(parsing: "rgb(18, 52, 86)"),
+                       SampledColor(red: 18, green: 52, blue: 86))
+        XCTAssertEqual(SampledColor(parsing: "rgba(18, 52, 86, 0.5)"),
+                       SampledColor(red: 18, green: 52, blue: 86, alpha: 128))
+        XCTAssertEqual(SampledColor(parsing: "rgb(18 52 86 / 50%)"),
+                       SampledColor(red: 18, green: 52, blue: 86, alpha: 128))
+        // HSL carries whole degrees and percentages, so a channel can land a
+        // couple of steps away; the visible colour is the same.
+        let hsl = try XCTUnwrap(SampledColor(parsing: "hsl(210, 65%, 20%)"))
+        XCTAssertLessThanOrEqual(abs(Int(hsl.red) - 0x12), 2)
+        XCTAssertLessThanOrEqual(abs(Int(hsl.green) - 0x34), 2)
+        XCTAssertLessThanOrEqual(abs(Int(hsl.blue) - 0x56), 2)
+        XCTAssertEqual(SampledColor(parsing: "hsla(0, 100%, 50%, 0.5)"),
+                       SampledColor(red: 255, green: 0, blue: 0, alpha: 128))
+    }
+
+    func testParsingRejectsWhatIsNotAColour() {
+        for text in ["red", "#12", "rgb(1, 2)", "hsl(1, 2)", "", "  ", "#gggggg"] {
+            XCTAssertNil(SampledColor(parsing: text), text)
+        }
+    }
+
+    func testRenderedFormatsParseBackToTheSameColour() throws {
+        let color = SampledColor(red: 0x12, green: 0x34, blue: 0x56)
+        XCTAssertEqual(SampledColor(parsing: color.hex), color)
+        XCTAssertEqual(SampledColor(parsing: color.hexWithAlpha), color)
+        XCTAssertEqual(SampledColor(parsing: color.rgba), color)
+        let hsl = try XCTUnwrap(SampledColor(parsing: color.hsl))
+        XCTAssertLessThanOrEqual(abs(Int(hsl.red) - Int(color.red)), 2)
+        XCTAssertLessThanOrEqual(abs(Int(hsl.green) - Int(color.green)), 2)
+        XCTAssertLessThanOrEqual(abs(Int(hsl.blue) - Int(color.blue)), 2)
     }
 
     func testReadingAPixelThroughSRGBAveragesTheCrop() throws {

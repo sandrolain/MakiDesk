@@ -274,6 +274,10 @@ disappears when MakiDesk quits.
   the selected text into the app you were using. `Esc` closes.
 - **To Shelf** sends the selected text to the shelf (also in the row's context
   menu); **Clear** empties the history.
+- A row shows a small preview of what it holds: a **colour swatch** when the
+  text is a colour (`#RRGGBB`, `rgb()`, `hsl()`…), an image **thumbnail** when it
+  is a local path or `file://` URL to an image, the text icon otherwise. Remote
+  links are not fetched.
 - The history keeps at most 50 distinct texts, newest first, and skips the
   copy's private/concealed types. **Secure input** (password fields) is never
   recorded, and the panel does not open while secure input is active.
@@ -438,17 +442,21 @@ a click without dragging, cancels without copying anything.
 
 ## Colour picker
 
-Press `⌃⌥E`, move the loupe over the point you want and click. The colour under
-the click goes to the clipboard; the notice shows its hex value, RGB and alpha.
+Press `⌃⌥E`, move the loupe over the point you want and click. The loupe shows
+a square with the colour under the pointer and its hex value; the click copies
+that colour in the chosen format and the notice shows hex, RGB and alpha.
+Point mode is a click, not a selection: dragging only moves the loupe, and a
+rectangle is never drawn.
 
 - **Settings ▸ Panels ▸ Colour picker** chooses the format copied: `#RRGGBB`,
-  `#RRGGBBAA`, `rgb(r, g, b)` or an `NSColor` snippet for Swift.
+  `#RRGGBBAA`, `rgb(r, g, b)`, `rgba(r, g, b, a)`, `hsl(h, s%, l%)`,
+  `hsla(h, s%, l%, a)`, or an `NSColor` snippet for Swift.
 - Values are converted to sRGB, so they match other colour tools; a display
   that is not colour-calibrated can still show a different colour from another
   one.
 - Screen Recording is required, like OCR. The capture is read in memory and
   never written to disk. `Esc` cancels. With the clipboard history on, the
-  colour is kept there like any other copy.
+  colour is kept there like any other copy, and the row shows its swatch.
 - If no text is found, the clipboard is left untouched.
 
 ## Settings

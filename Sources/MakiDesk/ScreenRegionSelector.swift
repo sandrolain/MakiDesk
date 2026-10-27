@@ -175,6 +175,7 @@ final class ScreenRegionSelector {
         let view = ScreenRegionOverlayView(frame: CGRect(origin: .zero, size: display.frame.size))
         view.accentColor = accentColor
         view.showsLoupe = showsLoupe
+        view.showsColorPreview = mode == .point
         view.setAccessibilityRole(.group)
         view.setAccessibilityLabel(mode == .point
             ? "Pick a colour from the screen"
@@ -222,6 +223,9 @@ final class ScreenRegionSelector {
     }
 
     private func dragMoved(_ point: CGPoint, displayID: CGDirectDisplayID) {
+        // In point mode a drag only moves the pointer: the loupe follows it and
+        // the click picks one pixel, so there is no rectangle to draw.
+        guard mode == .rectangle else { return }
         guard let overlay = overlay(for: displayID), let dragStart else { return }
         let end = global(point, in: overlay.display)
         let raw = CGRect(x: min(dragStart.x, end.x), y: min(dragStart.y, end.y),

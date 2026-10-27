@@ -25,6 +25,48 @@ struct ClipboardEntry: Identifiable, Equatable {
         let size = text.count == 1 ? "1 character" : "\(text.count) characters"
         return lines > 1 ? "\(lines) lines · \(size)" : size
     }
+
+    /// What the row shows before the text: a colour swatch, an image
+    /// thumbnail, or the plain text icon (T36).
+    var previewKind: ClipboardPreview { ClipboardPreview(text: text) }
+}
+
+/// The leading preview of a clipboard row, recognised from the copied text:
+/// a colour, a local image path, or nothing special.
+enum ClipboardPreview: Equatable {
+    case text
+    case color(SampledColor)
+    case image(URL)
+
+    static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "tif", "tiff", "heic", "heif", "gif", "bmp", "webp"
+    ]
+
+    init(text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let color = SampledColor(parsing: trimmed) {
+            self = .color(color)
+            return
+        }
+        guard trimmed.isEmpty == false, trimmed.contains("\n") == false,
+              trimmed.count <= 1024 else {
+            self = .text
+            return
+        }
+        let url: URL?
+        if let parsed = URL(string: trimmed), parsed.isFileURL {
+            url = parsed
+        } else if trimmed.hasPrefix("/") || trimmed.hasPrefix("~") {
+            url = URL(fileURLWithPath: (trimmed as NSString).expandingTildeInPath)
+        } else {
+            url = nil
+        }
+        if let url, Self.imageExtensions.contains(url.pathExtension.lowercased()) {
+            self = .image(url)
+        } else {
+            self = .text
+        }
+    }
 }
 
 /// The clipboard history: an in-memory ring of the last texts copied (T21).
