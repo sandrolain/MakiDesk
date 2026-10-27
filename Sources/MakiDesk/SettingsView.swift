@@ -177,6 +177,13 @@ struct SettingsView: View {
                 systemImage: store.shortcutsBlocked == 0 ? "keyboard" : "exclamationmark.triangle.fill"
             )
             .foregroundStyle(store.shortcutsBlocked == 0 ? .green : .orange)
+            if store.shortcutsBlocked > 0, store.blockedShortcutTitles.isEmpty == false {
+                Text(store.blockedShortcutTitles.prefix(4).joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                caption("Another app owns those combinations, so the menu is the fallback. The shortcut window also marks the affected rows.")
+            }
 
             ViewThatFits(in: .horizontal) {
                 HStack { permissionButtons }
@@ -520,7 +527,7 @@ struct SettingsView: View {
             ForEach(1...9, id: \.self) { slot in
                 GroupSettingsRow(store: store, slot: slot)
             }
-            caption("A group is a saved selection of windows: ⌃⌥⌘N adds or removes the front window, ⌃⌥N brings the group back. Recalling a group shows its windows where you left them — a group has no layout of its own. To give one a disposition, recall it and then run a layout (⌃⌥G grid, ⌃⌥S golden spiral, ⌃⌥A suggested): the arrangement is remembered for next time. The group column in the Opt-Tab / Opt-Space palette edits the same groups.")
+            caption("A group is a saved selection of windows: ⌃⌥⌘1…9 adds or removes the front window, ⌃⌥1…9 brings the group back. Recalling a group shows its windows where you left them — a group has no layout of its own. To give one a disposition, recall it and then run a layout (⌃⌥G grid, ⌃⌥S golden spiral, ⌃⌥A suggested): the arrangement is remembered for next time. The group column in the Opt-Tab / Opt-Space palette edits the same groups.")
         }
     }
 

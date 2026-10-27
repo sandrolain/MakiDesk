@@ -26,67 +26,25 @@ final class ShortcutManager {
         self.handler = handler
     }
 
-    private struct Binding {
-        let key: Int
-        let modifiers: Int
-        let action: WindowController.ShortcutAction
+    static let ctrlOpt = ShortcutDefinitions.ctrlOpt
+
+    /// The registered rows: every global definition, in catalog order.
+    private static let bindings: [ShortcutDefinition] = ShortcutDefinitions.all.filter(\.isGlobal)
+
+    /// Rows whose hot key could not be registered because another app owns it.
+    /// The menu remains the fallback and the catalog says so (T53).
+    private(set) var blockedShortcutIDs: Set<String> = []
+
+    /// The key a command shows and uses, straight from the table.
+    static func display(for action: WindowController.ShortcutAction) -> String? {
+        ShortcutDefinitions.all.first { $0.action == action && $0.isGlobal }?.display
     }
 
-    static let ctrlOpt = controlKey | optionKey
-
-    private static let baseBindings: [Binding] = [
-        .init(key: kVK_LeftArrow, modifiers: ctrlOpt, action: .leftHalf),
-        .init(key: kVK_RightArrow, modifiers: ctrlOpt, action: .rightHalf),
-        .init(key: kVK_UpArrow, modifiers: ctrlOpt, action: .topHalf),
-        .init(key: kVK_DownArrow, modifiers: ctrlOpt, action: .bottomHalf),
-        .init(key: kVK_ANSI_U, modifiers: ctrlOpt, action: .topLeft),
-        .init(key: kVK_ANSI_I, modifiers: ctrlOpt, action: .topRight),
-        .init(key: kVK_ANSI_J, modifiers: ctrlOpt, action: .bottomLeft),
-        .init(key: kVK_ANSI_K, modifiers: ctrlOpt, action: .bottomRight),
-        .init(key: kVK_Return, modifiers: ctrlOpt, action: .centerCycle),
-        .init(key: kVK_ANSI_C, modifiers: ctrlOpt, action: .center),
-        .init(key: kVK_ANSI_P, modifiers: ctrlOpt, action: .phi),
-        .init(key: kVK_ANSI_P, modifiers: ctrlOpt | cmdKey, action: .peekDesignate),
-        // Focus (T17): what leaves the screen is per window, and undoable.
-        .init(key: kVK_ANSI_V, modifiers: ctrlOpt, action: .putAwayFront),
-        .init(key: kVK_ANSI_A, modifiers: ctrlOpt | shiftKey, action: .showEverything),
-        .init(key: kVK_ANSI_Z, modifiers: ctrlOpt, action: .undoStep),
-        .init(key: kVK_ANSI_F, modifiers: ctrlOpt, action: .toggleFullScreen),
-        .init(key: kVK_ANSI_M, modifiers: ctrlOpt, action: .minimize),
-        // Layouts (T18): one key per preset, acting on what is in view.
-        .init(key: kVK_ANSI_G, modifiers: ctrlOpt, action: .gridLayout),
-        .init(key: kVK_ANSI_S, modifiers: ctrlOpt, action: .spiralLayout),
-        .init(key: kVK_ANSI_A, modifiers: ctrlOpt, action: .suggestLayout),
-        .init(key: kVK_ANSI_W, modifiers: ctrlOpt, action: .contentLayout),
-        .init(key: kVK_Tab, modifiers: optionKey, action: .switchWindows),
-        .init(key: kVK_Tab, modifiers: optionKey | shiftKey, action: .switchWindowsBack),
-        .init(key: kVK_Space, modifiers: optionKey, action: .searchWindows),
-        // Notes (T20): a panel, not a window, and no Accessibility needed.
-        .init(key: kVK_ANSI_N, modifiers: optionKey, action: .toggleNotes),
-        // Clipboard history (T21): pasting into the front app needs Accessibility.
-        .init(key: kVK_ANSI_V, modifiers: optionKey, action: .clipboardHistory),
-        // Shelf (T31): collecting does not need Accessibility.
-        .init(key: kVK_ANSI_D, modifiers: ctrlOpt, action: .toggleShelf),
-        // Text recognition (T41): local OCR on a selected area; it needs
-        // Screen Recording, not Accessibility.
-        .init(key: kVK_ANSI_O, modifiers: ctrlOpt, action: .recognizeText),
-        // Colour picker (T36): one click, the pixel under it; same permission.
-        .init(key: kVK_ANSI_E, modifiers: ctrlOpt, action: .sampleColor),
-        // Measure (T39): geometry only, no permission needed.
-        .init(key: kVK_ANSI_R, modifiers: ctrlOpt, action: .measureArea),
-    ]
-
-    /// Group shortcuts (1…9): ⌃⌥⌘N adds/removes the frontmost window, ⌃⌥N
-    /// recalls the group. The ANSI digit key codes are consecutive (1 = 18 … 9 = 25).
-    private static let groupBindings: [Binding] = (1...9).flatMap { slot -> [Binding] in
-        let key = kVK_ANSI_1 + (slot - 1)
-        return [
-            .init(key: key, modifiers: ctrlOpt | cmdKey, action: .assignToGroup(slot)),
-            .init(key: key, modifiers: ctrlOpt, action: .recallGroup(slot)),
-        ]
+    var blockedTitles: [String] {
+        ShortcutDefinitions.all
+            .filter { blockedShortcutIDs.contains($0.id) }
+            .map(\.title)
     }
-
-    private static let bindings: [Binding] = baseBindings + groupBindings
 
     func start() {
         guard handlerRef == nil else { return }
@@ -125,20 +83,22 @@ final class ShortcutManager {
             &handlerRef
         )
 
-        for (index, binding) in Self.bindings.enumerated() {
+        for (index, definition) in Self.bindings.enumerated() {
             let id = UInt32(index + 1)
+            guard let key = definition.keyCode, let action = definition.action else { continue }
             var ref: EventHotKeyRef?
             let status = RegisterEventHotKey(
-                UInt32(binding.key), UInt32(binding.modifiers),
+                UInt32(key), UInt32(definition.modifiers),
                 EventHotKeyID(signature: Self.signature, id: id),
                 GetApplicationEventTarget(), 0, &ref
             )
             if status == noErr, let ref {
                 hotKeys.append(ref)
-                actions[id] = binding.action
+                actions[id] = action
                 registeredCount += 1
             } else {
                 failedCount += 1
+                blockedShortcutIDs.insert(definition.id)
             }
         }
         makiLog.notice("hotkeys registered=\(self.registeredCount, privacy: .public) blocked=\(self.failedCount, privacy: .public)")

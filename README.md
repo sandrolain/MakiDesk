@@ -58,7 +58,7 @@ switcher uses the same two keys.
 
 Keep up to nine sets of windows. `⌃⌥1…9` brings a group back where you left it
 and puts the rest away; `⌃⌥⌘1…9` adds or removes the front window. Focus sends a
-single window away (`⌃⌥V`), brings everything back (`⌃⌥⇧A`) and undoes one step
+single window away (`⌃⌥⇧V`), brings everything back (`⌃⌥⇧A`) and undoes one step
 (`⌃⌥Z`). Peek (`⌃⌥⌘P`, hold `⌃⌥H`) keeps one designated window one key away.
 
 ### Notes without the ceremony
@@ -198,6 +198,8 @@ Taskfile commands and the signing notes.
 
 Every command, including the panels' own keys, is in the **Keyboard Shortcuts**
 window (menu bar or Settings ▸ General) and in the [usage guide](docs/USAGE.md#keyboard-shortcuts).
+The two families are written down: `⌥` opens a panel, `⌃⌥` acts on windows and
+the desktop, and `⇧` marks an alternate action.
 
 ## Documentation
 

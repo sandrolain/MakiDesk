@@ -27,18 +27,11 @@ struct MakiDeskApp: App {
     /// so the text is a reminder, not a second handler.
     private func menuAction(
         _ title: String,
-        _ keys: String,
         _ action: WindowController.ShortcutAction,
         icon: String? = nil
     ) -> some View {
-        Button {
+        menuButton(title, keys: ShortcutManager.display(for: action), icon: icon) {
             store.applyShortcut(action)
-        } label: {
-            if let icon {
-                Label("\(title)    \(keys)", systemImage: icon)
-            } else {
-                Text("\(title)    \(keys)")
-            }
         }
     }
 
@@ -83,7 +76,8 @@ struct MakiDeskApp: App {
             menuButton("Shelf", keys: "⌃⌥D", icon: "tray.and.arrow.down") {
                 ShelfController.shared.toggle()
             }
-            menuButton("Screenshots", icon: "menubar.dock.rectangle") {
+            menuButton("Screenshots", keys: ShortcutManager.display(for: .openScreenshots),
+                       icon: "menubar.dock.rectangle") {
                 ScreenshotLibraryController.shared.show()
             }
 
@@ -116,37 +110,45 @@ struct MakiDeskApp: App {
             Divider()
 
             Menu {
-                menuAction("Left column", "⌃⌥←", .leftHalf, icon: "rectangle.lefthalf.inset.filled")
-                menuAction("Right column", "⌃⌥→", .rightHalf, icon: "rectangle.righthalf.inset.filled")
-                menuAction("Top row", "⌃⌥↑", .topHalf, icon: "rectangle.tophalf.inset.filled")
-                menuAction("Bottom row", "⌃⌥↓", .bottomHalf, icon: "rectangle.bottomhalf.inset.filled")
+                menuAction("Left column", .leftHalf, icon: "rectangle.lefthalf.inset.filled")
+                menuAction("Right column", .rightHalf, icon: "rectangle.righthalf.inset.filled")
+                menuAction("Top row", .topHalf, icon: "rectangle.tophalf.inset.filled")
+                menuAction("Bottom row", .bottomHalf, icon: "rectangle.bottomhalf.inset.filled")
                 Divider()
-                menuAction("Top Left", "⌃⌥U", .topLeft)
-                menuAction("Top Right", "⌃⌥I", .topRight)
-                menuAction("Bottom Left", "⌃⌥J", .bottomLeft)
-                menuAction("Bottom Right", "⌃⌥K", .bottomRight)
+                menuAction("Top Left", .topLeft)
+                menuAction("Top Right", .topRight)
+                menuAction("Bottom Left", .bottomLeft)
+                menuAction("Bottom Right", .bottomRight)
                 Divider()
-                menuAction("Center / Full / Golden", "⌃⌥↩", .centerCycle)
-                menuAction("Center", "⌃⌥C", .center)
-                menuAction("Golden Ratio (Phi)", "⌃⌥P", .phi)
-                menuAction("Toggle Full Screen", "⌃⌥F", .toggleFullScreen)
-                menuAction("Minimize", "⌃⌥M", .minimize)
+                menuAction("Center / Full / Golden", .centerCycle)
+                menuAction("Center", .center)
+                menuAction("Golden Ratio (Phi)", .phi)
+                menuAction("Toggle Full Screen", .toggleFullScreen)
+                menuAction("Minimize", .minimize)
                 Divider()
                 menuButton(
                     store.focusBorderEnabled ? "Hide Focus Border" : "Show Focus Border",
+                    keys: ShortcutManager.display(for: .toggleFocusBorder),
                     icon: "rectangle.dashed"
                 ) {
                     store.updateFocusBorderEnabled(!store.focusBorderEnabled)
+                }
+                menuButton(
+                    store.showMiniMap ? "Hide Mini Map" : "Show Mini Map",
+                    keys: ShortcutManager.display(for: .toggleMiniMap),
+                    icon: "rectangle.inset.filled"
+                ) {
+                    store.updateMiniMapVisibility(!store.showMiniMap)
                 }
             } label: {
                 Label("Window", systemImage: "macwindow")
             }
 
             Menu {
-                menuAction("Grid — every window in view", "⌃⌥G", .gridLayout)
-                menuAction("Golden spiral — every window in view", "⌃⌥S", .spiralLayout)
-                menuAction("Suggested layout", "⌃⌥A", .suggestLayout)
-                menuAction("Content-weighted", "⌃⌥W", .contentLayout,
+                menuAction("Grid — every window in view", .gridLayout)
+                menuAction("Golden spiral — every window in view", .spiralLayout)
+                menuAction("Suggested layout", .suggestLayout)
+                menuAction("Content-weighted", .contentLayout,
                            icon: "rectangle.3.group")
                 Divider()
                 menuButton("Grid — selected windows") {
@@ -167,7 +169,8 @@ struct MakiDeskApp: App {
                 .disabled(store.lastLayoutSelection.count < 3)
                 if let advice = store.pendingLayout {
                     Divider()
-                    menuButton("Apply Suggested Layout (\(advice.layout.label))") {
+                    menuButton("Apply Suggested Layout (\(advice.layout.label))",
+                               keys: ShortcutManager.display(for: .applySuggestedLayout)) {
                         store.acceptPendingLayout()
                     }
                     menuButton("Dismiss Suggested Layout") {
@@ -182,14 +185,18 @@ struct MakiDeskApp: App {
                 if let scene = store.sceneTitle {
                     Text("In use: \(scene)")
                     if store.activeGroupSlot != nil {
-                        menuButton("Leave Group") { store.leaveGroup() }
+                        menuButton("Leave Group",
+                                   keys: ShortcutManager.display(for: .leaveGroup)) {
+                            store.leaveGroup()
+                        }
                     }
                     Divider()
                 }
                 // One flat list to recall a group; three management submenus
                 // replace the nine nested ones.
                 ForEach(1...9, id: \.self) { slot in
-                    menuButton(store.groupMenuLabel(slot), keys: "⌃⌥\(slot)") {
+                    menuButton(store.groupMenuLabel(slot),
+                               keys: ShortcutManager.display(for: .recallGroup(slot))) {
                         store.recallGroup(slot: slot)
                     }
                     .disabled(store.groupIsEmpty(slot))
@@ -197,7 +204,8 @@ struct MakiDeskApp: App {
                 Divider()
                 Menu("Add Front Window to Group") {
                     ForEach(1...9, id: \.self) { slot in
-                        menuButton(store.groupMenuLabel(slot), keys: "⌃⌥⌘\(slot)") {
+                        menuButton(store.groupMenuLabel(slot),
+                                   keys: ShortcutManager.display(for: .assignToGroup(slot))) {
                             store.toggleGroupMembership(slot: slot)
                         }
                     }
@@ -224,23 +232,26 @@ struct MakiDeskApp: App {
             Menu {
                 Text(store.sceneTitle.map { "In use: \($0)" } ?? "Nothing in use")
                 Divider()
-                menuButton("Focus Selected Windows") {
+                menuButton("Focus Selected Windows",
+                           keys: ShortcutManager.display(for: .focusSelection)) {
                     store.focus(on: store.lastLayoutSelection)
                 }
                 .disabled(store.lastLayoutSelection.isEmpty)
-                menuAction("Send Front Window Away", "⌃⌥V", .putAwayFront)
+                menuAction("Send Front Window Away", .putAwayFront)
                 Divider()
-                menuAction("Everything Back", "⌃⌥⇧A", .showEverything)
-                menuAction("Undo One Step", "⌃⌥Z", .undoStep)
+                menuAction("Everything Back", .showEverything)
+                menuAction("Undo One Step", .undoStep)
             } label: {
                 Label("Focus", systemImage: "scope")
             }
 
             Menu {
-                menuButton("Designate Front Window", keys: "⌃⌥⌘P") {
+                menuButton("Designate Front Window",
+                           keys: ShortcutManager.display(for: .peekDesignate)) {
                     store.togglePeekDesignation()
                 }
-                menuButton("Clear Peek (bring the window back)") {
+                menuButton("Clear Peek (bring the window back)",
+                           keys: ShortcutManager.display(for: .clearPeek)) {
                     store.clearPeek()
                 }
                 .disabled(store.peekName == nil)
@@ -293,15 +304,17 @@ struct MakiDeskApp: App {
 
             Divider()
 
-            menuButton("Keyboard Shortcuts…", icon: "keyboard") {
+            menuButton("Keyboard Shortcuts…",
+                       keys: ShortcutManager.display(for: .openKeyboardShortcuts),
+                       icon: "keyboard") {
                 ShortcutsWindowController.shared.show()
             }
             menuButton("Notification History…", icon: "bell") {
                 NotificationHistoryController.shared.show()
             }
-            menuButton("Settings…", icon: "gearshape") {
-                NSApp.activate()
-                NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
+            menuButton("Settings…", keys: ShortcutManager.display(for: .openSettings),
+                       icon: "gearshape") {
+                store.applyShortcut(.openSettings)
             }
             Divider()
             menuButton("Quit MakiDesk", icon: "power") {

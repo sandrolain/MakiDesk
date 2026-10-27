@@ -51,6 +51,10 @@ final class WorkspaceStore {
     }
     var shortcutsRegistered = 0
     var shortcutsBlocked = 0
+
+    /// Which hot keys another app owns, for the catalog and Settings (T53).
+    var blockedShortcutIDs: Set<String> { shortcutManager?.blockedShortcutIDs ?? [] }
+    var blockedShortcutTitles: [String] { shortcutManager?.blockedTitles ?? [] }
     var gap = (UserDefaults.standard.object(forKey: "windowGap") == nil
         ? 12
         : UserDefaults.standard.double(forKey: "windowGap")).clamped(to: 0...80)
@@ -784,6 +788,30 @@ final class WorkspaceStore {
             MeasureController.shared.start()
             return
         }
+        // Utility windows and presentation toggles need no Accessibility (T53).
+        switch action {
+        case .openSettings:
+            NSApp.activate()
+            NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
+            return
+        case .openKeyboardShortcuts:
+            ShortcutsWindowController.shared.show()
+            return
+        case .openScreenshots:
+            ScreenshotLibraryController.shared.show()
+            return
+        case .toggleFocusBorder:
+            updateFocusBorderEnabled(!focusBorderEnabled)
+            return
+        case .toggleMiniMap:
+            updateMiniMapVisibility(!showMiniMap)
+            return
+        case .leaveGroup:
+            leaveGroup()
+            return
+        default:
+            break
+        }
         let trusted = AXIsProcessTrusted()
         accessibilityTrusted = trusted
         guard trusted else {
@@ -828,6 +856,16 @@ final class WorkspaceStore {
             return
         case .undoStep:
             undoScene()
+            return
+        case .focusSelection:
+            focus(on: lastLayoutSelection)
+            return
+        case .clearPeek:
+            clearPeek()
+            return
+        case .applySuggestedLayout:
+            if pendingLayout != nil { acceptPendingLayout() }
+            else { status = "No suggested layout to apply" }
             return
         case .gridLayout:
             tileOnScreen(gap: gap)
@@ -1077,7 +1115,9 @@ final class WorkspaceStore {
              .putAwayFront, .showEverything, .undoStep,
              .gridLayout, .spiralLayout, .suggestLayout, .contentLayout,
              .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor,
-             .measureArea:
+             .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
+             .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
+             .clearPeek, .applySuggestedLayout:
             return nil
         }
     }
@@ -1444,6 +1484,15 @@ final class WorkspaceStore {
         case .recognizeText: return "text"
         case .sampleColor: return "colour"
         case .measureArea: return "measure"
+        case .openSettings: return "settings"
+        case .openKeyboardShortcuts: return "shortcuts"
+        case .openScreenshots: return "screenshots"
+        case .toggleFocusBorder: return "focus border"
+        case .toggleMiniMap: return "mini map"
+        case .focusSelection: return "focus selection"
+        case .leaveGroup: return "left group"
+        case .clearPeek: return "peek cleared"
+        case .applySuggestedLayout: return "suggested layout"
         case .peekDesignate: return "peek"
         case .putAwayFront: return "sent away"
         case .showEverything: return "everything back"

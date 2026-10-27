@@ -7,8 +7,11 @@ struct ShortcutItem: Identifiable {
     let title: String
     let keys: String
     var note: String?
+    /// Stable id for generated global rows (T53); local rows fall back to the
+    /// title and key text.
+    var identifier: String? = nil
 
-    var id: String { "\(title)|\(keys)" }
+    var id: String { identifier ?? "\(title)|\(keys)" }
 }
 
 struct ShortcutSection: Identifiable {
@@ -23,43 +26,33 @@ struct ShortcutSection: Identifiable {
 /// Every key the app answers to, grouped by where it works. Kept as plain
 /// data so the list can be searched and checked without touching the views.
 enum ShortcutCatalog {
-    static let sections: [ShortcutSection] = [
-        ShortcutSection(title: "Window", scope: "Global", items: [
-            .init(title: "Left column", keys: "⌃⌥←"),
-            .init(title: "Right column", keys: "⌃⌥→"),
-            .init(title: "Top row", keys: "⌃⌥↑"),
-            .init(title: "Bottom row", keys: "⌃⌥↓"),
-            .init(title: "Top-left quarter", keys: "⌃⌥U"),
-            .init(title: "Top-right quarter", keys: "⌃⌥I"),
-            .init(title: "Bottom-left quarter", keys: "⌃⌥J"),
-            .init(title: "Bottom-right quarter", keys: "⌃⌥K"),
-            .init(title: "Center / full / golden — cycle", keys: "⌃⌥↩"),
-            .init(title: "Center", keys: "⌃⌥C"),
-            .init(title: "Golden ratio (φ)", keys: "⌃⌥P"),
-            .init(title: "Toggle full screen", keys: "⌃⌥F"),
-            .init(title: "Minimize", keys: "⌃⌥M"),
-            .init(title: "Snap while dragging", keys: "⌥ + drag",
-                  note: "The key is chosen in Settings ▸ Placement; ⌥ is the default. The gesture can be turned off there.")
-        ], note: "The menu also has the selected-window layouts."),
+    /// The global sections are generated from `ShortcutDefinitions`; only the
+    /// in-panel rows are written here, because they are not Carbon hot keys.
+    static func sections(blocked: Set<String> = []) -> [ShortcutSection] {
+        var result: [ShortcutSection] = []
+        for section in ShortcutDefinitions.sections {
+            let items = section.definitions.map { definition in
+                ShortcutItem(
+                    title: definition.title,
+                    keys: definition.display,
+                    note: blocked.contains(definition.id)
+                        ? inUseNote(definition.note) : definition.note,
+                    identifier: definition.id
+                )
+            }
+            result.append(ShortcutSection(title: section.title, scope: "Global",
+                                          items: items, note: section.note))
+        }
+        result.append(contentsOf: localSections)
+        return result
+    }
 
-        ShortcutSection(title: "Layouts", scope: "Global", items: [
-            .init(title: "Grid — every window in view", keys: "⌃⌥G"),
-            .init(title: "Golden spiral — every window in view", keys: "⌃⌥S"),
-            .init(title: "Suggested layout", keys: "⌃⌥A",
-                  note: "With “Ask before using” on, the advice waits for a second press."),
-            .init(title: "Content-weighted — areas follow the content", keys: "⌃⌥W",
-                  note: "Needs at least three windows. Without Screen Recording it follows the app-kind weights from Settings."),
-        ]),
+    private static func inUseNote(_ note: String?) -> String {
+        let base = "In use by another app: use the menu instead."
+        return note.map { "\(base) \($0)" } ?? base
+    }
 
-        ShortcutSection(title: "Panels", scope: "Global", items: [
-            .init(title: "Window switcher", keys: "⌥⇥"),
-            .init(title: "Window switcher — backwards", keys: "⌥⇧⇥"),
-            .init(title: "Search windows and applications", keys: "⌥Space"),
-            .init(title: "Notes", keys: "⌥N"),
-            .init(title: "Clipboard history", keys: "⌥V"),
-            .init(title: "Shelf", keys: "⌃⌥D"),
-        ]),
-
+    private static let localSections: [ShortcutSection] = [
         ShortcutSection(title: "Window switcher and search", scope: "Palette open", items: [
             .init(title: "Move the highlight", keys: "↑ ↓ ← →"),
             .init(title: "Open the highlighted window", keys: "↩",
@@ -119,38 +112,6 @@ enum ShortcutCatalog {
                   note: "Same confirmation and payload as dropping on the tile."),
             .init(title: "Back to the shelf list", keys: "↑"),
         ], note: "Or drag items onto a tile while the strip is visible."),
-
-        ShortcutSection(title: "Groups", scope: "Global", items: [
-            .init(title: "Recall group 1…9", keys: "⌃⌥1…9"),
-            .init(title: "Add / remove the front window", keys: "⌃⌥⌘1…9"),
-        ], note: "Rename, empty and leave are in the Groups menu."),
-
-        ShortcutSection(title: "Focus", scope: "Global", items: [
-            .init(title: "Send the front window away", keys: "⌃⌥V"),
-            .init(title: "Everything back", keys: "⌃⌥⇧A"),
-            .init(title: "Undo one step", keys: "⌃⌥Z"),
-        ]),
-
-        ShortcutSection(title: "Peek", scope: "Global", items: [
-            .init(title: "Designate / undesignate the front window", keys: "⌃⌥⌘P"),
-            .init(title: "Peek at it while held", keys: "hold ⌃⌥H"),
-        ], note: "The designated window is put away; the hold brings it back."),
-
-        ShortcutSection(title: "Text & colour", scope: "Global", items: [
-            .init(title: "Recognize text from a selected area", keys: "⌃⌥O",
-                  note: "Esc cancels. The text goes to the clipboard; recognition runs locally."),
-            .init(title: "Pick a colour from the screen", keys: "⌃⌥E",
-                  note: "Click a point to copy its colour in the format chosen in Settings ▸ Panels; Esc cancels."),
-        ]),
-
-        ShortcutSection(title: "Measure", scope: "Global", items: [
-            .init(title: "Measure an area", keys: "⌃⌥R",
-                  note: "Drag over any app; Esc cancels. The pinned badge copies the values."),
-            .init(title: "Keep a square", keys: "⇧ + drag"),
-            .init(title: "Measure from the centre", keys: "⌥ + drag"),
-            .init(title: "Snap to windows and displays", keys: "auto",
-                  note: "Within 6 pt of an edge or a centre."),
-        ], note: "Measurements stay until their ✕ or Clear Measurements in the Measure menu."),
     ]
 }
 
@@ -216,14 +177,18 @@ struct ShortcutsView: View {
 
     private var theme: PaletteTheme { store.theme }
 
+    private var catalogSections: [ShortcutSection] {
+        ShortcutCatalog.sections(blocked: store.blockedShortcutIDs)
+    }
+
     private var total: Int {
-        ShortcutCatalog.sections.reduce(0) { $0 + $1.items.count }
+        catalogSections.reduce(0) { $0 + $1.items.count }
     }
 
     private var filtered: [ShortcutSection] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard needle.isEmpty == false else { return ShortcutCatalog.sections }
-        return ShortcutCatalog.sections.compactMap { section in
+        guard needle.isEmpty == false else { return catalogSections }
+        return catalogSections.compactMap { section in
             let items = section.items.filter { item in
                 item.title.localizedCaseInsensitiveContains(needle)
                     || item.keys.localizedCaseInsensitiveContains(needle)
@@ -274,6 +239,9 @@ struct ShortcutsView: View {
                     .font(.caption)
                     .foregroundStyle(theme.subtext)
             }
+            Text("⌥ opens a panel · ⌃⌥ acts on windows and the desktop")
+                .font(.caption)
+                .foregroundStyle(theme.subtext)
 
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")

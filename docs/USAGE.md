@@ -222,7 +222,7 @@ Focus keeps only the windows in use and puts the rest away:
 
 | Action | Shortcut |
 |---|---|
-| Send the front window away | `⌃⌥V` |
+| Send the front window away | `⌃⌥⇧V` |
 | Everything back | `⌃⌥⇧A` |
 | Undo one step | `⌃⌥Z` |
 
@@ -539,8 +539,10 @@ dropzones should go too; settings always reset.
 ## Keyboard shortcuts
 
 The full list is in the **Keyboard Shortcuts…** window (menu or Settings ▸
-General): 60 commands in groups, searchable by name or key, with the current
-theme. The main global keys:
+General), searchable by name or key, with the current theme. Two modifier
+families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `⌥N`,
+`⌥V`) and **`⌃⌥` acts on windows and the desktop** (`⌃⌥←`, `⌃⌥G`, `⌃⌥⇧V`,
+`⌃⌥1…9`); `⇧` marks an alternate action. The main global keys:
 
 | Area | Shortcuts |
 |---|---|
@@ -548,7 +550,7 @@ theme. The main global keys:
 | Layouts | `⌃⌥G`, `⌃⌥S`, `⌃⌥A`, `⌃⌥W` |
 | Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
-| Focus | `⌃⌥V`, `⌃⌥⇧A`, `⌃⌥Z` |
+| Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H` |
 
 Pressing `⌥⇥` / `⌥Space` shows the switcher even if MakiDesk is not the active

@@ -3,11 +3,11 @@ import XCTest
 
 final class ShortcutCatalogTests: XCTestCase {
     func testEverySectionAndCommandIsComplete() {
-        XCTAssertFalse(ShortcutCatalog.sections.isEmpty)
+        XCTAssertFalse(ShortcutCatalog.sections().isEmpty)
 
         var sectionIDs = Set<String>()
         var total = 0
-        for section in ShortcutCatalog.sections {
+        for section in ShortcutCatalog.sections() {
             XCTAssertTrue(sectionIDs.insert(section.id).inserted,
                           "duplicate section \(section.title)")
             XCTAssertFalse(section.items.isEmpty, "\(section.title) has no commands")

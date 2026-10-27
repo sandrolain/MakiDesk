@@ -45,6 +45,18 @@ enum WindowController {
         case sampleColor
         /// Measure an area of the screen (T39).
         case measureArea
+        /// Open a utility window without touching other apps (T53).
+        case openSettings
+        case openKeyboardShortcuts
+        case openScreenshots
+        /// Toggle presentation the user configured in Settings.
+        case toggleFocusBorder
+        case toggleMiniMap
+        /// Act on the current selection, group or pending advice.
+        case focusSelection
+        case leaveGroup
+        case clearPeek
+        case applySuggestedLayout
     }
 
     /// A value snapshot of one window.
