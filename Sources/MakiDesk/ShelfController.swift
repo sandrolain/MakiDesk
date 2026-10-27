@@ -822,16 +822,23 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let destination = staging.appendingPathComponent("promises-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let token = session
+        let progress = HUDController.shared.showProgress("Receiving files…",
+                                                         symbol: "arrow.down.circle")
+        let group = DispatchGroup()
         for receiver in receivers {
+            group.enter()
             receiver.receivePromisedFiles(atDestination: destination, options: [:],
                                           operationQueue: promiseQueue) { [weak self] url, error in
                 Task { @MainActor in
                     guard let self, self.session == token, error == nil, self.isVisible else { return }
                     self.add(.file(url, staged: true))
                 }
+                group.leave()
             }
         }
-        HUDController.shared.show("Receiving files…", symbol: "arrow.down.circle")
+        group.notify(queue: .main) {
+            HUDController.shared.finishProgress(progress)
+        }
     }
 
     // MARK: - Table
@@ -1197,7 +1204,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
         transferInFlight = true
         let control = ShelfTransferControl()
         transferControl = control
-        HUDController.shared.show("Transferring shelf items…", symbol: "folder")
+        let progress = HUDController.shared.showProgress("Transferring shelf items…",
+                                                         symbol: "folder")
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var results: [ShelfTransferResult] = []
             for (index, request) in requests.enumerated() {
@@ -1211,11 +1219,17 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 let completed = index + 1
                 Task { @MainActor [weak self] in
                     self?.hintLabel?.stringValue = "Transferring \(completed) of \(requests.count)…"
+                    HUDController.shared.updateProgress(
+                        progress,
+                        text: "Transferring \(completed) of \(requests.count)…",
+                        detail: nil
+                    )
                 }
             }
             let wasCancelled = control.isCancelled
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                HUDController.shared.finishProgress(progress)
                 self.transferInFlight = false
                 self.transferControl = nil
                 if mode == .move {
@@ -1447,13 +1461,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
     func runSelectedDropzone(_ zone: DropzoneConfig) {
         guard isVisible else {
             HUDController.shared.show("Open the Shelf and select something first",
-                                      symbol: "tray", duration: 2.5)
+                                      symbol: "tray")
             return
         }
         let selected = selectedItems
         guard !selected.isEmpty else {
             HUDController.shared.show("Select something in the Shelf first",
-                                      symbol: "cursorarrow", duration: 2.5)
+                                      symbol: "cursorarrow")
             return
         }
         var drop = DropzoneDrop()
@@ -1475,7 +1489,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         if texts.isEmpty == false { drop.text = texts.joined(separator: "\n") }
         guard !drop.isEmpty else {
             HUDController.shared.show("Nothing runnable in the selection",
-                                      symbol: "nosign", duration: 2.5)
+                                      symbol: "nosign")
             return
         }
         runDropzone(zone, drop: drop)
@@ -1521,7 +1535,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         guard let strip = dropzoneStrip else { return }
         guard hasSelection else {
             HUDController.shared.show("Select something in the Shelf first",
-                                      symbol: "cursorarrow", duration: 2.5)
+                                      symbol: "cursorarrow")
             return
         }
         let infos = selectionItemInfos()
@@ -1539,7 +1553,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         strip.setCompatibility(compatibility)
         guard compatibility.values.contains(true) else {
             HUDController.shared.show("No dropzone accepts these items",
-                                      symbol: "nosign", duration: 2.5)
+                                      symbol: "nosign")
             return
         }
         setDropzoneStripVisible(true)
@@ -1547,7 +1561,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         dropzoneKeyboardMode = true
         panel?.makeFirstResponder(table)
         HUDController.shared.show("← → choose · ↩ run · Esc back",
-                                  symbol: "bolt.square.on.square", duration: 2.5)
+                                  symbol: "bolt.square.on.square")
     }
 
     private func leaveDropzoneKeyboardMode() {
@@ -1765,7 +1779,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 dropReceived = true
                 guard strip.isZoneCompatible(zone.id) else {
                     HUDController.shared.show("This dropzone does not accept these items",
-                                              symbol: "nosign", duration: 2.5)
+                                              symbol: "nosign")
                     setDropzoneStripVisible(false)
                     return true
                 }
@@ -1778,7 +1792,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 HUDController.shared.show(strip.visibleZoneCount == 0
                                           ? "No dropzone accepts these items"
                                           : "Drop on a dropzone tile",
-                                          symbol: "arrow.up.left", duration: 2)
+                                          symbol: "arrow.up.left")
                 setDropzoneStripVisible(false)
                 return true
             }
@@ -1807,7 +1821,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
         var urls: [URL] = []
         var failure: String?
         let group = DispatchGroup()
-        HUDController.shared.show("Receiving files…", symbol: "arrow.down.circle", duration: 4)
+        let progress = HUDController.shared.showProgress("Receiving files…",
+                                                         symbol: "arrow.down.circle")
         for receiver in receivers {
             group.enter()
             receiver.receivePromisedFiles(atDestination: directory, options: [:],
@@ -1823,6 +1838,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
             }
         }
         group.notify(queue: .main) { [weak self] in
+            HUDController.shared.finishProgress(progress)
             guard let self else { return }
             lock.lock()
             let received = urls
@@ -1831,7 +1847,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
             if let error {
                 try? FileManager.default.removeItem(at: directory)
                 HUDController.shared.show("Could not receive the files: \(Self.short(error))",
-                                          symbol: "exclamationmark.triangle", duration: 3.5)
+                                          symbol: "exclamationmark.triangle")
                 return
             }
             drop.files.append(contentsOf: received)
@@ -1876,7 +1892,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     private func runDropzone(_ zone: DropzoneConfig, drop: DropzoneDrop, cleanup: URL? = nil) {
-        HUDController.shared.show("Running \(zone.name)…", symbol: "bolt.fill", duration: 1.2)
+        // The footer shows the elapsed time and Stop while the zone runs (T47).
         beginZoneRun(zone)
         Task { @MainActor [weak self] in
             defer {
@@ -1895,17 +1911,17 @@ final class ShelfController: NSObject, NSWindowDelegate,
                     outcome = await coordinator.run(zoneID: pending.id, drop: drop)
                 case .commandChanged:
                     HUDController.shared.show("\(pending.name) changed during confirmation; try again",
-                                              symbol: "exclamationmark.triangle", duration: 3)
+                                              symbol: "exclamationmark.triangle")
                     if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
                 case .unavailable:
                     HUDController.shared.show("\(pending.name) is no longer available",
-                                              symbol: "questionmark.circle", duration: 3)
+                                              symbol: "questionmark.circle")
                     if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
                 case let .saveFailed(message):
                     HUDController.shared.show("Could not save the confirmation for \(pending.name): \(Self.short(message))",
-                                              symbol: "externaldrive.badge.xmark", duration: 3.5)
+                                              symbol: "externaldrive.badge.xmark")
                     if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
                 }
@@ -1917,7 +1933,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 }
                 guard self.confirmDropzoneOverwrite(pending, path: path) else {
                     HUDController.shared.show("\(pending.name) cancelled",
-                                              symbol: "xmark.circle", duration: 2)
+                                              symbol: "xmark.circle")
                     if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
                 }
@@ -1974,13 +1990,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
         switch outcome {
         case let .rejected(reason):
             HUDController.shared.show(Self.short(reason.errorDescription ?? "Drop rejected"),
-                                      symbol: "nosign", duration: 2.5)
+                                      symbol: "nosign")
         case .cancelled:
             HUDController.shared.show("\(zone.name) cancelled",
-                                      symbol: "xmark.circle", duration: 2)
+                                      symbol: "xmark.circle")
         case let .failed(message):
             HUDController.shared.show("\(zone.name): \(Self.short(message))",
-                                      symbol: "exclamationmark.triangle", duration: 3.5)
+                                      symbol: "exclamationmark.triangle")
         case .needsConfirmation, .needsOverwriteConfirmation:
             break
         case let .finished(result):
@@ -1998,11 +2014,11 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 HUDController.shared.show("\(zone.name) cancelled", symbol: "xmark.circle")
             } else if result.timedOut {
                 HUDController.shared.show("\(zone.name) timed out",
-                                          symbol: "clock.badge.exclamationmark", duration: 3)
+                                          symbol: "clock.badge.exclamationmark")
             } else {
                 let detail = Self.firstLine(result.stderrExcerpt)
                 HUDController.shared.show("\(zone.name) failed\(detail.isEmpty ? "" : ": \(detail)")",
-                                          symbol: "exclamationmark.triangle", duration: 3.5)
+                                          symbol: "exclamationmark.triangle")
             }
         }
     }

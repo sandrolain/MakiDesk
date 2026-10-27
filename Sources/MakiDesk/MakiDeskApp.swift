@@ -296,6 +296,9 @@ struct MakiDeskApp: App {
             menuButton("Keyboard Shortcuts…", icon: "keyboard") {
                 ShortcutsWindowController.shared.show()
             }
+            menuButton("Notification History…", icon: "bell") {
+                NotificationHistoryController.shared.show()
+            }
             menuButton("Settings…", icon: "gearshape") {
                 NSApp.activate()
                 NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)

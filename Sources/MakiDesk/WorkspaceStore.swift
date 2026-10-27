@@ -2544,8 +2544,7 @@ final class WorkspaceStore {
         let putAway = putAwayForPeek(live)
         HUDController.shared.show(
             "Peek · \(target.appName) — hold ⌃⌥H",
-            symbol: putAway ? "eye.fill" : "exclamationmark.triangle.fill",
-            duration: putAway ? 1.4 : 2.2
+            symbol: putAway ? "eye.fill" : "exclamationmark.triangle.fill"
         )
     }
 
@@ -2902,7 +2901,7 @@ final class WorkspaceStore {
         HUDController.shared.show(
             "Suggested: \(advice.layout.label) · \(Self.layoutSummary(set))\n\(advice.reason)\nRun Auto again to apply",
             symbol: "wand.and.stars",
-            duration: Self.layoutOfferSeconds
+            overrideDuration: Self.layoutOfferSeconds
         )
     }
 

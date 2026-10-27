@@ -5,7 +5,7 @@ struct SettingsView: View {
     @Bindable var store: WorkspaceStore
 
     private enum SettingsTab: String, CaseIterable, Identifiable {
-        case general, windows, layouts, panels, groups, dropzones
+        case general, windows, layouts, panels, notifications, groups, dropzones
 
         var id: String { rawValue }
 
@@ -15,6 +15,7 @@ struct SettingsView: View {
             case .windows: return "Windows"
             case .layouts: return "Layouts"
             case .panels: return "Panels"
+            case .notifications: return "Notifications"
             case .groups: return "Groups"
             case .dropzones: return "Dropzones"
             }
@@ -24,6 +25,13 @@ struct SettingsView: View {
     @AppStorage("settingsTab") private var settingsTab: SettingsTab = .general
     @AppStorage(ColorSamplerController.formatDefaultsKey)
     private var colorFormat: ColorClipboardFormat = .hex
+    @AppStorage(HUDSettings.positionKey) private var hudPosition: HUDPosition = .bottomCenter
+    @AppStorage(HUDSettings.screenKey) private var hudScreen: PaletteScreenLocation = .focusedWindow
+    @AppStorage(HUDSettings.baseDurationKey) private var hudBaseDuration: Double = 1.4
+    @AppStorage(HUDSettings.historyEnabledKey) private var hudHistoryEnabled = true
+    @AppStorage(HUDSettings.voiceOverKey) private var hudVoiceOver = true
+    @AppStorage(HUDSettings.compactKey) private var hudCompact = false
+    @AppStorage(HUDSettings.textSizeKey) private var hudTextSize: Double = 14
     @State private var showResetConfirmation = false
     @State private var excludedAppsText = ""
     /// Owned here, not by the tab, so switching tabs does not throw away a draft.
@@ -60,6 +68,7 @@ struct SettingsView: View {
                         case .windows: windowsTab
                         case .layouts: layoutsTab
                         case .panels: panelsTab
+                        case .notifications: notificationsTab
                         case .groups: groupsTab
                         case .dropzones: EmptyView()
                         }
@@ -449,6 +458,63 @@ struct SettingsView: View {
     // MARK: - Groups
 
     @ViewBuilder
+    private var notificationsTab: some View {
+        SettingsSection("Position") {
+            Picker("Placement", selection: $hudPosition) {
+                ForEach(HUDPosition.allCases) { position in
+                    Text(position.label).tag(position)
+                }
+            }
+            Picker("Show on", selection: $hudScreen) {
+                ForEach(PaletteScreenLocation.allCases) { location in
+                    Text(location.label).tag(location)
+                }
+            }
+            caption("Notices follow the focus or the pointer and stay inside the display's visible frame, including displays with a negative origin. The fallback is the main display.")
+        }
+
+        SettingsSection("Duration") {
+            SliderRow(title: "Base duration", value: $hudBaseDuration,
+                      range: 1...5, step: 0.2, unit: " s", decimals: 1)
+            caption("Confirmations stay for the base duration, warnings about half as long again, errors twice as long with a 3 s floor. Up to two notices are visible; the rest wait in a queue. Progress notices stay until the work ends.")
+        }
+
+        SettingsSection("Appearance") {
+            SliderRow(title: "Text size", value: $hudTextSize,
+                      range: 12...20, step: 1, unit: " pt", decimals: 0)
+            HStack {
+                Text("The icon, padding and corners grow with the text.")
+                    .font(.caption)
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                Button("Preview") {
+                    HUDController.shared.show(
+                        "Notification preview",
+                        symbol: "bell",
+                        detail: "Text size \(Int(hudTextSize)) pt"
+                    )
+                }
+            }
+            Toggle("Compact notices (title only)", isOn: $hudCompact)
+            Toggle("Announce with VoiceOver", isOn: $hudVoiceOver)
+            caption("Severity tints the icon and border: accent for confirmations, orange for warnings, red for errors. Notices are excluded from screenshots and recordings. With Reduce Motion on, they appear without the short fade.")
+        }
+
+        SettingsSection("History") {
+            Toggle("Keep a history (in memory)", isOn: $hudHistoryEnabled)
+            HStack {
+                Text("The last 50 notices, newest first.")
+                    .font(.caption)
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                Button("Show Notification History…") {
+                    NotificationHistoryController.shared.show()
+                }
+            }
+            caption("Messages can name windows, zones and paths, so the history is never written to disk and disappears when MakiDesk quits. Search it, copy a message with Return, clear it with the Clear button.")
+        }
+    }
+
     private var groupsTab: some View {
         SettingsSection("Groups") {
             ForEach(1...9, id: \.self) { slot in

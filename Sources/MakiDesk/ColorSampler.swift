@@ -375,16 +375,14 @@ final class ColorSamplerController {
             HUDController.shared.show(
                 color.hex,
                 symbol: "eyedropper",
-                detail: "\(color.rgb) · \(color.hexWithAlpha)",
-                duration: 2.5
+                detail: "\(color.rgb) · \(color.hexWithAlpha)"
             )
             WorkspaceStore.shared.status = "Colour \(color.hex) copied"
         case .permissionDenied:
             HUDController.shared.show(
                 "Screen Recording permission required",
                 symbol: "exclamationmark.triangle.fill",
-                detail: "Grant it in Settings ▸ General, then try again.",
-                duration: 3
+                detail: "Grant it in Settings ▸ General, then try again."
             )
             WorkspaceStore.shared.status = "Screen Recording permission required"
         case .busy:
@@ -393,8 +391,7 @@ final class ColorSamplerController {
         case let .failed(message):
             let short = message.count > 80 ? String(message.prefix(80)) + "…" : message
             HUDController.shared.show("Colour not copied: \(short)",
-                                      symbol: "exclamationmark.triangle.fill",
-                                      duration: 3)
+                                      symbol: "exclamationmark.triangle.fill")
         }
     }
 }

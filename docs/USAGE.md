@@ -20,6 +20,7 @@ through Accessibility.
 - [Text from the screen](#text-from-the-screen)
 - [Colour picker](#colour-picker)
 - [Measure](#measure)
+- [Notifications](#notifications)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Troubleshooting](#troubleshooting)
@@ -488,6 +489,27 @@ measurement in place with a small badge that copies the values or dismisses it.
   granted; without it, measuring works the same.
 - `Esc` cancels while dragging. The badge's **Copy** button puts the values on
   the clipboard (the clipboard history keeps them when it is on).
+
+## Notifications
+
+MakiDesk reports results with a small notice: confirmations, warnings and
+errors. Notices appear on the display and in the corner chosen in
+**Settings ▸ Notifications**, and are excluded from screenshots and recordings.
+
+- Up to two notices are visible at once; the rest wait in a queue, so two
+  results in a row are both readable. Errors stay twice as long as
+  confirmations (with a three-second floor); progress notices such as
+  *Receiving files…* or *Transferring shelf items…* update in place and
+  disappear when the work ends.
+- **Settings ▸ Notifications** sets placement (bottom or top, centre or right),
+  the display (focused window or pointer), the base duration, the text size
+  (the icon, padding and corners grow with it), compact mode, the VoiceOver
+  announcement and whether to keep a history; **Preview** shows the result.
+  With *Reduce Motion* on, notices appear without the short fade.
+- **Notification History…** in the menu (or from Settings) lists the last 50
+  notices. Search, press Return to copy the selected message, or Clear to empty
+  the list. History lives **in memory only** and disappears when MakiDesk quits:
+  messages can name windows, zones and paths.
 
 ## Settings
 

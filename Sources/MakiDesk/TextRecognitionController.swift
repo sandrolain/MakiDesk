@@ -119,13 +119,11 @@ final class TextRecognitionController {
             HUDController.shared.show(
                 "Text copied · \(size)",
                 symbol: "text.viewfinder",
-                detail: result.preview,
-                duration: 3
+                detail: result.preview
             )
             WorkspaceStore.shared.status = "Text copied · \(size)"
         case .noText:
-            HUDController.shared.show("No text found", symbol: "text.magnifyingglass",
-                                      duration: 2)
+            HUDController.shared.show("No text found", symbol: "text.magnifyingglass")
             WorkspaceStore.shared.status = "No text found"
         case .cancelled:
             break
@@ -133,8 +131,7 @@ final class TextRecognitionController {
             HUDController.shared.show(
                 "Screen Recording permission required",
                 symbol: "exclamationmark.triangle.fill",
-                detail: "Grant it in Settings ▸ General, then try again.",
-                duration: 3
+                detail: "Grant it in Settings ▸ General, then try again."
             )
             WorkspaceStore.shared.status = "Screen Recording permission required"
         case .busy:
@@ -143,8 +140,7 @@ final class TextRecognitionController {
         case let .failed(message):
             let short = message.count > 80 ? String(message.prefix(80)) + "…" : message
             HUDController.shared.show("Text recognition failed: \(short)",
-                                      symbol: "exclamationmark.triangle.fill",
-                                      duration: 3)
+                                      symbol: "exclamationmark.triangle.fill")
             WorkspaceStore.shared.status = "Text recognition failed"
         }
     }

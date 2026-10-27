@@ -140,6 +140,15 @@ captures by month or week. Choose **Folder…** to browse another directory, or
 through the Spotlight index, while the name scan keeps the list usable when the
 index is off; the list refreshes when files change.
 
+### Notices that stay readable
+
+Results are reported by a small, themed notice: confirmations, warnings and
+errors stay long enough to be read, progress updates in place, and two notices
+can be visible at once without one hiding the other. Choose the corner and the
+display and text size in Settings ▸ Notifications, and open **Notification
+History…** for the last 50 messages (memory only). Notices never end up in
+screenshots or recordings.
+
 ### Small details, native feel
 
 A theme that covers the panels, the Settings window and the overlay,

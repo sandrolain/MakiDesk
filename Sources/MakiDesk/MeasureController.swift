@@ -82,7 +82,7 @@ final class MeasureController {
                                           symbol: "display.trianglebadge.exclamationmark")
             } catch {
                 HUDController.shared.show("Could not measure: \(error.localizedDescription)",
-                                          symbol: "exclamationmark.triangle.fill", duration: 3)
+                                          symbol: "exclamationmark.triangle.fill")
             }
         }
     }
@@ -134,7 +134,7 @@ final class MeasureController {
             return
         }
         HUDController.shared.show("Measurement copied", symbol: "ruler",
-                                  detail: measurement.dimensions(unit), duration: 2.2)
+                                  detail: measurement.dimensions(unit))
         WorkspaceStore.shared.status = "Measurement copied"
     }
 
