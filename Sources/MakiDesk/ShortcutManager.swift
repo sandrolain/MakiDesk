@@ -70,6 +70,8 @@ final class ShortcutManager {
         // Text recognition (T41): local OCR on a selected area; it needs
         // Screen Recording, not Accessibility.
         .init(key: kVK_ANSI_O, modifiers: ctrlOpt, action: .recognizeText),
+        // Colour picker (T36): one click, the pixel under it; same permission.
+        .init(key: kVK_ANSI_E, modifiers: ctrlOpt, action: .sampleColor),
     ]
 
     /// Group shortcuts (1…9): ⌃⌥⌘N adds/removes the frontmost window, ⌃⌥N

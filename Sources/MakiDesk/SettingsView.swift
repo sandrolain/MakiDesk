@@ -22,6 +22,8 @@ struct SettingsView: View {
     }
 
     @AppStorage("settingsTab") private var settingsTab: SettingsTab = .general
+    @AppStorage(ColorSamplerController.formatDefaultsKey)
+    private var colorFormat: ColorClipboardFormat = .hex
     @State private var showResetConfirmation = false
     @State private var excludedAppsText = ""
     /// Owned here, not by the tab, so switching tabs does not throw away a draft.
@@ -409,6 +411,13 @@ struct SettingsView: View {
                 set: { store.updateOCRLanguageCorrection($0) }
             ))
             caption("⌃⌥O selects an area of the screen and copies the text it contains; Esc cancels. Vision runs on this Mac and detects the language automatically; the models (about 100 MB) stay in memory after the first use. Nothing is uploaded or written to disk.")
+        }
+
+        SettingsSection("Colour picker") {
+            Picker("Copy as", selection: $colorFormat) {
+                ForEach(ColorClipboardFormat.allCases) { Text($0.title).tag($0) }
+            }
+            caption("⌃⌥E opens a loupe and copies the colour under the click; Esc cancels. Values are converted to sRGB. The clipboard history keeps a copy when it is on.")
         }
 
         SettingsSection("Grid & card size") {

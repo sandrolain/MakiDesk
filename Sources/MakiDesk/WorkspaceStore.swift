@@ -774,6 +774,11 @@ final class WorkspaceStore {
             TextRecognitionController.shared.recognizeArea(options: textRecognitionOptions)
             return
         }
+        // The colour picker reads one pixel the same way (T36).
+        if action == .sampleColor {
+            ColorSamplerController.shared.sample()
+            return
+        }
         let trusted = AXIsProcessTrusted()
         accessibilityTrusted = trusted
         guard trusted else {
@@ -1066,7 +1071,7 @@ final class WorkspaceStore {
              .assignToGroup, .recallGroup, .peekDesignate,
              .putAwayFront, .showEverything, .undoStep,
              .gridLayout, .spiralLayout, .suggestLayout, .contentLayout,
-             .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText:
+             .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor:
             return nil
         }
     }
@@ -1431,6 +1436,7 @@ final class WorkspaceStore {
         case .clipboardHistory: return "clipboard"
         case .toggleShelf: return "shelf"
         case .recognizeText: return "text"
+        case .sampleColor: return "colour"
         case .peekDesignate: return "peek"
         case .putAwayFront: return "sent away"
         case .showEverything: return "everything back"

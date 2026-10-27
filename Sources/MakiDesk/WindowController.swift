@@ -41,6 +41,8 @@ enum WindowController {
         case toggleShelf
         /// Select an area of the screen and copy the text it contains (T41).
         case recognizeText
+        /// Pick the colour under one point of the screen (T36).
+        case sampleColor
     }
 
     /// A value snapshot of one window.

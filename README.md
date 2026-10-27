@@ -81,6 +81,12 @@ Press `⌃⌥O` and drag over any text on screen: the words go to the clipboard
 with a short preview. Recognition runs locally with Vision and needs Screen
 Recording; the selected image is not written to disk and nothing is uploaded.
 
+### Colour from the screen
+
+Press `⌃⌥E`, move the loupe and click: the colour under the point is on the
+clipboard, as hex by default or as RGB/NSColor from Settings ▸ Panels. Values
+are converted to sRGB, so they match other colour tools.
+
 <p align="center">
   <img src="docs/assets/shelf.png" alt="MakiDesk shelf" width="30%">
   &nbsp;&nbsp;

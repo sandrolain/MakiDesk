@@ -146,7 +146,7 @@ final class ScreenRegionSelector {
         // Only the screen with the pointer carries the hint; the others are
         // just dimmed while the drag stays on its own display.
         overlays.first(where: { $0.display.id == active?.id })?.view.hintText =
-            "Drag to select an area · Esc to cancel"
+            mode == .point ? "Click a colour · Esc to cancel" : "Drag to select an area · Esc to cancel"
 
         if let active {
             ensureSnapshot(for: active)
@@ -176,7 +176,9 @@ final class ScreenRegionSelector {
         view.accentColor = accentColor
         view.showsLoupe = showsLoupe
         view.setAccessibilityRole(.group)
-        view.setAccessibilityLabel("Select an area of the screen")
+        view.setAccessibilityLabel(mode == .point
+            ? "Pick a colour from the screen"
+            : "Select an area of the screen")
         view.onPointerMoved = { [weak self] point in
             self?.pointerMoved(point, displayID: display.id)
         }

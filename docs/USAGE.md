@@ -18,6 +18,7 @@ through Accessibility.
 - [Dropzones](#dropzones)
 - [Screenshots](#screenshots)
 - [Text from the screen](#text-from-the-screen)
+- [Colour picker](#colour-picker)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Troubleshooting](#troubleshooting)
@@ -434,6 +435,20 @@ a click without dragging, cancels without copying anything.
 - Screen Recording is required for the selection. The image is not written to
   disk and nothing is uploaded. The first use loads Vision's models (about
   100 MB), which stay in memory while MakiDesk runs.
+
+## Colour picker
+
+Press `⌃⌥E`, move the loupe over the point you want and click. The colour under
+the click goes to the clipboard; the notice shows its hex value, RGB and alpha.
+
+- **Settings ▸ Panels ▸ Colour picker** chooses the format copied: `#RRGGBB`,
+  `#RRGGBBAA`, `rgb(r, g, b)` or an `NSColor` snippet for Swift.
+- Values are converted to sRGB, so they match other colour tools; a display
+  that is not colour-calibrated can still show a different colour from another
+  one.
+- Screen Recording is required, like OCR. The capture is read in memory and
+  never written to disk. `Esc` cancels. With the clipboard history on, the
+  colour is kept there like any other copy.
 - If no text is found, the clipboard is left untouched.
 
 ## Settings

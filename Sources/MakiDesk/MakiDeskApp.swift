@@ -258,10 +258,14 @@ struct MakiDeskApp: App {
                         options: store.textRecognitionOptions
                     )
                 }
+                menuButton("Pick a Color from the Screen", keys: "⌃⌥E",
+                           icon: "eyedropper") {
+                    ColorSamplerController.shared.sample()
+                }
                 Divider()
-                Text("The text goes to the clipboard. Everything runs locally.")
+                Text("Text goes to the clipboard; the colour uses the format chosen in Settings. Everything runs locally.")
             } label: {
-                Label("Text", systemImage: "text.viewfinder")
+                Label("Text & Color", systemImage: "text.viewfinder")
             }
 
             Divider()
