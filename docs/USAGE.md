@@ -372,10 +372,14 @@ dropzones with their own tick.
 ## Screenshots
 
 Choose **Screenshots** in the menu-bar menu to open the screenshot library in a
-floating window that stays above other windows. It starts in Desktop and lists
-common macOS screenshot image and PDF filenames; use **Folder…** if macOS saves
-screenshots elsewhere. The folder is remembered, and the list refreshes when its
-contents change.
+floating window that stays above other windows. It follows the folder macOS
+saves screenshots in (Desktop by default) and picks up a change made in System
+Settings at the next launch. **Folder…** browses another directory and remembers
+it; **Use System Folder** returns to following macOS. Captures are matched by
+name and through Spotlight's screen-capture attribute, so renamed files stay
+listed; when Spotlight has not indexed the folder, a hint says the list is
+name-based and the list keeps working. The list refreshes when its contents
+change.
 
 Search by filename, click to select, Command-click to add or remove items, or
 drag a selection rectangle from empty space across multiple cards. Clicking

@@ -46,12 +46,16 @@ struct ScreenshotScan: Sendable {
 @Observable
 @MainActor
 final class ScreenshotLibraryModel {
-    typealias DirectoryScanner = @Sendable (String, [String], Set<String>) -> ScreenshotScan
+    /// `(folder, name prefixes, image extensions, paths Spotlight indexed)` on
+    /// a worker; the run parameters travel as values so the scan never touches
+    /// main-actor state.
+    typealias DirectoryScanner = @Sendable (String, [String], Set<String>, [String]) -> ScreenshotScan
     private(set) var folderURL: URL
     private(set) var files: [ScreenshotFile] = []
     private(set) var selectedPaths: Set<String> = []
     private(set) var isLoading = false
     private(set) var isOperating = false
+    private(set) var indexState: ScreenshotIndexState = .idle
     private(set) var message: String?
     var searchText = ""
     var sortOrder: ScreenshotSortOrder = .newestFirst
@@ -63,7 +67,10 @@ final class ScreenshotLibraryModel {
     private var refreshPending = false
     private var isPresented = false
     private let scanDirectory: DirectoryScanner
-    private var watcher: DispatchSourceFileSystemObject?
+    private let defaults: UserDefaults
+    private let systemFolder: () -> URL
+    private let spotlight: ScreenshotIndexProvider
+    private var watcher: ScreenshotFolderWatcher?
     private var refreshWork: DispatchWorkItem?
 
     private static let folderKey = "screenshotLibraryFolderPath"
@@ -75,22 +82,46 @@ final class ScreenshotLibraryModel {
         "png", "jpg", "jpeg", "tif", "tiff", "pdf"
     ]
 
-    init(folderURL overrideFolderURL: URL? = nil, scanner: DirectoryScanner? = nil) {
-        sortOrder = ScreenshotSortOrder(rawValue: UserDefaults.standard.string(forKey: "screenshotLibrarySort") ?? "") ?? .newestFirst
-        grouping = ScreenshotGrouping(rawValue: UserDefaults.standard.string(forKey: "screenshotLibraryGrouping") ?? "") ?? .month
-        thumbnailScale = min(max(UserDefaults.standard.object(forKey: "screenshotLibraryScale") as? Double ?? 1, 0.75), 1.6)
+    init(folderURL overrideFolderURL: URL? = nil,
+         defaults: UserDefaults = .standard,
+         systemFolder: @escaping () -> URL = { SystemScreenshotFolder.folderURL() },
+         index: ScreenshotIndexProvider? = nil,
+         scanner: DirectoryScanner? = nil) {
+        self.defaults = defaults
+        self.systemFolder = systemFolder
+        spotlight = index ?? ScreenshotSpotlightIndex()
+        sortOrder = ScreenshotSortOrder(rawValue: defaults.string(forKey: "screenshotLibrarySort") ?? "") ?? .newestFirst
+        grouping = ScreenshotGrouping(rawValue: defaults.string(forKey: "screenshotLibraryGrouping") ?? "") ?? .month
+        thumbnailScale = min(max(defaults.object(forKey: "screenshotLibraryScale") as? Double ?? 1, 0.75), 1.6)
         if let overrideFolderURL {
             folderURL = overrideFolderURL.standardizedFileURL
-        } else if let path = UserDefaults.standard.string(forKey: Self.folderKey),
+        } else if let path = defaults.string(forKey: Self.folderKey),
            FileManager.default.fileExists(atPath: path) {
             folderURL = URL(fileURLWithPath: path, isDirectory: true)
         } else {
-            folderURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
-                ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Desktop", isDirectory: true)
+            folderURL = systemFolder().standardizedFileURL
         }
-        scanDirectory = scanner ?? { path, prefixes, extensions in
-            Self.scan(path: path, prefixes: prefixes, extensions: extensions)
+        scanDirectory = scanner ?? { path, prefixes, extensions, indexedPaths in
+            Self.scan(path: path, prefixes: prefixes, extensions: extensions, indexedPaths: indexedPaths)
         }
+        spotlight.onChange = { [weak self] in
+            guard let self else { return }
+            self.indexState = self.spotlight.state
+            self.scheduleRefresh()
+        }
+    }
+
+    var systemFolderURL: URL {
+        systemFolder().standardizedFileURL
+    }
+
+    /// The read-only `type` macOS was configured with, for the button's hint.
+    var systemFolderType: String? {
+        SystemScreenshotFolder.fileType()
+    }
+
+    var isUsingSystemFolder: Bool {
+        folderURL.standardizedFileURL == systemFolderURL
     }
 
     var visibleFiles: [ScreenshotFile] {
@@ -150,6 +181,7 @@ final class ScreenshotLibraryModel {
         isPresented = true
         refresh()
         startWatching()
+        startIndexing()
     }
 
     func hide() {
@@ -160,6 +192,7 @@ final class ScreenshotLibraryModel {
         refreshWork?.cancel()
         refreshWork = nil
         stopWatching()
+        stopIndexing()
     }
 
     func select(_ file: ScreenshotFile, extending: Bool) {
@@ -189,25 +222,43 @@ final class ScreenshotLibraryModel {
 
     func setSortOrder(_ order: ScreenshotSortOrder) {
         sortOrder = order
-        UserDefaults.standard.set(order.rawValue, forKey: "screenshotLibrarySort")
+        defaults.set(order.rawValue, forKey: "screenshotLibrarySort")
     }
 
     func setGrouping(_ value: ScreenshotGrouping) {
         grouping = value
-        UserDefaults.standard.set(value.rawValue, forKey: "screenshotLibraryGrouping")
+        defaults.set(value.rawValue, forKey: "screenshotLibraryGrouping")
     }
 
     func setThumbnailScale(_ value: Double) {
         thumbnailScale = value
-        UserDefaults.standard.set(value, forKey: "screenshotLibraryScale")
+        defaults.set(value, forKey: "screenshotLibraryScale")
     }
 
     func chooseFolder(_ url: URL) {
+        applyFolder(url, persist: true)
+    }
+
+    /// Stops persisting a custom folder, so the next launch follows the system
+    /// setting again (T48).
+    func useSystemFolder() {
+        applyFolder(systemFolder(), persist: false)
+    }
+
+    private func applyFolder(_ url: URL, persist: Bool) {
         folderURL = url.standardizedFileURL
-        UserDefaults.standard.set(folderURL.path, forKey: Self.folderKey)
+        // Choosing exactly the folder macOS uses means following it, not
+        // freezing today's path: a later change in System Settings must reach
+        // the next launch too.
+        if persist, folderURL != systemFolder().standardizedFileURL {
+            defaults.set(folderURL.path, forKey: Self.folderKey)
+        } else {
+            defaults.removeObject(forKey: Self.folderKey)
+        }
         clearSelection()
         message = nil
         restartWatching()
+        startIndexing()
         refresh()
     }
 
@@ -234,10 +285,11 @@ final class ScreenshotLibraryModel {
         isLoading = true
         let prefixes = Self.screenshotPrefixes
         let extensions = Self.imageExtensions
+        let indexedPaths = spotlight.paths
         let scanDirectory = self.scanDirectory
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let result = scanDirectory(path, prefixes, extensions)
+            let result = scanDirectory(path, prefixes, extensions, indexedPaths)
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.scanInFlight = false
@@ -314,32 +366,42 @@ final class ScreenshotLibraryModel {
         }
     }
 
-    nonisolated private static func scan(
+    /// Lists the folder by name **and** merges the paths Spotlight indexed
+    /// (`kMDItemIsScreenCapture`), so a renamed capture stays visible. The
+    /// name scan runs first: it also covers files Spotlight has not indexed and
+    /// keeps the list usable when indexing is off.
+    nonisolated static func scan(
         path: String,
         prefixes: [String],
-        extensions: Set<String>
+        extensions: Set<String>,
+        indexedPaths: [String]
     ) -> ScreenshotScan {
-        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        let directory = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
         do {
             let urls = try FileManager.default.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             )
-            let files = urls.compactMap { url -> ScreenshotFile? in
+            var seen = Set<String>()
+            var files: [ScreenshotFile] = []
+            for url in urls {
                 guard extensions.contains(url.pathExtension.lowercased()),
                       prefixes.contains(where: { url.deletingPathExtension().lastPathComponent
                           .localizedLowercase.hasPrefix($0.localizedLowercase) }),
-                      let values = try? url.resourceValues(forKeys: [
-                        .isRegularFileKey, .contentModificationDateKey, .fileSizeKey
-                      ]),
-                      values.isRegularFile == true else { return nil }
-                return ScreenshotFile(
-                    path: url.standardizedFileURL.path,
-                    name: url.lastPathComponent,
-                    modified: values.contentModificationDate ?? .distantPast,
-                    byteCount: values.fileSize ?? 0
-                )
+                      let file = screenshotFile(at: url),
+                      seen.insert(file.path).inserted else { continue }
+                files.append(file)
+            }
+            // A Spotlight scope is recursive; only direct children belong here.
+            let directoryPath = directory.path
+            for indexed in indexedPaths {
+                let url = URL(fileURLWithPath: indexed)
+                guard url.deletingLastPathComponent().standardizedFileURL.path == directoryPath,
+                      extensions.contains(url.pathExtension.lowercased()),
+                      let file = screenshotFile(at: url),
+                      seen.insert(file.path).inserted else { continue }
+                files.append(file)
             }
             return ScreenshotScan(
                 files: files.sorted { $0.modified > $1.modified }, error: nil
@@ -347,6 +409,18 @@ final class ScreenshotLibraryModel {
         } catch {
             return ScreenshotScan(files: [], error: error.localizedDescription)
         }
+    }
+
+    nonisolated private static func screenshotFile(at url: URL) -> ScreenshotFile? {
+        guard let values = try? url.resourceValues(forKeys: [
+            .isRegularFileKey, .contentModificationDateKey, .fileSizeKey
+        ]), values.isRegularFile == true else { return nil }
+        return ScreenshotFile(
+            path: url.standardizedFileURL.path,
+            name: url.lastPathComponent,
+            modified: values.contentModificationDate ?? .distantPast,
+            byteCount: values.fileSize ?? 0
+        )
     }
 
     nonisolated private static func nonCollidingURL(for source: URL, in directory: URL) -> URL {
@@ -369,25 +443,37 @@ final class ScreenshotLibraryModel {
     }
 
     private func startWatching() {
-        guard watcher == nil else { return }
-        let descriptor = open(folderURL.path, O_EVTONLY)
-        guard descriptor >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: descriptor,
-            eventMask: [.write, .delete, .rename],
-            queue: DispatchQueue.global(qos: .utility)
-        )
-        source.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in self?.scheduleRefresh() }
+        guard isPresented, watcher == nil else { return }
+        let watcher = ScreenshotFolderWatcher { [weak self] flags in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // A renamed, moved or replaced folder keeps the same path but
+                // invalidates the watched root: reopen the stream before the
+                // rescan, otherwise later changes would go unseen.
+                if flags & FSEventStreamEventFlags(kFSEventStreamEventFlagRootChanged) != 0 {
+                    self.restartWatching()
+                }
+                self.scheduleRefresh()
+            }
         }
-        source.setCancelHandler { close(descriptor) }
-        watcher = source
-        source.resume()
+        watcher.start(folder: folderURL)
+        self.watcher = watcher
     }
 
     private func stopWatching() {
-        watcher?.cancel()
+        watcher?.stop()
         watcher = nil
+    }
+
+    private func startIndexing() {
+        guard isPresented else { return }
+        spotlight.start(folder: folderURL)
+        indexState = spotlight.state
+    }
+
+    private func stopIndexing() {
+        spotlight.stop()
+        indexState = .idle
     }
 
     private func scheduleRefresh() {
@@ -395,7 +481,7 @@ final class ScreenshotLibraryModel {
         refreshWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.refresh() }
         refreshWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 }
 
@@ -589,7 +675,9 @@ private struct ScreenshotLibraryView: View {
                     model.isLoading ? "Loading Screenshots…" : (model.searchText.isEmpty ? "No Screenshots Found" : "No Matching Screenshots"),
                     systemImage: "photo.on.rectangle.angled",
                     description: Text(model.message ?? (model.searchText.isEmpty
-                        ? "Screenshots in the selected folder will appear here."
+                        ? (model.indexState == .empty || model.indexState == .unavailable
+                            ? "Screenshots appear by name; Spotlight has no indexed captures in this folder, so renamed ones may be missing."
+                            : "Screenshots in the selected folder will appear here.")
                         : "Try another filename or clear the search."))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -703,16 +791,31 @@ private struct ScreenshotLibraryView: View {
                 .font(.system(size: 17, weight: .medium))
             VStack(alignment: .leading, spacing: 2) {
                 Text("Screenshots").font(.headline)
-                Text(model.folderURL.path)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 4) {
+                    Text(model.folderURL.path)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if model.indexState == .empty || model.indexState == .unavailable {
+                        Image(systemName: "magnifyingglass")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .help("Spotlight has no indexed captures here: files are matched by name, so renamed captures may be missing.")
+                            .accessibilityLabel("Spotlight has no indexed captures in this folder")
+                    }
+                }
             }
             Spacer()
             TextField("Search screenshots", text: $model.searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 210)
+            if !model.isUsingSystemFolder {
+                Button("Use System Folder", action: model.useSystemFolder)
+                    .help(model.systemFolderType.map {
+                        "Follow the folder macOS saves screenshots in (\($0.uppercased()))"
+                    } ?? "Follow the folder macOS saves screenshots in")
+            }
             Button(action: chooseFolder) {
                 Label("Folder…", systemImage: "folder")
             }
