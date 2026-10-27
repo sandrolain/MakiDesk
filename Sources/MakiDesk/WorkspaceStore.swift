@@ -56,6 +56,14 @@ final class WorkspaceStore {
         : UserDefaults.standard.double(forKey: "windowGap")).clamped(to: 0...80)
     var showMiniMap = UserDefaults.standard.object(forKey: "showMiniMap") as? Bool ?? true
     var showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
+    /// OCR quality and correction (T41). Languages stay automatic.
+    var ocrFastRecognition = UserDefaults.standard.object(forKey: "ocrFastRecognition") as? Bool ?? false
+    var ocrLanguageCorrection = UserDefaults.standard.object(forKey: "ocrLanguageCorrection") as? Bool ?? true
+    var textRecognitionOptions: TextRecognitionOptions {
+        TextRecognitionOptions(quality: ocrFastRecognition ? .fast : .accurate,
+                               usesLanguageCorrection: ocrLanguageCorrection,
+                               languages: [])
+    }
     var miniMapPosition = PalettePosition(rawValue: UserDefaults.standard.string(forKey: "miniMapPosition") ?? "") ?? .topRight
     var themeID = PaletteTheme.normalized(UserDefaults.standard.string(forKey: "themeID") ?? "mocha")
     var overlayScale = UserDefaults.standard.object(forKey: "overlayScale") as? Double ?? 1.0
@@ -447,6 +455,16 @@ final class WorkspaceStore {
         if value { maybePromptForScreenRecording() }
     }
 
+    func updateOCRFastRecognition(_ value: Bool) {
+        ocrFastRecognition = value
+        UserDefaults.standard.set(value, forKey: "ocrFastRecognition")
+    }
+
+    func updateOCRLanguageCorrection(_ value: Bool) {
+        ocrLanguageCorrection = value
+        UserDefaults.standard.set(value, forKey: "ocrLanguageCorrection")
+    }
+
     func updateMiniMapPosition(_ value: PalettePosition) {
         miniMapPosition = value
         UserDefaults.standard.set(value.rawValue, forKey: "miniMapPosition")
@@ -675,6 +693,8 @@ final class WorkspaceStore {
         updateGap(12)
         updateMiniMapVisibility(true)
         updateShowPreview(true)
+        updateOCRFastRecognition(false)
+        updateOCRLanguageCorrection(true)
         updateMiniMapPosition(.topRight)
         updateTheme("mocha")
         updateOverlayScale(1.0)
@@ -746,6 +766,12 @@ final class WorkspaceStore {
         }
         if action == .toggleShelf {
             MainActor.assumeIsolated { ShelfController.shared.toggle() }
+            return
+        }
+        // OCR reads the screen with Screen Recording; it must work without
+        // Accessibility, like the panels (T41).
+        if action == .recognizeText {
+            TextRecognitionController.shared.recognizeArea(options: textRecognitionOptions)
             return
         }
         let trusted = AXIsProcessTrusted()
@@ -1040,7 +1066,7 @@ final class WorkspaceStore {
              .assignToGroup, .recallGroup, .peekDesignate,
              .putAwayFront, .showEverything, .undoStep,
              .gridLayout, .spiralLayout, .suggestLayout, .contentLayout,
-             .toggleNotes, .clipboardHistory, .toggleShelf:
+             .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText:
             return nil
         }
     }
@@ -1404,6 +1430,7 @@ final class WorkspaceStore {
         case .toggleNotes: return "notes"
         case .clipboardHistory: return "clipboard"
         case .toggleShelf: return "shelf"
+        case .recognizeText: return "text"
         case .peekDesignate: return "peek"
         case .putAwayFront: return "sent away"
         case .showEverything: return "everything back"

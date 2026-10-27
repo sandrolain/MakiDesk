@@ -39,6 +39,8 @@ enum WindowController {
         case clipboardHistory
         /// Show or hide the shelf (T31).
         case toggleShelf
+        /// Select an area of the screen and copy the text it contains (T41).
+        case recognizeText
     }
 
     struct WindowInfo: Identifiable {

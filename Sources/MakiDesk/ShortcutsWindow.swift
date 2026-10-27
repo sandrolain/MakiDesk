@@ -125,6 +125,11 @@ enum ShortcutCatalog {
             .init(title: "Designate / undesignate the front window", keys: "⌃⌥⌘P"),
             .init(title: "Peek at it while held", keys: "hold ⌃⌥H"),
         ], note: "The designated window is put away; the hold brings it back."),
+
+        ShortcutSection(title: "Text", scope: "Global", items: [
+            .init(title: "Recognize text from a selected area", keys: "⌃⌥O",
+                  note: "Esc cancels. The text goes to the clipboard; recognition runs locally."),
+        ]),
     ]
 }
 

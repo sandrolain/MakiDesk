@@ -67,6 +67,9 @@ final class ShortcutManager {
         .init(key: kVK_ANSI_V, modifiers: optionKey, action: .clipboardHistory),
         // Shelf (T31): collecting does not need Accessibility.
         .init(key: kVK_ANSI_D, modifiers: ctrlOpt, action: .toggleShelf),
+        // Text recognition (T41): local OCR on a selected area; it needs
+        // Screen Recording, not Accessibility.
+        .init(key: kVK_ANSI_O, modifiers: ctrlOpt, action: .recognizeText),
     ]
 
     /// Group shortcuts (1…9): ⌃⌥⌘N adds/removes the frontmost window, ⌃⌥N

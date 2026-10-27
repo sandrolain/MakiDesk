@@ -2,7 +2,7 @@
 
 MakiDesk is a local desktop utility. It has **no account, no server, no
 analytics, no crash uploader and no telemetry**, and it does not send window
-titles, previews, notes, clipboard contents or files anywhere.
+titles, previews, notes, clipboard contents, recognized text or files anywhere.
 
 - [Permissions](#permissions)
 - [What is read](#what-is-read)
@@ -21,7 +21,7 @@ for two macOS TCC permissions:
 | Permission | Why |
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
-| **Screen Recording** | Live window previews and the content measure used by the suggested/content-weighted layouts. |
+| **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, and the area selected for text recognition. |
 
 Both are granted by you in **System Settings ▸ Privacy & Security** and can be
 revoked there at any time. The app does not request Input Monitoring, Full Disk
@@ -40,6 +40,11 @@ identity asks again. A Developer ID-signed public release behaves best here.
   content measure are in use. The images are downscaled and kept **in memory**;
   they are used for the switcher cards, the overlay and the edge-energy score,
   and are not written to disk.
+- **The area you select for text recognition**, only when you press `⌃⌥O`. The
+  image is processed locally by Vision, kept in memory for the recognition and
+  not written to disk; only the recognized text goes to the clipboard and the
+  on-screen preview. Vision's language models stay resident in memory after the
+  first use.
 - **Text on the pasteboard**, only through the clipboard-history poll, and only
   while secure input is off and the copy is not marked concealed/transient.
 - Files and URLs **only when you drop them on the shelf or open them in Notes**.

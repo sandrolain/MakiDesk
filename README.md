@@ -75,6 +75,12 @@ pastes into the app you were using. At most 50 distinct texts, no duplicates,
 and password fields/secure input are skipped. The panel will not even open while
 secure input is active.
 
+### Text from the screen
+
+Press `⌃⌥O` and drag over any text on screen: the words go to the clipboard
+with a short preview. Recognition runs locally with Vision and needs Screen
+Recording; the selected image is not written to disk and nothing is uploaded.
+
 <p align="center">
   <img src="docs/assets/shelf.png" alt="MakiDesk shelf" width="30%">
   &nbsp;&nbsp;
@@ -150,6 +156,7 @@ Taskfile commands and the signing notes.
 | `⌥⇥` | window switcher |
 | `⌥Space` | search windows and applications |
 | `⌃⌥W` | content-weighted layout |
+| `⌃⌥O` | text from a selected area |
 | `⌥N` | notes |
 | `⌥V` | clipboard history |
 | `⌃⌥D` | shelf |

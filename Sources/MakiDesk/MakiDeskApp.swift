@@ -225,6 +225,19 @@ struct MakiDeskApp: App {
                 Label("Peek", systemImage: "eye")
             }
 
+            Menu {
+                menuButton("Recognize Text from Selected Area", keys: "⌃⌥O",
+                           icon: "text.viewfinder") {
+                    TextRecognitionController.shared.recognizeArea(
+                        options: store.textRecognitionOptions
+                    )
+                }
+                Divider()
+                Text("The text goes to the clipboard. Everything runs locally.")
+            } label: {
+                Label("Text", systemImage: "text.viewfinder")
+            }
+
             Divider()
 
             menuButton("Keyboard Shortcuts…", icon: "keyboard") {

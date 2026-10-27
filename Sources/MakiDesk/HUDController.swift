@@ -14,19 +14,33 @@ final class HUDController {
     private init() {}
 
     /// Shows `text` with `symbol` for a moment, replacing any notice on screen.
-    /// `duration` is how long it stays; the couple of seconds a confirmation
-    /// needs is the default, an offer waiting to be accepted asks for longer.
-    func show(_ text: String, symbol: String = "checkmark.circle.fill", duration: TimeInterval = 1.4) {
+    /// `detail` is an optional monospaced preview under the title (the OCR
+    /// result, T41). `duration` is how long it stays; the couple of seconds a
+    /// confirmation needs is the default, an offer waiting to be accepted asks
+    /// for longer.
+    func show(_ text: String, symbol: String = "checkmark.circle.fill",
+              detail: String? = nil, duration: TimeInterval = 1.4) {
         if Thread.isMainThread {
-            present(text, symbol: symbol, duration: duration)
+            present(text, symbol: symbol, detail: detail, duration: duration)
         } else {
-            DispatchQueue.main.async { [weak self] in self?.present(text, symbol: symbol, duration: duration) }
+            DispatchQueue.main.async { [weak self] in
+                self?.present(text, symbol: symbol, detail: detail, duration: duration)
+            }
         }
     }
 
-    private func present(_ text: String, symbol: String, duration: TimeInterval) {
+    /// Takes the current notice away at once. A command that captures the
+    /// screen calls this first, so the previous notice cannot end up in the
+    /// image (T41).
+    func hide() {
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+        panel?.orderOut(nil)
+    }
+
+    private func present(_ text: String, symbol: String, detail: String?, duration: TimeInterval) {
         guard let screen = NSScreen.main else { return }
-        let hosting = NSHostingView(rootView: HUDView(text: text, symbol: symbol))
+        let hosting = NSHostingView(rootView: HUDView(text: text, symbol: symbol, detail: detail))
         let size = hosting.fittingSize
         guard size.width > 1, size.height > 1 else { return }
 
@@ -65,19 +79,31 @@ final class HUDController {
 private struct HUDView: View {
     let text: String
     let symbol: String
+    var detail: String? = nil
 
     /// In-theme so the notice never clashes with the palette.
     private var theme: PaletteTheme { WorkspaceStore.shared.theme }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(theme.accent)
-            Text(text)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(theme.text)
-                .fixedSize()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+                Text(text)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(theme.text)
+                    .fixedSize()
+            }
+            if let detail, detail.isEmpty == false {
+                Text(detail)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(theme.subtext)
+                    .lineLimit(4)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 420, alignment: .leading)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 11)

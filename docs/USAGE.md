@@ -16,6 +16,8 @@ through Accessibility.
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
+- [Screenshots](#screenshots)
+- [Text from the screen](#text-from-the-screen)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Troubleshooting](#troubleshooting)
@@ -390,6 +392,21 @@ The segmented controls sort captures newest-first or oldest-first and group
 them as one grid, by month, or by week. The thumbnail-size slider changes the
 card size; sort order, grouping and size are remembered.
 
+## Text from the screen
+
+Press `⌃⌥O` and drag over the text you want. MakiDesk recognizes it locally with
+Vision, copies the result to the clipboard and shows a short preview. `Esc`, or
+a click without dragging, cancels without copying anything.
+
+- The area is captured at native resolution; an image longer than 3000 px on
+  one side is downscaled before recognition.
+- **Settings ▸ Panels ▸ Text recognition** chooses fast or accurate recognition
+  and language correction. The language is detected automatically.
+- Screen Recording is required for the selection. The image is not written to
+  disk and nothing is uploaded. The first use loads Vision's models (about
+  100 MB), which stay in memory while MakiDesk runs.
+- If no text is found, the clipboard is left untouched.
+
 ## Settings
 
 The Settings window is split into tabs:
@@ -398,7 +415,8 @@ The Settings window is split into tabs:
   reset and finish setup.
 - **Windows** — gap, drag-to-snap key, macOS tiling, focus border, overlay.
 - **Layouts** — suggested layout behaviour and the seven content weights.
-- **Panels** — shelf shake settings and the window switcher/search appearance.
+- **Panels** — shelf shake settings, the window switcher/search appearance, and
+  text recognition quality and correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.

@@ -399,6 +399,18 @@ struct SettingsView: View {
             caption("Previews need Screen Recording permission. The theme also colours the overlay. Window colours affect the list, thumbnails and mini-map; the focused-window outline keeps its theme colour.")
         }
 
+        SettingsSection("Text recognition") {
+            Toggle("Fast recognition (less accurate)", isOn: Binding(
+                get: { store.ocrFastRecognition },
+                set: { store.updateOCRFastRecognition($0) }
+            ))
+            Toggle("Language correction", isOn: Binding(
+                get: { store.ocrLanguageCorrection },
+                set: { store.updateOCRLanguageCorrection($0) }
+            ))
+            caption("⌃⌥O selects an area of the screen and copies the text it contains; Esc cancels. Vision runs on this Mac and detects the language automatically; the models (about 100 MB) stay in memory after the first use. Nothing is uploaded or written to disk.")
+        }
+
         SettingsSection("Grid & card size") {
             Picker("Columns", selection: Binding(
                 get: { store.paletteColumns },
