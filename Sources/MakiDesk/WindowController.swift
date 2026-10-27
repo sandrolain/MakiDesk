@@ -43,7 +43,13 @@ enum WindowController {
         case recognizeText
     }
 
-    struct WindowInfo: Identifiable {
+    /// A value snapshot of one window.
+    ///
+    /// Discovery builds these on a worker and publishes them to the main actor.
+    /// `AXUIElement` is an immutable Core Foundation handle whose API is safe to
+    /// call from any thread, and the snapshot is copied rather than mutated in
+    /// place once handed off, so transferring it between threads is sound.
+    struct WindowInfo: Identifiable, @unchecked Sendable {
         var id: String
         let title: String
         let appName: String
@@ -60,7 +66,9 @@ enum WindowController {
         var temporarilyUnavailable = false
     }
 
-    struct WindowInventoryRead {
+    /// One discovery result: windows plus the applications that timed out and
+    /// the stacking order. Same transfer invariant as `WindowInfo`.
+    struct WindowInventoryRead: @unchecked Sendable {
         var windows: [WindowInfo]
         var unavailablePIDs: Set<pid_t> = []
         var stackingOrder: [CGWindowID: Int] = [:]
@@ -427,6 +435,7 @@ enum WindowController {
         case none
     }
 
+    @MainActor
     static func frontmost() -> Frontmost {
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
@@ -475,6 +484,7 @@ enum WindowController {
 
     /// The frontmost window, or `nil` when the frontmost app has none — or when
     /// what it has focused is the desktop, which is not a window (T26).
+    @MainActor
     static func frontmostWindow() -> WindowInfo? {
         if case let .window(info) = frontmost() { return info }
         return nil

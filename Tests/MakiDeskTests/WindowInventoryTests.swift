@@ -4,6 +4,9 @@ import ApplicationServices
 
 @MainActor
 final class WindowInventoryTests: XCTestCase {
+    // The `nonisolated(unsafe)` locals below are fixtures for the injected
+    // discovery providers. The tests drain the scheduled work synchronously on
+    // the main thread, so only one context touches them at a time.
     private func window(_ identity: String, elementPID: pid_t, frame: CGRect = .zero, ownerPID: pid_t = 7) -> WindowController.WindowInfo {
         WindowController.WindowInfo(id: identity, title: identity, appName: "Test",
             element: AXUIElementCreateApplication(elementPID), frame: frame, pid: ownerPID)
@@ -47,8 +50,8 @@ final class WindowInventoryTests: XCTestCase {
     }
 
     func testInvalidatedScanCannotPublishAndWaitersJoinFollowupScan() async {
-        var work: [() -> Void] = []
-        var samples = [[window("old", elementPID: 101)], [window("new", elementPID: 102)]]
+        nonisolated(unsafe) var work: [() -> Void] = []
+        nonisolated(unsafe) var samples = [[window("old", elementPID: 101)], [window("new", elementPID: 102)]]
         let index = WindowIndex(discover: { samples.removeFirst() }, scheduleDiscovery: { work.append($0) })
         var published: [[String]] = []
         index.refreshAsync { published.append($0.map(\.id)) }
@@ -65,7 +68,7 @@ final class WindowInventoryTests: XCTestCase {
     }
 
     func testGeometryWrittenDuringDiscoveryWinsOverOldScanFrame() async {
-        var work: [() -> Void] = []
+        nonisolated(unsafe) var work: [() -> Void] = []
         let sample = window("known", elementPID: 101)
         let index = WindowIndex(discover: { [sample] }, scheduleDiscovery: { work.append($0) })
         let frame = CGRect(x: 20, y: 40, width: 800, height: 600)
@@ -77,11 +80,11 @@ final class WindowInventoryTests: XCTestCase {
     }
 
     func testSingleApplicationRefreshDoesNotScanOrRemoveOtherApplications() async {
-        var work: [() -> Void] = []
+        nonisolated(unsafe) var work: [() -> Void] = []
         let first = window("A", elementPID: 101)
         let other = window("B", elementPID: 102, ownerPID: 8)
-        var globalReads = 0
-        var scopes: [Set<pid_t>] = []
+        nonisolated(unsafe) var globalReads = 0
+        nonisolated(unsafe) var scopes: [Set<pid_t>] = []
         let index = WindowIndex(discover: { globalReads += 1; return [first, other] },
             readForPIDs: { pids in scopes.append(pids); return .init(windows: []) },
             scheduleDiscovery: { work.append($0) })
@@ -98,9 +101,9 @@ final class WindowInventoryTests: XCTestCase {
     }
 
     func testGlobalRequestDuringPartialScanWaitsForCompleteInventory() async {
-        var work: [() -> Void] = []
+        nonisolated(unsafe) var work: [() -> Void] = []
         let sample = window("A", elementPID: 101)
-        var globalReads = 0
+        nonisolated(unsafe) var globalReads = 0
         let index = WindowIndex(discover: { globalReads += 1; return [sample] },
             readForPIDs: { _ in .init(windows: []) }, scheduleDiscovery: { work.append($0) })
         index.refreshAsync { _ in }
