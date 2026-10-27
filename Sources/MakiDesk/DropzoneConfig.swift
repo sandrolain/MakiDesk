@@ -178,11 +178,18 @@ struct DropFeedback: Codable, Equatable, Sendable {
         case none
         case stdout
         case reveal
+        /// Copies what the command produced (its files, else stdout) to the
+        /// clipboard (T47).
+        case clipboard
+        /// Adds what the command produced (its files, else stdout) to the
+        /// Shelf (T47).
+        case shelf
     }
 
     var notifyOnSuccess: Bool
     /// `stdout` shows the output in the result notice; `reveal` opens the
-    /// output folder in Finder.
+    /// output folder in Finder; `clipboard`/`shelf` send the produced files to
+    /// the clipboard or the Shelf.
     var showOutput: Output
     var revealOutput: Bool
 
@@ -195,7 +202,14 @@ struct DropFeedback: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         notifyOnSuccess = try container.decodeIfPresent(Bool.self, forKey: .notifyOnSuccess) ?? true
-        showOutput = try container.decodeIfPresent(Output.self, forKey: .showOutput) ?? .none
+        // A value written by a newer build (or edited by hand) must not make
+        // the whole file unreadable: an unknown destination means `none`.
+        if let raw = try? container.decodeIfPresent(String.self, forKey: .showOutput),
+           let output = Output(rawValue: raw) {
+            showOutput = output
+        } else {
+            showOutput = .none
+        }
         revealOutput = try container.decodeIfPresent(Bool.self, forKey: .revealOutput) ?? false
     }
 }

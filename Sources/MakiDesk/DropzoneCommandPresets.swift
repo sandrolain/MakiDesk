@@ -22,6 +22,9 @@ struct DropzoneCommandPreset: Identifiable, Equatable, Sendable {
     let mode: CommandSpec.Mode
     let showStdout: Bool
     let revealOutput: Bool
+    /// Converting a batch of images takes longer than the 60 s default; a
+    /// preset carries its own limit (T47).
+    let timeoutSeconds: Int
     /// Some commands hand the run folder to another app (Terminal); keeping it
     /// makes their result usable after the command returns.
     let keepsRunFolder: Bool
@@ -31,7 +34,8 @@ struct DropzoneCommandPreset: Identifiable, Equatable, Sendable {
 
     init(id: String, name: String, summary: String, symbol: String,
          category: Category, line: String, mode: CommandSpec.Mode,
-         showStdout: Bool, revealOutput: Bool, keepsRunFolder: Bool = false,
+         showStdout: Bool, revealOutput: Bool, timeoutSeconds: Int = 60,
+         keepsRunFolder: Bool = false,
          expectedOutput: String? = nil) {
         self.id = id
         self.name = name
@@ -42,6 +46,7 @@ struct DropzoneCommandPreset: Identifiable, Equatable, Sendable {
         self.mode = mode
         self.showStdout = showStdout
         self.revealOutput = revealOutput
+        self.timeoutSeconds = timeoutSeconds
         self.keepsRunFolder = keepsRunFolder
         self.expectedOutput = expectedOutput
     }
@@ -50,6 +55,7 @@ struct DropzoneCommandPreset: Identifiable, Equatable, Sendable {
         zone.command.line = line
         zone.command.mode = mode
         zone.command.stdin = .none
+        zone.command.timeoutSeconds = timeoutSeconds
         zone.feedback.showOutput = showStdout ? .stdout : .none
         zone.feedback.revealOutput = revealOutput
         if keepsRunFolder { zone.command.keepWorkdir = true }
@@ -97,19 +103,19 @@ struct DropzoneCommandPreset: Identifiable, Equatable, Sendable {
             summary: "Write PNG copies to output/ with sips.",
             symbol: "photo", category: .images,
             line: "/usr/bin/sips -s format png {paths} --out {outdir}",
-            mode: .argv, showStdout: false, revealOutput: true),
+            mode: .argv, showStdout: false, revealOutput: true, timeoutSeconds: 300),
         DropzoneCommandPreset(
             id: "jpeg", name: "Convert images to JPEG",
             summary: "Write JPEG copies to output/ with sips.",
             symbol: "photo.on.rectangle", category: .images,
             line: "/usr/bin/sips -s format jpeg {paths} --out {outdir}",
-            mode: .argv, showStdout: false, revealOutput: true),
+            mode: .argv, showStdout: false, revealOutput: true, timeoutSeconds: 300),
         DropzoneCommandPreset(
             id: "resize", name: "Resize images to 1600 px",
             summary: "Fit the long edge to 1600 px and write the copies to output/.",
             symbol: "arrow.up.left.and.arrow.down.right", category: .images,
             line: "/usr/bin/sips -Z 1600 {paths} --out {outdir}",
-            mode: .argv, showStdout: false, revealOutput: true),
+            mode: .argv, showStdout: false, revealOutput: true, timeoutSeconds: 300),
 
         DropzoneCommandPreset(
             id: "copy-paths", name: "Copy paths",

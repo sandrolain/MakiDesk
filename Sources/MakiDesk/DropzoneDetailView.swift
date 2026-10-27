@@ -29,6 +29,7 @@ struct DropzoneDetailView: View {
     let shortcutsLoaded: Bool
     let testing: Bool
     let isCancelling: Bool
+    let lastRun: DropzoneRunSummary?
     let onChoosePreset: () -> Void
     let onChooseShortcut: () -> Void
     let onTest: () -> Void
@@ -68,6 +69,7 @@ struct DropzoneDetailView: View {
             commandSection
             runtimeSection
             feedbackSection
+            lastRunSection
             testSection
             checksSection
         }

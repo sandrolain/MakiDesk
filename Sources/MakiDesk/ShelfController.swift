@@ -195,6 +195,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
     private var headerSeparator: NSView?
     private var footerSeparator: NSView?
     private var hintLabel: NSTextField?
+    private var dropzonesButton: NSButton?
+    private var runLabel: NSTextField?
+    private var stopButton: ShelfTextButton?
+    private var runZoneID: UUID?
+    private var runStarted: Date?
+    private var runTimer: Timer?
+    private var dropzoneKeyboardMode = false
     private var dropzoneStrip: ShelfDropzoneStripView?
     private var dropzoneStripHeight: NSLayoutConstraint?
     private var dropzoneStripVisible = false
@@ -450,9 +457,31 @@ final class ShelfController: NSObject, NSWindowDelegate,
         notes.target = self
         notes.action = #selector(insertInNotes)
         notes.toolTip = "Insert the selected text in the open note"
-        let hint = NSTextField(labelWithString: "Space · ⌫ · esc")
+        let hint = NSTextField(labelWithString: "Space · ⌫ · ⌘D")
         hint.font = .systemFont(ofSize: 9)
         hint.alignment = .right
+
+        let zones = NSButton()
+        zones.image = NSImage(systemSymbolName: "bolt.square.on.square",
+                              accessibilityDescription: "Run a dropzone on the selection")
+        zones.isBordered = false
+        zones.imagePosition = .imageOnly
+        zones.target = self
+        zones.action = #selector(toggleDropzoneStrip)
+        zones.toolTip = "Run a dropzone on the selected items (⌘D)"
+
+        let runLabel = NSTextField(labelWithString: "")
+        runLabel.font = .systemFont(ofSize: 9.5)
+        runLabel.alignment = .right
+        runLabel.lineBreakMode = .byTruncatingMiddle
+        runLabel.isHidden = true
+        runLabel.setAccessibilityLabel("Running dropzone")
+
+        let stop = ShelfTextButton(title: "Stop")
+        stop.target = self
+        stop.action = #selector(stopZoneRun)
+        stop.toolTip = "Stop the running command"
+        stop.isHidden = true
 
         let strip = ShelfDropzoneStripView()
         strip.isHidden = true
@@ -466,7 +495,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
             view.translatesAutoresizingMaskIntoConstraints = false
             header.addSubview(view)
         }
-        for view in [handle, save, notes, hint] {
+        for view in [handle, save, notes, zones, hint, runLabel, stop] {
             view.translatesAutoresizingMaskIntoConstraints = false
             footer.addSubview(view)
         }
@@ -527,9 +556,20 @@ final class ShelfController: NSObject, NSWindowDelegate,
             notes.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
             notes.widthAnchor.constraint(equalToConstant: 64),
             notes.heightAnchor.constraint(equalToConstant: 26),
+            zones.leadingAnchor.constraint(equalTo: notes.trailingAnchor, constant: 4),
+            zones.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            zones.widthAnchor.constraint(equalToConstant: 22),
+            zones.heightAnchor.constraint(equalToConstant: 22),
             hint.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
             hint.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            hint.leadingAnchor.constraint(greaterThanOrEqualTo: notes.trailingAnchor, constant: 8),
+            hint.leadingAnchor.constraint(greaterThanOrEqualTo: zones.trailingAnchor, constant: 8),
+            runLabel.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
+            runLabel.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            runLabel.leadingAnchor.constraint(greaterThanOrEqualTo: zones.trailingAnchor, constant: 8),
+            stop.trailingAnchor.constraint(equalTo: runLabel.leadingAnchor, constant: -6),
+            stop.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            stop.widthAnchor.constraint(equalToConstant: 44),
+            stop.heightAnchor.constraint(equalToConstant: 24),
 
             empty.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
             empty.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),
@@ -552,6 +592,9 @@ final class ShelfController: NSObject, NSWindowDelegate,
         self.headerSeparator = separatorTop
         self.footerSeparator = separatorBottom
         self.hintLabel = hint
+        self.dropzonesButton = zones
+        self.runLabel = runLabel
+        self.stopButton = stop
         self.dropzoneStrip = strip
         self.dropzoneStripHeight = stripHeight
         return panel
@@ -621,6 +664,9 @@ final class ShelfController: NSObject, NSWindowDelegate,
         }
         saveButton?.apply(theme: theme, enabled: items.isEmpty == false)
         notesButton?.apply(theme: theme, enabled: items.contains { $0.text != nil })
+        dropzonesButton?.contentTintColor = NSColor(theme.subtext)
+        runLabel?.textColor = NSColor(theme.text)
+        stopButton?.apply(theme: theme, enabled: true)
         dragHandle?.apply(theme: theme)
         table?.backgroundColor = .clear
         table?.reloadData()
@@ -635,6 +681,10 @@ final class ShelfController: NSObject, NSWindowDelegate,
         clearButton?.contentTintColor = NSColor(theme.subtext).withAlphaComponent(count > 0 ? 1 : 0.35)
         saveButton?.apply(theme: theme, enabled: count > 0)
         notesButton?.apply(theme: theme, enabled: items.contains { $0.text != nil })
+        dropzonesButton?.isEnabled = count > 0 && !DropzoneCoordinator.shared.zones.filter(\.enabled).isEmpty
+        dropzonesButton?.contentTintColor = dropzonesButton?.isEnabled == true
+            ? NSColor(theme.subtext)
+            : NSColor(theme.subtext).withAlphaComponent(0.35)
         dragHandle?.isEnabled = count > 0
         if count > 0, let row = table?.selectedRow, row >= 0 {
             table?.scrollRowToVisible(row)
@@ -1258,13 +1308,35 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 }
                 return event
             }
+            // Keyboard mode of the dropzone strip (T47): the drag owns the
+            // events while it lasts, so the strip is reached from here.
+            if self.dropzoneKeyboardMode {
+                switch event.keyCode {
+                case 123: self.dropzoneStrip?.moveHighlight(by: -1); return nil
+                case 124: self.dropzoneStrip?.moveHighlight(by: 1); return nil
+                case 126: self.leaveDropzoneKeyboardMode(); return nil
+                case 36, 76: self.runHighlightedZone(); return nil
+                case 53: self.leaveDropzoneKeyboardMode(); return nil
+                default: return event
+                }
+            }
             switch event.keyCode {
             case 126: self.moveSelection(by: -1); return nil   // Up
-            case 125: self.moveSelection(by: 1); return nil    // Down
+            case 125:                                           // Down
+                if self.table?.selectedRow == self.items.count - 1,
+                   (self.dropzoneStrip?.zoneCount ?? 0) > 0 {
+                    self.enterDropzoneKeyboardMode()
+                } else {
+                    self.moveSelection(by: 1)
+                }
+                return nil
             case 116: self.moveSelection(by: -6); return nil   // Page Up
             case 121: self.moveSelection(by: 6); return nil    // Page Down
             case 115: self.moveSelection(to: 0); return nil    // Home
             case 119: self.moveSelection(to: self.items.count - 1); return nil // End
+            case 2 where event.modifierFlags.contains(.command): // ⌘D
+                self.toggleDropzoneStrip()
+                return nil
             case 49:                                    // Space: Quick Look
                 self.toggleQuickLook()
                 return nil
@@ -1319,6 +1391,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let zones = coordinator.zones.filter(\.enabled)
         dropzoneStrip?.update(zones: zones, theme: theme)
         dropzoneStrip?.setCompatibility([:])
+        dropzoneStrip?.setPreviews([:])
+        dropzoneStrip?.clearHighlight()
         dragProbeChangeCount = -1
         if zones.isEmpty { setDropzoneStripVisible(false) }
     }
@@ -1332,7 +1406,12 @@ final class ShelfController: NSObject, NSWindowDelegate,
         height.constant = shouldShow ? Self.dropzoneStripHeightValue : 0
         if shouldShow { strip.scrollToLeading() }
         strip.setHovered(nil)
-        if shouldShow == false { strip.setCompatibility([:]) }
+        strip.clearHighlight()
+        if shouldShow == false {
+            strip.setCompatibility([:])
+            strip.setPreviews([:])
+            dropzoneKeyboardMode = false
+        }
         // Resize around the panel's current position. Re-placing it with
         // `targetFrame(near: NSEvent.mouseLocation)` here moved the shelf toward
         // the pointer the moment a drag started; the pointer is usually outside
@@ -1358,6 +1437,224 @@ final class ShelfController: NSObject, NSWindowDelegate,
     /// During the drag the matcher works on types only: no file is read. A
     /// promise keeps every zone active because its type is unknown until the
     /// drop, and the coordinator validates the real payload then.
+    /// True when the shelf is open with at least one selected item: the menu
+    /// enables *Run dropzone* only then (T47).
+    var hasSelection: Bool { !selectedItems.isEmpty }
+
+    /// Runs `zone` on the selected shelf items, without a drag. The same
+    /// coordinator path as a drop, so confirmation, overwrite checks and
+    /// reporting are identical (T47).
+    func runSelectedDropzone(_ zone: DropzoneConfig) {
+        guard isVisible else {
+            HUDController.shared.show("Open the Shelf and select something first",
+                                      symbol: "tray", duration: 2.5)
+            return
+        }
+        let selected = selectedItems
+        guard !selected.isEmpty else {
+            HUDController.shared.show("Select something in the Shelf first",
+                                      symbol: "cursorarrow", duration: 2.5)
+            return
+        }
+        var drop = DropzoneDrop()
+        var texts: [String] = []
+        for item in selected {
+            switch item.content {
+            case let .file(url, _):
+                drop.files.append(url)
+            case let .text(text):
+                texts.append(text)
+            case let .image(image):
+                if let data = image.shelfPNGData {
+                    drop.images.append(.init(data: data, name: item.name))
+                }
+            case let .link(url):
+                drop.urls.append(url)
+            }
+        }
+        if texts.isEmpty == false { drop.text = texts.joined(separator: "\n") }
+        guard !drop.isEmpty else {
+            HUDController.shared.show("Nothing runnable in the selection",
+                                      symbol: "nosign", duration: 2.5)
+            return
+        }
+        runDropzone(zone, drop: drop)
+    }
+
+    /// Type-only descriptors for the current selection, so the strip can say
+    /// which zones accept it before anything is read from disk (T47).
+    private func selectionItemInfos() -> [DropItemInfo] {
+        var items: [DropItemInfo] = []
+        var index = 0
+        for item in selectedItems {
+            switch item.content {
+            case let .file(url, _):
+                let uti = url.hasDirectoryPath
+                    ? "public.folder"
+                    : (url.pathExtension.isEmpty ? nil
+                        : UTType(filenameExtension: url.pathExtension)?.identifier)
+                items.append(DropItemInfo(kind: .file, uti: uti, name: item.name, index: index))
+            case .text:
+                items.append(DropItemInfo(kind: .text, name: "Text", index: index))
+            case .image:
+                items.append(DropItemInfo(kind: .image, name: item.name, index: index))
+            case let .link(url):
+                items.append(DropItemInfo(kind: .url, name: url.host ?? url.absoluteString,
+                                          index: index))
+            }
+            index += 1
+        }
+        return items
+    }
+
+    @objc private func toggleDropzoneStrip() {
+        if dropzoneKeyboardMode || dropzoneStripVisible {
+            leaveDropzoneKeyboardMode()
+        } else {
+            enterDropzoneKeyboardMode()
+        }
+    }
+
+    /// Shows the strip without a drag and highlights the first zone that
+    /// accepts the selection. Return runs it (T47).
+    private func enterDropzoneKeyboardMode() {
+        guard let strip = dropzoneStrip else { return }
+        guard hasSelection else {
+            HUDController.shared.show("Select something in the Shelf first",
+                                      symbol: "cursorarrow", duration: 2.5)
+            return
+        }
+        let infos = selectionItemInfos()
+        refreshDropzones()
+        var compatibility: [UUID: Bool] = [:]
+        var previews: [UUID: String] = [:]
+        for zone in DropzoneCoordinator.shared.zones where zone.enabled {
+            let match = DropzoneMatcher.match(infos, zone: zone)
+            compatibility[zone.id] = match.isAccepted
+            if case let .accepted(accepted) = match {
+                previews[zone.id] = DropzoneMatcher.summary(for: accepted)
+            }
+        }
+        strip.setPreviews(previews)
+        strip.setCompatibility(compatibility)
+        guard compatibility.values.contains(true) else {
+            HUDController.shared.show("No dropzone accepts these items",
+                                      symbol: "nosign", duration: 2.5)
+            return
+        }
+        setDropzoneStripVisible(true)
+        strip.highlightFirst()
+        dropzoneKeyboardMode = true
+        panel?.makeFirstResponder(table)
+        HUDController.shared.show("← → choose · ↩ run · Esc back",
+                                  symbol: "bolt.square.on.square", duration: 2.5)
+    }
+
+    private func leaveDropzoneKeyboardMode() {
+        dropzoneKeyboardMode = false
+        dropzoneStrip?.clearHighlight()
+        setDropzoneStripVisible(false)
+        panel?.makeFirstResponder(table)
+    }
+
+    private func runHighlightedZone() {
+        guard let zone = dropzoneStrip?.highlightedZone else { return }
+        leaveDropzoneKeyboardMode()
+        runSelectedDropzone(zone)
+    }
+
+    /// Keeps the strip response while a zone runs so the footer can show the
+    /// elapsed time and a Stop button (T47).
+    private func beginZoneRun(_ zone: DropzoneConfig) {
+        runTimer?.invalidate()
+        runZoneID = zone.id
+        runStarted = Date()
+        runLabel?.stringValue = "Running \(zone.name)…"
+        runLabel?.isHidden = false
+        runLabel?.setAccessibilityValue("Running \(zone.name)")
+        stopButton?.isHidden = false
+        stopButton?.apply(theme: theme, enabled: true)
+        hintLabel?.isHidden = true
+        dropzonesButton?.isHidden = true
+        let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateRunLabel() }
+        }
+        runTimer = timer
+    }
+
+    private func updateRunLabel() {
+        guard let runStarted, let runZoneID,
+              let zone = DropzoneCoordinator.shared.zone(id: runZoneID) else { return }
+        let elapsed = Int(Date().timeIntervalSince(runStarted))
+        runLabel?.stringValue = "\(zone.name) · \(elapsed)s"
+        runLabel?.setAccessibilityValue("Running \(zone.name), \(elapsed) seconds")
+    }
+
+    private func endZoneRun() {
+        runTimer?.invalidate()
+        runTimer = nil
+        runZoneID = nil
+        runStarted = nil
+        runLabel?.isHidden = true
+        stopButton?.isHidden = true
+        hintLabel?.isHidden = false
+        dropzonesButton?.isHidden = false
+        if isVisible, items.isEmpty { hide() }
+    }
+
+    @objc private func stopZoneRun() {
+        guard let runZoneID else { return }
+        stopButton?.isEnabled = false
+        runLabel?.stringValue = "Stopping…"
+        Task { await DropzoneCoordinator.shared.cancel(zoneID: runZoneID) }
+    }
+
+    /// Delivers what the command produced to the clipboard or the Shelf.
+    /// `.stdout` is already handled by the notice; `.reveal` by the toggle.
+    private func deliverOutput(_ result: CommandResult, zone: DropzoneConfig) {
+        let output = zone.feedback.showOutput
+        guard output == .clipboard || output == .shelf else { return }
+        let expected = DropzoneCoordinator.shared.lastRun(zoneID: zone.id)?.outputPath
+        guard let payload = DropzoneOutput.payload(result: result, expectedOutput: expected) else {
+            return
+        }
+        switch output {
+        case .clipboard:
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            if payload.fileURLs.isEmpty == false {
+                pasteboard.writeObjects(payload.fileURLs as [NSURL])
+                HUDController.shared.show(payload.fileURLs.count == 1
+                                          ? "1 file on the clipboard"
+                                          : "\(payload.fileURLs.count) files on the clipboard",
+                                          symbol: "doc.on.clipboard")
+            } else if let text = payload.text {
+                pasteboard.setString(text, forType: .string)
+                HUDController.shared.show("Output on the clipboard",
+                                          symbol: "doc.on.clipboard")
+            }
+        case .shelf:
+            if isVisible == false {
+                show(at: nil, activating: false)
+                // Not a shake: do not auto-close on the next mouse release.
+                openedByShake = false
+            }
+            if payload.fileURLs.isEmpty == false {
+                for url in payload.fileURLs { add(.file(url)) }
+                HUDController.shared.show(payload.fileURLs.count == 1
+                                          ? "1 file added to the Shelf"
+                                          : "\(payload.fileURLs.count) files added to the Shelf",
+                                          symbol: "tray.and.arrow.down.fill")
+            } else if let text = payload.text {
+                add(.text(text))
+                HUDController.shared.show("Output added to the Shelf",
+                                          symbol: "tray.and.arrow.down.fill")
+            }
+        case .none, .stdout, .reveal:
+            break
+        }
+    }
+
     private func dropzoneDragUpdate(at point: NSPoint, pasteboard: NSPasteboard) -> NSDragOperation {
         guard let strip = dropzoneStrip else { return .copy }
         let firstEntry = dropzoneStripVisible == false
@@ -1393,12 +1690,19 @@ final class ShelfController: NSObject, NSWindowDelegate,
         dragProbeChangeCount = pasteboard.changeCount
         guard let items = dragItems(from: pasteboard) else {
             strip.setCompatibility([:])
+            strip.setPreviews([:])
             return true
         }
         var map: [UUID: Bool] = [:]
+        var previews: [UUID: String] = [:]
         for zone in DropzoneCoordinator.shared.zones where zone.enabled {
-            map[zone.id] = DropzoneMatcher.match(items, zone: zone).isAccepted
+            let match = DropzoneMatcher.match(items, zone: zone)
+            map[zone.id] = match.isAccepted
+            if case let .accepted(accepted) = match {
+                previews[zone.id] = DropzoneMatcher.summary(for: accepted)
+            }
         }
+        strip.setPreviews(previews)
         strip.setCompatibility(map)
         return true
     }
@@ -1537,11 +1841,12 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     /// A zone drop does not throw away what the shelf already holds: an empty,
-    /// transient shelf closes; one with items stays and only loses the strip.
+    /// transient shelf closes. The run row keeps it open until the command
+    /// ends, so the elapsed time and Stop stay reachable (T47).
     private func leaveShelfForDropzone() {
         dropReceived = true
         setDropzoneStripVisible(false)
-        if items.isEmpty { hide() }
+        dropzoneKeyboardMode = false
     }
 
     private func dropzoneDrop(from pasteboard: NSPasteboard) -> DropzoneDrop {
@@ -1572,12 +1877,16 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
     private func runDropzone(_ zone: DropzoneConfig, drop: DropzoneDrop, cleanup: URL? = nil) {
         HUDController.shared.show("Running \(zone.name)…", symbol: "bolt.fill", duration: 1.2)
+        beginZoneRun(zone)
         Task { @MainActor [weak self] in
+            defer {
+                if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
+                self?.endZoneRun()
+            }
             let coordinator = DropzoneCoordinator.shared
             var outcome = await coordinator.run(zoneID: zone.id, drop: drop)
             if case let .needsConfirmation(pending) = outcome {
                 guard let self, self.confirmDropzoneRun(pending) else {
-                    if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
                     return
                 }
                 let hash = DropzoneConfig.confirmationHash(for: pending.command)
@@ -1621,6 +1930,9 @@ final class ShelfController: NSObject, NSWindowDelegate,
                 outcome = .failed("The output changed during confirmation. Drop the item again to review it.")
             }
             self?.report(outcome, zone: zone)
+            if case let .finished(result) = outcome {
+                self?.deliverOutput(result, zone: zone)
+            }
             if let cleanup { try? FileManager.default.removeItem(at: cleanup) }
         }
     }

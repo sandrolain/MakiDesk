@@ -316,7 +316,29 @@ appears under the shelf when the drag reaches it, already filtered to the zones
 that accept the current items — incompatible zones are not shown at all (if none
 match, the strip says so). Releasing outside a visible tile cancels the drop.
 Dropping on a zone runs the command and does not keep the items on the shelf
-unless the shelf was empty. Configure the zones in **Settings ▸ Dropzones**.
+unless the shelf was empty. Configure the zones in **Settings ▸ Dropzones** (or
+**Dropzones…** in the menu).
+
+- **Run without dragging.** Select items in the shelf and press `⌘D` (or the
+  bolt button in the footer): the strip appears with the zones that accept the
+  selection and the first one highlighted. `←`/`→` choose, `↩` runs, `↑` returns
+  to the list, `Esc` closes the strip. The same zones are in the menu bar under
+  **Dropzones**, each running on the selection; they are disabled when the shelf
+  is closed, nothing is selected, or the file is read-only. Every tile is an
+  accessibility element that reads its name and what it will receive.
+- **Progress and Stop.** While a command runs, the shelf footer shows its name
+  and elapsed seconds with a **Stop** button; stopping ends the whole process
+  group, not just the wait. The result appears in a notice, or in the chosen
+  destination below.
+- **Where the output goes.** *Feedback ▸ Send the output to* chooses the notice
+  (stdout excerpt), the clipboard, or the Shelf. Clipboard and Shelf receive the
+  files the command produced (or stdout when it wrote none), and the run folder
+  is kept because they point at those files.
+- **Last run.** The detail view remembers the last run in memory: outcome, exit
+  code, duration, the first stderr line and the declared output path. It is
+  never written to disk.
+- **No `sudo`.** A command whose first step asks for an administrator password
+  is refused before a process starts; remove `sudo` to run it.
 
 - **Name and icon.** The icon can be an SF Symbol chosen from a searchable
   preview list, an emoji chosen from a grid, or an image file copied into
@@ -332,10 +354,11 @@ unless the shelf was empty. Configure the zones in **Settings ▸ Dropzones**.
 - **Presets.** *Presets…* offers starting points for files (Reveal in Finder,
   Open, ZIP next to the first file, Unzip, Terminal), images (PNG, JPEG, resize
   to 1600 px), the clipboard (copy paths, names or dropped text), and inspection
-  (SHA-256, line count, paths, manifest). Applying one replaces the command line
-  and output settings, leaves the accepted kinds and limits unchanged, and runs
-  nothing. The ZIP preset writes `archive.zip` next to the first dropped file
-  and asks before replacing it if it already exists.
+  (SHA-256, line count, paths, manifest). Applying one replaces the command line,
+  the timeout and the output settings, leaves the accepted kinds and limits
+  unchanged, and runs nothing. Image conversions allow 300 seconds instead of
+  60. The ZIP preset writes `archive.zip` next to the first dropped file and asks
+  before replacing it if it already exists.
 - **Placeholders.** `{paths}`, `{path}`, `{parent}`, `{text}`, `{textfile}`,
   `{urls}`, `{urlsfile}`, `{manifest}`, `{workdir}`, `{outdir}`, `{name}`,
   `{count}`. `{parent}` is the folder containing the first dropped item, handy
@@ -349,8 +372,10 @@ unless the shelf was empty. Configure the zones in **Settings ▸ Dropzones**.
 - **Results.** Output goes to `output/` inside the run folder; a notice reports
   the exit code, stderr and a short stdout excerpt, and can reveal the folder.
   The run folder lives under `~/Library/Caches/MakiDesk/DropzoneRuns/` and is
-  removed when the command ends unless you keep or reveal it. Cancelling stops
-  waiting for the command; a Shortcut may keep running inside Shortcuts.
+  removed when the command ends unless you keep it, reveal it, or send the
+  output to the clipboard or the Shelf (those point at its files). Stopping ends
+  the process group MakiDesk started; an app it launched separately, or a
+  Shortcut running inside Shortcuts, may keep running.
 - **Existing output.** The optional *Check an output path before running* field
   (Runtime) makes the run ask **Run Anyway / Cancel** when that path already
   exists. The ZIP preset fills it with `{parent}/archive.zip`. MakiDesk can only

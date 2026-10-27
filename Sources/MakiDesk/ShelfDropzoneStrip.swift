@@ -17,7 +17,9 @@ final class ShelfDropzoneStripView: NSView {
     private var tiles: [ShelfDropzoneTileView] = []
     private var zones: [DropzoneConfig] = []
     private var compatibility: [UUID: Bool] = [:]
+    private var previews: [UUID: String] = [:]
     private var hovered: UUID?
+    private var highlighted: UUID?
     private var theme = PaletteTheme.all[0]
 
     override init(frame frameRect: NSRect) {
@@ -77,6 +79,7 @@ final class ShelfDropzoneStripView: NSView {
         updateEmptyState()
         setAccessibilityChildren(tiles.filter { $0.isHidden == false })
         if let hovered, map[hovered] == false { setHovered(nil) }
+        if let highlighted, map[highlighted] == false { setHighlighted(nil) }
     }
 
     func setHovered(_ id: UUID?) {
@@ -85,6 +88,44 @@ final class ShelfDropzoneStripView: NSView {
         for tile in tiles {
             tile.isHovered = tile.zone.id == id
         }
+    }
+
+    /// What each tile will receive during the drag (T47): counts only, decided
+    /// by the matcher, with no file read.
+    func setPreviews(_ map: [UUID: String]) {
+        previews = map
+        for tile in tiles { tile.detail = map[tile.zone.id] }
+    }
+
+    /// Directional highlight used by the shelf keyboard path (T47).
+    var highlightedZone: DropzoneConfig? {
+        tiles.first { $0.zone.id == highlighted && $0.isHidden == false }?.zone
+    }
+
+    func highlightFirst() {
+        setHighlighted(tiles.first { $0.isHidden == false }?.zone.id)
+    }
+
+    func moveHighlight(by delta: Int) {
+        let visible = tiles.filter { $0.isHidden == false }
+        guard !visible.isEmpty else { return }
+        let current = visible.firstIndex { $0.zone.id == highlighted } ?? -1
+        let next = min(max(0, current + delta), visible.count - 1)
+        setHighlighted(visible[next].zone.id)
+    }
+
+    func clearHighlight() {
+        setHighlighted(nil)
+    }
+
+    private func setHighlighted(_ id: UUID?) {
+        highlighted = id
+        for tile in tiles {
+            tile.isHighlighted = tile.zone.id == id
+        }
+        guard let id, let tile = tiles.first(where: { $0.zone.id == id }) else { return }
+        scrollView.contentView.scrollToVisible(tile.frame.insetBy(dx: -8, dy: 0))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
     func isZoneCompatible(_ id: UUID) -> Bool {
@@ -115,11 +156,13 @@ final class ShelfDropzoneStripView: NSView {
         for tile in tiles { tile.removeFromSuperview() }
         tiles = []
         hovered = nil
+        highlighted = nil
         for zone in zones {
             let tile = ShelfDropzoneTileView(zone: zone, theme: theme)
             let compatible = compatibility[zone.id] ?? true
             tile.isDimmed = compatible == false
             tile.isHidden = compatible == false
+            tile.detail = previews[zone.id]
             content.addSubview(tile)
             tiles.append(tile)
         }
@@ -197,12 +240,33 @@ final class ShelfDropzoneTileView: NSView {
     private let iconView = ShelfDropzoneIconView()
     private let emojiLabel = ShelfPassiveTextField(labelWithString: "")
     private let nameLabel = ShelfPassiveTextField(labelWithString: "")
+    private let detailLabel = ShelfPassiveTextField(labelWithString: "")
     private var theme: PaletteTheme
 
     var isHovered = false {
         didSet {
             guard isHovered != oldValue else { return }
             needsDisplay = true
+        }
+    }
+
+    /// Keyboard highlight, separate from the drag hover (T47).
+    var isHighlighted = false {
+        didSet {
+            guard isHighlighted != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+
+    /// What the tile will receive, shown under the name during a drag (T47).
+    var detail: String? {
+        didSet {
+            detailLabel.stringValue = detail ?? ""
+            detailLabel.isHidden = detail == nil
+            setAccessibilityValue(detail ?? "")
+            toolTip = detail.map { "\(zone.name)\n\($0)\n\(zone.command.line)" }
+                ?? "\(zone.name)\n\(zone.command.line)"
+            needsLayout = true
         }
     }
 
@@ -234,7 +298,15 @@ final class ShelfDropzoneTileView: NSView {
         nameLabel.isBezeled = false
         nameLabel.isEditable = false
         nameLabel.isSelectable = false
-        for view in [iconView, emojiLabel, nameLabel] {
+        detailLabel.alignment = .center
+        detailLabel.font = .systemFont(ofSize: 8.5)
+        detailLabel.lineBreakMode = .byTruncatingTail
+        detailLabel.drawsBackground = false
+        detailLabel.isBezeled = false
+        detailLabel.isEditable = false
+        detailLabel.isSelectable = false
+        detailLabel.isHidden = true
+        for view in [iconView, emojiLabel, nameLabel, detailLabel] {
             view.translatesAutoresizingMaskIntoConstraints = true
             addSubview(view)
         }
@@ -245,7 +317,8 @@ final class ShelfDropzoneTileView: NSView {
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(nameLabel.stringValue)
-        toolTip = zone.name
+        setAccessibilityHelp("Press Return to run this dropzone on the selected items.")
+        toolTip = "\(zone.name)\n\(zone.command.line)"
     }
 
     @available(*, unavailable)
@@ -254,6 +327,7 @@ final class ShelfDropzoneTileView: NSView {
     func applyTheme(_ theme: PaletteTheme) {
         self.theme = theme
         nameLabel.textColor = NSColor(theme.text)
+        detailLabel.textColor = NSColor(theme.subtext)
         configureIcon()
         needsDisplay = true
     }
@@ -295,17 +369,21 @@ final class ShelfDropzoneTileView: NSView {
 
     override func layout() {
         super.layout()
-        // Center the icon and the actual (one- or two-line) name as one block,
-        // instead of anchoring the icon to the top and the label to the bottom.
-        let icon = NSSize(width: 32, height: 32)
-        let gap: CGFloat = 6
+        // Center the icon, the actual (one- or two-line) name and the payload
+        // preview as one block, instead of anchoring the icon to the top and
+        // the labels to the bottom.
+        let icon = NSSize(width: 30, height: 30)
+        let gap: CGFloat = 5
+        let detailHeight: CGFloat = detail == nil ? 0 : 11
         let textWidth = max(0, bounds.width - 8)
         let fitting = nameLabel.sizeThatFits(NSSize(width: textWidth, height: 40))
-        let nameHeight = min(max(fitting.height, 14), 34)
-        let groupHeight = icon.height + gap + nameHeight
+        let nameHeight = min(max(fitting.height, 14), 30)
+        let groupHeight = icon.height + gap + nameHeight + detailHeight
         let groupBottom = max(4, (bounds.height - groupHeight) / 2)
-        nameLabel.frame = NSRect(x: 4, y: groupBottom, width: textWidth, height: nameHeight)
-        let iconY = groupBottom + nameHeight + gap
+        detailLabel.frame = NSRect(x: 4, y: groupBottom, width: textWidth, height: detailHeight)
+        nameLabel.frame = NSRect(x: 4, y: groupBottom + detailHeight,
+                                 width: textWidth, height: nameHeight)
+        let iconY = groupBottom + detailHeight + nameHeight + gap
         iconView.frame = NSRect(x: (bounds.width - icon.width) / 2, y: iconY,
                                 width: icon.width, height: icon.height)
         emojiLabel.frame = iconView.frame
@@ -323,12 +401,13 @@ final class ShelfDropzoneTileView: NSView {
         super.draw(dirtyRect)
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: 11, yRadius: 11)
-        let fill = isHovered ? NSColor(theme.surfaceSelected) : NSColor(theme.surface)
-        fill.withAlphaComponent(isHovered ? 0.95 : 0.55).setFill()
+        let active = isHovered || isHighlighted
+        let fill = active ? NSColor(theme.surfaceSelected) : NSColor(theme.surface)
+        fill.withAlphaComponent(active ? 0.95 : 0.55).setFill()
         path.fill()
-        let stroke = isHovered ? NSColor(theme.accent) : NSColor(theme.border)
-        stroke.withAlphaComponent(isHovered ? 1 : 0.6).setStroke()
-        path.lineWidth = isHovered ? 2 : 1
+        let stroke = active ? NSColor(theme.accent) : NSColor(theme.border)
+        stroke.withAlphaComponent(active ? 1 : 0.6).setStroke()
+        path.lineWidth = active ? 2 : 1
         path.stroke()
     }
 }

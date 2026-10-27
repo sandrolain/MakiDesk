@@ -168,6 +168,45 @@ enum CommandResolutionError: Error, Equatable, LocalizedError {
     }
 }
 
+/// Refuses commands that would ask for an administrator password (T47).
+///
+/// The runner starts without a TTY, so `sudo` usually fails on its own. That is
+/// not a guarantee, and the failure is a poor explanation: this rejects the
+/// command before a process exists.
+enum CommandElevation {
+    static let message = "MakiDesk does not run commands that ask for an administrator password. Remove sudo from the command."
+
+    static func rejection(for command: ResolvedCommand) -> String? {
+        if isSudo(command.executable) { return message }
+        if command.executable.lastPathComponent == "env",
+           let first = command.arguments.first, isSudo(URL(fileURLWithPath: first)) {
+            return message
+        }
+        if shells.contains(command.executable.lastPathComponent),
+           let script = command.arguments.last, startsWithSudo(script) {
+            return message
+        }
+        return nil
+    }
+
+    private static let shells: Set<String> = ["zsh", "sh", "bash"]
+
+    private static func isSudo(_ url: URL) -> Bool {
+        url.lastPathComponent == "sudo"
+    }
+
+    /// `sudo …`, `/usr/bin/sudo …`, `env sudo …`, `env -i sudo …`.
+    private static func startsWithSudo(_ script: String) -> Bool {
+        let words = script.split(whereSeparator: \.isWhitespace).prefix(3).map(String.init)
+        guard let first = words.first else { return false }
+        if isSudo(URL(fileURLWithPath: first)) { return true }
+        if first == "env" || first.hasSuffix("/env") {
+            return words.dropFirst().contains { isSudo(URL(fileURLWithPath: $0)) }
+        }
+        return false
+    }
+}
+
 /// Expands and validates a `CommandSpec` into a `ResolvedCommand`.
 ///
 /// Pure apart from resolving the executable and checking the working

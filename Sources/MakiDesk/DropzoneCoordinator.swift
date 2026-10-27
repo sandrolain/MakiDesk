@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UniformTypeIdentifiers
 
 /// What one drop contains, already read from the pasteboard. Images travel as
@@ -244,12 +245,33 @@ private struct Manifest: Codable {
     var items: [Item]
 }
 
+/// The last run remembered for one zone. In memory only: the app keeps no
+/// history on disk (T47).
+struct DropzoneRunSummary: Equatable, Sendable {
+    let zoneID: UUID
+    let zoneName: String
+    let date: Date
+    let exitCode: Int32?
+    let duration: TimeInterval?
+    let succeeded: Bool
+    let cancelled: Bool
+    let timedOut: Bool
+    /// The first line of stderr, or the failure message when no process ran.
+    let errorLine: String?
+    /// The path the zone declared as its output, when it asked for one.
+    let outputPath: String?
+}
+
 /// Owns the dropzone list and runs a command for one drop.
 ///
 /// The coordinator is the only place that knows both the configuration and the
 /// executor: it reloads the file before a run, validates the payload with the
 /// same matcher used during the drag, prepares the run directory off the main
 /// thread and reports the result. It has no UI and no pasteboard code.
+///
+/// Observable so the menu, the shelf footer and the Settings detail follow the
+/// running set and the last run without callbacks (T47).
+@Observable
 @MainActor
 final class DropzoneCoordinator {
     enum Outcome: Equatable {
@@ -280,6 +302,8 @@ final class DropzoneCoordinator {
 
     private(set) var snapshot: DropzoneStore.Snapshot
     private(set) var runningZones: Set<UUID> = []
+    /// Last run per zone, in memory only (T47). Read by the Settings detail.
+    private(set) var lastRuns: [UUID: DropzoneRunSummary] = [:]
 
     private let store: DropzoneStore
     private let runner: CommandRunning
@@ -288,6 +312,7 @@ final class DropzoneCoordinator {
     private let preparePayload: (DropzoneConfig, DropzoneDrop, [DropItemInfo], URL) async throws -> DropzonePrepared
     private var runIdentifiers: [UUID: UUID] = [:]
     private var runCancellations: [UUID: CommandCancellation] = [:]
+    private var resolvedOutputs: [UUID: String] = [:]
     private var lastModification: Date?
 
     init(store: DropzoneStore = DropzoneStore(),
@@ -376,6 +401,64 @@ final class DropzoneCoordinator {
     func run(zoneID: UUID,
              drop: DropzoneDrop,
              confirmedOverwritePath: String? = nil) async -> Outcome {
+        let started = Date()
+        let outcome = await performRun(zoneID: zoneID, drop: drop,
+                                       confirmedOverwritePath: confirmedOverwritePath)
+        record(outcome, zoneID: zoneID, started: started)
+        resolvedOutputs[zoneID] = nil
+        return outcome
+    }
+
+    /// The last run for `zoneID`, or `nil` when it never ran in this session.
+    func lastRun(zoneID: UUID) -> DropzoneRunSummary? {
+        lastRuns[zoneID]
+    }
+
+    private func record(_ outcome: Outcome, zoneID: UUID, started: Date) {
+        guard let zone = zone(id: zoneID) else { return }
+        let elapsed = Date().timeIntervalSince(started)
+        let summary: DropzoneRunSummary
+        switch outcome {
+        case let .finished(result):
+            summary = DropzoneRunSummary(
+                zoneID: zoneID,
+                zoneName: zone.name,
+                date: Date(),
+                exitCode: result.exitCode,
+                duration: result.duration,
+                succeeded: result.succeeded,
+                cancelled: result.cancelled,
+                timedOut: result.timedOut,
+                errorLine: Self.firstLine(result.stderrExcerpt),
+                outputPath: resolvedOutputs[zoneID]
+            )
+        case let .failed(message):
+            summary = DropzoneRunSummary(
+                zoneID: zoneID, zoneName: zone.name, date: Date(), exitCode: nil,
+                duration: elapsed, succeeded: false, cancelled: false, timedOut: false,
+                errorLine: message, outputPath: resolvedOutputs[zoneID]
+            )
+        case .cancelled:
+            summary = DropzoneRunSummary(
+                zoneID: zoneID, zoneName: zone.name, date: Date(), exitCode: nil,
+                duration: elapsed, succeeded: false, cancelled: true, timedOut: false,
+                errorLine: nil, outputPath: nil
+            )
+        case .rejected, .needsConfirmation, .needsOverwriteConfirmation:
+            // Not a run: nothing to remember.
+            return
+        }
+        lastRuns[zoneID] = summary
+    }
+
+    private static func firstLine(_ text: String) -> String? {
+        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        return line.isEmpty ? nil : line
+    }
+
+    private func performRun(zoneID: UUID,
+                            drop: DropzoneDrop,
+                            confirmedOverwritePath: String?) async -> Outcome {
         // Read the file again at drop time: permissions and contents may have
         // changed since the last edit, and a trust decision must be current.
         snapshot = store.load()
@@ -415,9 +498,14 @@ final class DropzoneCoordinator {
 
             do {
                 let prepared = try await preparePayload(zone, drop, accepted, workDirectory)
+                resolvedOutputs[zoneID] = prepared.expectedOutput
                 guard !cancellation.isCancelled else {
                     try? fileManager.removeItem(at: workDirectory)
                     return .cancelled
+                }
+                if let refusal = CommandElevation.rejection(for: prepared.command) {
+                    try? fileManager.removeItem(at: workDirectory)
+                    return .failed(refusal)
                 }
                 if let expected = prepared.expectedOutput,
                    confirmedOverwritePath != expected,
@@ -428,7 +516,7 @@ final class DropzoneCoordinator {
                     return .needsOverwriteConfirmation(zone, path: expected)
                 }
                 let result = try await runner.run(prepared.command, id: runID,
-                                                  includeStdout: zone.feedback.showOutput == .stdout,
+                                                  includeStdout: zone.feedback.showOutput != .none,
                                                   cancellation: cancellation)
                 if shouldKeep(prepared, zone: zone) == false {
                     try? fileManager.removeItem(at: workDirectory)
@@ -443,8 +531,17 @@ final class DropzoneCoordinator {
 
     /// `reveal` keeps the run directory only when the command actually wrote
     /// something into `{outdir}`; an empty folder is not worth keeping.
+    /// `clipboard` and `shelf` keep it too: the clipboard and the Shelf point
+    /// at those files, so deleting them would leave dead references (T47).
     private func shouldKeep(_ prepared: DropzonePrepared, zone: DropzoneConfig) -> Bool {
         if prepared.command.keepWorkdir { return true }
+        switch zone.feedback.showOutput {
+        case .clipboard, .shelf:
+            let contents = try? fileManager.contentsOfDirectory(atPath: prepared.command.outputDirectory.path)
+            return contents?.isEmpty == false
+        case .none, .stdout, .reveal:
+            break
+        }
         guard zone.feedback.revealOutput else { return false }
         let contents = try? fileManager.contentsOfDirectory(atPath: prepared.command.outputDirectory.path)
         return contents?.isEmpty == false

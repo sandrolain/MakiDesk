@@ -307,6 +307,7 @@ struct DropzoneSettingsView: View {
                     shortcutsLoaded: model.shortcutsLoaded,
                     testing: testingZoneID == model.zones[index].id,
                     isCancelling: isCancelling,
+                    lastRun: DropzoneCoordinator.shared.lastRun(zoneID: model.zones[index].id),
                     onChoosePreset: {
                         presetZoneID = model.zones[index].id
                         showingPresets = true

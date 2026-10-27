@@ -87,6 +87,32 @@ struct MakiDeskApp: App {
                 ScreenshotLibraryController.shared.show()
             }
 
+            Menu {
+                let coordinator = DropzoneCoordinator.shared
+                let _ = coordinator.reloadIfNeeded()
+                if coordinator.zones.isEmpty {
+                    Text("No dropzones yet")
+                }
+                ForEach(coordinator.zones) { zone in
+                    menuButton(zone.name.isEmpty ? "Untitled dropzone" : zone.name,
+                               icon: zone.icon.symbolName) {
+                        ShelfController.shared.runSelectedDropzone(zone)
+                    }
+                    .disabled(zone.enabled == false
+                              || coordinator.snapshot.isRunnable == false
+                              || ShelfController.shared.hasSelection == false)
+                }
+                Divider()
+                menuButton("Dropzones…", icon: "bolt.square.on.square") {
+                    // The Settings tab is persisted: select it before opening.
+                    UserDefaults.standard.set("dropzones", forKey: "settingsTab")
+                    NSApp.activate()
+                    NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
+                }
+            } label: {
+                Label("Dropzones", systemImage: "bolt.square.on.square")
+            }
+
             Divider()
 
             Menu {

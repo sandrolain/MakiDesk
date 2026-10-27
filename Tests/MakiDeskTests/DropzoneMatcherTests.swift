@@ -137,4 +137,18 @@ final class DropzoneMatcherTests: XCTestCase {
         }
         XCTAssertEqual(reason, .invalidConfiguration("no accepted kinds"))
     }
+
+    // MARK: - Payload preview (T47)
+
+    func testSummaryCountsEveryKindWithPluralNames() {
+        let items = [
+            DropItemInfo(kind: .file, name: "a", index: 0),
+            DropItemInfo(kind: .file, name: "b", index: 1),
+            DropItemInfo(kind: .image, name: "c", index: 2),
+            DropItemInfo(kind: .text, name: "Text", index: 3),
+        ]
+        XCTAssertEqual(DropzoneMatcher.summary(for: items), "2 files · 1 image · 1 text")
+        XCTAssertEqual(DropzoneMatcher.summary(for: [DropItemInfo(kind: .url, index: 0)]), "1 link")
+        XCTAssertEqual(DropzoneMatcher.summary(for: []), "")
+    }
 }

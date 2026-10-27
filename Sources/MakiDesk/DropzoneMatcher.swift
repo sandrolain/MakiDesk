@@ -136,6 +136,23 @@ enum DropzoneMatcher {
         case rejected(DropzoneRejection)
     }
 
+    /// A short description of what a zone will receive, shown on its tile
+    /// during a drag (T47). Counts only: no path and no file system access.
+    static func summary(for items: [DropItemInfo]) -> String {
+        var counts: [DropItemInfo.Kind: Int] = [:]
+        for item in items { counts[item.kind, default: 0] += 1 }
+        var parts: [String] = []
+        func append(_ kind: DropItemInfo.Kind, one: String, many: String) {
+            guard let count = counts[kind], count > 0 else { return }
+            parts.append("\(count) \(count == 1 ? one : many)")
+        }
+        append(.file, one: "file", many: "files")
+        append(.image, one: "image", many: "images")
+        append(.url, one: "link", many: "links")
+        append(.text, one: "text", many: "texts")
+        return parts.joined(separator: " · ")
+    }
+
     private static func compatibility(of item: DropItemInfo,
                                       in zone: DropzoneConfig,
                                       acceptedTypes: [UTType]) -> Compatibility {

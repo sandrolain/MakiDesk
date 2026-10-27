@@ -314,19 +314,93 @@ extension DropzoneDetailView {
     var feedbackSection: some View {
         SettingsSection("Feedback") {
             Toggle("Notify when the command finishes", isOn: $zone.feedback.notifyOnSuccess)
-            Toggle("Show its output in the notice", isOn: showOutputBinding)
+            Picker("Send the output to", selection: $zone.feedback.showOutput) {
+                Text("Nowhere").tag(DropFeedback.Output.none)
+                Text("The notice").tag(DropFeedback.Output.stdout)
+                Text("The clipboard").tag(DropFeedback.Output.clipboard)
+                Text("The Shelf").tag(DropFeedback.Output.shelf)
+            }
+            .pickerStyle(.menu)
             Toggle("Open the output folder when it has files", isOn: $zone.feedback.revealOutput)
-            caption("Output is always written under {outdir}; the notice shows only a short excerpt. A failed command reports its exit code and stderr.")
+            caption("Output is always written under {outdir}; the notice shows only a short excerpt. Clipboard and Shelf receive the files the command produced, or stdout when it wrote none. A failed command reports its exit code and stderr.")
         }
     }
 
-    private var showOutputBinding: Binding<Bool> {
-        Binding(get: { zone.feedback.showOutput != .none }, set: { on in
-            zone.feedback.showOutput = on ? .stdout : .none
-        })
+    // MARK: Test
+
+    var lastRunSection: some View {
+        SettingsSection("Last run") {
+            if let lastRun {
+                HStack(spacing: 6) {
+                    Image(systemName: statusSymbol(lastRun))
+                        .foregroundStyle(statusTint(lastRun))
+                    Text(statusText(lastRun))
+                        .font(.caption)
+                    Spacer()
+                    Text(lastRun.date.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(theme.subtext)
+                    if let duration = lastRun.duration {
+                        Text(Self.durationText(duration))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(theme.subtext)
+                    }
+                }
+                if let code = lastRun.exitCode {
+                    Text("Exit code \(code)")
+                        .font(.caption)
+                        .foregroundStyle(theme.subtext)
+                }
+                if let error = lastRun.errorLine {
+                    Text(error)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+                if let output = lastRun.outputPath {
+                    Text(output)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(theme.subtext)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(output)
+                }
+                caption("Kept in memory only: it disappears when MakiDesk quits.")
+            } else {
+                caption("No run yet in this session.")
+            }
+        }
     }
 
-    // MARK: Test
+    private func statusText(_ run: DropzoneRunSummary) -> String {
+        if run.cancelled { return "Stopped" }
+        if run.timedOut { return "Timed out" }
+        if run.succeeded { return "Succeeded" }
+        if run.exitCode == nil, run.errorLine != nil { return "Did not start" }
+        return "Failed"
+    }
+
+    private func statusSymbol(_ run: DropzoneRunSummary) -> String {
+        if run.cancelled { return "stop.circle.fill" }
+        if run.timedOut { return "clock.badge.exclamationmark" }
+        if run.succeeded { return "checkmark.circle.fill" }
+        return "exclamationmark.triangle.fill"
+    }
+
+    private func statusTint(_ run: DropzoneRunSummary) -> Color {
+        if run.cancelled { return theme.subtext }
+        if run.timedOut { return .orange }
+        if run.succeeded { return .green }
+        return .orange
+    }
+
+    private static func durationText(_ duration: TimeInterval) -> String {
+        if duration < 1 { return String(format: "%.0f ms", duration * 1000) }
+        if duration < 60 { return String(format: "%.1f s", duration) }
+        let seconds = Int(duration)
+        return "\(seconds / 60)m \(seconds % 60)s"
+    }
 
     var testSection: some View {
         SettingsSection("Try it") {

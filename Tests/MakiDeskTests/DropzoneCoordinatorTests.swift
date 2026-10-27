@@ -325,6 +325,45 @@ final class DropzoneCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.zones.map(\.name), ["Pictures"])
     }
 
+    // MARK: - T47: history, elevation and output retention
+
+    func testFinishedRunIsRememberedForTheDetailView() async throws {
+        try save(confirmedImageZone(command: CommandSpec(line: "/bin/echo {paths}")))
+        _ = await coordinator.run(zoneID: coordinator.zones[0].id,
+                                  drop: DropzoneDrop(files: [try imageFile()]))
+        let summary = try XCTUnwrap(coordinator.lastRun(zoneID: coordinator.zones[0].id))
+        XCTAssertEqual(summary.zoneName, "Images")
+        XCTAssertTrue(summary.succeeded)
+        XCTAssertEqual(summary.exitCode, 0)
+        XCTAssertNotNil(summary.duration)
+        XCTAssertNil(summary.errorLine)
+    }
+
+    func testRefusedElevationIsReportedAndNeverRuns() async throws {
+        try save(confirmedImageZone(command: CommandSpec(line: "sudo -n true")))
+        let outcome = await coordinator.run(zoneID: coordinator.zones[0].id,
+                                            drop: DropzoneDrop(files: [try imageFile()]))
+        guard case let .failed(message) = outcome else { return XCTFail("expected a failure") }
+        XCTAssertTrue(message.contains("administrator password"))
+        XCTAssertTrue(runner.records.isEmpty)
+        let summary = try XCTUnwrap(coordinator.lastRun(zoneID: coordinator.zones[0].id))
+        XCTAssertEqual(summary.errorLine, message)
+        XCTAssertNil(summary.exitCode)
+    }
+
+    func testShelfOutputKeepsTheFilesItDelivers() async throws {
+        var zone = confirmedImageZone(command: CommandSpec(line: "/bin/echo {paths}"))
+        zone.feedback.showOutput = .shelf
+        try save(zone)
+        runner.writeOutput = true
+        let outcome = await coordinator.run(zoneID: coordinator.zones[0].id,
+                                            drop: DropzoneDrop(files: [try imageFile()]))
+        guard case let .finished(result) = outcome else { return XCTFail("expected a finish") }
+        let produced = result.workDirectory.appendingPathComponent("output/result.txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: produced.path),
+                      "the Shelf points at these files, so they must outlive the run")
+    }
+
     private func contents(of directory: URL, _ name: String) -> String {
         directory.appendingPathComponent(name).path
     }

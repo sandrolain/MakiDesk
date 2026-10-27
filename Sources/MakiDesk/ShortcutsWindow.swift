@@ -110,6 +110,16 @@ enum ShortcutCatalog {
                   note: "Then drag any row to take them all, or use “Drag all out”."),
         ], note: "⌃⌥D opens it from anywhere; shaking during a drag does too."),
 
+        ShortcutSection(title: "Dropzones", scope: "Shelf open", items: [
+            .init(title: "Show the dropzone strip for the selection", keys: "⌘D",
+                  note: "The menu bar has the same zones under Dropzones; each one runs on the selected items."),
+            .init(title: "Choose between dropzone tiles", keys: "← →",
+                  note: "The highlighted tile is the one Return runs."),
+            .init(title: "Run the highlighted dropzone", keys: "↩",
+                  note: "Same confirmation and payload as dropping on the tile."),
+            .init(title: "Back to the shelf list", keys: "↑"),
+        ], note: "Or drag items onto a tile while the strip is visible."),
+
         ShortcutSection(title: "Groups", scope: "Global", items: [
             .init(title: "Recall group 1…9", keys: "⌃⌥1…9"),
             .init(title: "Add / remove the front window", keys: "⌃⌥⌘1…9"),

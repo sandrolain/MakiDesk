@@ -95,16 +95,20 @@ drag everything out or one row, copy or move it to a folder, or send the selecte
 text straight to the open note. The shelf is temporary by design: it empties
 when it closes and never keeps your files anywhere else.
 
-**Dropzones** (Settings ▸ Dropzones) go one step further: each one is a command
-you write, run on what you drop on its tile in the strip that appears under the
-shelf. Choose files, folders, images, text or links; use placeholders such as
-`{paths}`, `{textfile}` and `{outdir}`; try it from Settings. Start from a command
-preset (Reveal, ZIP, image conversion, checksums and more), pick an SF Symbol or
-emoji from a preview list, and only compatible zones appear while you drag. The
-first run, and the first run after the command changes, asks for confirmation;
-a preset that writes next to the source (ZIP) checks the target and asks before
-replacing an existing file. The Shortcuts picker only prefills `shortcuts run
-<UUID>`: the zone runs any CLI command.
+**Dropzones** (Settings ▸ Dropzones, or the **Dropzones** menu) go one step
+further: each one is a command you write, run on what you drop on its tile in the
+strip that appears under the shelf — or on the shelf's selection, from the menu
+or with `⌘D` and `↩`. Choose files, folders, images, text or links; use
+placeholders such as `{paths}`, `{textfile}` and `{outdir}`; try it from
+Settings. Start from a command preset (Reveal, ZIP, image conversion, checksums
+and more), pick an SF Symbol or emoji from a preview list, and only compatible
+zones appear while you drag, each showing what it will receive. A long command
+shows its elapsed time and a **Stop** button in the shelf; the result can go to
+the notice, the clipboard or the Shelf. The first run, and the first run after
+the command changes, asks for confirmation; a preset that writes next to the
+source (ZIP) checks the target and asks before replacing an existing file. The
+Shortcuts picker only prefills `shortcuts run <UUID>`: the zone runs any CLI
+command, never `sudo`.
 
 ### Keep screenshots out of the desktop clutter
 

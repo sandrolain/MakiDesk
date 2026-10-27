@@ -68,6 +68,33 @@ final class DropzoneConfigTests: XCTestCase {
         XCTAssertEqual(zone.accepts.minItems, 1)
     }
 
+    func testUnknownOutputDestinationDecodesToNone() throws {
+        let json = #"{"feedback":{"showOutput":"printer","notifyOnSuccess":false}}"#.data(using: .utf8)!
+        let zone = try JSONDecoder().decode(DropzoneConfig.self, from: json)
+        XCTAssertEqual(zone.feedback.showOutput, .none)
+        XCTAssertFalse(zone.feedback.notifyOnSuccess)
+    }
+
+    func testClipboardAndShelfOutputsRoundTrip() throws {
+        for output in [DropFeedback.Output.none, .stdout, .reveal, .clipboard, .shelf] {
+            var zone = DropzoneConfig(name: "Zone")
+            zone.feedback.showOutput = output
+            XCTAssertEqual(try roundTrip(zone).feedback.showOutput, output)
+        }
+    }
+
+    func testImagePresetsAllowMoreThanTheDefaultTimeout() {
+        for preset in DropzoneCommandPreset.all where ["png", "jpeg", "resize"].contains(preset.id) {
+            var zone = DropzoneConfig()
+            preset.apply(to: &zone)
+            XCTAssertGreaterThan(zone.command.timeoutSeconds, 60, preset.id)
+            XCTAssertEqual(zone.command.timeoutSeconds, preset.timeoutSeconds)
+        }
+        var zone = DropzoneConfig()
+        DropzoneCommandPreset.all.first { $0.id == "zip" }?.apply(to: &zone)
+        XCTAssertEqual(zone.command.timeoutSeconds, 60)
+    }
+
     // MARK: - Validation
 
     func testEmptyNameAndCommandAreReported() {

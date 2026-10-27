@@ -314,7 +314,8 @@ extension DropzoneEditorTests {
         XCTAssertEqual(zone.command.line, preset.line)
         XCTAssertEqual(zone.command.mode, preset.mode)
         XCTAssertEqual(zone.command.stdin, .none)
-        XCTAssertEqual(zone.command.timeoutSeconds, 42)
+        XCTAssertEqual(zone.command.timeoutSeconds, preset.timeoutSeconds,
+                       "a preset carries its own limit (T47)")
         XCTAssertTrue(zone.command.keepWorkdir)
         XCTAssertNil(zone.expectedOutput)
         XCTAssertEqual(zone.feedback.showOutput, .none)
