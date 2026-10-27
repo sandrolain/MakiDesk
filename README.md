@@ -152,9 +152,10 @@ screenshots or recordings.
 ### Small details, native feel
 
 A theme that covers the panels, the Settings window and the overlay,
-configurable animations, a focus border, a searchable Keyboard Shortcuts window
-with all 60 commands, and Settings split into General, Windows, Layouts, Panels,
-Groups and Dropzones.
+configurable animations, a focus border, a searchable Keyboard Shortcuts window,
+and Settings split into General, Windows, Layouts, Panels, Notifications,
+Groups and Dropzones. Utility windows open on the display where the focused
+window is, and recenter when they were last used on another one.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="MakiDesk settings" width="39%">

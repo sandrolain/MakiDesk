@@ -22,6 +22,9 @@ final class NotificationHistoryController {
 
     func show() {
         if window == nil { build() }
+        if let window, window.isVisible == false {
+            UtilityWindowPlacement.placeOnFocusedScreen(window)
+        }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }

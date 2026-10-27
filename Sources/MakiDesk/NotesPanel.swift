@@ -33,10 +33,11 @@ final class NotesController: NSObject, NSWindowDelegate {
 
     func show() {
         if !isKey { focusReturn.capture() }
+        let wasVisible = window?.isVisible == true
         if window == nil { build() }
         guard let window, let content else { return }
         content.applyTheme()
-        place(window)
+        if !wasVisible { place(window) }
         applyMovability(to: window)
         content.updateToolbar()
 
@@ -50,7 +51,6 @@ final class NotesController: NSObject, NSWindowDelegate {
                 self.store.openNote(id: first.id)
             }
             content.reloadEverything()
-            self.place(window)
             self.applyMovability(to: window)
             content.updateToolbar()
             let insertions = self.pendingInsertions
@@ -108,8 +108,22 @@ final class NotesController: NSObject, NSWindowDelegate {
     }
 
     private func place(_ window: NSWindow) {
+        let target = UtilityWindowPlacement.focusedScreen() ?? NSScreen.main
         if let side = store.anchor {
-            applyAnchor(side, to: window)
+            applyAnchor(side, to: window, on: target)
+            return
+        }
+        if let frame = store.windowFrame,
+           let target,
+           let savedScreen = UtilityWindowPlacement.screen(containing: frame),
+           UtilityWindowPlacement.sameDisplay(savedScreen, target) == false {
+            // The focus moved to another display: open centered there instead
+            // of restoring a position the user cannot see.
+            window.setFrame(
+                UtilityWindowPlacement.centeredFrame(size: frame.size,
+                                                     in: target.visibleFrame),
+                display: false
+            )
             return
         }
         if let frame = store.windowFrame,
@@ -117,14 +131,11 @@ final class NotesController: NSObject, NSWindowDelegate {
             window.setFrame(frame, display: false)
             return
         }
-        guard let screen = NSScreen.main else { return }
+        guard let screen = target else { return }
         let size = NSSize(width: 900, height: 620)
-        let visible = screen.visibleFrame
-        let width = min(size.width, visible.width - 40)
-        let height = min(size.height, visible.height - 40)
-        let frame = NSRect(x: visible.midX - width / 2, y: visible.midY - height / 2,
-                           width: width, height: height)
-        window.setFrame(frame, display: false)
+        window.setFrame(UtilityWindowPlacement.centeredFrame(size: size,
+                                                             in: screen.visibleFrame),
+                        display: false)
     }
 
     /// Docks the panel to a screen edge (full height), or floats it again
@@ -152,8 +163,9 @@ final class NotesController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = floating
     }
 
-    private func applyAnchor(_ side: NotesAnchor, to window: NSWindow) {
-        guard let screen = window.screen ?? NSScreen.main else { return }
+    private func applyAnchor(_ side: NotesAnchor, to window: NSWindow,
+                             on target: NSScreen? = nil) {
+        guard let screen = target ?? window.screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let width = min(max(window.frame.width, window.minSize.width),
                         max(window.minSize.width, visible.width - 20))

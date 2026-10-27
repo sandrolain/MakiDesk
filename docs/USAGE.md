@@ -35,6 +35,11 @@ through Accessibility.
 3. Press `⌥⇥` for the window switcher, `⌥N` for notes, or use the window
    shortcuts below from any app.
 
+Windows opened by a shortcut or the menu — Notes, Screenshots, Keyboard
+Shortcuts, Notification History — appear on the display where the focused
+window is. If they were last used on another display, they open centered on
+the active one; otherwise they keep their last position.
+
 The permissions are standard macOS TCC permissions: MakiDesk cannot grant them
 itself, and you can revoke them at any time in **System Settings ▸ Privacy &
 Security**. The app is not sandboxed; see [Privacy](PRIVACY.md).

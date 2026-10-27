@@ -509,6 +509,7 @@ final class ScreenshotLibraryController: NSObject, NSWindowDelegate,
         }
         focusReturn.capture()
         let window = buildIfNeeded()
+        UtilityWindowPlacement.placeOnFocusedScreen(window)
         model.show()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
