@@ -178,7 +178,12 @@ final class ClipboardHistory {
         return types.contains { Self.concealedTypes.contains($0) }
     }
 
-    private func insert(_ text: String) {
+    /// Adds a text to the history as if it had been copied, **without touching
+    /// the pasteboard**: the OCR "history only" destination uses it (T54).
+    /// Dedupes by text, keeps the newest first and trims to `limit`; the same
+    /// bounds as the poll apply, so a giant text cannot flood the memory.
+    func insert(_ text: String) {
+        guard text.isEmpty == false, text.count <= maximumLength else { return }
         entries.removeAll { $0.text == text }
         entries.insert(ClipboardEntry(id: UUID(), text: text, date: Date()), at: 0)
         if entries.count > limit {

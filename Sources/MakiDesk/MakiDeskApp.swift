@@ -266,7 +266,9 @@ struct MakiDeskApp: App {
                 menuButton("Recognize Text from Selected Area", keys: "⌃⌥O",
                            icon: "text.viewfinder") {
                     TextRecognitionController.shared.recognizeArea(
-                        options: store.textRecognitionOptions
+                        options: store.textRecognitionOptions,
+                        output: store.ocrOutput,
+                        reveal: store.ocrRevealHistory
                     )
                 }
                 menuButton("Pick a Color from the Screen", keys: "⌃⌥E",

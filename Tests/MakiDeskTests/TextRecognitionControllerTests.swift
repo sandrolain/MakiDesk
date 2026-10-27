@@ -6,17 +6,20 @@ import XCTest
 @MainActor
 final class TextRecognitionControllerTests: XCTestCase {
     private var pasteboard: NSPasteboard!
+    private var history: ClipboardHistory!
     private var feedback: FeedbackRecorder!
 
     override func setUp() async throws {
         pasteboard = NSPasteboard(name: .init("MakiDeskOCR-\(UUID().uuidString)"))
         pasteboard.clearContents()
+        history = ClipboardHistory(pasteboard: pasteboard, limit: 50, secureInput: { false })
         feedback = FeedbackRecorder()
     }
 
     override func tearDown() async throws {
         pasteboard.releaseGlobally()
         pasteboard = nil
+        history = nil
         feedback = nil
     }
 
@@ -28,8 +31,9 @@ final class TextRecognitionControllerTests: XCTestCase {
         controller.recognizeArea()
         await waitUntil { self.feedback.values.isEmpty == false }
 
-        XCTAssertEqual(feedback.values, [.copied(result)])
+        XCTAssertEqual(feedback.values, [.copied(result, .pasteboardAndHistory)])
         XCTAssertEqual(pasteboard.string(forType: .string), "Hello\nWorld")
+        XCTAssertEqual(history.entries.map(\.text), ["Hello\nWorld"])
     }
 
     func testNoTextReportsItWithoutWritingThePasteboard() async {
@@ -74,23 +78,118 @@ final class TextRecognitionControllerTests: XCTestCase {
         let first = TextRecognitionResult(text: "first", durationMilliseconds: 1, scaled: false)
         let second = TextRecognitionResult(text: "second", durationMilliseconds: 1, scaled: false)
         let recognizer = GatedRecognizer(first: first, second: second)
-        let controller = makeController(recognizer: recognizer)
+        let reveal = RevealSpy()
+        let controller = makeController(recognizer: recognizer,
+                                        showHistory: { reveal.count += 1 })
 
-        controller.recognizeArea()
+        controller.recognizeArea(reveal: .always)
         await recognizer.waitForFirstStart()
 
-        controller.recognizeArea()
+        controller.recognizeArea(reveal: .always)
         await waitUntil { self.feedback.values.isEmpty == false }
-        XCTAssertEqual(feedback.values, [.copied(second)])
+        XCTAssertEqual(feedback.values, [.copied(second, .pasteboardAndHistory)])
         XCTAssertEqual(pasteboard.string(forType: .string), "second")
+        XCTAssertEqual(reveal.count, 1)
 
         // The first request finishes after the newer one: its answer belongs to
         // a generation that no longer exists and must be discarded.
         await recognizer.releaseFirst()
         try? await Task.sleep(nanoseconds: 200_000_000)
 
-        XCTAssertEqual(feedback.values, [.copied(second)])
+        XCTAssertEqual(feedback.values, [.copied(second, .pasteboardAndHistory)])
         XCTAssertEqual(pasteboard.string(forType: .string), "second")
+        XCTAssertEqual(reveal.count, 1, "a stale result must not open the history")
+    }
+
+    // MARK: - Output destinations (T54)
+
+    func testHistoryOnlyLeavesThePasteboardUntouched() async {
+        let result = TextRecognitionResult(text: "secret", durationMilliseconds: 1, scaled: false)
+        let before = pasteboard.changeCount
+        let controller = makeController(recognizer: StubRecognizer(outcome: .success(result)))
+
+        controller.recognizeArea(output: .historyOnly)
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(pasteboard.changeCount, before)
+        XCTAssertNil(pasteboard.string(forType: .string))
+        XCTAssertEqual(history.entries.map(\.text), ["secret"])
+        XCTAssertEqual(feedback.values, [.copied(result, .historyOnly)])
+    }
+
+    func testPasteboardOnlyDoesNotAddToHistory() async {
+        let result = TextRecognitionResult(text: "copied", durationMilliseconds: 1, scaled: false)
+        let controller = makeController(recognizer: StubRecognizer(outcome: .success(result)))
+
+        controller.recognizeArea(output: .pasteboard)
+        await waitUntil { self.feedback.values.isEmpty == false }
+        history.poll()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "copied")
+        XCTAssertTrue(history.entries.isEmpty)
+    }
+
+    func testPasteboardAndHistoryAddsOneEntryImmediately() async {
+        let result = TextRecognitionResult(text: "both", durationMilliseconds: 1, scaled: false)
+        let controller = makeController(recognizer: StubRecognizer(outcome: .success(result)))
+
+        controller.recognizeArea(output: .pasteboardAndHistory)
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(history.entries.map(\.text), ["both"])
+        history.poll()
+        XCTAssertEqual(history.entries.map(\.text), ["both"])
+    }
+
+    func testRevealPreferenceOpensTheHistoryOnlyWhenItShould() async {
+        let result = TextRecognitionResult(text: "x", durationMilliseconds: 1, scaled: false)
+        let always = RevealSpy()
+        let alwaysController = makeController(
+            recognizer: StubRecognizer(outcome: .success(result)),
+            showHistory: { always.count += 1 }
+        )
+        alwaysController.recognizeArea(output: .pasteboard, reveal: .always)
+        await waitUntil { always.count > 0 }
+        XCTAssertEqual(always.count, 1)
+
+        let never = RevealSpy()
+        let neverBaseline = feedback.values.count
+        let neverController = makeController(
+            recognizer: StubRecognizer(outcome: .success(result)),
+            showHistory: { never.count += 1 }
+        )
+        neverController.recognizeArea(output: .historyOnly, reveal: .never)
+        await waitUntil { self.feedback.values.count > neverBaseline }
+        XCTAssertEqual(never.count, 0)
+
+        let onlyHistory = RevealSpy()
+        let onlyController = makeController(
+            recognizer: StubRecognizer(outcome: .success(result)),
+            showHistory: { onlyHistory.count += 1 }
+        )
+        let onlyBaseline = feedback.values.count
+        onlyController.recognizeArea(output: .pasteboard, reveal: .historyOnly)
+        await waitUntil { self.feedback.values.count > onlyBaseline }
+        XCTAssertEqual(onlyHistory.count, 0)
+        onlyController.recognizeArea(output: .historyOnly, reveal: .historyOnly)
+        await waitUntil { onlyHistory.count > 0 }
+        XCTAssertEqual(onlyHistory.count, 1)
+    }
+
+    func testRevealDoesNotOpenAfterTheUserSwitchesApp() async {
+        let result = TextRecognitionResult(text: "x", durationMilliseconds: 1, scaled: false)
+        let spy = RevealSpy()
+        let pids = PIDSequence([42, 43])
+        let controller = makeController(
+            recognizer: StubRecognizer(outcome: .success(result)),
+            frontmostPID: { pids.next() },
+            showHistory: { spy.count += 1 }
+        )
+
+        controller.recognizeArea(output: .historyOnly, reveal: .always)
+        await waitUntil { self.feedback.values.isEmpty == false }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(spy.count, 0)
     }
 
     // MARK: - Helpers
@@ -99,12 +198,17 @@ final class TextRecognitionControllerTests: XCTestCase {
         recognizer: TextRecognizing,
         selectRegion: @escaping TextRecognitionController.RegionSelector = {
             TextRecognitionControllerTests.selection()
-        }
+        },
+        frontmostPID: @escaping TextRecognitionController.PIDProvider = { 42 },
+        showHistory: @escaping TextRecognitionController.HistoryPresenter = {}
     ) -> TextRecognitionController {
         TextRecognitionController(
             recognizer: recognizer,
             pasteboard: pasteboard,
+            history: history,
             selectRegion: selectRegion,
+            frontmostPID: frontmostPID,
+            showHistory: showHistory,
             feedback: { [weak self] in self?.feedback.record($0) }
         )
     }
@@ -197,5 +301,24 @@ private actor GatedRecognizer: TextRecognizing {
     func releaseFirst() {
         release?.resume()
         release = nil
+    }
+}
+
+
+@MainActor
+private final class RevealSpy {
+    var count = 0
+}
+
+@MainActor
+private final class PIDSequence {
+    private var values: [pid_t?]
+
+    init(_ values: [pid_t?]) {
+        self.values = values
+    }
+
+    func next() -> pid_t? {
+        values.isEmpty ? nil : values.removeFirst()
     }
 }

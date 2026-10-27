@@ -441,8 +441,15 @@ a click without dragging, cancels without copying anything.
 
 - The area is captured at native resolution; an image longer than 3000 px on
   one side is downscaled before recognition.
-- **Settings ▸ Panels ▸ Text recognition** chooses fast or accurate recognition
-  and language correction. The language is detected automatically.
+- **Settings ▸ Panels ▸ Text recognition** chooses where the text goes:
+  **clipboard**, **clipboard and history** (the default, what used to happen by
+  accident) or **history only**, which leaves the system pasteboard untouched.
+  It also chooses whether the clipboard panel opens after recognizing: never
+  (default), only when the text is not copied, or always. The panel never opens
+  for a stale result or after you have switched to another app. The clipboard
+  history lives in memory only, so “history only” keeps no copy after MakiDesk
+  quits; the same section chooses fast or accurate recognition and language
+  correction, and the language is detected automatically.
 - Screen Recording is required for the selection. The image is not written to
   disk and nothing is uploaded. The first use loads Vision's models (about
   100 MB), which stay in memory while MakiDesk runs.

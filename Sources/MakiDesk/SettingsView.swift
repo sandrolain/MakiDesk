@@ -426,7 +426,23 @@ struct SettingsView: View {
                 get: { store.ocrLanguageCorrection },
                 set: { store.updateOCRLanguageCorrection($0) }
             ))
-            caption("⌃⌥O selects an area of the screen and copies the text it contains; Esc cancels. Vision runs on this Mac and detects the language automatically; the models (about 100 MB) stay in memory after the first use. Nothing is uploaded or written to disk.")
+            Picker("Send the text to", selection: Binding(
+                get: { store.ocrOutput },
+                set: { store.updateOCROutput($0) }
+            )) {
+                ForEach(TextRecognitionOutput.allCases) { output in
+                    Text(output.title).tag(output)
+                }
+            }
+            Picker("Open clipboard history", selection: Binding(
+                get: { store.ocrRevealHistory },
+                set: { store.updateOCRRevealHistory($0) }
+            )) {
+                ForEach(OCRRevealHistory.allCases) { reveal in
+                    Text(reveal.title).tag(reveal)
+                }
+            }
+            caption("⌃⌥O selects an area of the screen and sends the text to the clipboard, to the in-memory clipboard history, or both; Esc cancels. The history disappears when MakiDesk quits, so “History only” keeps no copy after the app closes. Vision runs on this Mac and detects the language automatically; the models (about 100 MB) stay in memory after the first use. Nothing is uploaded or written to disk.")
         }
 
         SettingsSection("Colour picker") {

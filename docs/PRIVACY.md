@@ -42,9 +42,12 @@ identity asks again. A Developer ID-signed public release behaves best here.
   and are not written to disk.
 - **The area you select for text recognition**, only when you press `⌃⌥O`. The
   image is processed locally by Vision, kept in memory for the recognition and
-  not written to disk; only the recognized text goes to the clipboard and the
-  on-screen preview. Vision's language models stay resident in memory after the
-  first use.
+  not written to disk. The recognized text goes to the system clipboard, to the
+  in-memory clipboard history, or both, as chosen in Settings; “History only”
+  never touches the system pasteboard. An OCR request is explicit, so it is
+  recorded even while secure input is active; the history panel itself still
+  refuses to open in that state. Vision's language models stay resident in
+  memory after the first use.
 - **Text on the pasteboard**, only through the clipboard-history poll, and only
   while secure input is off and the copy is not marked concealed/transient.
 - Files and URLs **only when you drop them on the shelf or open them in Notes**.

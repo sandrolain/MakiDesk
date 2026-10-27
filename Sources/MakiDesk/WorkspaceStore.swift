@@ -63,6 +63,14 @@ final class WorkspaceStore {
     /// OCR quality and correction (T41). Languages stay automatic.
     var ocrFastRecognition = UserDefaults.standard.object(forKey: "ocrFastRecognition") as? Bool ?? false
     var ocrLanguageCorrection = UserDefaults.standard.object(forKey: "ocrLanguageCorrection") as? Bool ?? true
+    /// Where the recognized text goes (T54); unknown or missing values keep the
+    /// previous behaviour.
+    var ocrOutput = TextRecognitionOutput(
+        rawValue: UserDefaults.standard.string(forKey: "ocrOutputDestination") ?? ""
+    ) ?? .pasteboardAndHistory
+    var ocrRevealHistory = OCRRevealHistory(
+        rawValue: UserDefaults.standard.string(forKey: "ocrRevealHistory") ?? ""
+    ) ?? .never
     var textRecognitionOptions: TextRecognitionOptions {
         TextRecognitionOptions(quality: ocrFastRecognition ? .fast : .accurate,
                                usesLanguageCorrection: ocrLanguageCorrection,
@@ -469,6 +477,16 @@ final class WorkspaceStore {
         UserDefaults.standard.set(value, forKey: "ocrLanguageCorrection")
     }
 
+    func updateOCROutput(_ value: TextRecognitionOutput) {
+        ocrOutput = value
+        UserDefaults.standard.set(value.rawValue, forKey: "ocrOutputDestination")
+    }
+
+    func updateOCRRevealHistory(_ value: OCRRevealHistory) {
+        ocrRevealHistory = value
+        UserDefaults.standard.set(value.rawValue, forKey: "ocrRevealHistory")
+    }
+
     func updateMiniMapPosition(_ value: PalettePosition) {
         miniMapPosition = value
         UserDefaults.standard.set(value.rawValue, forKey: "miniMapPosition")
@@ -775,7 +793,11 @@ final class WorkspaceStore {
         // OCR reads the screen with Screen Recording; it must work without
         // Accessibility, like the panels (T41).
         if action == .recognizeText {
-            TextRecognitionController.shared.recognizeArea(options: textRecognitionOptions)
+            TextRecognitionController.shared.recognizeArea(
+                options: textRecognitionOptions,
+                output: ocrOutput,
+                reveal: ocrRevealHistory
+            )
             return
         }
         // The colour picker reads one pixel the same way (T36).

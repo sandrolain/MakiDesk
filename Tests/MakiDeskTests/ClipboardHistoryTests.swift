@@ -121,6 +121,26 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(ClipboardEntry(id: UUID(), text: long, date: Date()).preview.count, 121)
     }
 
+    func testInsertAddsWithoutTouchingThePasteboardAndDedupes() throws {
+        let pasteboard = try makePasteboard()
+        let history = ClipboardHistory(pasteboard: pasteboard, limit: 2, secureInput: { false })
+        let before = pasteboard.changeCount
+
+        history.insert("a")
+        history.insert("b")
+        history.insert("a")
+
+        XCTAssertEqual(pasteboard.changeCount, before)
+        XCTAssertEqual(history.entries.map(\.text), ["a", "b"])
+
+        history.insert("c")
+        XCTAssertEqual(history.entries.map(\.text), ["c", "a"], "the ring keeps the limit")
+        XCTAssertEqual(pasteboard.changeCount, before)
+
+        history.insert("")
+        XCTAssertEqual(history.entries.count, 2)
+    }
+
     func testClearEmptiesTheList() throws {
         let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })

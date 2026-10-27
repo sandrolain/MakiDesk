@@ -77,9 +77,11 @@ secure input is active.
 
 ### Text from the screen
 
-Press `⌃⌥O` and drag over any text on screen: the words go to the clipboard
-with a short preview. Recognition runs locally with Vision and needs Screen
-Recording; the selected image is not written to disk and nothing is uploaded.
+Press `⌃⌥O` and drag over any text on screen: the words go to the clipboard,
+the in-memory clipboard history, or both, with a short preview. Settings can
+keep them off the system pasteboard (“history only”) and open the history when
+appropriate. Recognition runs locally with Vision and needs Screen Recording;
+the selected image is not written to disk and nothing is uploaded.
 
 ### Colour from the screen
 
