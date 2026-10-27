@@ -43,6 +43,8 @@ enum WindowController {
         case recognizeText
         /// Pick the colour under one point of the screen (T36).
         case sampleColor
+        /// Measure an area of the screen (T39).
+        case measureArea
     }
 
     /// A value snapshot of one window.

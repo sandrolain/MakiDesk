@@ -43,6 +43,29 @@ enum ScreenRegionGeometry {
         return rect
     }
 
+    /// The rectangle of a measuring drag, before clamping and snapping.
+    /// `⇧` keeps a square (the larger side wins), `⌥` grows from the press as
+    /// the centre. Pure so the gesture can be tested without a desktop (T39).
+    static func measureRect(from start: CGPoint, to end: CGPoint,
+                            centered: Bool = false, square: Bool = false) -> CGRect {
+        var target = end
+        if square {
+            let dx = end.x - start.x
+            let dy = end.y - start.y
+            let side = max(abs(dx), abs(dy))
+            target = CGPoint(x: start.x + (dx < 0 ? -side : side),
+                             y: start.y + (dy < 0 ? -side : side))
+        }
+        if centered {
+            let halfWidth = abs(target.x - start.x)
+            let halfHeight = abs(target.y - start.y)
+            return CGRect(x: start.x - halfWidth, y: start.y - halfHeight,
+                          width: halfWidth * 2, height: halfHeight * 2)
+        }
+        return CGRect(x: min(start.x, target.x), y: min(start.y, target.y),
+                      width: abs(target.x - start.x), height: abs(target.y - start.y))
+    }
+
     /// Keeps a selection inside one display. A drag that leaves the display is
     /// clipped, never wrapped or moved to another screen.
     static func clamped(_ rect: CGRect, to display: ScreenRegionDisplay) -> CGRect {

@@ -31,14 +31,58 @@ final class ScreenRegionSelector {
         case point
     }
 
+    /// Which axes snapped during the drag (T39).
+    struct SnapInfo: Equatable, Sendable {
+        var axisX = false
+        var axisY = false
+
+        static let none = SnapInfo()
+    }
+
+    /// Per-session options. The defaults match the rectangle capture OCR and the
+    /// colour picker use; the ruler asks for a lighter dim, no required capture
+    /// and its own label (T39).
+    struct Options {
+        /// The caller needs the pixels: Screen Recording is required and the
+        /// final capture is returned.
+        var capturesPixels = true
+        /// The loupe needs a capture; it also appears only when permitted.
+        var showsLoupe = true
+        /// How dark the overlay makes the screen.
+        var dimAlpha: CGFloat = 0.45
+        /// Snap to window and display centres as well as their edges.
+        var snapToCenters = false
+        /// Apply ⇧ (square) and ⌥ (from the centre) while dragging. Off for
+        /// text recognition and the colour picker.
+        var respectsModifiers = false
+        /// Replaces the default hint on the display with the pointer.
+        var hint: String?
+        /// Replaces the default accessibility label of each overlay.
+        var accessibilityLabel: String?
+        /// The live badge text; `nil` keeps the default size label.
+        var label: ((CGRect, ScreenRegionDisplay, SnapInfo) -> String)?
+    }
+
     struct Selection {
         /// AppKit global coordinates.
         let rect: CGRect
         let display: ScreenRegionDisplay
-        /// The selection at native pixel size, without the overlay.
-        let image: CGImage
+        /// The selection at native pixel size; `nil` when the caller did not
+        /// ask for pixels (T39).
+        let image: CGImage?
         /// The clicked point in `.point` mode, otherwise `nil`.
         let point: CGPoint?
+        /// Which axes were snapped when the selection ended.
+        let snapped: SnapInfo
+
+        init(rect: CGRect, display: ScreenRegionDisplay, image: CGImage?,
+             point: CGPoint?, snapped: SnapInfo = .none) {
+            self.rect = rect
+            self.display = display
+            self.image = image
+            self.point = point
+            self.snapped = snapped
+        }
     }
 
     static let shared = ScreenRegionSelector()
@@ -51,7 +95,7 @@ final class ScreenRegionSelector {
     var snapToWindows = true
     var snapTolerance: CGFloat = 6
     /// Live rectangle while dragging, `nil` when the drag resets or ends.
-    var onChange: ((CGRect?) -> Void)?
+    var onChange: ((CGRect?, SnapInfo) -> Void)?
 
     var isSelecting: Bool { continuation != nil }
 
@@ -64,6 +108,8 @@ final class ScreenRegionSelector {
     private var overlays: [Overlay] = []
     private var continuation: CheckedContinuation<Selection, Error>?
     private var mode: Mode = .rectangle
+    private var options = Options()
+    private var currentSnap = SnapInfo.none
     private var focusReturn = PanelFocusReturn()
 
     private var dragStart: CGPoint?
@@ -83,9 +129,11 @@ final class ScreenRegionSelector {
 
     // MARK: - Public API
 
-    func select(mode: Mode = .rectangle) async throws -> Selection {
+    func select(mode: Mode = .rectangle, options: Options = Options()) async throws -> Selection {
         guard continuation == nil else { throw ScreenRegionError.alreadySelecting }
-        guard ScreenRegionCapture.isAuthorized else { throw ScreenRegionError.permissionDenied }
+        if options.capturesPixels, ScreenRegionCapture.isAuthorized == false {
+            throw ScreenRegionError.permissionDenied
+        }
         let displays = Self.availableDisplays()
         guard displays.isEmpty == false else { throw ScreenRegionError.displayUnavailable }
 
@@ -93,7 +141,9 @@ final class ScreenRegionSelector {
             try await withCheckedThrowingContinuation { continuation in
                 self.continuation = continuation
                 self.mode = mode
+                self.options = options
                 self.currentRect = nil
+                self.currentSnap = .none
                 self.dragStart = nil
                 self.begin(displays: displays)
             }
@@ -109,7 +159,7 @@ final class ScreenRegionSelector {
     func cancel() {
         guard let continuation else { return }
         self.continuation = nil
-        onChange?(nil)
+        onChange?(nil, .none)
         tearDown(restoreFocus: true)
         continuation.resume(throwing: ScreenRegionError.cancelled)
     }
@@ -146,7 +196,9 @@ final class ScreenRegionSelector {
         // Only the screen with the pointer carries the hint; the others are
         // just dimmed while the drag stays on its own display.
         overlays.first(where: { $0.display.id == active?.id })?.view.hintText =
-            mode == .point ? "Click a colour · Esc to cancel" : "Drag to select an area · Esc to cancel"
+            options.hint ?? (mode == .point
+                ? "Click a colour · Esc to cancel"
+                : "Drag to select an area · Esc to cancel")
 
         if let active {
             ensureSnapshot(for: active)
@@ -174,12 +226,13 @@ final class ScreenRegionSelector {
 
         let view = ScreenRegionOverlayView(frame: CGRect(origin: .zero, size: display.frame.size))
         view.accentColor = accentColor
-        view.showsLoupe = showsLoupe
+        view.showsLoupe = showsLoupe && options.showsLoupe && ScreenRegionCapture.isAuthorized
+        view.dimAlpha = options.dimAlpha
         view.showsColorPreview = mode == .point
         view.setAccessibilityRole(.group)
-        view.setAccessibilityLabel(mode == .point
+        view.setAccessibilityLabel(options.accessibilityLabel ?? (mode == .point
             ? "Pick a colour from the screen"
-            : "Select an area of the screen")
+            : "Select an area of the screen"))
         view.onPointerMoved = { [weak self] point in
             self?.pointerMoved(point, displayID: display.id)
         }
@@ -218,7 +271,9 @@ final class ScreenRegionSelector {
         activeDisplayID = displayID
         dragStart = global(point, in: overlay.display)
         currentRect = nil
+        currentSnap = .none
         overlay.view.setSelection(nil, label: nil)
+        onChange?(nil, .none)
         ensureSnapshot(for: overlay.display)
     }
 
@@ -228,9 +283,14 @@ final class ScreenRegionSelector {
         guard mode == .rectangle else { return }
         guard let overlay = overlay(for: displayID), let dragStart else { return }
         let end = global(point, in: overlay.display)
-        let raw = CGRect(x: min(dragStart.x, end.x), y: min(dragStart.y, end.y),
-                         width: abs(end.x - dragStart.x), height: abs(end.y - dragStart.y))
+        let flags = NSEvent.modifierFlags
+        let raw = ScreenRegionGeometry.measureRect(
+            from: dragStart, to: end,
+            centered: options.respectsModifiers && flags.contains(.option),
+            square: options.respectsModifiers && flags.contains(.shift)
+        )
         var visual = ScreenRegionGeometry.clamped(raw, to: overlay.display)
+        var snapInfo = SnapInfo.none
         if visual.width >= ScreenRegionGeometry.minimumSide,
            visual.height >= ScreenRegionGeometry.minimumSide {
             let snap = ScreenRegionGeometry.snapped(visual,
@@ -239,14 +299,18 @@ final class ScreenRegionSelector {
             // A window edge can sit outside the display (a window dragged partly
             // off-screen), so the snapped result is clamped again.
             visual = ScreenRegionGeometry.clamped(snap.rect, to: overlay.display)
+            snapInfo = SnapInfo(axisX: snap.snappedX, axisY: snap.snappedY)
         }
         let isValid = visual.width >= ScreenRegionGeometry.minimumSide
             && visual.height >= ScreenRegionGeometry.minimumSide
         currentRect = isValid ? visual : nil
-        overlay.view.setSelection(local(visual, in: overlay.display),
-                                  label: ScreenRegionGeometry.sizeLabel(for: visual,
-                                                                        scale: overlay.display.scale))
-        onChange?(currentRect)
+        currentSnap = isValid ? snapInfo : .none
+        let label = currentRect.map { rect in
+            options.label?(rect, overlay.display, currentSnap)
+                ?? ScreenRegionGeometry.sizeLabel(for: rect, scale: overlay.display.scale)
+        }
+        overlay.view.setSelection(local(visual, in: overlay.display), label: label)
+        onChange?(currentRect, currentSnap)
     }
 
     private func dragEnded(_ point: CGPoint, displayID: CGDirectDisplayID) {
@@ -274,11 +338,19 @@ final class ScreenRegionSelector {
     private func finish(rect: CGRect, display: ScreenRegionDisplay, point: CGPoint?) {
         guard let continuation else { return }
         self.continuation = nil
-        onChange?(nil)
+        let snapped = currentSnap
+        onChange?(nil, .none)
+        let needsPixels = options.capturesPixels
         let cached = snapshot?.display.id == display.id ? snapshot?.image : nil
         tearDown(restoreFocus: true)
 
         Task { @MainActor in
+            guard needsPixels else {
+                continuation.resume(returning: Selection(rect: rect, display: display,
+                                                         image: nil, point: point,
+                                                         snapped: snapped))
+                return
+            }
             do {
                 let source: CGImage
                 if let cached {
@@ -289,7 +361,8 @@ final class ScreenRegionSelector {
                 }
                 let image = try ScreenRegionCapture.image(of: rect, in: display, from: source)
                 continuation.resume(returning: Selection(rect: rect, display: display,
-                                                         image: image, point: point))
+                                                         image: image, point: point,
+                                                         snapped: snapped))
             } catch {
                 continuation.resume(throwing: error)
             }
@@ -389,8 +462,13 @@ final class ScreenRegionSelector {
             frames += WindowIndex.shared.snapshot().map { WindowController.flip($0.frame) }
         }
         let edges = ScreenRegionGeometry.edges(of: frames)
-        snapEdgesX = edges.x
-        snapEdgesY = edges.y
+        if options.snapToCenters {
+            snapEdgesX = (edges.x + frames.map(\.midX)).sorted()
+            snapEdgesY = (edges.y + frames.map(\.midY)).sorted()
+        } else {
+            snapEdgesX = edges.x
+            snapEdgesY = edges.y
+        }
     }
 
     private static func availableDisplays() -> [ScreenRegionDisplay] {

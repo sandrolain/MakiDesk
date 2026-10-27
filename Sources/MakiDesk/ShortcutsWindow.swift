@@ -142,6 +142,15 @@ enum ShortcutCatalog {
             .init(title: "Pick a colour from the screen", keys: "⌃⌥E",
                   note: "Click a point to copy its colour in the format chosen in Settings ▸ Panels; Esc cancels."),
         ]),
+
+        ShortcutSection(title: "Measure", scope: "Global", items: [
+            .init(title: "Measure an area", keys: "⌃⌥R",
+                  note: "Drag over any app; Esc cancels. The pinned badge copies the values."),
+            .init(title: "Keep a square", keys: "⇧ + drag"),
+            .init(title: "Measure from the centre", keys: "⌥ + drag"),
+            .init(title: "Snap to windows and displays", keys: "auto",
+                  note: "Within 6 pt of an edge or a centre."),
+        ], note: "Measurements stay until their ✕ or Clear Measurements in the Measure menu."),
     ]
 }
 

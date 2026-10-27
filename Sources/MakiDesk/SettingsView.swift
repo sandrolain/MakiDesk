@@ -420,6 +420,16 @@ struct SettingsView: View {
             caption("⌃⌥E opens a loupe and copies the colour under the click; Esc cancels. Values are converted to sRGB. The clipboard history keeps a copy when it is on.")
         }
 
+        SettingsSection("Measure") {
+            Picker("Units", selection: Binding(
+                get: { MeasurementSettings.unit() },
+                set: { MeasurementSettings.setUnit($0) }
+            )) {
+                ForEach(MeasurementUnit.allCases) { Text($0.title).tag($0) }
+            }
+            caption("⌃⌥R drags a measurement over any app: ⇧ keeps a square, ⌥ measures from the centre, and values snap within 6 pt to windows and displays. Measurements stay until their ✕ or Clear Measurements. Millimetres and inches are estimated from the display's reported physical size.")
+        }
+
         SettingsSection("Grid & card size") {
             Picker("Columns", selection: Binding(
                 get: { store.paletteColumns },

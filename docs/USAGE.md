@@ -19,6 +19,7 @@ through Accessibility.
 - [Screenshots](#screenshots)
 - [Text from the screen](#text-from-the-screen)
 - [Colour picker](#colour-picker)
+- [Measure](#measure)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Troubleshooting](#troubleshooting)
@@ -439,6 +440,7 @@ a click without dragging, cancels without copying anything.
 - Screen Recording is required for the selection. The image is not written to
   disk and nothing is uploaded. The first use loads Vision's models (about
   100 MB), which stay in memory while MakiDesk runs.
+- If no text is found, the clipboard is left untouched.
 
 ## Colour picker
 
@@ -457,7 +459,25 @@ rectangle is never drawn.
 - Screen Recording is required, like OCR. The capture is read in memory and
   never written to disk. `Esc` cancels. With the clipboard history on, the
   colour is kept there like any other copy, and the row shows its swatch.
-- If no text is found, the clipboard is left untouched.
+
+## Measure
+
+Press `⌃⌥R` and drag over anything on screen. While you drag, the overlay shows
+width × height, ΔX/ΔY, the diagonal, its angle and the area; releasing pins the
+measurement in place with a small badge that copies the values or dismisses it.
+
+- `⇧` keeps a square, `⌥` measures out from the centre (both can combine).
+- Values snap within 6 pt to window and display edges **and centres**; the
+  badge says which axis snapped.
+- A measurement stays until its ✕ or **Measure ▸ Clear Measurements**; up to
+  eight at once. Nothing is written to disk.
+- **Settings ▸ Panels ▸ Measure** or **Measure ▸ Units** chooses points (exact),
+  device pixels, or millimetres and inches estimated from the display's reported
+  physical size.
+- Geometry needs no permission. The loupe appears only when Screen Recording is
+  granted; without it, measuring works the same.
+- `Esc` cancels while dragging. The badge's **Copy** button puts the values on
+  the clipboard (the clipboard history keeps them when it is on).
 
 ## Settings
 

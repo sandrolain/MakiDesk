@@ -779,6 +779,11 @@ final class WorkspaceStore {
             ColorSamplerController.shared.sample()
             return
         }
+        // Measuring reads no pixels at all: no permission required (T39).
+        if action == .measureArea {
+            MeasureController.shared.start()
+            return
+        }
         let trusted = AXIsProcessTrusted()
         accessibilityTrusted = trusted
         guard trusted else {
@@ -1071,7 +1076,8 @@ final class WorkspaceStore {
              .assignToGroup, .recallGroup, .peekDesignate,
              .putAwayFront, .showEverything, .undoStep,
              .gridLayout, .spiralLayout, .suggestLayout, .contentLayout,
-             .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor:
+             .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor,
+             .measureArea:
             return nil
         }
     }
@@ -1437,6 +1443,7 @@ final class WorkspaceStore {
         case .toggleShelf: return "shelf"
         case .recognizeText: return "text"
         case .sampleColor: return "colour"
+        case .measureArea: return "measure"
         case .peekDesignate: return "peek"
         case .putAwayFront: return "sent away"
         case .showEverything: return "everything back"

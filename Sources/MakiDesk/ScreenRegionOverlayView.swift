@@ -22,6 +22,10 @@ final class ScreenRegionOverlayView: NSView {
     var hintText: String? {
         didSet { needsDisplay = true }
     }
+    /// How dark the overlay makes the screen; the ruler asks for a lighter dim.
+    var dimAlpha: CGFloat = 0.45 {
+        didSet { needsDisplay = true }
+    }
 
     var onPointerMoved: ((CGPoint) -> Void)?
     var onMouseDown: ((CGPoint) -> Void)?
@@ -38,7 +42,6 @@ final class ScreenRegionOverlayView: NSView {
     private var sampledColor: SampledColor?
     private var trackingArea: NSTrackingArea?
 
-    private let dimAlpha: CGFloat = 0.45
     private let loupeSide: CGFloat = 112
     private let loupeMargin: CGFloat = 14
     /// How many points around the pointer the loupe magnifies.
@@ -212,8 +215,14 @@ final class ScreenRegionOverlayView: NSView {
             .foregroundColor: NSColor.white
         ]
         let text = selectionLabel as NSString
-        let size = text.size(withAttributes: attributes)
-        let padding = CGSize(width: 7, height: 4)
+        // The ruler's label has three lines; short selections keep one.
+        let bounding = text.boundingRect(
+            with: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes
+        )
+        let size = CGSize(width: ceil(bounding.width), height: ceil(bounding.height))
+        let padding = CGSize(width: 8, height: 5)
         var origin = CGPoint(x: rect.minX, y: rect.maxY + 10)
         if origin.y + size.height + padding.height * 2 > bounds.maxY - 8 {
             origin.y = rect.minY - 10 - size.height - padding.height * 2
@@ -224,15 +233,18 @@ final class ScreenRegionOverlayView: NSView {
         let background = CGRect(x: origin.x, y: origin.y,
                                 width: size.width + padding.width * 2,
                                 height: size.height + padding.height * 2)
+        let radius = min(8, background.height / 2)
         let pill = NSBezierPath(roundedRect: background,
-                                xRadius: background.height / 2, yRadius: background.height / 2)
+                                xRadius: radius, yRadius: radius)
         NSColor.black.withAlphaComponent(0.62).setFill()
         pill.fill()
         accentColor.withAlphaComponent(0.9).setStroke()
         pill.lineWidth = 1
         pill.stroke()
-        text.draw(at: CGPoint(x: origin.x + padding.width, y: origin.y + padding.height),
-                  withAttributes: attributes)
+        text.draw(with: CGRect(x: origin.x + padding.width, y: origin.y + padding.height,
+                               width: size.width, height: size.height),
+                  options: [.usesLineFragmentOrigin, .usesFontLeading],
+                  attributes: attributes)
     }
 
     private func drawHint() {

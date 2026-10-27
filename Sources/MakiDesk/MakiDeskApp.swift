@@ -268,6 +268,29 @@ struct MakiDeskApp: App {
                 Label("Text & Color", systemImage: "text.viewfinder")
             }
 
+            Menu {
+                menuButton("Measure an Area…", keys: "⌃⌥R", icon: "ruler") {
+                    MeasureController.shared.start()
+                }
+                menuButton("Clear Measurements", icon: "xmark.circle") {
+                    MeasureController.shared.clear()
+                }
+                .disabled(MeasureController.shared.measurementCount == 0)
+                Divider()
+                Picker("Units", selection: Binding(
+                    get: { MeasurementSettings.unit() },
+                    set: { MeasurementSettings.setUnit($0) }
+                )) {
+                    ForEach(MeasurementUnit.allCases) { unit in
+                        Text(unit.title).tag(unit)
+                    }
+                }
+                Divider()
+                Text("Drag over any app; Esc cancels. Values snap to windows and displays.")
+            } label: {
+                Label("Measure", systemImage: "ruler")
+            }
+
             Divider()
 
             menuButton("Keyboard Shortcuts…", icon: "keyboard") {

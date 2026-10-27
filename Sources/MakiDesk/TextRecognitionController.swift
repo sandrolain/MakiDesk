@@ -64,8 +64,12 @@ final class TextRecognitionController {
                 let selection = try await self.selectRegion()
                 self.isSelecting = false
                 try Task.checkCancellation()
-                let result = try await self.recognizer.recognize(selection.image,
-                                                                 options: options)
+                guard let image = selection.image else {
+                    self.publish(.failed("The area could not be captured."),
+                                 generation: generation)
+                    return
+                }
+                let result = try await self.recognizer.recognize(image, options: options)
                 try Task.checkCancellation()
                 guard self.generation == generation else { return }
                 guard self.copy(result.text) else {

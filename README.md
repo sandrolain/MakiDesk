@@ -88,6 +88,14 @@ clipboard, as hex by default or as RGB, HSL or NSColor from Settings ▸ Panels.
 The loupe shows a colour square and its hex value; values are converted to
 sRGB, so they match other colour tools.
 
+### Measure anything on screen
+
+Press `⌃⌥R` and drag: live width, height, ΔX/ΔY, diagonal, angle and area,
+snapped to real window and display edges and centres. Release to pin the
+readout, copy it from its badge, and dismiss it with ✕ or Clear Measurements.
+`⇧` keeps a square, `⌥` measures from the centre; points, device pixels and
+estimated millimetres or inches are in Settings.
+
 <p align="center">
   <img src="docs/assets/shelf.png" alt="MakiDesk shelf" width="30%">
   &nbsp;&nbsp;

@@ -322,7 +322,8 @@ final class ColorSamplerController {
                 let selection = try await self.selectPoint()
                 self.isSampling = false
                 try Task.checkCancellation()
-                guard let color = SampledColor(image: selection.image) else {
+                guard let image = selection.image,
+                      let color = SampledColor(image: image) else {
                     self.publish(.failed("The pixel could not be read."), generation: generation)
                     return
                 }
