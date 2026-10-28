@@ -1544,12 +1544,15 @@ final class WorkspaceStore {
             showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
             return
         }
+        let delay = Self.frameRetries[attempt]
         retryFrame(wanted, target: target, attempt: attempt, key: key) {
-            let delay = Self.frameRetries[attempt]
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.verifyFrame(wanted, target: target, reason: reason,
-                                  key: key, generation: generation, attempt: attempt + 1,
-                                  retryOnMismatch: retryOnMismatch)
+            // The retry lands within a few tenths of a second and the store lives
+            // for the app: a weak capture here would only mix ownership with the
+            // strong one the callback already has.
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                self.verifyFrame(wanted, target: target, reason: reason,
+                                 key: key, generation: generation, attempt: attempt + 1,
+                                 retryOnMismatch: retryOnMismatch)
             }
         }
     }

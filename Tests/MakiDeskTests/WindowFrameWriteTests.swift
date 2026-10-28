@@ -36,6 +36,29 @@ final class WindowFrameWriteTests: XCTestCase {
         await fulfillment(of: [written], timeout: 2)
     }
 
+    func testAPositionOnlyWriteNeverResizesTheWindow() async {
+        // The mini-map drag moves a window without touching its size (T50): it
+        // must take the position-only path, not a frame write with the current
+        // size. A frame write here would resize the window on every tick.
+        let frames = RecordedFrameWriter()
+        let positions = RecordedPositionWriter()
+        let coordinator = AXFrameWriteCoordinator(
+            frameWriter: { frame, _, _, order in frames.write(frame, order: order) },
+            positionWriter: { origin, _ in positions.write(origin) }
+        )
+        let finished = expectation(description: "position written")
+        coordinator.enqueuePosition(CGPoint(x: 12, y: 24),
+                                    element: AXUIElementCreateApplication(12345),
+                                    identity: "drag", completion: { finished.fulfill() })
+
+        let started = await wait(for: positions.firstStarted)
+        XCTAssertEqual(started, .success)
+        positions.releaseFirst.signal()
+        await fulfillment(of: [finished], timeout: 3)
+        XCTAssertEqual(positions.positions.map(\.x), [12])
+        XCTAssertTrue(frames.frames.isEmpty, "a drag must not write a size")
+    }
+
     func testWritesAreSerializedAndIntermediateFramesAreCoalesced() async {
         let writer = RecordedFrameWriter()
         let coordinator = AXFrameWriteCoordinator { frame, _, _, order in

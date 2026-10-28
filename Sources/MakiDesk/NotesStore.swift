@@ -1082,9 +1082,9 @@ final class NotesStore {
             self.sessionWork = nil
             self.draftIOQueue.async {
                 let succeeded = (try? Self.writeSessionSnapshot(snapshot, to: directory)) != nil
-                Task { @MainActor [weak self] in
-                    if succeeded, self?.pendingDrafts.isEmpty == true { self?.clearPersistenceError() }
-                    else { self?.reportPersistenceFailure() }
+                Task { @MainActor in
+                    if succeeded, self.pendingDrafts.isEmpty { self.clearPersistenceError() }
+                    else { self.reportPersistenceFailure() }
                 }
             }
         }
