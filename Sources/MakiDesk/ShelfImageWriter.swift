@@ -7,9 +7,17 @@ import UniformTypeIdentifiers
 /// trigger a second synchronous image encode.
 final class ShelfImageWriter: NSObject, NSPasteboardWriting, @unchecked Sendable {
     private static let queue = DispatchQueue(label: "com.makidesk.shelf-image-data", qos: .utility)
-    /// Lock protects entries, recency and byte accounting. The cache is sized
-    /// for the Shelf's 128 MiB decoded-image admission budget plus both PNG and
-    /// TIFF outputs and format overhead.
+    /// Lock protects entries, recency and byte accounting.
+    ///
+    /// **Budget decision (T51).** `cacheByteLimit` is a ceiling on a transient
+    /// spike, not a resident cost: the Shelf admits at most 128 MiB of decoded
+    /// images, both promised formats (PNG and TIFF) are encoded ahead so a drag
+    /// never has to encode synchronously (N15), and the whole cache is dropped
+    /// when the Shelf empties or closes. 288 MiB covers the decoded budget plus
+    /// two encodings and format overhead. The eager pair is kept deliberately:
+    /// making TIFF lazy would trade this bound for a possible stall on the first
+    /// drag that asks for it. No measurement has shown the spike to hurt; if one
+    /// does, lower this number first, then consider encoding TIFF on demand.
     private final class Cache: @unchecked Sendable {
         private struct Entry {
             let data: Data

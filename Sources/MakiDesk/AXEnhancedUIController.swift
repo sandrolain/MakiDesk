@@ -56,6 +56,14 @@ enum AXEnhancedUIController {
         }
     }
 
+    /// Runs one geometry write with the attribute temporarily off.
+    ///
+    /// The attribute is read again for every write, on purpose (T51). It can
+    /// change while the app is open (an assistive tool turning Live Text on, the
+    /// app being restarted), and a cached answer could either skip a restore or
+    /// restore something this code never disabled. Sampling once per session was
+    /// considered and rejected; the read is bounded by the 0.1 s messaging
+    /// timeout and runs on the frame-write worker, never on the main thread.
     static func performFrameAdjustment(
         for window: AXUIElement,
         operation: () throws -> Void
@@ -72,9 +80,6 @@ enum AXEnhancedUIController {
             let disabled = wasEnabled && AXUIElementSetAttributeValue(
                 application, enhancedUIAttribute, kCFBooleanFalse
             ) == .success
-            // One Accessibility round-trip per frame write is accepted here:
-            // the flag can change while the app is open, and caching it would
-            // either skip a restore or restore an attribute we never disabled.
             let restore = Self.shouldRestoreEnhancedUI(
                 wasEnabled: wasEnabled,
                 isChromium: isChromiumBundle(NSRunningApplication(processIdentifier: pid)?.bundleIdentifier),

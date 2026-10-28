@@ -16,6 +16,14 @@ final class AXEnhancedUITests: XCTestCase {
         }
     }
 
+    func testChannelBundlesFollowTheirFamily() {
+        XCTAssertTrue(AXEnhancedUIController.isChromiumBundle("com.google.Chrome.canary"))
+        XCTAssertTrue(AXEnhancedUIController.isChromiumBundle("com.brave.Browser.beta"))
+        XCTAssertTrue(AXEnhancedUIController.isChromiumBundle("com.microsoft.edgemac.canary"))
+        XCTAssertFalse(AXEnhancedUIController.isChromiumBundle("com.brave.BrowserX"))
+        XCTAssertFalse(AXEnhancedUIController.isChromiumBundle(""))
+    }
+
     func testOtherBundlesAndMissingIdentifiersDoNotMatch() {
         for identifier in ["com.apple.Safari",
                            "com.makidesk.app",
