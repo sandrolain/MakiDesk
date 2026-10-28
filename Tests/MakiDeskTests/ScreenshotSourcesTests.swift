@@ -33,4 +33,13 @@ final class ScreenshotSourcesTests: XCTestCase {
         XCTAssertNil(SystemScreenshotFolder.fileType(read: { _ in nil }))
         XCTAssertNil(SystemScreenshotFolder.fileType(read: { _ in 42 }))
     }
+
+    func testWatcherCombinesFlagsOfEveryEventInABatch() {
+        let created = FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated)
+        let rootChanged = FSEventStreamEventFlags(kFSEventStreamEventFlagRootChanged)
+        let combined = ScreenshotFolderWatcher.combine([created, 0, rootChanged])
+        XCTAssertNotEqual(combined & rootChanged, 0)
+        XCTAssertNotEqual(combined & created, 0)
+        XCTAssertEqual(ScreenshotFolderWatcher.combine([]), 0)
+    }
 }

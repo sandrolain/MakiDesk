@@ -23,7 +23,7 @@ Read only the relevant paths before editing:
 
 Swift files above are under `Sources/MakiDesk/`; tests are under `Tests/MakiDeskTests/`. Package/dependency configuration is in `Package.swift` and `Package.resolved`; bundling/signing commands are in `Taskfile.yml`; app metadata is in `Resources/Info.plist`.
 
-For performance or lifecycle work, read the findings and current implementation ledger in [the 2026-10-26 analysis](docs/analisi-ottimizzazioni-refactoring-bug-2026-10-26.md). Verify historical claims against current code.
+For performance or lifecycle work, read the findings and current implementation ledger in [the 2026-10-26 analysis](docs/analisi-ottimizzazioni-refactoring-bug-2026-10-26.md) and the findings B01–B11 with their implementation ledger in [the 2026-10-28 analysis](docs/analisi-performance-bug-2026-10-28.md). Verify historical claims against current code.
 
 ## Workflow and change scope
 

@@ -56,6 +56,17 @@ final class DropzoneOutputTests: XCTestCase {
         XCTAssertEqual(payload.text, "hello\n")
     }
 
+    func testStdoutLargerThanTheExcerptIsDeliveredAsItsLogFile() throws {
+        let log = workDirectory.appendingPathComponent("stdout.log")
+        let big = String(repeating: "a", count: CommandRunner.stdoutExcerptBytes + 1)
+        try big.write(to: log, atomically: true, encoding: .utf8)
+        let payload = try XCTUnwrap(DropzoneOutput.payload(
+            result: result(stdout: String(big.prefix(CommandRunner.stdoutExcerptBytes))),
+            expectedOutput: nil))
+        XCTAssertEqual(payload.fileURLs, [log])
+        XCTAssertNil(payload.text)
+    }
+
     func testFailedRunAndEmptyOutputDeliverNothing() throws {
         XCTAssertNil(DropzoneOutput.payload(result: result(succeeded: false), expectedOutput: nil))
         XCTAssertNil(DropzoneOutput.payload(result: result(stdout: "  \n"), expectedOutput: nil))

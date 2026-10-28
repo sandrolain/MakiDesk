@@ -77,6 +77,9 @@ enum WindowController {
         /// fallback.
         var windowID: CGWindowID?
         var minimized: Bool = false
+        /// In macOS full screen, read with the rest of the window on the worker so
+        /// layout commands need no per-window Accessibility read on the main thread.
+        var fullScreen = false
         /// Front-to-back stacking order (0 = frontmost). `Int.max` when unknown.
         var zIndex: Int = Int.max
         var temporarilyUnavailable = false
@@ -121,7 +124,7 @@ enum WindowController {
 
     static func requestAccessibilityPermission() -> Bool {
         guard !AXIsProcessTrusted() else { return true }
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }
 
@@ -259,6 +262,7 @@ enum WindowController {
                         pid: pid,
                         windowID: cgID,
                         minimized: minimized,
+                        fullScreen: !minimized && isFullScreen(element),
                         zIndex: cgID.flatMap { stackRanks[$0] } ?? Int.max,
                         temporarilyUnavailable: result == .cannotComplete || result == .failure
                     )
@@ -457,7 +461,16 @@ enum WindowController {
               app.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
             return .none
         }
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        return readFocusedWindow(pid: app.processIdentifier, appName: app.localizedName,
+                                 indexed: WindowIndex.shared.snapshot(includeMinimized: true))
+    }
+
+    /// The focused window of `pid`, read through Accessibility. It touches no
+    /// main-actor state — the index snapshot comes in as a value — so a worker
+    /// can run it and the main thread never waits on the target app.
+    nonisolated static func readFocusedWindow(pid: pid_t, appName: String?,
+                                              indexed snapshot: [WindowInfo]) -> Frontmost {
+        let appElement = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(appElement, 0.1)
         var raw: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -476,24 +489,24 @@ enum WindowController {
         // gives the same number as the on-screen one — and names it even in the
         // moment it is being minimised under a click.
         var claimed = Set<CGWindowID>()
-        let indexed = WindowIndex.shared.snapshot(includeMinimized: true).first {
-            $0.pid == app.processIdentifier && CFEqual($0.element, element)
+        let indexed = snapshot.first {
+            $0.pid == pid && CFEqual($0.element, element)
         }
         let cgID: CGWindowID?
         if let indexed { cgID = indexed.windowID }
         else {
-            cgID = windowNumber(for: frame, pid: app.processIdentifier,
+            cgID = windowNumber(for: frame, pid: pid,
                                 title: titleValue as? String, in: cgWindowNumbers(), used: &claimed)
         }
         return .window(WindowInfo(
-            id: indexed?.id ?? stableID(pid: app.processIdentifier,
+            id: indexed?.id ?? stableID(pid: pid,
                          identifier: attributeString(kAXIdentifierAttribute, of: element),
                          windowNumber: cgID, index: 0),
             title: titleValue as? String ?? "Untitled window",
-            appName: app.localizedName ?? "Application",
+            appName: appName ?? "Application",
             element: element,
             frame: frame,
-            pid: app.processIdentifier,
+            pid: pid,
             windowID: cgID
         ))
     }

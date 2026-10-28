@@ -42,6 +42,12 @@ enum DropzoneOutput {
               stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             return nil
         }
+        // The excerpt stops at a fixed size. When the command wrote more, the
+        // log file is the complete result; text cut mid-way would look whole.
+        let logSize = (try? fileManager.attributesOfItem(atPath: result.stdoutFile.path)[.size] as? NSNumber)?.intValue
+        if let logSize, logSize > CommandRunner.stdoutExcerptBytes {
+            return Payload(fileURLs: [result.stdoutFile], text: nil)
+        }
         return Payload(fileURLs: [], text: stdout)
     }
 }

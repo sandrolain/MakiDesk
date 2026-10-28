@@ -19,10 +19,10 @@ enum WindowCapture {
         let windowID: CGWindowID
     }
 
-    private struct CaptureBatch {
+    private struct CaptureBatch: Sendable {
         let requests: [Request]
         let maxDimension: CGFloat
-        let onImage: @MainActor (String, NSImage) -> Void
+        let onImage: @MainActor @Sendable (String, NSImage) -> Void
     }
 
     // MARK: - Permission
@@ -89,7 +89,7 @@ enum WindowCapture {
         _ requests: [Request],
         maxDimension: CGFloat = 640,
         force: Bool = false,
-        onImage: @MainActor @escaping (String, NSImage) -> Void
+        onImage: @MainActor @escaping @Sendable (String, NSImage) -> Void
     ) {
         guard isAuthorized, !requests.isEmpty else { return }
         let now = Date()

@@ -89,16 +89,17 @@ final class MiniMapController {
     private func startHoverTracking() {
         hoverTimer?.invalidate()
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: true) { [weak self] timer in
-            Task { @MainActor [weak self] in
-                guard let self, let panel = self.panel, panel.isVisible else {
-                    timer.invalidate()
-                    self?.hoverTimer = nil
+            guard let self else { timer.invalidate(); return }
+            Task { @MainActor in
+                guard let panel = self.panel, panel.isVisible else {
+                    self.hoverTimer?.invalidate()
+                    self.hoverTimer = nil
                     return
                 }
                 if panel.frame.contains(NSEvent.mouseLocation) {
                     self.hideWorkItem?.cancel()
                     panel.orderOut(nil)
-                    timer.invalidate()
+                    self.hoverTimer?.invalidate()
                     self.hoverTimer = nil
                 }
             }

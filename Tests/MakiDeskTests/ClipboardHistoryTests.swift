@@ -141,6 +141,18 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(history.entries.count, 2)
     }
 
+    func testTextsOverTheLimitAreRejectedByUTF16Length() throws {
+        let pasteboard = try makePasteboard()
+        let history = ClipboardHistory(pasteboard: pasteboard, limit: 5, secureInput: { false })
+
+        history.insert(String(repeating: "a", count: 1_000_001))
+        history.insert(String(repeating: "😀", count: 500_001))
+        XCTAssertTrue(history.entries.isEmpty)
+
+        history.insert(String(repeating: "a", count: 1_000_000))
+        XCTAssertEqual(history.entries.count, 1)
+    }
+
     func testClearEmptiesTheList() throws {
         let pasteboard = try makePasteboard()
         let history = ClipboardHistory(pasteboard: pasteboard, limit: 10, secureInput: { false })

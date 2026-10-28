@@ -608,7 +608,9 @@ final class NotesStore {
         // after this save would otherwise restore older text and make the
         // next save undo what was just written.
         try write(notes[index])
-        try writeExternal(text, url, notes[index].externalEncoding)
+        let writeEncoding = Self.effectiveEncoding(for: text, preferred: notes[index].externalEncoding)
+        try writeExternal(text, url, writeEncoding)
+        notes[index].externalEncoding = writeEncoding
         notes[index].externalBaseline = text
         notes[index].updatedAt = Date()
         scheduleSession()
@@ -649,6 +651,7 @@ final class NotesStore {
         let associationRevision = association.snapshot()
         let draftDirectory = directory
         let writer = self.writeExternal
+        let writeEncoding = Self.effectiveEncoding(for: snapshot.text, preferred: snapshot.externalEncoding)
         draftIOQueue.async { [weak self] in
             let result = Result<Void, Error> {
                 guard association.matches(associationRevision) else { throw CancellationError() }
@@ -664,7 +667,7 @@ final class NotesStore {
                 guard association.matches(associationRevision) else { throw CancellationError() }
                 try Self.writeDraft(snapshot, to: draftDirectory)
                 guard association.matches(associationRevision) else { throw CancellationError() }
-                try writer(snapshot.text, url, snapshot.externalEncoding)
+                try writer(snapshot.text, url, writeEncoding)
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -675,6 +678,7 @@ final class NotesStore {
                 }
                 if case .success = result, let currentIndex = self.noteIndex(id: id) {
                     self.notes[currentIndex].externalBaseline = snapshot.text
+                    self.notes[currentIndex].externalEncoding = writeEncoding
                     if self.draftRevision[id, default: 0] == revision {
                         self.notes[currentIndex].updatedAt = Date()
                         self.pendingDrafts.remove(id)
@@ -1184,9 +1188,13 @@ final class NotesStore {
     }
 
     nonisolated private static func write(text: String, to url: URL, encoding: UInt) throws {
-        let used = String.Encoding(rawValue: encoding)
-        if (try? text.write(to: url, atomically: true, encoding: used)) == nil {
-            try text.write(to: url, atomically: true, encoding: .utf8)
-        }
+        try text.write(to: url, atomically: true, encoding: String.Encoding(rawValue: encoding))
+    }
+
+    /// The file keeps its encoding unless the edited text cannot be represented
+    /// in it; then UTF-8 is used and the note records the change.
+    nonisolated static func effectiveEncoding(for text: String, preferred: UInt) -> UInt {
+        let encoding = String.Encoding(rawValue: preferred)
+        return text.canBeConverted(to: encoding) ? preferred : String.Encoding.utf8.rawValue
     }
 }

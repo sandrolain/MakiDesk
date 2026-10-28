@@ -251,6 +251,19 @@ final class CommandResolverTests: XCTestCase {
         ))
     }
 
+    func testInheritedDyldVariablesAreDroppedButExplicitOnesKept() throws {
+        let inheriting = CommandResolver(baseEnvironment: ["HOME": "/Users/test",
+                                                           "DYLD_INSERT_LIBRARIES": "/tmp/x.dylib"])
+        let plain = try inheriting.resolve(CommandSpec(line: "/bin/echo hi"), payload: payload())
+        XCTAssertNil(plain.environment["DYLD_INSERT_LIBRARIES"])
+        XCTAssertEqual(plain.environment["HOME"], "/Users/test")
+
+        let explicit = try inheriting.resolve(
+            CommandSpec(line: "/bin/echo hi", environment: ["DYLD_LIBRARY_PATH": "/opt/lib"]),
+            payload: payload())
+        XCTAssertEqual(explicit.environment["DYLD_LIBRARY_PATH"], "/opt/lib")
+    }
+
     func testCountAndNamePlaceholders() throws {
         let command = try resolve("/bin/echo {name} {count}", payload: payload {
             $0.name = "IMG 1.png"

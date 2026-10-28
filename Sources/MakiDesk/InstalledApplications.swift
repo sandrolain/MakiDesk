@@ -167,6 +167,7 @@ enum ApplicationScanner {
 /// Process-wide application inventory. The scan runs on a utility queue, is
 /// coalesced while in flight, and publishes on the main queue; the result is
 /// reused for a short while so opening the search repeatedly stays instant.
+@MainActor
 final class ApplicationCatalog {
     static let shared = ApplicationCatalog()
 
@@ -175,12 +176,12 @@ final class ApplicationCatalog {
     private var loadedAt: Date?
     private var waiters: [([InstalledApplication]) -> Void] = []
     private let queue = DispatchQueue(label: "com.makidesk.application-catalog", qos: .utility)
-    private let scan: () -> [InstalledApplication]
+    private let scan: @Sendable () -> [InstalledApplication]
     /// Installs and removals are rare; a short-lived cache is enough to notice
     /// them without re-reading the folders on every keystroke.
     private static let maximumAge: TimeInterval = 120
 
-    init(scan: @escaping () -> [InstalledApplication] = { ApplicationScanner.scan() }) {
+    init(scan: @escaping @Sendable () -> [InstalledApplication] = { ApplicationScanner.scan() }) {
         self.scan = scan
     }
 
@@ -198,7 +199,7 @@ final class ApplicationCatalog {
         let started = Date()
         queue.async { [weak self] in
             let found = scan()
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 guard let self else { return }
                 let milliseconds = Int(Date().timeIntervalSince(started) * 1000)
                 self.applications = found
@@ -215,11 +216,11 @@ final class ApplicationCatalog {
     /// Opens the bundle. The completion runs on the main queue with the error,
     /// if any; the caller decides how to report it.
     func launch(_ application: InstalledApplication,
-                completion: @escaping (Error?) -> Void) {
+                completion: @escaping @MainActor @Sendable (Error?) -> Void) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: application.url, configuration: configuration) { _, error in
-            DispatchQueue.main.async { completion(error) }
+            Task { @MainActor in completion(error) }
         }
     }
 }

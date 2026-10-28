@@ -292,7 +292,7 @@ struct CommandResolver {
     private func resolveEnvironment(spec: CommandSpec,
                                     payload: CommandPayload,
                                     workDirectory: URL) -> [String: String] {
-        var environment = baseEnvironment
+        var environment = baseEnvironment.filter { $0.key.hasPrefix("DYLD_") == false }
         // The inherited PATH of a GUI app does not include Homebrew, so the
         // default is explicit and the spec may override it.
         environment["PATH"] = spec.environment["PATH"] ?? Self.defaultPATH

@@ -151,9 +151,20 @@ protocol TextRecognizing: Sendable {
                    options: TextRecognitionOptions) async throws -> TextRecognitionResult
 }
 
+/// Lets a task cancellation reach a request that is running inside Vision.
+/// `VNRequest.cancel()` exists to be called from another thread while
+/// `perform` blocks; this box only ever calls that one method.
+private struct CancellableVisionRequest: @unchecked Sendable {
+    let request: VNRequest
+
+    init(_ request: VNRequest) { self.request = request }
+
+    func cancel() { request.cancel() }
+}
+
 /// Vision behind an actor: one recognition at a time, off the main thread.
-/// A newer request cannot interrupt a request already inside Vision, so the
-/// caller also carries a generation and discards the stale answer.
+/// A newer request cancels the one inside Vision; the caller also carries a
+/// generation and discards any answer that still arrives late.
 actor TextRecognizer: TextRecognizing {
     func recognize(_ image: CGImage,
                    options: TextRecognitionOptions) async throws -> TextRecognitionResult {
@@ -172,8 +183,15 @@ actor TextRecognizer: TextRecognizing {
 
         do {
             let handler = VNImageRequestHandler(cgImage: prepared.image, options: [:])
-            try handler.perform([request])
+            let cancellable = CancellableVisionRequest(request)
+            try await withTaskCancellationHandler {
+                try handler.perform([request])
+            } onCancel: {
+                cancellable.cancel()
+            }
         } catch {
+            // A superseded request is cancelled inside Vision; that is not a failure.
+            try Task.checkCancellation()
             throw TextRecognitionError.visionFailed(error.localizedDescription)
         }
         try Task.checkCancellation()

@@ -82,6 +82,7 @@ struct PaletteTheme: Identifiable, Equatable {
     /// Derived from the palette luminance. Used to give native
     /// controls (switches, popups, titlebars) a matching appearance when a whole
     /// window is painted with the theme, as Settings now is (T42).
+    @MainActor
     var isDark: Bool {
         if followsSystemAppearance {
             return NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua

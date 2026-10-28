@@ -162,6 +162,12 @@ final class ScreenshotFolderWatcher {
 
     deinit { stop() }
 
+    /// One batch can hold several events; a root change or rescan request in
+    /// any of them must reach the handler, not only the first one's flags.
+    static func combine(_ flags: [FSEventStreamEventFlags]) -> FSEventStreamEventFlags {
+        flags.reduce(0, |)
+    }
+
     func start(folder: URL) {
         stop()
         var context = FSEventStreamContext(
@@ -175,8 +181,8 @@ final class ScreenshotFolderWatcher {
             nil,
             { _, info, count, _, flags, _ in
                 guard let info else { return }
-                let first = count > 0 ? flags[0] : 0
-                Unmanaged<EventHandler>.fromOpaque(info).takeUnretainedValue().call(first)
+                let combined = ScreenshotFolderWatcher.combine(Array(UnsafeBufferPointer(start: flags, count: count)))
+                Unmanaged<EventHandler>.fromOpaque(info).takeUnretainedValue().call(combined)
             },
             &context,
             [folder.path] as CFArray,

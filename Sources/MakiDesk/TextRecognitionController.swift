@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 
 /// Where the recognized text goes (T54). There is deliberately no "nowhere":
@@ -74,6 +75,7 @@ final class TextRecognitionController {
     private let history: ClipboardHistory
     private let selectRegion: RegionSelector
     private let frontmostPID: PIDProvider
+    private let secureInput: () -> Bool
     private let showHistory: HistoryPresenter
     private let feedback: FeedbackHandler
 
@@ -85,18 +87,20 @@ final class TextRecognitionController {
 
     init(recognizer: TextRecognizing = TextRecognizer(),
          pasteboard: NSPasteboard = .general,
-         history: ClipboardHistory = .shared,
+         history: ClipboardHistory? = nil,
          selectRegion: @escaping RegionSelector = { try await ScreenRegionSelector.shared.select() },
          frontmostPID: @escaping PIDProvider = {
              NSWorkspace.shared.frontmostApplication?.processIdentifier
          },
+         secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
          showHistory: @escaping HistoryPresenter = { ClipboardController.shared.show() },
          feedback: @escaping FeedbackHandler = { TextRecognitionController.present($0) }) {
         self.recognizer = recognizer
         self.pasteboard = pasteboard
-        self.history = history
+        self.history = history ?? .shared
         self.selectRegion = selectRegion
         self.frontmostPID = frontmostPID
+        self.secureInput = secureInput
         self.showHistory = showHistory
         self.feedback = feedback
     }
@@ -185,9 +189,17 @@ final class TextRecognitionController {
         self.feedback(feedback)
     }
 
+    /// Secure input means a password field has the keyboard, so the text read
+    /// from the screen may be a secret: the pasteboard entry is marked
+    /// concealed and clipboard managers that honour the convention skip it.
     private func copy(_ text: String) -> Bool {
+        let concealed = secureInput()
         pasteboard.clearContents()
-        return pasteboard.setString(text, forType: .string)
+        guard pasteboard.setString(text, forType: .string) else { return false }
+        if concealed {
+            pasteboard.setData(Data(), forType: ClipboardHistory.concealedMarker)
+        }
+        return true
     }
 
     private func finish(_ generation: UInt64) {

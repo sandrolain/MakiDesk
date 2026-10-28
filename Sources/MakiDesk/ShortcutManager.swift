@@ -19,8 +19,12 @@ final class ShortcutManager {
     private var handlerRef: EventHandlerRef?
     fileprivate let handler: (WindowController.ShortcutAction) -> Void
 
-    private(set) var registeredCount = 0
-    private(set) var failedCount = 0
+    /// Hot keys currently owned: the table's rows plus the on-demand ones, so a
+    /// reload cannot forget the dynamic keys that survive it.
+    var registeredCount: Int { hotKeys.count + dynamicKeys.count }
+    /// Rows blocked in the table plus on-demand registrations refused so far.
+    var failedCount: Int { blockedShortcutIDs.count + failedDynamicCount }
+    private var failedDynamicCount = 0
 
     init(handler: @escaping (WindowController.ShortcutAction) -> Void) {
         self.handler = handler
@@ -68,8 +72,6 @@ final class ShortcutManager {
         actions.removeAll()
         blockedShortcutIDs.removeAll()
         disabledShortcutIDs.removeAll()
-        registeredCount = 0
-        failedCount = 0
         currentBindings = bindings
 
         for (index, definition) in Self.bindings.enumerated() {
@@ -89,9 +91,7 @@ final class ShortcutManager {
             if status == noErr, let ref {
                 hotKeys.append(ref)
                 actions[id] = action
-                registeredCount += 1
             } else {
-                failedCount += 1
                 blockedShortcutIDs.insert(definition.id)
             }
         }
@@ -167,14 +167,13 @@ final class ShortcutManager {
             GetApplicationEventTarget(), 0, &ref
         )
         guard status == noErr, let ref else {
-            failedCount += 1
+            failedDynamicCount += 1
             return nil
         }
         nextDynamicID += 1
         dynamicKeys[id] = ref
         pressHandlers[id] = onPress
         if let onRelease { releaseHandlers[id] = onRelease }
-        registeredCount += 1
         return id
     }
 
@@ -184,7 +183,6 @@ final class ShortcutManager {
         UnregisterEventHotKey(ref)
         pressHandlers[id] = nil
         releaseHandlers[id] = nil
-        registeredCount = max(0, registeredCount - 1)
     }
 
     /// Registers Esc for as long as it is needed — the peek (T16) intercepts it

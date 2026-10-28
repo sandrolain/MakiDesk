@@ -960,7 +960,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
                     url = directory.appendingPathComponent(name)
                 }
             } catch { url = nil }
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 guard let self, self.isVisible, self.session == session else {
                     let obsolete = self?.staging != staging ? staging : directory
                     DispatchQueue.global(qos: .utility).async { try? FileManager.default.removeItem(at: obsolete) }

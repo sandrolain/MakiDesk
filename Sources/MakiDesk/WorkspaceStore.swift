@@ -22,6 +22,8 @@ struct ActionableWindow: Identifiable {
     let icon: NSImage?
     /// Whether the window is on screen or minimised.
     var state: WindowState
+    /// From the last inventory read, not a live Accessibility query.
+    var fullScreen = false
 }
 
 /// Where a window currently sits, for the palette's state indicator (T5).
@@ -64,6 +66,37 @@ final class WorkspaceStore {
         guard Date().timeIntervalSince(focusedWindowSnapshotAt) < 0.1,
               focusedWindowSnapshotPID == NSWorkspace.shared.frontmostApplication?.processIdentifier else { return nil }
         return focusedWindowSnapshot
+    }
+
+    @ObservationIgnored private lazy var focusReader = FocusReadCoordinator(
+        frontmostTarget: {
+            guard let app = NSWorkspace.shared.frontmostApplication,
+                  app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
+            return FocusReadCoordinator.Target(pid: app.processIdentifier, appName: app.localizedName)
+        },
+        indexedWindows: { WindowIndex.shared.snapshot(includeMinimized: true) },
+        deliver: { [weak self] focused, pid, purposes in
+            self?.applyFocusRead(focused, pid: pid, purposes: purposes)
+        }
+    )
+
+    private func requestFocusRead(_ purpose: FocusReadCoordinator.Purpose) {
+        focusReader.request(purpose)
+    }
+
+    private func applyFocusRead(_ focused: WindowController.Frontmost, pid: pid_t?,
+                                purposes: Set<FocusReadCoordinator.Purpose>) {
+        guard accessibilityTrusted else { return }
+        focusedWindowSnapshot = focused
+        if purposes.contains(.now) || purposes.contains(.change) {
+            focusedWindowSnapshotAt = Date()
+            focusedWindowSnapshotPID = pid
+        }
+        recordFrontmostWindowFocus(focused)
+        if purposes.contains(.change) { checkFrontmostChange(focused) }
+        if purposes.contains(.now) || purposes.contains(.change) {
+            WindowOutlineController.shared.refresh(frontmost: focused)
+        }
     }
     var shortcutsRegistered = 0
     var shortcutsBlocked = 0
@@ -283,8 +316,13 @@ final class WorkspaceStore {
             WindowOutlineController.shared.refresh()
         }
         WindowIndex.shared.onFocusChange = { [weak self] in
-            self?.checkFrontmostChange()
-            WindowOutlineController.shared.refresh(frontmost: self?.recentFocusSnapshot())
+            guard let self else { return }
+            if let snapshot = self.recentFocusSnapshot() {
+                self.checkFrontmostChange(snapshot)
+                WindowOutlineController.shared.refresh(frontmost: snapshot)
+            } else {
+                self.requestFocusRead(.change)
+            }
         }
         WindowIndex.shared.onGeometryNow = { WindowOutlineController.shared.refreshGeometry() }
         WindowIndex.shared.onGeometryChanged = { [weak self] element, frame in
@@ -292,12 +330,7 @@ final class WorkspaceStore {
             WindowOutlineController.shared.refreshGeometry(for: element, frame: frame)
         }
         WindowIndex.shared.onFocusNow = { [weak self] in
-            let focused = WindowController.frontmost()
-            self?.focusedWindowSnapshot = focused
-            self?.focusedWindowSnapshotAt = Date()
-            self?.focusedWindowSnapshotPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
-            self?.recordFrontmostWindowFocus(focused)
-            WindowOutlineController.shared.refresh(frontmost: focused)
+            self?.requestFocusRead(.now)
         }
         WindowIndex.shared.onScreenChange = { [weak self] in self?.handleScreenChange() }
         WindowIndex.shared.onApplicationTerminated = { [weak self] pid in
@@ -379,9 +412,9 @@ final class WorkspaceStore {
         }
     }
 
-    private func checkFrontmostChange() {
+    private func checkFrontmostChange(_ frontmost: WindowController.Frontmost) {
         guard showMiniMap, accessibilityTrusted else { return }
-        switch recentFocusSnapshot() ?? WindowController.frontmost() {
+        switch frontmost {
         case let .window(target):
             let key = target.id
             guard key != lastFrontmostKey else { return }
@@ -1398,7 +1431,7 @@ final class WorkspaceStore {
         frameGenerations[key] = generation
         pendingFrameTargets[key] = adjusted
         makiLog.notice("frame command window=\(key, privacy: .public) app=\(target.appName, privacy: .public) reason=\(reason, privacy: .public) requested=(\(Int(adjusted.minX)),\(Int(adjusted.minY)),\(Int(adjusted.width)),\(Int(adjusted.height))) generation=\(generation, privacy: .public)")
-        let finish: () -> Void = { [weak self] in
+        let finish: @MainActor @Sendable () -> Void = { [weak self] in
             self?.verifyFrame(adjusted, target: target, reason: reason,
                               key: key, generation: generation, attempt: 0,
                               retryOnMismatch: retryOnMismatch)
@@ -1583,21 +1616,22 @@ final class WorkspaceStore {
     /// own timer, so overlapping animations do not cancel each other, and the
     /// completion is always delivered (A3).
     private func animateFrame(to target: CGRect, element: AXUIElement, key: String,
-                              generation: Int, completion: (@MainActor () -> Void)? = nil) {
+                              generation: Int, completion: (@MainActor @Sendable () -> Void)? = nil) {
         frameTimers[key]?.invalidate()
         frameTimers[key] = nil
         frameLastWritten[key] = nil
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let handle = SendableAXElement(element: element)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let start = reduceMotion ? nil : WindowController.frame(of: element)
-            DispatchQueue.main.async { [weak self] in
+            let start = reduceMotion ? nil : WindowController.frame(of: handle.element)
+            Task { @MainActor [weak self] in
                 guard let self, self.frameGenerations[key] == generation else { return }
                 guard !reduceMotion, let start else {
-                    WindowController.setFrameAsync(target, for: element, identity: key,
+                    WindowController.setFrameAsync(target, for: handle.element, identity: key,
                                                    completion: { completion?() })
                     return
                 }
-                self.startFrameAnimation(from: start, to: target, element: element,
+                self.startFrameAnimation(from: start, to: target, element: handle.element,
                                          key: key, completion: completion)
             }
         }
@@ -1605,15 +1639,16 @@ final class WorkspaceStore {
 
     private func startFrameAnimation(from start: CGRect, to target: CGRect,
                                      element: AXUIElement, key: String,
-                                     completion: (@MainActor () -> Void)?) {
+                                     completion: (@MainActor @Sendable () -> Void)?) {
         let startTime = ProcessInfo.processInfo.systemUptime
         let duration = 0.18
+        let handle = SendableAXElement(element: element)
         frameLastWritten[key] = start.integral
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
             // The timer is scheduled on the main run loop; the animation state
             // and the frame writes belong to the store's main actor.
             MainActor.assumeIsolated {
-                guard let self else { timer.invalidate(); return }
                 let t = min(max((ProcessInfo.processInfo.systemUptime - startTime) / duration, 0), 1)
                 let eased = 1 - pow(1 - t, 3)
                 let frame = CGRect(
@@ -1624,14 +1659,14 @@ final class WorkspaceStore {
                 ).integral
                 let previous = self.frameLastWritten[key] ?? start.integral
                 if t >= 1 {
-                    timer.invalidate()
+                    self.frameTimers[key]?.invalidate()
                     self.frameTimers[key] = nil
                     self.frameLastWritten[key] = nil
-                    WindowController.setFrameAsync(target, for: element, identity: key,
+                    WindowController.setFrameAsync(target, for: handle.element, identity: key,
                                                    completion: { completion?() })
                 } else if frame.origin != previous.origin || frame.size != previous.size {
                     self.frameLastWritten[key] = frame
-                    WindowController.setFrameAsync(frame, for: element, identity: key)
+                    WindowController.setFrameAsync(frame, for: handle.element, identity: key)
                 }
             }
         }
@@ -1756,9 +1791,7 @@ final class WorkspaceStore {
         WindowIndex.shared.refreshAsync { [weak self] discovered in
             guard let self, self.accessibilityTrusted else { return }
             self.rebuildModel(from: discovered, announce: true)
-            let focused = WindowController.frontmost()
-            self.focusedWindowSnapshot = focused
-            self.recordFrontmostWindowFocus(focused)
+            self.requestFocusRead(.inventory)
             if !self.didInitialRecall {
                 self.didInitialRecall = true
                 self.recallOffscreenWindows()
@@ -1809,7 +1842,7 @@ final class WorkspaceStore {
                              frame: info.frame, pid: info.pid, minimized: info.minimized,
                              element: info.element, color: color(for: info.appName),
                              windowID: info.windowID, icon: icon(for: info.pid),
-                             state: state(for: info))
+                             state: state(for: info), fullScreen: info.fullScreen)
         }
     }
 
@@ -1857,39 +1890,6 @@ final class WorkspaceStore {
         }
     }
 
-    /// What a layout command does with one live window: place it, or leave it
-    /// alone for a stated reason (T24).
-    enum LayoutDisposition: Equatable {
-        /// In view and arrangeable.
-        case arrange
-        /// In full screen: the app owns the frame and refuses ours.
-        case fullScreen
-        /// Minimised, or owned by an app that is hidden: out of view on purpose.
-        case away
-    }
-
-    static func disposition(minimized: Bool, appHidden: Bool, fullScreen: Bool) -> LayoutDisposition {
-        if minimized || appHidden { return .away }
-        if fullScreen { return .fullScreen }
-        return .arrange
-    }
-
-    /// A layout command's candidates, with what it deliberately left out so the
-    /// feedback can say how many windows it placed and why there were not more
-    /// (T24).
-    struct ArrangeableSet {
-        var windows: [ActionableWindow] = []
-        /// In view, but in full screen: no frame of ours to set.
-        var fullScreen = 0
-        /// Out of view on purpose: minimised, or its app is hidden.
-        var away = 0
-        var unavailable = 0
-
-        init(windows: [ActionableWindow] = []) { self.windows = windows }
-
-        var isEmpty: Bool { windows.isEmpty }
-    }
-
     /// The windows a layout command may arrange: the ones actually on screen —
     /// not minimised, not full screen, and not owned by an app that is hidden. A
     /// window nobody can see must not be pulled out of the Dock or out from
@@ -1900,38 +1900,13 @@ final class WorkspaceStore {
     /// The index is re-read first: the command must see the windows that are
     /// there now (T24).
     private func arrangeableSet() -> ArrangeableSet {
-        var set = ArrangeableSet()
-        for window in actionableWindows() {
-            if window.state == .unavailable { set.unavailable += 1; continue }
-            let disposition = Self.disposition(
-                minimized: window.minimized,
-                appHidden: NSRunningApplication(processIdentifier: window.pid)?.isHidden ?? false,
-                fullScreen: WindowController.isFullScreen(window.element)
-            )
-            switch disposition {
-            case .arrange: set.windows.append(window)
-            case .fullScreen: set.fullScreen += 1
-            case .away: set.away += 1
-            }
+        Self.arrangeableSet(from: actionableWindows()) {
+            NSRunningApplication(processIdentifier: $0)?.isHidden ?? false
         }
-        return set
     }
 
     /// The windows a layout command arranges (T18).
     private func arrangeableWindows() -> [ActionableWindow] { arrangeableSet().windows }
-
-    /// One line saying how many windows a layout placed and, when that is fewer
-    /// than what is in view, why: a window that is away stays away, a full-screen
-    /// window cannot be given a frame of ours (T24).
-    static func layoutSummary(_ set: ArrangeableSet) -> String {
-        var text = set.windows.count == 1 ? "1 window" : "\(set.windows.count) windows"
-        if set.fullScreen == 1 { text += " · 1 full screen" }
-        if set.fullScreen > 1 { text += " · \(set.fullScreen) full screen" }
-        if set.away == 1 { text += " · 1 away" }
-        if set.away > 1 { text += " · \(set.away) away" }
-        if set.unavailable > 0 { text += " · \(set.unavailable) temporarily unavailable" }
-        return text
-    }
 
     /// The app icon, looked up once per pid and cached (T3).
     private func icon(for pid: pid_t) -> NSImage? {

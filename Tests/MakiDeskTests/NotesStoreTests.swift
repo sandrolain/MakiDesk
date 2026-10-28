@@ -507,6 +507,27 @@ final class NotesStoreTests: XCTestCase {
             }
         }
     }
+
+    func testExternalEncodingIsKeptUnlessTheTextCannotBeRepresented() {
+        let latin1 = String.Encoding.isoLatin1.rawValue
+        let utf8 = String.Encoding.utf8.rawValue
+        XCTAssertEqual(NotesStore.effectiveEncoding(for: "caffè", preferred: latin1), latin1)
+        XCTAssertEqual(NotesStore.effectiveEncoding(for: "caffè 😀", preferred: latin1), utf8)
+        XCTAssertEqual(NotesStore.effectiveEncoding(for: "😀", preferred: utf8), utf8)
+    }
+
+    func testSaveToExternalRecordsTheEncodingActuallyWritten() throws {
+        let dir = try makeDirectory()
+        let file = dir.appendingPathComponent("legacy.txt")
+        try "plain".write(to: file, atomically: true, encoding: .utf8)
+        let store = NotesStore(directory: dir.appendingPathComponent("Notes"))
+        let note = try store.openExternal(file)
+        store.updateText("emoji 😀", for: note.id)
+        try store.saveToExternal(note.id)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "emoji 😀")
+        XCTAssertEqual(try XCTUnwrap(store.note(id: note.id)).externalEncoding,
+                       String.Encoding.utf8.rawValue)
+    }
 }
 
 /// Holds the first two external writes in flight so a test can decide when each

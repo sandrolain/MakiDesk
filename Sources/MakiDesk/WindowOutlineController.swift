@@ -487,8 +487,9 @@ final class WindowOutlineController {
             observers.append(NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { [weak self] note in
+                let window = note.object as? NSWindow
                 MainActor.assumeIsolated {
-                    self?.handleOwnWindowEvent(named: name, note: note)
+                    self?.handleOwnWindowEvent(named: name, window: window)
                 }
             })
         }
@@ -507,8 +508,8 @@ final class WindowOutlineController {
         })
     }
 
-    private func handleOwnWindowEvent(named name: Notification.Name, note: Notification) {
-        guard let window = note.object as? NSWindow,
+    private func handleOwnWindowEvent(named name: Notification.Name, window: NSWindow?) {
+        guard let window,
               !surfaces.values.contains(where: { $0.panel === window }) else { return }
         switch name {
         case NSWindow.didMoveNotification,

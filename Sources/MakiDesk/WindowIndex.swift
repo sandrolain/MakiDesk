@@ -8,7 +8,7 @@ import os
 /// Same invariant as `GeometryReadRequest`: the handle is immutable and only
 /// read, so transferring it to the thread that handles the notification is
 /// safe.
-private struct SendableAXElement: @unchecked Sendable {
+struct SendableAXElement: @unchecked Sendable {
     let element: AXUIElement
 }
 

@@ -4,6 +4,7 @@ import XCTest
 /// T42: the Settings window paints itself with the palette theme. The window
 /// also flips its native appearance to match how light or dark that theme is,
 /// so switches, popups and the titlebar stay readable.
+@MainActor
 final class PaletteThemeTests: XCTestCase {
     private let lightThemeIDs: Set<String> = ["latte", "macos-light", "solarized-light"]
 

@@ -171,6 +171,16 @@ final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorag
     }
 }
 
+/// Removes its observer when the owner lets go of it, so an isolated view needs
+/// no `deinit` that touches main-actor state.
+private final class NotificationToken: @unchecked Sendable {
+    private let token: NSObjectProtocol
+
+    init(_ token: NSObjectProtocol) { self.token = token }
+
+    deinit { NotificationCenter.default.removeObserver(token) }
+}
+
 /// Line numbers in the scroll view's vertical ruler. Only logical lines are
 /// numbered: a line wrapped by the window does not get a second number.
 @MainActor
@@ -179,7 +189,7 @@ final class LineNumberRulerView: NSRulerView {
     private var theme: NotesSyntaxTheme
     private var lineStarts: [Int] = [0]
     private var lineStartsDirty = true
-    private var observer: NSObjectProtocol?
+    private var observer: NotificationToken?
 
     private let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
 
@@ -195,21 +205,17 @@ final class LineNumberRulerView: NSRulerView {
     /// must repaint the numbers.
     func startObserving() {
         guard observer == nil else { return }
-        observer = NotificationCenter.default.addObserver(
+        observer = NotificationToken(NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification,
             object: scrollView?.contentView,
             queue: .main
         ) { [weak self] _ in
-            self?.needsDisplay = true
-        }
+            MainActor.assumeIsolated { self?.needsDisplay = true }
+        })
     }
 
     @available(*, unavailable)
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    deinit {
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-    }
 
     func applyTheme(_ theme: NotesSyntaxTheme) {
         self.theme = theme

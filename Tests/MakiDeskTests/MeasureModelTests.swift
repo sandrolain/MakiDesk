@@ -137,4 +137,14 @@ final class MeasureModelTests: XCTestCase {
         defaults.set("pixels", forKey: MeasurementSettings.unitKey)
         XCTAssertEqual(MeasurementSettings.unit(defaults: defaults), .pixels)
     }
+
+    @MainActor
+    func testAPinStaysOnlyWhileItsDisplayFrameStillExists() {
+        let main = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let left = CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        XCTAssertTrue(MeasureController.isAnchored(displayFrame: left, screens: [main, left]))
+        XCTAssertFalse(MeasureController.isAnchored(displayFrame: left, screens: [main]))
+        XCTAssertFalse(MeasureController.isAnchored(
+            displayFrame: left, screens: [main, CGRect(x: -1600, y: 0, width: 1600, height: 900)]))
+    }
 }

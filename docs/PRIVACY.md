@@ -46,8 +46,10 @@ identity asks again. A Developer ID-signed public release behaves best here.
   in-memory clipboard history, or both, as chosen in Settings; “History only”
   never touches the system pasteboard. An OCR request is explicit, so it is
   recorded even while secure input is active; the history panel itself still
-  refuses to open in that state. Vision's language models stay resident in
-  memory after the first use.
+  refuses to open in that state. While secure input is active, text copied to
+  the system clipboard is also marked `org.nspasteboard.ConcealedType`, so
+  clipboard managers that honour the convention skip it. Vision's language
+  models stay resident in memory after the first use.
 - **Text on the pasteboard**, only through the clipboard-history poll, and only
   while secure input is off and the copy is not marked concealed/transient.
 - Files and URLs **only when you drop them on the shelf or open them in Notes**.

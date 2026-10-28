@@ -482,6 +482,9 @@ final class ScreenRegionSelector {
         onChange?(nil, .none)
         let needsPixels = options.capturesPixels
         let cached = snapshot?.display.id == display.id ? snapshot?.image : nil
+        // Taken before the overlays close: if the window server still lists one
+        // when the capture runs, it is left out of the image.
+        let excluded = overlays.map { CGWindowID(truncatingIfNeeded: $0.window.windowNumber) }
         tearDown(restoreFocus: true)
 
         Task { @MainActor in
@@ -496,8 +499,9 @@ final class ScreenRegionSelector {
                 if let cached {
                     source = cached
                 } else {
-                    // The overlays are gone, so nothing of ours is on screen.
-                    source = try await ScreenRegionCapture.capture(display: display)
+                    // The overlays are closing; any the server still lists are excluded.
+                    source = try await ScreenRegionCapture.capture(display: display,
+                                                                   excluding: excluded)
                 }
                 let image = try ScreenRegionCapture.image(of: rect, in: display, from: source)
                 continuation.resume(returning: Selection(rect: rect, display: display,

@@ -36,6 +36,28 @@ final class TextRecognitionControllerTests: XCTestCase {
         XCTAssertEqual(history.entries.map(\.text), ["Hello\nWorld"])
     }
 
+    func testTextReadWhileSecureInputIsOnIsMarkedConcealedOnThePasteboard() async {
+        let result = TextRecognitionResult(text: "s3cret", durationMilliseconds: 5, scaled: false)
+        let controller = makeController(recognizer: StubRecognizer(outcome: .success(result)),
+                                        secureInput: { true })
+
+        controller.recognizeArea(output: .pasteboard)
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "s3cret")
+        XCTAssertTrue(pasteboard.types?.contains(ClipboardHistory.concealedMarker) == true)
+    }
+
+    func testOrdinaryTextIsNotMarkedConcealed() async {
+        let result = TextRecognitionResult(text: "plain", durationMilliseconds: 5, scaled: false)
+        let controller = makeController(recognizer: StubRecognizer(outcome: .success(result)))
+
+        controller.recognizeArea(output: .pasteboard)
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(pasteboard.types?.contains(ClipboardHistory.concealedMarker), false)
+    }
+
     func testNoTextReportsItWithoutWritingThePasteboard() async {
         let controller = makeController(
             recognizer: StubRecognizer(outcome: .failure(.noText))
@@ -200,6 +222,7 @@ final class TextRecognitionControllerTests: XCTestCase {
             TextRecognitionControllerTests.selection()
         },
         frontmostPID: @escaping TextRecognitionController.PIDProvider = { 42 },
+        secureInput: @escaping () -> Bool = { false },
         showHistory: @escaping TextRecognitionController.HistoryPresenter = {}
     ) -> TextRecognitionController {
         TextRecognitionController(
@@ -208,6 +231,7 @@ final class TextRecognitionControllerTests: XCTestCase {
             history: history,
             selectRegion: selectRegion,
             frontmostPID: frontmostPID,
+            secureInput: secureInput,
             showHistory: showHistory,
             feedback: { [weak self] in self?.feedback.record($0) }
         )

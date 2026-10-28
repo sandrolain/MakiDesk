@@ -400,6 +400,9 @@ unless the shelf was empty. Configure the zones in **Settings ▸ Dropzones** (o
   environment variables; `MAKIDESK_*` variables describe the run.
 - **Results.** Output goes to `output/` inside the run folder; a notice reports
   the exit code, stderr and a short stdout excerpt, and can reveal the folder.
+  Each log file is capped at 256 MiB: a command that writes more is stopped and
+  reported as such. When stdout is longer than the 64 KiB excerpt, the clipboard
+  and the Shelf receive its log file rather than text cut mid-way.
   The run folder lives under `~/Library/Caches/MakiDesk/DropzoneRuns/` and is
   removed when the command ends unless you keep it, reveal it, or send the
   output to the clipboard or the Shelf (those point at its files). Stopping ends

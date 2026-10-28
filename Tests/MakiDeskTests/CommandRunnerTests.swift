@@ -130,6 +130,24 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertFalse(result.timedOut)
     }
 
+    func testRunawayOutputIsStoppedAtTheLogLimit() async throws {
+        let limited = CommandRunner(maxLogBytes: 1024 * 1024)
+        let started = Date()
+        let result = try await limited.run(shell("yes", timeout: 30), id: UUID())
+        XCTAssertTrue(result.outputLimitExceeded)
+        XCTAssertFalse(result.succeeded)
+        XCTAssertFalse(result.timedOut)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+        XCTAssertTrue(result.stderrExcerpt.contains("exceeded"))
+    }
+
+    func testOutputUnderTheLimitIsUnaffected() async throws {
+        let limited = CommandRunner(maxLogBytes: 1024 * 1024)
+        let result = try await limited.run(shell("printf ok"), id: UUID(), includeStdout: true)
+        XCTAssertTrue(result.succeeded)
+        XCTAssertFalse(result.outputLimitExceeded)
+    }
+
     func testCancelStopsARunningCommand() async throws {
         let id = UUID()
         let task = Task { try await runner.run(self.shell("sleep 5"), id: id) }

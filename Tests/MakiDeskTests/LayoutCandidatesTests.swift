@@ -47,10 +47,26 @@ final class LayoutCandidatesTests: XCTestCase {
 
     // MARK: - What the feedback says
 
-    private func makeWindow(_ id: String) -> ActionableWindow {
-        ActionableWindow(id: id, title: id, appName: "Example", frame: .zero, pid: 0,
-                         minimized: false, element: AXUIElementCreateSystemWide(), color: .black,
-                         windowID: nil, icon: nil, state: .normal)
+    private func makeWindow(_ id: String, pid: pid_t = 0, minimized: Bool = false,
+                            fullScreen: Bool = false, state: WindowState = .normal) -> ActionableWindow {
+        ActionableWindow(id: id, title: id, appName: "Example", frame: .zero, pid: pid,
+                         minimized: minimized, element: AXUIElementCreateSystemWide(), color: .black,
+                         windowID: nil, icon: nil, state: state, fullScreen: fullScreen)
+    }
+
+    func testArrangeableSetSortsWindowsFromTheInventoryFlagsAlone() {
+        let windows = [
+            makeWindow("plain", pid: 1),
+            makeWindow("full", pid: 2, fullScreen: true),
+            makeWindow("minimized", pid: 3, minimized: true),
+            makeWindow("hidden-app", pid: 4),
+            makeWindow("gone", pid: 5, state: .unavailable),
+        ]
+        let set = WorkspaceStore.arrangeableSet(from: windows) { $0 == 4 }
+        XCTAssertEqual(set.windows.map(\.id), ["plain"])
+        XCTAssertEqual(set.fullScreen, 1)
+        XCTAssertEqual(set.away, 2)
+        XCTAssertEqual(set.unavailable, 1)
     }
 
     func testTheSummaryCountsTheWindowsItPlaced() {

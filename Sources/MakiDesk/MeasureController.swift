@@ -11,6 +11,7 @@ final class MeasureController {
 
     private struct Pinned {
         let id: UUID
+        let displayFrame: CGRect
         let visibleFrame: CGRect
         let overlay: MeasureOverlayWindow
         let badge: MeasureBadgeWindow
@@ -20,6 +21,7 @@ final class MeasureController {
     private var isMeasuring = false
     private var task: Task<Void, Never>?
     private var unitObserver: NSObjectProtocol?
+    private var screenObserver: NSObjectProtocol?
 
     var measurementCount: Int { windows.count }
     var currentUnit: MeasurementUnit { MeasurementSettings.unit() }
@@ -30,6 +32,25 @@ final class MeasureController {
         ) { [weak self] _ in
             Task { @MainActor in self?.refreshUnit() }
         }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.dropMeasurementsOffTheDisplays() }
+        }
+    }
+
+    /// A pin is anchored to the display it was measured on. When that display
+    /// goes away or is rearranged, its overlay would float over the wrong place.
+    static func isAnchored(displayFrame: CGRect, screens: [CGRect]) -> Bool {
+        screens.contains(displayFrame)
+    }
+
+    private func dropMeasurementsOffTheDisplays() {
+        let screens = NSScreen.screens.map(\.frame)
+        let stale = windows.filter {
+            Self.isAnchored(displayFrame: $0.displayFrame, screens: screens) == false
+        }
+        for item in stale { remove(item.id) }
     }
 
     /// Starts a measurement. A second call while the selector is open is a
@@ -113,7 +134,7 @@ final class MeasureController {
         )
         overlay.orderFrontRegardless()
         badge.orderFrontRegardless()
-        windows.append(Pinned(id: id, visibleFrame: visibleFrame,
+        windows.append(Pinned(id: id, displayFrame: display.frame, visibleFrame: visibleFrame,
                               overlay: overlay, badge: badge))
     }
 

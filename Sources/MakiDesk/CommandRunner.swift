@@ -15,8 +15,12 @@ struct CommandResult: Equatable, Sendable {
     let stderrFile: URL
     let stdoutExcerpt: String?
     let stderrExcerpt: String
+    /// The command was stopped because stdout or stderr outgrew the log limit.
+    var outputLimitExceeded = false
 
-    var succeeded: Bool { exitCode == 0 && timedOut == false && cancelled == false }
+    var succeeded: Bool {
+        exitCode == 0 && timedOut == false && cancelled == false && outputLimitExceeded == false
+    }
 }
 
 enum CommandRunError: Error, Equatable, LocalizedError {
@@ -77,11 +81,20 @@ actor CommandRunner: CommandRunning {
     static let stdoutExcerptBytes = 64 * 1024
     /// How long a terminated command gets before `SIGKILL`.
     static let killGrace: TimeInterval = 2
+    /// Per-file ceiling for stdout.log and stderr.log. The files are the only
+    /// unbounded output, so a runaway command is stopped instead of filling the disk.
+    static let defaultMaxLogBytes: Int64 = 256 * 1024 * 1024
+    private static let logCheckInterval: DispatchTimeInterval = .milliseconds(500)
 
+    private let maxLogBytes: Int64
     private var running: [UUID: ProcessRun] = [:]
     private let waiterQueue = DispatchQueue(label: "MakiDesk.CommandRunner.wait", qos: .utility,
                                             attributes: .concurrent)
     private let timerQueue = DispatchQueue(label: "MakiDesk.CommandRunner.timer", qos: .utility)
+
+    init(maxLogBytes: Int64 = CommandRunner.defaultMaxLogBytes) {
+        self.maxLogBytes = maxLogBytes
+    }
 
     func run(_ command: ResolvedCommand, id: UUID, includeStdout: Bool = false,
              cancellation: CommandCancellation? = nil) async throws -> CommandResult {
@@ -101,7 +114,8 @@ actor CommandRunner: CommandRunning {
         running[id] = process
 
         let timeoutItem = scheduleTimeout(command: command, process: process)
-
+        let logWatch = watchLogs(of: process, files: [stdoutFile, stderrFile])
+        let limitMiB = max(1, maxLogBytes / (1024 * 1024))
         let result: CommandResult = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 waiterQueue.async {
@@ -130,8 +144,10 @@ actor CommandRunner: CommandRunning {
                         stderrFile: stderrFile,
                         stdoutExcerpt: includeStdout ? Self.excerpt(of: stdoutFile,
                                                                     limit: Self.stdoutExcerptBytes) : nil,
-                        stderrExcerpt: Self.excerpt(of: stderrFile,
-                                                    limit: Self.stderrExcerptBytes) ?? ""
+                        stderrExcerpt: flags.outputLimitExceeded
+                            ? "Output exceeded \(limitMiB) MiB; the command was stopped."
+                            : Self.excerpt(of: stderrFile, limit: Self.stderrExcerptBytes) ?? "",
+                        outputLimitExceeded: flags.outputLimitExceeded
                     ))
                 }
             }
@@ -140,6 +156,7 @@ actor CommandRunner: CommandRunning {
         }
 
         timeoutItem?.cancel()
+        logWatch.cancel()
         running[id] = nil
         return result
     }
@@ -169,6 +186,21 @@ actor CommandRunner: CommandRunning {
         }
         timerQueue.asyncAfter(deadline: .now() + command.timeout, execute: item)
         return item
+    }
+
+    private func watchLogs(of process: ProcessRun, files: [URL]) -> DispatchSourceTimer {
+        let limit = maxLogBytes
+        let timer = DispatchSource.makeTimerSource(queue: timerQueue)
+        timer.schedule(deadline: .now() + Self.logCheckInterval, repeating: Self.logCheckInterval)
+        timer.setEventHandler { [weak process] in
+            let exceeded = files.contains { file in
+                let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.int64Value
+                return (size ?? 0) > limit
+            }
+            if exceeded { process?.terminate(.outputLimit, grace: Self.killGrace) }
+        }
+        timer.resume()
+        return timer
     }
 
     private func spawn(_ command: ResolvedCommand, stdout: URL, stderr: URL) throws -> pid_t {
@@ -268,13 +300,14 @@ actor CommandRunner: CommandRunning {
 /// One live child. The lock protects the flags read by the waiter and written
 /// by the timeout/cancel paths on other queues.
 private final class ProcessRun: @unchecked Sendable {
-    enum Termination { case timedOut, cancelled }
+    enum Termination { case timedOut, cancelled, outputLimit }
 
     let pid: pid_t
     private let lock = NSLock()
     private var isFinished = false
     private var timedOut = false
     private var cancelled = false
+    private var outputLimitExceeded = false
     private var terminating = false
     private var escalation: DispatchWorkItem?
 
@@ -285,13 +318,13 @@ private final class ProcessRun: @unchecked Sendable {
     /// Marks the child finished and returns the final flags. Only the first
     /// call wins, so a timeout that fires exactly as the child exits keeps the
     /// real exit status meaningful.
-    func finish() -> (timedOut: Bool, cancelled: Bool) {
+    func finish() -> (timedOut: Bool, cancelled: Bool, outputLimitExceeded: Bool) {
         lock.lock()
         isFinished = true
         let shouldKillRemainingGroup = terminating
         escalation?.cancel()
         escalation = nil
-        let result = (timedOut, cancelled)
+        let result = (timedOut, cancelled, outputLimitExceeded)
         lock.unlock()
         // The leader may exit on SIGTERM while a child ignores it. Reap the
         // leader, then make sure the rest of its process group also terminates.
@@ -311,6 +344,7 @@ private final class ProcessRun: @unchecked Sendable {
         switch reason {
         case .timedOut: timedOut = true
         case .cancelled: cancelled = true
+        case .outputLimit: outputLimitExceeded = true
         }
         let escalation = DispatchWorkItem { [weak self] in self?.escalateIfLeaderRunning() }
         self.escalation = escalation
