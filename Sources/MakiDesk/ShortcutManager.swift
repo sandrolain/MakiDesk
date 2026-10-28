@@ -29,24 +29,91 @@ final class ShortcutManager {
     static let ctrlOpt = ShortcutDefinitions.ctrlOpt
 
     /// The registered rows: every global definition, in catalog order.
-    private static let bindings: [ShortcutDefinition] = ShortcutDefinitions.all.filter(\.isGlobal)
+    private static let bindings: [ShortcutDefinition] = ShortcutDefinitions.global
 
     /// Rows whose hot key could not be registered because another app owns it.
     /// The menu remains the fallback and the catalog says so (T53).
     private(set) var blockedShortcutIDs: Set<String> = []
+    /// Rows the user turned off; they own no hot key at all.
+    private(set) var disabledShortcutIDs: Set<String> = []
+    /// The table in force, for diagnostics and for the menu labels.
+    private(set) var currentBindings = ShortcutBindings.defaults
 
-    /// The key a command shows and uses, straight from the table.
-    static func display(for action: WindowController.ShortcutAction) -> String? {
-        ShortcutDefinitions.all.first { $0.action == action && $0.isGlobal }?.display
+    /// The key a command shows and uses. Menus pass the table in force, so a
+    /// remapped row updates as soon as the store changes (T53).
+    static func display(for action: WindowController.ShortcutAction,
+                        bindings: ShortcutBindings = .defaults) -> String? {
+        bindings.display(forAction: action)
     }
 
     var blockedTitles: [String] {
-        ShortcutDefinitions.all
+        ShortcutDefinitions.global
             .filter { blockedShortcutIDs.contains($0.id) }
             .map(\.title)
     }
 
-    func start() {
+    func start(bindings: ShortcutBindings) {
+        installHandlerIfNeeded()
+        reload(bindings)
+    }
+
+    /// Re-registers every row from `bindings`. Called once at launch and again
+    /// after each change, so a remapped combination works without a restart
+    /// (T53). A row that fails here is reported as blocked and keeps the menu
+    /// as its way in.
+    func reload(_ bindings: ShortcutBindings) {
+        installHandlerIfNeeded()
+        hotKeys.forEach { UnregisterEventHotKey($0) }
+        hotKeys.removeAll()
+        actions.removeAll()
+        blockedShortcutIDs.removeAll()
+        disabledShortcutIDs.removeAll()
+        registeredCount = 0
+        failedCount = 0
+        currentBindings = bindings
+
+        for (index, definition) in Self.bindings.enumerated() {
+            let id = UInt32(index + 1)
+            if bindings.isDisabled(definition.id) {
+                disabledShortcutIDs.insert(definition.id)
+                continue
+            }
+            guard let binding = bindings.binding(for: definition.id),
+                  let action = definition.action else { continue }
+            var ref: EventHotKeyRef?
+            let status = RegisterEventHotKey(
+                UInt32(binding.keyCode), UInt32(binding.normalized.modifiers),
+                EventHotKeyID(signature: Self.signature, id: id),
+                GetApplicationEventTarget(), 0, &ref
+            )
+            if status == noErr, let ref {
+                hotKeys.append(ref)
+                actions[id] = action
+                registeredCount += 1
+            } else {
+                failedCount += 1
+                blockedShortcutIDs.insert(definition.id)
+            }
+        }
+        makiLog.notice("hotkeys registered=\(self.registeredCount, privacy: .public) blocked=\(self.failedCount, privacy: .public) off=\(self.disabledShortcutIDs.count, privacy: .public)")
+    }
+
+    /// Whether the system will let us own this combination right now. It
+    /// registers and immediately unregisters, so the answer is the one a
+    /// `reload` would get; the recorder asks before saving anything.
+    func canRegister(_ binding: ShortcutBinding) -> Bool {
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(binding.keyCode), UInt32(binding.normalized.modifiers),
+            EventHotKeyID(signature: Self.signature, id: 0),
+            GetApplicationEventTarget(), 0, &ref
+        )
+        guard status == noErr, let ref else { return false }
+        UnregisterEventHotKey(ref)
+        return true
+    }
+
+    private func installHandlerIfNeeded() {
         guard handlerRef == nil else { return }
         var specs = [
             EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
@@ -82,26 +149,6 @@ final class ShortcutManager {
             Unmanaged.passUnretained(self).toOpaque(),
             &handlerRef
         )
-
-        for (index, definition) in Self.bindings.enumerated() {
-            let id = UInt32(index + 1)
-            guard let key = definition.keyCode, let action = definition.action else { continue }
-            var ref: EventHotKeyRef?
-            let status = RegisterEventHotKey(
-                UInt32(key), UInt32(definition.modifiers),
-                EventHotKeyID(signature: Self.signature, id: id),
-                GetApplicationEventTarget(), 0, &ref
-            )
-            if status == noErr, let ref {
-                hotKeys.append(ref)
-                actions[id] = action
-                registeredCount += 1
-            } else {
-                failedCount += 1
-                blockedShortcutIDs.insert(definition.id)
-            }
-        }
-        makiLog.notice("hotkeys registered=\(self.registeredCount, privacy: .public) blocked=\(self.failedCount, privacy: .public)")
     }
 
     // MARK: - On-demand hot keys (press and release)

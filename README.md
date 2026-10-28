@@ -201,7 +201,9 @@ Taskfile commands and the signing notes.
 Every command, including the panels' own keys, is in the **Keyboard Shortcuts**
 window (menu bar or Settings ▸ General) and in the [usage guide](docs/USAGE.md#keyboard-shortcuts).
 The two families are written down: `⌥` opens a panel, `⌃⌥` acts on windows and
-the desktop, and `⇧` marks an alternate action.
+the desktop, and `⇧` marks an alternate action. Click a key there to record a
+new combination, turn a command off or restore the defaults; the choice is
+saved in `shortcuts.json` and survives a restart.
 
 ## Documentation
 

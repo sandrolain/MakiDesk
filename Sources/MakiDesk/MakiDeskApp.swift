@@ -30,9 +30,15 @@ struct MakiDeskApp: App {
         _ action: WindowController.ShortcutAction,
         icon: String? = nil
     ) -> some View {
-        menuButton(title, keys: ShortcutManager.display(for: action), icon: icon) {
+        menuButton(title, keys: shortcutKeys(action), icon: icon) {
             store.applyShortcut(action)
         }
+    }
+
+    /// The keys a menu row shows, read from the table in force: a remapped
+    /// shortcut is reflected as soon as the store changes (T53).
+    private func shortcutKeys(_ action: WindowController.ShortcutAction) -> String? {
+        ShortcutManager.display(for: action, bindings: store.shortcutBindings)
     }
 
     private func menuButton(
@@ -64,19 +70,19 @@ struct MakiDeskApp: App {
 
             // The four panels are one click away; everything else lives in a
             // menu with a single level of nesting.
-            menuButton("Search Windows", keys: "⌥Space", icon: "magnifyingglass") {
+            menuButton("Search Windows", keys: shortcutKeys(.searchWindows), icon: "magnifyingglass") {
                 store.applyShortcut(.searchWindows)
             }
-            menuButton("Notes", keys: "⌥N", icon: "note.text") {
+            menuButton("Notes", keys: shortcutKeys(.toggleNotes), icon: "note.text") {
                 NotesController.shared.show()
             }
-            menuButton("Clipboard History", keys: "⌥V", icon: "doc.on.clipboard") {
+            menuButton("Clipboard History", keys: shortcutKeys(.clipboardHistory), icon: "doc.on.clipboard") {
                 ClipboardController.shared.toggle()
             }
-            menuButton("Shelf", keys: "⌃⌥D", icon: "tray.and.arrow.down") {
+            menuButton("Shelf", keys: shortcutKeys(.toggleShelf), icon: "tray.and.arrow.down") {
                 ShelfController.shared.toggle()
             }
-            menuButton("Screenshots", keys: ShortcutManager.display(for: .openScreenshots),
+            menuButton("Screenshots", keys: shortcutKeys(.openScreenshots),
                        icon: "menubar.dock.rectangle") {
                 ScreenshotLibraryController.shared.show()
             }
@@ -128,14 +134,14 @@ struct MakiDeskApp: App {
                 Divider()
                 menuButton(
                     store.focusBorderEnabled ? "Hide Focus Border" : "Show Focus Border",
-                    keys: ShortcutManager.display(for: .toggleFocusBorder),
+                    keys: shortcutKeys(.toggleFocusBorder),
                     icon: "rectangle.dashed"
                 ) {
                     store.updateFocusBorderEnabled(!store.focusBorderEnabled)
                 }
                 menuButton(
                     store.showMiniMap ? "Hide Mini Map" : "Show Mini Map",
-                    keys: ShortcutManager.display(for: .toggleMiniMap),
+                    keys: shortcutKeys(.toggleMiniMap),
                     icon: "rectangle.inset.filled"
                 ) {
                     store.updateMiniMapVisibility(!store.showMiniMap)
@@ -170,7 +176,7 @@ struct MakiDeskApp: App {
                 if let advice = store.pendingLayout {
                     Divider()
                     menuButton("Apply Suggested Layout (\(advice.layout.label))",
-                               keys: ShortcutManager.display(for: .applySuggestedLayout)) {
+                               keys: shortcutKeys(.applySuggestedLayout)) {
                         store.acceptPendingLayout()
                     }
                     menuButton("Dismiss Suggested Layout") {
@@ -186,7 +192,7 @@ struct MakiDeskApp: App {
                     Text("In use: \(scene)")
                     if store.activeGroupSlot != nil {
                         menuButton("Leave Group",
-                                   keys: ShortcutManager.display(for: .leaveGroup)) {
+                                   keys: shortcutKeys(.leaveGroup)) {
                             store.leaveGroup()
                         }
                     }
@@ -196,7 +202,7 @@ struct MakiDeskApp: App {
                 // replace the nine nested ones.
                 ForEach(1...9, id: \.self) { slot in
                     menuButton(store.groupMenuLabel(slot),
-                               keys: ShortcutManager.display(for: .recallGroup(slot))) {
+                               keys: shortcutKeys(.recallGroup(slot))) {
                         store.recallGroup(slot: slot)
                     }
                     .disabled(store.groupIsEmpty(slot))
@@ -205,7 +211,7 @@ struct MakiDeskApp: App {
                 Menu("Add Front Window to Group") {
                     ForEach(1...9, id: \.self) { slot in
                         menuButton(store.groupMenuLabel(slot),
-                                   keys: ShortcutManager.display(for: .assignToGroup(slot))) {
+                                   keys: shortcutKeys(.assignToGroup(slot))) {
                             store.toggleGroupMembership(slot: slot)
                         }
                     }
@@ -233,7 +239,7 @@ struct MakiDeskApp: App {
                 Text(store.sceneTitle.map { "In use: \($0)" } ?? "Nothing in use")
                 Divider()
                 menuButton("Focus Selected Windows",
-                           keys: ShortcutManager.display(for: .focusSelection)) {
+                           keys: shortcutKeys(.focusSelection)) {
                     store.focus(on: store.lastLayoutSelection)
                 }
                 .disabled(store.lastLayoutSelection.isEmpty)
@@ -247,11 +253,11 @@ struct MakiDeskApp: App {
 
             Menu {
                 menuButton("Designate Front Window",
-                           keys: ShortcutManager.display(for: .peekDesignate)) {
+                           keys: shortcutKeys(.peekDesignate)) {
                     store.togglePeekDesignation()
                 }
                 menuButton("Clear Peek (bring the window back)",
-                           keys: ShortcutManager.display(for: .clearPeek)) {
+                           keys: shortcutKeys(.clearPeek)) {
                     store.clearPeek()
                 }
                 .disabled(store.peekName == nil)
@@ -263,7 +269,7 @@ struct MakiDeskApp: App {
             }
 
             Menu {
-                menuButton("Recognize Text from Selected Area", keys: "⌃⌥O",
+                menuButton("Recognize Text from Selected Area", keys: shortcutKeys(.recognizeText),
                            icon: "text.viewfinder") {
                     TextRecognitionController.shared.recognizeArea(
                         options: store.textRecognitionOptions,
@@ -271,7 +277,7 @@ struct MakiDeskApp: App {
                         reveal: store.ocrRevealHistory
                     )
                 }
-                menuButton("Pick a Color from the Screen", keys: "⌃⌥E",
+                menuButton("Pick a Color from the Screen", keys: shortcutKeys(.sampleColor),
                            icon: "eyedropper") {
                     ColorSamplerController.shared.sample()
                 }
@@ -282,7 +288,7 @@ struct MakiDeskApp: App {
             }
 
             Menu {
-                menuButton("Measure an Area…", keys: "⌃⌥R", icon: "ruler") {
+                menuButton("Measure an Area…", keys: shortcutKeys(.measureArea), icon: "ruler") {
                     MeasureController.shared.start()
                 }
                 menuButton("Clear Measurements", icon: "xmark.circle") {
@@ -307,14 +313,14 @@ struct MakiDeskApp: App {
             Divider()
 
             menuButton("Keyboard Shortcuts…",
-                       keys: ShortcutManager.display(for: .openKeyboardShortcuts),
+                       keys: shortcutKeys(.openKeyboardShortcuts),
                        icon: "keyboard") {
                 ShortcutsWindowController.shared.show()
             }
             menuButton("Notification History…", icon: "bell") {
                 NotificationHistoryController.shared.show()
             }
-            menuButton("Settings…", keys: ShortcutManager.display(for: .openSettings),
+            menuButton("Settings…", keys: shortcutKeys(.openSettings),
                        icon: "gearshape") {
                 store.applyShortcut(.openSettings)
             }

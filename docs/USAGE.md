@@ -45,8 +45,8 @@ itself, and you can revoke them at any time in **System Settings ▸ Privacy &
 Security**. The app is not sandboxed; see [Privacy](PRIVACY.md).
 
 If a shortcut is taken by another app, Settings ▸ General shows how many were
-registered and how many were blocked. Close the other app or change its
-shortcut; MakiDesk cannot override it.
+registered and how many were blocked. Record a different combination in
+**Keyboard Shortcuts…** (or close the other app); MakiDesk cannot override it.
 
 ## Window tiling
 
@@ -565,6 +565,26 @@ app. The palette's own keys are listed in the same window (arrows, `↑`/`↓` i
 the Applications shelf, `↩`, Space, `Esc`, `⌘1…9`, `⌥1…9`, `⌥Q`, `⌥⇧Q`, `⌥M`,
 `⌫`).
 
+### Changing a shortcut
+
+Click the key next to a global command (or its `⋯` menu ▸ **Record new
+shortcut…**) and press the combination you want. **Esc** cancels, `⌫` turns the
+command off without closing the window. A combination needs `⌃` or `⌥`: `⌘`
+alone would take a standard shortcut from the front app, and `⇧` alone would
+take ordinary typing.
+
+MakiDesk refuses a combination that another command already uses and names the
+row that owns it, and it refuses `⌃⌥H`, which is held for the peek. A row
+another app owns is marked *In use by another app*: record a different
+combination for it. On any refusal the previous shortcut stays in force.
+
+The `⋯` menu also has **Turn off** and **Restore default**; the arrow on a
+changed row restores that one, and **Restore all** at the top puts every
+shortcut back. Changes take effect immediately and are stored in
+`shortcuts.json` in the Application Support folder; a file that cannot be read
+is set aside as `shortcuts.json.bak` and the defaults are used, so a bad file
+never leaves the app without shortcuts.
+
 ## Troubleshooting
 
 **Accessibility is required after a rebuild.** macOS ties the permission to the
@@ -587,8 +607,9 @@ instead of leaving a hole. Note and Safari are retried specially.
 window between Spaces. MakiDesk only moves windows on the current desktop.
 
 **Where is my data?** Notes in `~/Library/Application Support/MakiDesk/Note/`;
-groups in `groups.json` in the same Support folder; clipboard and shelf are
-memory/temporary. The reset sheet can remove them.
+groups in `groups.json` and remapped shortcuts in `shortcuts.json` in the same
+Support folder; clipboard and shelf are memory/temporary. The reset sheet can
+remove them.
 
 **Uninstall.** Quit MakiDesk, drag it to the Trash, then remove
 `~/Library/Application Support/MakiDesk/` if you do not want the data. Revoke

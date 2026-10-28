@@ -55,6 +55,12 @@ final class WorkspaceStore {
     /// Which hot keys another app owns, for the catalog and Settings (T53).
     var blockedShortcutIDs: Set<String> { shortcutManager?.blockedShortcutIDs ?? [] }
     var blockedShortcutTitles: [String] { shortcutManager?.blockedTitles ?? [] }
+
+    /// The shortcuts in force: the table plus the user's overrides (T53). The
+    /// window, the menu and the catalog read this one value.
+    var shortcutBindings = ShortcutBindings.defaults
+    /// What happened to `shortcuts.json` at launch, so the editor can say it.
+    var shortcutFileState: ShortcutStore.State = .missing
     var gap = (UserDefaults.standard.object(forKey: "windowGap") == nil
         ? 12
         : UserDefaults.standard.double(forKey: "windowGap")).clamped(to: 0...80)
@@ -434,10 +440,16 @@ final class WorkspaceStore {
     }
 
     func startGlobalShortcuts() {
+        let snapshot = ShortcutStore().load()
+        shortcutBindings = snapshot.bindings
+        shortcutFileState = snapshot.state
+        if case let .futureVersion(version) = snapshot.state {
+            makiLog.error("shortcuts: file from a newer version \(version, privacy: .public); defaults in use")
+        }
         let manager = ShortcutManager { [weak self] action in
             self?.applyShortcut(action)
         }
-        manager.start()
+        manager.start(bindings: snapshot.bindings)
         // The peek's hold key (T16) needs both halves of the press, so it lives
         // apart from the fixed table above.
         if manager.registerPeekHold(
@@ -449,6 +461,100 @@ final class WorkspaceStore {
         shortcutManager = manager
         shortcutsRegistered = manager.registeredCount
         shortcutsBlocked = manager.failedCount
+    }
+
+    // MARK: - Remapping (T53)
+
+    /// Records a combination for one row. Validation, the system's answer and
+    /// the save all happen before anything is announced; on any failure the
+    /// previous table stays in force, so a row is never left mute.
+    @discardableResult
+    func setShortcut(_ binding: ShortcutBinding, for id: String) -> ShortcutEditResult {
+        guard let definition = ShortcutDefinitions.definition(id: id), definition.isGlobal else {
+            return .rejected(.noKey)
+        }
+        if let error = shortcutBindings.validationError(for: binding, for: id) {
+            return .rejected(error)
+        }
+        let previous = shortcutBindings
+        var updated = previous
+        updated.set(binding, for: id)
+        guard updated != previous else { return .applied }
+        // Asking the system first keeps a taken combination from replacing a
+        // working one. The row's own combination is already ours, so skip the
+        // probe in that case.
+        if let manager = shortcutManager,
+           binding.normalized != previous.binding(for: id),
+           manager.canRegister(binding) == false {
+            return .rejected(.unavailableBySystem)
+        }
+        guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
+        if shortcutManager?.blockedShortcutIDs.contains(id) == true {
+            _ = applyShortcutBindings(previous)
+            return .rejected(.unavailableBySystem)
+        }
+        announceShortcutChange("Shortcut updated · \(definition.title)",
+                               detail: shortcutBindings.binding(for: id)?.display)
+        return .applied
+    }
+
+    /// Turns one command off: it keeps its row in the catalog and the menu,
+    /// but owns no hot key until it is recorded again.
+    @discardableResult
+    func disableShortcut(_ id: String) -> ShortcutEditResult {
+        guard let definition = ShortcutDefinitions.definition(id: id), definition.isGlobal else {
+            return .rejected(.noKey)
+        }
+        var updated = shortcutBindings
+        updated.disable(id)
+        guard updated != shortcutBindings else { return .applied }
+        guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
+        announceShortcutChange("Shortcut turned off · \(definition.title)", detail: nil)
+        return .applied
+    }
+
+    @discardableResult
+    func restoreShortcut(_ id: String) -> ShortcutEditResult {
+        guard let definition = ShortcutDefinitions.definition(id: id), definition.isGlobal else {
+            return .rejected(.noKey)
+        }
+        var updated = shortcutBindings
+        updated.restore(id)
+        guard updated != shortcutBindings else { return .applied }
+        guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
+        announceShortcutChange("Shortcut restored · \(definition.title)",
+                               detail: shortcutBindings.binding(for: id)?.display)
+        return .applied
+    }
+
+    /// Puts the whole table back to the one in `ShortcutDefinitions`.
+    @discardableResult
+    func restoreAllShortcuts() -> ShortcutEditResult {
+        guard shortcutBindings.modifiedCount > 0 else { return .applied }
+        var updated = shortcutBindings
+        updated.restoreAll()
+        guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
+        announceShortcutChange("Shortcuts restored", detail: nil)
+        return .applied
+    }
+
+    private func applyShortcutBindings(_ updated: ShortcutBindings) -> Bool {
+        if case let .failure(error) = ShortcutStore().save(updated) {
+            makiLog.error("shortcuts: save failed (\(error.localizedDescription, privacy: .public))")
+            status = "Shortcut not saved"
+            return false
+        }
+        shortcutBindings = updated
+        shortcutFileState = .loaded
+        shortcutManager?.reload(updated)
+        shortcutsRegistered = shortcutManager?.registeredCount ?? 0
+        shortcutsBlocked = shortcutManager?.failedCount ?? 0
+        return true
+    }
+
+    private func announceShortcutChange(_ title: String, detail: String?) {
+        HUDController.shared.show(title, symbol: "keyboard", detail: detail)
+        status = detail.map { "\(title) · \($0)" } ?? title
     }
 
     func updateGap(_ value: Double) {
@@ -739,6 +845,17 @@ final class WorkspaceStore {
         updateAnimationDuration(0.22)
         updateFocusBorderEnabled(true)
         updateFocusBorderWidth(FocusBorder.defaultWidth)
+        // A remapped shortcut is settings too: put the table back and drop the
+        // file. A file from a newer version stays untouched (T53).
+        let shortcutStore = ShortcutStore()
+        if shortcutStore.load().canSave {
+            _ = shortcutStore.remove()
+            shortcutBindings = .defaults
+            shortcutFileState = shortcutStore.load().state
+            shortcutManager?.reload(.defaults)
+            shortcutsRegistered = shortcutManager?.registeredCount ?? 0
+            shortcutsBlocked = shortcutManager?.failedCount ?? 0
+        }
     }
 
     /// Frame of the overlay at its configured position (for placement math).

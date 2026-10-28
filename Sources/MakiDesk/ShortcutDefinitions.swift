@@ -111,6 +111,24 @@ enum ShortcutDefinitions {
 
     static let all: [ShortcutDefinition] = sections.flatMap(\.definitions)
 
+    /// The rows that own a Carbon hot key; the others explain a gesture.
+    static let global: [ShortcutDefinition] = all.filter(\.isGlobal)
+
+    /// Lookup by stable id, used by the remapping table and the recorder. Built
+    /// without `uniqueKeysWithValues` so a duplicate id can never crash at
+    /// launch; a test still fails on duplicates.
+    static func definition(id: String) -> ShortcutDefinition? {
+        byID[id]
+    }
+
+    private static let byID: [String: ShortcutDefinition] = {
+        var table: [String: ShortcutDefinition] = [:]
+        for definition in all where table[definition.id] == nil {
+            table[definition.id] = definition
+        }
+        return table
+    }()
+
     private static func def(_ id: String, _ title: String, section: String,
                             key: Int, modifiers: Int = ctrlOpt,
                             action: WindowController.ShortcutAction,
