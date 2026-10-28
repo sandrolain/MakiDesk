@@ -451,7 +451,15 @@ to the moved filename.
 
 The segmented controls sort captures newest-first or oldest-first and group
 them as one grid, by month, or by week. The thumbnail-size slider changes the
-card size; sort order, grouping and size are remembered.
+card size; sort order, grouping and size are remembered. Thumbnails are decoded
+off the main thread and kept in a 32 MiB cache, released when the library
+closes.
+
+**Videos** in the same toolbar also lists screen recordings (`.mov`, `.mp4`):
+they get a film badge and their length, Quick Look plays them, and the same
+move, trash and drag actions apply. It is off by default. If macOS has not
+granted access to the folder (Desktop, Documents, external volumes), the empty
+state explains it and offers **Open Privacy Settings**.
 
 ## Text from the screen
 

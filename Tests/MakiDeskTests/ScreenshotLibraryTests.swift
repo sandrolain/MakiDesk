@@ -97,6 +97,113 @@ final class ScreenshotLibraryTests: XCTestCase {
         model.hide()
     }
 
+    // MARK: - T48: thumbnails, recordings and folder access
+
+    func testThumbnailCacheEvictsTheLeastRecentlyUsedWithinItsBudget() {
+        let cache = ScreenshotThumbnailCache(byteLimit: 100)
+        let first = NSImage(size: NSSize(width: 1, height: 1))
+        let second = NSImage(size: NSSize(width: 1, height: 1))
+        let third = NSImage(size: NSSize(width: 1, height: 1))
+
+        cache.insert(first, forKey: "a", cost: 40)
+        cache.insert(second, forKey: "b", cost: 40)
+        XCTAssertEqual(cache.count, 2)
+        XCTAssertEqual(cache.currentCost, 80)
+        XCTAssertNotNil(cache.image(forKey: "a"), "reading a refreshes its recency")
+
+        cache.insert(third, forKey: "c", cost: 40)
+        XCTAssertEqual(cache.count, 2)
+        XCTAssertEqual(cache.currentCost, 80)
+        XCTAssertNotNil(cache.image(forKey: "a"))
+        XCTAssertNil(cache.image(forKey: "b"), "the least recently used entry goes")
+        XCTAssertNotNil(cache.image(forKey: "c"))
+
+        // An image larger than the whole budget would evict everything and
+        // still not fit: it is simply not cached.
+        cache.insert(NSImage(size: NSSize(width: 1, height: 1)), forKey: "huge", cost: 101)
+        XCTAssertNil(cache.image(forKey: "huge"))
+        XCTAssertEqual(cache.currentCost, 80)
+
+        cache.removeAll()
+        XCTAssertEqual(cache.count, 0)
+        XCTAssertEqual(cache.currentCost, 0)
+    }
+
+    func testTheScanCanIncludeRecordingsAndKeepsTheirNames() throws {
+        let folder = temporaryFolder("Recordings")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        for name in ["Screen Recording 2026-01-01.mov", "Screenshot 2026-01-01.png",
+                     "holiday.mov", "movie.mp4"] {
+            XCTAssertTrue(FileManager.default.createFile(atPath: folder.appendingPathComponent(name).path,
+                                                         contents: Data([0, 1, 2])))
+        }
+
+        let result = ScreenshotLibraryModel.scan(
+            path: folder.path,
+            prefixes: ["screenshot", "screen recording"],
+            extensions: ["png", "mov", "mp4"],
+            indexedPaths: []
+        )
+        XCTAssertNil(result.error)
+        XCTAssertEqual(Set(result.files.map(\.name)),
+                       ["Screen Recording 2026-01-01.mov", "Screenshot 2026-01-01.png"])
+        XCTAssertTrue(result.files.first { $0.name.hasSuffix(".mov") }?.isVideo == true)
+        XCTAssertFalse(result.files.first { $0.name.hasSuffix(".png") }?.isVideo == true)
+    }
+
+    func testAPermissionRefusalIsRecognised() {
+        let cocoa = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError)
+        let posix = NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))
+        let other = NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError)
+
+        XCTAssertTrue(ScreenshotLibraryModel.isPermissionDenied(cocoa))
+        XCTAssertTrue(ScreenshotLibraryModel.isPermissionDenied(posix))
+        XCTAssertFalse(ScreenshotLibraryModel.isPermissionDenied(other))
+        XCTAssertFalse(ScreenshotLibraryModel.isPermissionDenied(
+            NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))))
+    }
+
+    func testRefreshingKeepsSelectionWhenANewCaptureArrives() async throws {
+        let folder = temporaryFolder("Incremental")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let older = ScreenshotFile(path: folder.appendingPathComponent("Screenshot 1.png").path,
+                                   name: "Screenshot 1.png",
+                                   modified: Date(timeIntervalSince1970: 100), byteCount: 10)
+        let newer = ScreenshotFile(path: folder.appendingPathComponent("Screenshot 2.png").path,
+                                   name: "Screenshot 2.png",
+                                   modified: Date(timeIntervalSince1970: 200), byteCount: 20)
+        let box = ScreenshotScanBox(ScreenshotScan(files: [older], error: nil))
+        let suite = "MakiDeskScreenshotDefaults-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = ScreenshotLibraryModel(folderURL: folder, defaults: defaults,
+                                           systemFolder: { folder },
+                                           index: FakeScreenshotIndex()) { _, _, _, _ in
+            box.current()
+        }
+
+        model.show()
+        defer { model.hide() }
+        try await waitUntil { model.files.count == 1 }
+        model.select(older, extending: false)
+
+        box.set(ScreenshotScan(files: [older, newer], error: nil))
+        model.refresh()
+        try await waitUntil { model.files.count == 2 }
+
+        XCTAssertEqual(model.visibleFiles.map(\.name), ["Screenshot 2.png", "Screenshot 1.png"])
+        XCTAssertEqual(model.selectedPaths, [older.path],
+                       "a new capture must not drop the selection")
+    }
+
+    private func waitUntil(_ condition: @escaping @MainActor () -> Bool) async throws {
+        for _ in 0..<100 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTFail("condition not met in time")
+    }
+
     // MARK: - T48: system folder, Spotlight and scan merge
 
     func testScanMergesRenamedCapturesFromTheIndexWithoutDuplicates() throws {
@@ -281,5 +388,25 @@ private final class FakeScreenshotIndex: ScreenshotIndexProvider {
 
     func stop() {
         state = .idle
+    }
+}
+
+/// A scan result the test can replace between refreshes.
+private final class ScreenshotScanBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scan: ScreenshotScan
+
+    init(_ scan: ScreenshotScan) { self.scan = scan }
+
+    func set(_ scan: ScreenshotScan) {
+        lock.lock()
+        self.scan = scan
+        lock.unlock()
+    }
+
+    func current() -> ScreenshotScan {
+        lock.lock()
+        defer { lock.unlock() }
+        return scan
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import CoreGraphics
 import ImageIO
 import Observation
@@ -6,7 +7,7 @@ import QuickLookUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ScreenshotFile: Identifiable, Sendable {
+struct ScreenshotFile: Identifiable, Equatable, Sendable {
     let path: String
     let name: String
     let modified: Date
@@ -15,6 +16,12 @@ struct ScreenshotFile: Identifiable, Sendable {
     var id: String { path }
     var url: URL { URL(fileURLWithPath: path) }
     var thumbnailRevision: String { "\(path)|\(modified.timeIntervalSince1970)|\(byteCount)" }
+
+    /// Screen recordings share the folder with captures (T48). They have no
+    /// still image to decode, so the card shows a film icon and a duration.
+    var isVideo: Bool {
+        ["mov", "mp4"].contains(url.pathExtension.lowercased())
+    }
 }
 
 enum ScreenshotSortOrder: String, CaseIterable, Identifiable {
@@ -41,6 +48,9 @@ struct ScreenshotSection: Identifiable {
 struct ScreenshotScan: Sendable {
     let files: [ScreenshotFile]
     let error: String?
+    /// The folder could not be read for lack of permission, not for another
+    /// reason: the view offers the Files and Folders pane instead of a dead end.
+    var needsPermission = false
 }
 
 @Observable
@@ -57,6 +67,11 @@ final class ScreenshotLibraryModel {
     private(set) var isOperating = false
     private(set) var indexState: ScreenshotIndexState = .idle
     private(set) var message: String?
+    /// The scan failed because macOS has not granted access to this folder
+    /// (Desktop, Documents and removable volumes go through TCC).
+    private(set) var needsFileAccess = false
+    /// Whether screen recordings are listed. Off by default (T48).
+    var showsRecordings = false
     var searchText = ""
     var sortOrder: ScreenshotSortOrder = .newestFirst
     var grouping: ScreenshotGrouping = .month
@@ -81,6 +96,13 @@ final class ScreenshotLibraryModel {
     private static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "tif", "tiff", "pdf"
     ]
+    /// `⌘⇧5` can also record a movie into the same folder (T48).
+    private static let videoExtensions: Set<String> = ["mov", "mp4"]
+    /// macOS names recordings in the system language, not "Screenshot…".
+    private static let videoPrefixes = [
+        "screen recording", "registrazione schermo", "bildschirmaufnahme",
+        "grabación de pantalla", "enregistrement d'écran", "录屏", "画面収録"
+    ]
 
     init(folderURL overrideFolderURL: URL? = nil,
          defaults: UserDefaults = .standard,
@@ -91,6 +113,7 @@ final class ScreenshotLibraryModel {
         self.systemFolder = systemFolder
         spotlight = index ?? ScreenshotSpotlightIndex()
         sortOrder = ScreenshotSortOrder(rawValue: defaults.string(forKey: "screenshotLibrarySort") ?? "") ?? .newestFirst
+        showsRecordings = defaults.object(forKey: "screenshotLibraryShowsRecordings") as? Bool ?? false
         grouping = ScreenshotGrouping(rawValue: defaults.string(forKey: "screenshotLibraryGrouping") ?? "") ?? .month
         thumbnailScale = min(max(defaults.object(forKey: "screenshotLibraryScale") as? Double ?? 1, 0.75), 1.6)
         if let overrideFolderURL {
@@ -193,6 +216,9 @@ final class ScreenshotLibraryModel {
         refreshWork = nil
         stopWatching()
         stopIndexing()
+        // Thumbnails are derived from screen contents; release them with the
+        // window instead of keeping a bounded cache alive (T48).
+        ScreenshotThumbnailCache.shared.removeAll()
     }
 
     func select(_ file: ScreenshotFile, extending: Bool) {
@@ -233,6 +259,21 @@ final class ScreenshotLibraryModel {
     func setThumbnailScale(_ value: Double) {
         thumbnailScale = value
         defaults.set(value, forKey: "screenshotLibraryScale")
+    }
+
+    /// Lists or hides screen recordings; persisted, off by default (T48).
+    func setShowsRecordings(_ value: Bool) {
+        guard showsRecordings != value else { return }
+        showsRecordings = value
+        defaults.set(value, forKey: "screenshotLibraryShowsRecordings")
+        refresh()
+    }
+
+    /// Opens the pane where the user grants access to Desktop and Documents.
+    func openFileAccessSettings() {
+        guard let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     func chooseFolder(_ url: URL) {
@@ -284,7 +325,9 @@ final class ScreenshotLibraryModel {
         let path = folderURL.path
         isLoading = true
         let prefixes = Self.screenshotPrefixes
+            + (showsRecordings ? Self.videoPrefixes : [])
         let extensions = Self.imageExtensions
+            .union(showsRecordings ? Self.videoExtensions : [])
         let indexedPaths = spotlight.paths
         let scanDirectory = self.scanDirectory
 
@@ -295,10 +338,14 @@ final class ScreenshotLibraryModel {
                 self.scanInFlight = false
                 if self.isPresented, self.scanGeneration == generation,
                    self.folderURL.path == path {
-                    self.files = result.files
+                    // Only a real change is published: a watcher event that
+                    // left the folder as it was must not rebuild the grid or
+                    // move the scroll (T48).
+                    if result.files != self.files { self.files = result.files }
                     self.selectedPaths.formIntersection(Set(result.files.map(\.path)))
                     self.isLoading = false
                     self.message = result.error
+                    self.needsFileAccess = result.needsPermission
                 }
                 if self.isPresented, self.refreshPending { self.startScan() }
             }
@@ -407,8 +454,28 @@ final class ScreenshotLibraryModel {
                 files: files.sorted { $0.modified > $1.modified }, error: nil
             )
         } catch {
-            return ScreenshotScan(files: [], error: error.localizedDescription)
+            let denied = isPermissionDenied(error)
+            return ScreenshotScan(
+                files: [],
+                error: denied
+                    ? "MakiDesk cannot read this folder. Allow it in System Settings ▸ Privacy & Security ▸ Files and Folders."
+                    : error.localizedDescription,
+                needsPermission: denied
+            )
         }
+    }
+
+    /// A TCC refusal arrives as a Cocoa permission error or as POSIX `EPERM` /
+    /// `EACCES`, depending on the volume (T48).
+    nonisolated static func isPermissionDenied(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain {
+            return nsError.code == NSFileReadNoPermissionError
+        }
+        if nsError.domain == NSPOSIXErrorDomain {
+            return nsError.code == Int(EPERM) || nsError.code == Int(EACCES)
+        }
+        return false
     }
 
     nonisolated private static func screenshotFile(at url: URL) -> ScreenshotFile? {
@@ -672,15 +739,20 @@ private struct ScreenshotLibraryView: View {
             controls
             Divider()
             if model.visibleFiles.isEmpty {
-                ContentUnavailableView(
-                    model.isLoading ? "Loading Screenshots…" : (model.searchText.isEmpty ? "No Screenshots Found" : "No Matching Screenshots"),
-                    systemImage: "photo.on.rectangle.angled",
-                    description: Text(model.message ?? (model.searchText.isEmpty
+                ContentUnavailableView {
+                    Label(model.isLoading ? "Loading Screenshots…" : (model.searchText.isEmpty ? "No Screenshots Found" : "No Matching Screenshots"),
+                          systemImage: "photo.on.rectangle.angled")
+                } description: {
+                    Text(model.message ?? (model.searchText.isEmpty
                         ? (model.indexState == .empty || model.indexState == .unavailable
                             ? "Screenshots appear by name; Spotlight has no indexed captures in this folder, so renamed ones may be missing."
                             : "Screenshots in the selected folder will appear here.")
                         : "Try another filename or clear the search."))
-                )
+                } actions: {
+                    if model.needsFileAccess {
+                        Button("Open Privacy Settings") { model.openFileAccessSettings() }
+                    }
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 GeometryReader { geometry in
@@ -894,6 +966,15 @@ private struct ScreenshotLibraryView: View {
                 .help("Resize screenshot cards")
             Image(systemName: "photo.fill")
                 .foregroundStyle(.secondary)
+            Button {
+                model.setShowsRecordings(!model.showsRecordings)
+            } label: {
+                Label("Videos", systemImage: model.showsRecordings ? "film.fill" : "film")
+            }
+            .buttonStyle(.borderless)
+            .help(model.showsRecordings ? "Hide screen recordings" : "Show screen recordings (.mov, .mp4)")
+            .accessibilityLabel("Show screen recordings")
+            .accessibilityValue(model.showsRecordings ? "On" : "Off")
         }
         .font(.caption)
         .padding(.horizontal, 18)
@@ -909,8 +990,89 @@ private struct ScreenshotCardFramesKey: PreferenceKey {
     }
 }
 
+/// Downsampled thumbnails for the cards, with an explicit memory budget (T48).
+///
+/// The key carries `thumbnailRevision`, so a changed file is a different entry
+/// and freshness never depends on eviction order. The bound counts decoded
+/// pixels, not entries: a card at 640 px costs roughly a megabyte, so 32 MiB
+/// holds the visible rows plus a little scrolling either way. The cache is
+/// emptied when the library closes.
+final class ScreenshotThumbnailCache: @unchecked Sendable {
+    static let shared = ScreenshotThumbnailCache()
+    static let defaultByteLimit = 32 * 1024 * 1024
+
+    private struct Entry {
+        let image: NSImage
+        let cost: Int
+    }
+
+    private let lock = NSLock()
+    private let byteLimit: Int
+    private var entries: [String: Entry] = [:]
+    private var recency: [String] = []
+    private var totalCost = 0
+
+    init(byteLimit: Int = ScreenshotThumbnailCache.defaultByteLimit) {
+        self.byteLimit = max(0, byteLimit)
+    }
+
+    var currentCost: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return totalCost
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.count
+    }
+
+    func image(forKey key: String) -> NSImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = entries[key] else { return nil }
+        recency.removeAll { $0 == key }
+        recency.append(key)
+        return entry.image
+    }
+
+    /// Inserts a decoded image, evicting the least recently used entries until
+    /// both the byte budget and the image fit. An image larger than the whole
+    /// budget is not cached: it would evict everything and still not fit.
+    func insert(_ image: NSImage, forKey key: String, cost: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        let cost = max(1, cost)
+        guard cost <= byteLimit else { return }
+        if let old = entries.removeValue(forKey: key) {
+            totalCost -= old.cost
+            recency.removeAll { $0 == key }
+        }
+        while totalCost + cost > byteLimit {
+            guard let evicted = recency.first,
+                  let entry = entries.removeValue(forKey: evicted) else { break }
+            recency.removeFirst()
+            totalCost -= entry.cost
+        }
+        entries[key] = Entry(image: image, cost: cost)
+        recency.append(key)
+        totalCost += cost
+    }
+
+    func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        entries.removeAll()
+        recency.removeAll()
+        totalCost = 0
+    }
+}
+
 private enum ScreenshotThumbnailDecoder {
     private static let semaphore = DispatchSemaphore(value: 3)
+    /// The long side of a card thumbnail; the cache key carries it too.
+    static let maxPixelSize = 640
 
     static func decode(at path: String) -> CGImage? {
         semaphore.wait()
@@ -919,9 +1081,24 @@ private enum ScreenshotThumbnailDecoder {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         return CGImageSourceCreateThumbnailAtIndex(source, 0, [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceThumbnailMaxPixelSize: 640,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
             kCGImageSourceCreateThumbnailWithTransform: true
         ] as CFDictionary)
+    }
+}
+
+/// Reads a recording's length for the card (T48). Quick Look still plays it.
+private enum ScreenshotVideo {
+    static func duration(at url: URL) async -> TimeInterval? {
+        let asset = AVURLAsset(url: url)
+        guard let duration = try? await asset.load(.duration) else { return nil }
+        let seconds = CMTimeGetSeconds(duration)
+        return seconds.isFinite && seconds > 0 ? seconds : nil
+    }
+
+    static func label(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }
 
@@ -932,6 +1109,7 @@ private struct ScreenshotCard: View {
     let width: CGFloat
     let open: () -> Void
     @State private var thumbnail: NSImage?
+    @State private var duration: TimeInterval?
 
     var body: some View {
         ScreenshotCardDragHost(
@@ -946,6 +1124,16 @@ private struct ScreenshotCard: View {
         .frame(width: width, height: 190 * scale)
         .task(id: file.thumbnailRevision) {
             thumbnail = nil
+            duration = nil
+            if file.isVideo {
+                duration = await ScreenshotVideo.duration(at: file.url)
+                return
+            }
+            let key = "\(file.thumbnailRevision)|\(ScreenshotThumbnailDecoder.maxPixelSize)"
+            if let cached = ScreenshotThumbnailCache.shared.image(forKey: key) {
+                thumbnail = cached
+                return
+            }
             let path = file.path
             let worker = Task.detached(priority: .utility) { () -> CGImage? in
                 guard !Task.isCancelled else { return nil }
@@ -957,8 +1145,11 @@ private struct ScreenshotCard: View {
                 worker.cancel()
             }
             guard !Task.isCancelled, let image else { return }
-            thumbnail = NSImage(cgImage: image,
-                                size: NSSize(width: image.width, height: image.height))
+            let decoded = NSImage(cgImage: image,
+                                  size: NSSize(width: image.width, height: image.height))
+            ScreenshotThumbnailCache.shared.insert(decoded, forKey: key,
+                                                   cost: image.bytesPerRow * image.height)
+            thumbnail = decoded
         }
 
     }
@@ -973,6 +1164,10 @@ private struct ScreenshotCard: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .padding(6 * scale)
+                } else if file.isVideo {
+                    Image(systemName: "film")
+                        .font(.system(size: 32 * scale))
+                        .foregroundStyle(.secondary)
                 } else {
                     Image(systemName: "photo")
                         .font(.system(size: 32 * scale))
@@ -980,14 +1175,29 @@ private struct ScreenshotCard: View {
                 }
             }
             .frame(height: 132 * scale)
+            .overlay(alignment: .topTrailing) {
+                if file.isVideo {
+                    Label("Video", systemImage: "film.fill")
+                        .labelStyle(.titleAndIcon)
+                        .font(.system(size: 9 * scale, weight: .semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(6 * scale)
+                }
+            }
             Text(file.name)
                 .font(.system(size: 12 * scale, weight: .medium))
                 .lineLimit(1)
                 .foregroundStyle(.primary)
             HStack {
+                if let duration {
+                    Text(ScreenshotVideo.label(duration))
+                }
                 Text(file.modified, style: .date)
                 Text(ByteCountFormatter.string(fromByteCount: Int64(file.byteCount), countStyle: .file))
             }
+            .lineLimit(1)
             .font(.system(size: 10 * scale))
             .foregroundStyle(.secondary)
         }
