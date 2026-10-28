@@ -2068,6 +2068,28 @@ struct PaletteView: View {
     }
 }
 
+/// The sizes of the label block under a preview (T56). Kept pure and apart from
+/// the view so the rule — app name a little larger than the title, icon growing
+/// with the card but bounded — can be checked without rendering a card.
+enum PaletteCardLabel {
+    /// The window title: the smaller of the two lines, still semibold.
+    static func titleSize(fontSize: CGFloat) -> CGFloat {
+        fontSize * 0.95
+    }
+
+    /// The app name: deliberately a little larger than the title (T56).
+    static func appNameSize(fontSize: CGFloat) -> CGFloat {
+        fontSize * 1.08
+    }
+
+    /// The app icon beside the lines: it follows the card's font up to 36 pt and
+    /// gives way on a card narrowed to the floor, so the name is not squeezed
+    /// into a couple of letters.
+    static func iconSize(fontSize: CGFloat, thumbnailWidth: CGFloat) -> CGFloat {
+        max(18, min(30 * (fontSize / 12), 36, thumbnailWidth * 0.18))
+    }
+}
+
 /// A single preview card. Its own `View` so SwiftUI can skip re-rendering the
 /// cards whose inputs did not change when only the selection moves — keeping the
 /// thumbnails steady (no flicker).
@@ -2150,15 +2172,30 @@ private struct PaletteCard: View {
             .overlay { if dimmed { DiagonalHatch(color: theme.subtext.opacity(0.22)) } }
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(alignment: .topTrailing) { stateBadge }
-            .overlay(alignment: .bottomTrailing) { appIcon }
             .overlay(alignment: .topLeading) { selectionTick }
             .overlay(alignment: .bottomLeading) { groupBadges }
-            Text(window.title.isEmpty ? window.appName : window.title)
-                .font(.system(size: metrics.fontSize, weight: .semibold))
-                .lineLimit(1).foregroundStyle(theme.text)
-            Text(window.appName)
-                .font(.system(size: metrics.fontSize * 0.85)).lineLimit(1)
-                .foregroundStyle(theme.subtext)
+            // The app icon sits beside the name, not over the thumbnail (T56):
+            // the preview belongs to the window, the icon identifies the app.
+            HStack(alignment: .center, spacing: 8 * (metrics.fontSize / 12)) {
+                appIconLabel
+                VStack(alignment: .leading, spacing: 1 * (metrics.fontSize / 12)) {
+                    Text(window.title.isEmpty ? window.appName : window.title)
+                        .font(.system(size: PaletteCardLabel.titleSize(fontSize: metrics.fontSize),
+                                      weight: .semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(theme.text)
+                    // The app name is the larger of the two lines, as asked in
+                    // T56, and the only one that stays whole at the edges.
+                    Text(window.appName)
+                        .font(.system(size: PaletteCardLabel.appNameSize(fontSize: metrics.fontSize),
+                                      weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(theme.subtext)
+                        .help(window.appName)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(width: metrics.thumbnailWidth, alignment: .leading)
         }
         .padding(10 * (metrics.fontSize / 12))
         .background(RoundedRectangle(cornerRadius: 14)
@@ -2169,8 +2206,8 @@ private struct PaletteCard: View {
     }
 
     /// Tick shown on the cards of the group being edited (G3), top-left so it
-    /// never collides with the state badge or the app icon. Without a group
-    /// there is no tick: the palette is then just a window switcher.
+    /// never collides with the state badge. Without a group there is no tick:
+    /// the palette is then just a window switcher.
     @ViewBuilder private var selectionTick: some View {
         if layoutSelected, editedSlot != nil {
             Image(systemName: "checkmark.circle.fill")
@@ -2205,7 +2242,7 @@ private struct PaletteCard: View {
     }
 
     /// State indicator (T5): minimised. Top-right, so it never collides with
-    /// the app icon in the bottom-right (T3).
+    /// the group badges in the bottom-left (T3).
     @ViewBuilder private var stateBadge: some View {
         switch window.state {
         case .normal:
@@ -2217,20 +2254,37 @@ private struct PaletteCard: View {
         }
     }
 
-    /// The owning app's icon (T3), bottom-right, over a light material so it
-    /// stays legible on any thumbnail.
-    @ViewBuilder private var appIcon: some View {
-        if let icon = window.icon {
-            Image(nsImage: icon)
-                .resizable()
-                .frame(width: metrics.iconSize, height: metrics.iconSize)
-                .padding(3)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 7))
-                .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.border, lineWidth: 1))
-                .opacity(0.95)
-                .padding(7)
-                .help(window.appName)
+    /// The side the icon takes beside the two text lines (T56). It grows with
+    /// the card but not without a limit, so a full-screen card keeps the name
+    /// readable instead of hiding it behind a huge symbol; on a card narrowed to
+    /// the floor it shrinks rather than leaving the name two letters wide.
+    private var infoIconSize: CGFloat {
+        PaletteCardLabel.iconSize(fontSize: metrics.fontSize,
+                                  thumbnailWidth: metrics.thumbnailWidth)
+    }
+
+    /// The owning app's icon (T3), left of the title and the app name. A window
+    /// with no icon keeps the row height with a generic glyph.
+    @ViewBuilder private var appIconLabel: some View {
+        Group {
+            if let icon = window.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .overlay(RoundedRectangle(cornerRadius: infoIconSize * 0.22)
+                        .stroke(theme.border.opacity(0.55), lineWidth: 0.5))
+            } else {
+                Image(systemName: window.state == .minimized ? "dock.rectangle" : "macwindow")
+                    .font(.system(size: infoIconSize * 0.8))
+                    .foregroundStyle(glyphTint)
+            }
         }
+        .frame(width: infoIconSize, height: infoIconSize)
+        .opacity(dimmed ? 0.7 : 1)
+        // The app name is right beside it: reading it twice would be noise.
+        .accessibilityHidden(true)
+        .help(window.appName)
     }
 
     private func badge(symbol: String, label: String) -> some View {

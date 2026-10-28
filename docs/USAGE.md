@@ -160,13 +160,15 @@ windows or without a measurement.
 | Search | `⌥Space` |
 
 The switcher is a grid of **live previews** of every window, with a groups
-column on the left. Automatic columns follow the window count in the compact
-panel. The full-screen layout uses the same card sizing and adds as many columns
-as the display has room for (up to 8), so a wide screen shows more cards instead
-of a small grid in the middle; cards never get smaller than in the compact
-switcher, and a larger maximum card size can make them bigger. A fixed column
-count is always honoured, and maximum card size still caps how large a card may
-get.
+column on the left (hide it in Settings ▸ Panels). Each card puts the preview on
+top and, underneath, the app's icon beside the window title and the app name,
+with the name a little larger than the title. Automatic columns follow the
+window count in the compact panel. The full-screen layout uses the same card
+sizing and adds as many columns as the display has room for (up to 8), so a wide
+screen shows more cards instead of a small grid in the middle; cards never get
+smaller than in the compact switcher, and a larger maximum card size can make
+them bigger. A fixed column count is always honoured, and maximum card size
+still caps how large a card may get.
 
 - Move with the arrows; **release ⌥** or press `↩` to open the highlighted
   window. `Esc` closes (if a group is being edited, it leaves the group first).
