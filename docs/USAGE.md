@@ -210,7 +210,16 @@ windows — it does not invent a layout.
 Recalling a group brings its members back where they were and puts the windows
 outside the group away (a hidden app, or a minimized window). The **Groups**
 menu has the same commands plus *Leave Group*, *Rename*, *Empty Group* and the
-flat recall list. The switcher's groups column edits the same groups.
+flat recall list. The switcher's groups column edits the same groups: click a
+group to tick its members, `⌘1…9` picks one, `⌥1…9` adds or removes the
+highlighted card.
+
+If you do not use groups, **Settings ▸ Panels ▸ Window switcher** turns the
+column off: the palette narrows to the cards, the badges on the thumbnails go
+with it, and the informative notices (added, removed, recalled, left, cleared)
+fall silent. A group that is empty, or whose windows are gone, is still reported
+when you ask for it, and `⌃⌥1…9`, `⌃⌥⌘1…9` and the menu keep working. The same
+section can hide just the groups with no windows while keeping the column.
 
 The arrangement a group restores is the last arrangement its windows had — move
 them by hand or run a layout while the group is on screen and that is what comes
@@ -531,8 +540,9 @@ The Settings window is split into tabs:
   reset and finish setup.
 - **Windows** — gap, drag-to-snap key, macOS tiling, focus border, overlay.
 - **Layouts** — suggested layout behaviour and the seven content weights.
-- **Panels** — shelf shake settings, the window switcher/search appearance, and
-  text recognition quality and correction.
+- **Panels** — shelf shake settings, the window switcher/search appearance
+  (including the groups column and its announcements), and text recognition
+  quality and correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.

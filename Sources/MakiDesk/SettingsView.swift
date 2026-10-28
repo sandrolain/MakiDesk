@@ -389,7 +389,20 @@ struct SettingsView: View {
                 get: { store.paletteFullScreen },
                 set: { store.updatePaletteFullScreen($0) }
             ))
-            caption("⌥Tab opens the switcher. Choose which display it uses; the panel stays there until closed.")
+            Toggle("Show the groups column", isOn: Binding(
+                get: { store.showGroupsInPalette },
+                set: { store.updatePaletteGroupsVisibility($0) }
+            ))
+            Toggle("Only groups with windows", isOn: Binding(
+                get: { store.showEmptyGroupsInPalette },
+                set: { store.updatePaletteEmptyGroups($0) }
+            ))
+            .disabled(!store.showGroupsInPalette)
+            Toggle("Announce group changes", isOn: Binding(
+                get: { store.announceGroupChanges },
+                set: { store.updateGroupAnnouncements($0) }
+            ))
+            caption("⌥Tab opens the switcher. Choose which display it uses; the panel stays there until closed. The groups column edits the numbered groups next to the window grid; with it off the panel narrows to the cards, while ⌘1…9 and Esc still work on the cards and ⌃⌥1…9 still recalls a group from anywhere. Announcements cover adding, removing, recalling and clearing; a group that is empty, or whose windows are gone, is still reported when you ask for it. The Groups menu always lists every group.")
         }
 
         SettingsSection("Search & launch") {
@@ -543,7 +556,7 @@ struct SettingsView: View {
             ForEach(1...9, id: \.self) { slot in
                 GroupSettingsRow(store: store, slot: slot)
             }
-            caption("A group is a saved selection of windows: ⌃⌥⌘1…9 adds or removes the front window, ⌃⌥1…9 brings the group back. Recalling a group shows its windows where you left them — a group has no layout of its own. To give one a disposition, recall it and then run a layout (⌃⌥G grid, ⌃⌥S golden spiral, ⌃⌥A suggested): the arrangement is remembered for next time. The group column in the Opt-Tab / Opt-Space palette edits the same groups.")
+            caption("A group is a saved selection of windows: ⌃⌥⌘1…9 adds or removes the front window, ⌃⌥1…9 brings the group back. Recalling a group shows its windows where you left them — a group has no layout of its own. To give one a disposition, recall it and then run a layout (⌃⌥G grid, ⌃⌥S golden spiral, ⌃⌥A suggested): the arrangement is remembered for next time. The group column in the Opt-Tab / Opt-Space palette edits the same groups; hide it and its announcements in Panels ▸ Window switcher.")
         }
     }
 

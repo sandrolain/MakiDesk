@@ -60,6 +60,8 @@ Keep up to nine sets of windows. `⌃⌥1…9` brings a group back where you lef
 and puts the rest away; `⌃⌥⌘1…9` adds or removes the front window. Focus sends a
 single window away (`⌃⌥⇧V`), brings everything back (`⌃⌥⇧A`) and undoes one step
 (`⌃⌥Z`). Peek (`⌃⌥⌘P`, hold `⌃⌥H`) keeps one designated window one key away.
+The switcher's groups column can be hidden in Settings ▸ Panels, with its card
+badges and its notices, for a palette as wide as the windows alone.
 
 ### Notes without the ceremony
 

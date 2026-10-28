@@ -352,6 +352,26 @@ struct PaletteGroupRow: Identifiable, Equatable {
     }
 }
 
+/// What the groups column shows and how wide it is (T55). Pure, so the rule can
+/// be checked without opening the palette.
+enum PaletteGroupVisibility {
+    /// Width the column takes off the grid. Zero means no column and no divider.
+    static func columnWidth(showsGroups: Bool) -> CGFloat {
+        showsGroups ? PaletteLayoutEngine.groupColumnWidth : 0
+    }
+
+    /// The rows to list. Hiding empty groups is a filter, not a smaller table:
+    /// the full nine stay available to the shortcuts and the footer.
+    static func rows(_ rows: [PaletteGroupRow], showsEmpty: Bool) -> [PaletteGroupRow] {
+        showsEmpty ? rows : rows.filter { $0.memberCount > 0 }
+    }
+
+    /// Badges on the cards. They belong to the column, so they go with it.
+    static func badges(_ slots: [Int], showsGroups: Bool) -> [Int] {
+        showsGroups ? slots : []
+    }
+}
+
 /// Shared state of the window palette.
 @Observable
 final class PaletteModel {
@@ -382,6 +402,11 @@ final class PaletteModel {
     var focusToken = 0
     /// The nine groups, as the side column shows them (G3).
     var groupRows: [PaletteGroupRow] = []
+    /// Whether the groups column and the card badges are shown (T55): a view
+    /// choice, because the groups themselves keep working.
+    var showsGroups = true
+    /// Whether the column lists groups with no members (T55).
+    var showsEmptyGroups = true
     /// The group currently being edited from the column. While it is set the
     /// ticked cards *are* the group's members.
     var selectedGroupSlot: Int?
@@ -466,6 +491,9 @@ final class WindowPalette {
         model.showPreview = store.showPreview
         model.opacity = store.paletteOpacity
         model.tintedCards = store.paletteTintedCards
+        model.showsGroups = store.showGroupsInPalette
+        model.showsEmptyGroups = store.showEmptyGroupsInPalette
+        refreshGroupState()
         guard isVisible, let panel else { return }
         updateLayout(in: panel, store: store, rescan: true)
     }
@@ -478,6 +506,8 @@ final class WindowPalette {
         model.showPreview = store.showPreview
         model.opacity = store.paletteOpacity
         model.tintedCards = store.paletteTintedCards
+        model.showsGroups = store.showGroupsInPalette
+        model.showsEmptyGroups = store.showEmptyGroupsInPalette
         suppressReleaseActivation = false
         pendingReleaseActivation = false
 
@@ -592,10 +622,10 @@ final class WindowPalette {
         let screen = presentationScreen
         let available = screen?.visibleFrame.size
             ?? CGSize(width: 1440, height: 900)
-        // The column is shown in both modes, so it always takes its width off
-        // the grid area; the search field and the footer are always there too,
-        // so the chrome is the same whichever mode the palette is in.
-        let groupColumnWidth = PaletteLayoutEngine.groupColumnWidth
+        // The column is shown in both modes, so when it is on it takes its width
+        // off the grid area; the search field and the footer are always there
+        // too, so the chrome is the same whichever mode the palette is in (T55).
+        let groupColumnWidth = PaletteGroupVisibility.columnWidth(showsGroups: model.showsGroups)
         let metrics = PaletteLayoutEngine.metrics(
             itemCount: model.items.count,
             layout: layout,
@@ -1226,7 +1256,10 @@ final class WindowPalette {
     /// Recomputes which groups each visible card belongs to, for the badges on
     /// the thumbnails.
     private func refreshGroupBadges() {
-        guard let store else { return }
+        guard let store, model.showsGroups else {
+            model.groupBadges = [:]
+            return
+        }
         model.groupBadges = store.groupSlots(among: model.items)
     }
 
@@ -1542,12 +1575,15 @@ struct PaletteView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // The groups column is always there: it is the point of the ⌥Space
-            // palette, and useful in the plain ⌥Tab switcher too.
-            groupsColumn
-            Rectangle()
-                .fill(model.theme.surface.opacity(0.8))
-                .frame(width: 1)
+            // The groups column can be hidden in Settings ▸ Panels (T55). Off
+            // means no column and no divider: the panel is as wide as its cards,
+            // and the group keys and badges go with it.
+            if model.showsGroups {
+                groupsColumn
+                Rectangle()
+                    .fill(model.theme.surface.opacity(0.8))
+                    .frame(width: 1)
+            }
             VStack(spacing: 0) {
                 // One panel, one set of elements: the field is always here. The
                 // mode only decides who owns the keyboard — browsing keeps it
@@ -1604,7 +1640,9 @@ struct PaletteView: View {
                                             layoutSelected: model.selectedIDs.contains(window.id),
                                             metrics: model.metrics,
                                             theme: model.theme,
-                                            groupSlots: model.groupBadges[window.id] ?? [],
+                                            groupSlots: PaletteGroupVisibility.badges(
+                                                model.groupBadges[window.id] ?? [],
+                                                showsGroups: model.showsGroups),
                                             editedSlot: model.selectedGroupSlot)
                                     .id(window.id)
                                     .onAppear { onCardVisibility(window.id, true) }
@@ -1831,7 +1869,9 @@ struct PaletteView: View {
     /// ticks at its members; its buttons recall or reset it. It stays visible in
     /// both modes, so a group being edited keeps its ticks while searching.
     private var groupsColumn: some View {
-        ScrollView {
+        let rows = PaletteGroupVisibility.rows(model.groupRows,
+                                               showsEmpty: model.showsEmptyGroups)
+        return ScrollView {
             VStack(spacing: 3) {
                 HStack(spacing: 6) {
                     Image(systemName: "square.on.square").font(.system(size: 10 * scale))
@@ -1845,8 +1885,17 @@ struct PaletteView: View {
                 .padding(.top, 4)
                 .padding(.bottom, 4)
 
-                ForEach(model.groupRows) { row in
-                    groupRow(row)
+                if rows.isEmpty {
+                    Text("No groups with windows")
+                        .font(.system(size: 10 * scale))
+                        .foregroundStyle(model.theme.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10)
+                        .padding(.top, 2)
+                } else {
+                    ForEach(rows) { row in
+                        groupRow(row)
+                    }
                 }
             }
             .padding(.vertical, 8)

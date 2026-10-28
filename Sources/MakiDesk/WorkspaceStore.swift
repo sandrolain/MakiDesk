@@ -31,6 +31,22 @@ enum WindowState: Equatable {
     case unavailable
 }
 
+/// What a group notice is for (T55): a change worth reporting, or the outcome of
+/// something the user asked for. The content setting silences the first kind
+/// only, so asking for an empty group never answers with silence.
+enum GroupNoticeScope: Equatable, Sendable {
+    case change
+    case outcome
+}
+
+struct GroupNoticePolicy: Equatable, Sendable {
+    var announcesChanges: Bool
+
+    func shows(_ scope: GroupNoticeScope) -> Bool {
+        announcesChanges || scope == .outcome
+    }
+}
+
 @Observable
 @MainActor
 final class WorkspaceStore {
@@ -99,6 +115,14 @@ final class WorkspaceStore {
     var paletteScreenLocation = PaletteScreenLocation(
         rawValue: UserDefaults.standard.string(forKey: "paletteScreenLocation") ?? ""
     ) ?? .focusedWindow
+    /// Whether the palette shows the groups column and the card badges (T55).
+    /// Hiding it is a view choice: the groups, their shortcuts and the menu
+    /// keep working.
+    var showGroupsInPalette = UserDefaults.standard.object(forKey: "showGroupsInPalette") as? Bool ?? true
+    /// Whether the column leaves out groups with no members (T55).
+    var showEmptyGroupsInPalette = UserDefaults.standard.object(forKey: "showEmptyGroupsInPalette") as? Bool ?? true
+    /// Whether group changes are announced in the HUD (T55). Outcomes still are.
+    var announceGroupChanges = UserDefaults.standard.object(forKey: "announceGroupChanges") as? Bool ?? true
     var dragActivator = DragActivator(rawValue: UserDefaults.standard.string(forKey: "dragActivator") ?? "") ?? .fallback
     var dragEnabled = UserDefaults.standard.object(forKey: "dragEnabled") as? Bool ?? true
     /// Whether the intelligent layout offers what it suggests — with the reason —
@@ -654,6 +678,27 @@ final class WorkspaceStore {
         // Placement is chosen at the next opening, so an open session stays put.
     }
 
+    /// Shows or hides the groups column and the card badges (T55).
+    func updatePaletteGroupsVisibility(_ value: Bool) {
+        showGroupsInPalette = value
+        UserDefaults.standard.set(value, forKey: "showGroupsInPalette")
+        WindowPalette.shared.applySettings(from: self)
+    }
+
+    /// Whether the groups column lists groups with no members (T55).
+    func updatePaletteEmptyGroups(_ value: Bool) {
+        showEmptyGroupsInPalette = value
+        UserDefaults.standard.set(value, forKey: "showEmptyGroupsInPalette")
+        WindowPalette.shared.applySettings(from: self)
+    }
+
+    /// Turns the informative group notices on or off; outcomes are not affected
+    /// (T55).
+    func updateGroupAnnouncements(_ value: Bool) {
+        announceGroupChanges = value
+        UserDefaults.standard.set(value, forKey: "announceGroupChanges")
+    }
+
     func updateDragActivator(_ value: DragActivator) {
         dragActivator = value
         UserDefaults.standard.set(value.rawValue, forKey: "dragActivator")
@@ -833,6 +878,9 @@ final class WorkspaceStore {
         updatePaletteTintedCards(true)
         updatePaletteFullScreen(false)
         updatePaletteScreenLocation(.focusedWindow)
+        updatePaletteGroupsVisibility(true)
+        updatePaletteEmptyGroups(true)
+        updateGroupAnnouncements(true)
         updateDragActivator(.option)
         updateDragEnabled(true)
         updateLayoutAsksFirst(true)
@@ -2000,16 +2048,29 @@ final class WorkspaceStore {
         if let index = group.members.firstIndex(where: { $0.matches(ref) }) {
             group.members.remove(at: index)
             commit(group)
-            HUDController.shared.show("Removed from \(group.displayName) · \(count(group.members.count))",
-                                      symbol: "minus.circle.fill")
+            showGroupNotice("Removed from \(group.displayName) · \(count(group.members.count))",
+                            symbol: "minus.circle.fill")
             return false
         }
         group.members.append(ref)
         commit(group)
-        HUDController.shared.show("Added to \(group.displayName) · \(count(group.members.count))",
-                                  symbol: "plus.circle.fill")
+        showGroupNotice("Added to \(group.displayName) · \(count(group.members.count))",
+                        symbol: "plus.circle.fill")
         if activeGroupSlot == slot { recallGroup(slot: slot, announce: false) }
         return true
+    }
+
+    /// The notice rule for groups (T55): one gate, so the seven call sites do not
+    /// each grow an `if`. Informative changes can be silenced; an answer to
+    /// something the user asked for is always shown.
+    var groupNoticePolicy: GroupNoticePolicy {
+        GroupNoticePolicy(announcesChanges: announceGroupChanges)
+    }
+
+    private func showGroupNotice(_ text: String, symbol: String,
+                                 scope: GroupNoticeScope = .change) {
+        guard groupNoticePolicy.shows(scope) else { return }
+        HUDController.shared.show(text, symbol: symbol)
     }
 
     /// The windows of `group` that are live in `windows`, in the group's saved
@@ -2152,13 +2213,16 @@ final class WorkspaceStore {
         if deferUntilFreshInventory({ [weak self] in guard let self else { return }; self.recallGroup(slot: slot, announce: announce) }) { return }
         guard (1...9).contains(slot) else { return }
         guard let group = groups[slot], !group.members.isEmpty else {
-            if announce { HUDController.shared.show("\(groupName(slot)) is empty", symbol: "tray") }
+            if announce {
+                showGroupNotice("\(groupName(slot)) is empty", symbol: "tray", scope: .outcome)
+            }
             return
         }
 
         let (resolved, missing) = resolveGroup(group)
         guard !resolved.isEmpty else {
-            HUDController.shared.show("\(group.displayName) — no windows found", symbol: "exclamationmark.triangle.fill")
+            showGroupNotice("\(group.displayName) — no windows found",
+                            symbol: "exclamationmark.triangle.fill", scope: .outcome)
             return
         }
 
@@ -2323,6 +2387,10 @@ final class WorkspaceStore {
         }
 
         if announce {
+            // A focus set is assembled on the spot, so its arrival is the answer
+            // to the command; a recalled group is a change the user can silence
+            // (T55). The "still away" warning below is never silenced.
+            let scope: GroupNoticeScope = source == .adHoc ? .outcome : .change
             let verb = source == .adHoc ? "arranged" : "restored"
             var text = applied.count == 0
                 ? "\(title) — \(count(members.count)) in use, where they stand"
@@ -2334,8 +2402,10 @@ final class WorkspaceStore {
             if offDesktop == 1 { text += " · 1 on another desktop" }
             if offDesktop > 1 { text += " · \(offDesktop) on other desktops" }
             if putAway > 0 { text += " · \(putAway) put away" }
-            HUDController.shared.show(text, symbol: source == .adHoc
-                                      ? "square.grid.3x3.fill" : "arrow.uturn.backward.circle.fill")
+            if groupNoticePolicy.shows(scope) {
+                HUDController.shared.show(text, symbol: source == .adHoc
+                                          ? "square.grid.3x3.fill" : "arrow.uturn.backward.circle.fill")
+            }
 
             // A member that does not actually come back is never absent in
             // silence: the reveal settles (or does not) within half a second, and
@@ -2449,7 +2519,7 @@ final class WorkspaceStore {
         guard let slot = activeGroupSlot else { return }
         rememberStepBack()
         leaveScene()
-        if announce { HUDController.shared.show("Left \(groupName(slot))", symbol: "arrow.uturn.backward") }
+        if announce { showGroupNotice("Left \(groupName(slot))", symbol: "arrow.uturn.backward") }
     }
 
     // MARK: - Focus: a scene without a group (T17)
@@ -2602,7 +2672,7 @@ final class WorkspaceStore {
         group.frames.removeAll()
         commit(group)
         if activeGroupSlot == slot { leaveGroup(announce: false) }
-        HUDController.shared.show("\(group.displayName) cleared", symbol: "trash.fill")
+        showGroupNotice("\(group.displayName) cleared", symbol: "trash.fill")
     }
 
     func groupName(_ slot: Int) -> String {
