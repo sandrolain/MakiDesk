@@ -487,7 +487,11 @@ struct SettingsView: View {
                       value: Binding(get: { store.paletteMaxCardWidth },
                                      set: { store.updatePaletteMaxCardWidth($0) }),
                       range: 160...480, step: 10, unit: " pt")
-            caption("Automatic uses 2–4 columns in the compact switcher and as many as fit in full-screen mode. A fixed number pins the grid. Cards shrink to fit the screen, and previews keep the display's proportions.")
+            Toggle("Size follows the number of windows", isOn: Binding(
+                get: { store.paletteCardSizeFollowsCount },
+                set: { store.updatePaletteCardSizeFollowsCount($0) }
+            ))
+            caption("Automatic uses 2–4 columns in the compact switcher and as many as fit in full-screen mode. A fixed number pins the grid. Cards shrink to fit the screen, and previews keep the display's proportions. With the last option on, one window takes the whole Max size, two a little less, and from nine windows on about 70% of it: the count is the windows open when the switcher opens, so typing a search does not resize the panel. The profile never goes above Max size or below 80 pt, and a fixed column count still decides the grid.")
         }
     }
 

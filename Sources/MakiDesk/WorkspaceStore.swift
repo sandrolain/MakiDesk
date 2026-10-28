@@ -107,6 +107,9 @@ final class WorkspaceStore {
     /// Grid columns for the palette: 0 means "auto" (2–4 by window count), a
     /// positive value pins the count (T15).
     var paletteColumns = UserDefaults.standard.object(forKey: "paletteColumns") as? Int ?? 0
+    /// Whether the card size follows the number of windows in the session
+    /// (T57). Off by default: the card is bounded by Max size alone.
+    var paletteCardSizeFollowsCount = UserDefaults.standard.object(forKey: "paletteCardSizeFollowsCount") as? Bool ?? false
     var paletteOpacity = UserDefaults.standard.object(forKey: "paletteOpacity") as? Double ?? 0.9
     /// Whether the palette cards are tinted with the per-app colour (T12).
     var paletteTintedCards = UserDefaults.standard.object(forKey: "paletteTintedCards") as? Bool ?? true
@@ -653,6 +656,13 @@ final class WorkspaceStore {
         WindowPalette.shared.applySettings(from: self)
     }
 
+    /// Lets the card size follow the number of windows (T57).
+    func updatePaletteCardSizeFollowsCount(_ value: Bool) {
+        paletteCardSizeFollowsCount = value
+        UserDefaults.standard.set(value, forKey: "paletteCardSizeFollowsCount")
+        WindowPalette.shared.applySettings(from: self)
+    }
+
     func updatePaletteOpacity(_ value: Double) {
         paletteOpacity = value.clamped(to: 0.5...1.0)
         UserDefaults.standard.set(paletteOpacity, forKey: "paletteOpacity")
@@ -874,6 +884,7 @@ final class WorkspaceStore {
         updateOverlayOpacity(0.94)
         updatePaletteMaxCardWidth(250)
         updatePaletteColumns(0)
+        updatePaletteCardSizeFollowsCount(false)
         updatePaletteOpacity(0.9)
         updatePaletteTintedCards(true)
         updatePaletteFullScreen(false)

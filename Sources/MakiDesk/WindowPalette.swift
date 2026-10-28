@@ -62,6 +62,41 @@ struct PaletteMetrics {
 /// bring the ticked windows into use and put the rest away.
 enum PaletteLayoutCommand { case tile, goldenSpiral, auto, content, focus }
 
+/// How much of the user's *Max size* a card takes, by the number of windows in
+/// the session (T57).
+///
+/// Off — the default — every count takes the full Max size, which is exactly the
+/// layout before T57. On, one window gets the largest preview, two a little
+/// smaller, and from nine windows on the smallest. The profile only scales
+/// *down* from the user's cap, so the cap, the screen and the card floor still
+/// win; it never makes a card larger than Max size.
+enum PaletteCardScale {
+    /// The smallest a card may get, whatever the count (the same floor the
+    /// layout already applied).
+    static let floor: CGFloat = 80
+
+    /// Fraction of Max size for a session with `itemCount` windows. The scale
+    /// changes only at 2, 3, 5 and 9 windows, so a window opening or closing
+    /// moves it in steps instead of on every event.
+    static func factor(for itemCount: Int) -> CGFloat {
+        switch itemCount {
+        case ...1: return 1
+        case 2: return 0.95
+        case 3...4: return 0.88
+        case 5...8: return 0.78
+        default: return 0.70
+        }
+    }
+
+    /// The cap the layout should use: Max size when the setting is off, the
+    /// scaled Max size when it is on, never below the card floor.
+    static func maximumCardWidth(_ maximum: CGFloat, itemCount: Int,
+                                 followsCount: Bool) -> CGFloat {
+        guard followsCount else { return max(floor, maximum) }
+        return max(floor, maximum * factor(for: max(0, itemCount)))
+    }
+}
+
 /// Pure geometry for the palette panel: same inputs, same layout, so the
 /// sizing can be tested without a screen (T13).
 enum PaletteLayoutEngine {
@@ -98,7 +133,8 @@ enum PaletteLayoutEngine {
     static func metrics(itemCount: Int, layout: PaletteLayout,
                         columns: Int, maxCardWidth: CGFloat,
                         available: CGSize, groupColumnWidth: CGFloat = 0,
-                        showsApplicationShelf: Bool = false) -> PaletteMetrics {
+                        showsApplicationShelf: Bool = false,
+                        sizeFollowsCount: Bool = false) -> PaletteMetrics {
         // The screen's own proportions drive the shape of every preview box, so
         // a box is never an over-wide or over-tall ribbon (T15).
         let aspect = max(0.5, available.width / max(1, available.height))
@@ -109,13 +145,15 @@ enum PaletteLayoutEngine {
                                   columns: columns, maxCardWidth: maxCardWidth,
                                   available: available, aspect: aspect,
                                   groupColumnWidth: groupColumnWidth,
-                                  applicationShelf: applicationShelf)
+                                  applicationShelf: applicationShelf,
+                                  sizeFollowsCount: sizeFollowsCount)
         case .fullScreen:
             return fullScreenMetrics(itemCount: itemCount,
                                      columns: columns, maxCardWidth: maxCardWidth,
                                      available: available, aspect: aspect,
                                      groupColumnWidth: groupColumnWidth,
-                                     applicationShelf: applicationShelf)
+                                     applicationShelf: applicationShelf,
+                                     sizeFollowsCount: sizeFollowsCount)
         }
     }
 
@@ -142,7 +180,8 @@ enum PaletteLayoutEngine {
                                        available: CGSize,
                                        aspect: CGFloat,
                                        groupColumnWidth: CGFloat,
-                                       applicationShelf: CGFloat) -> PaletteMetrics {
+                                       applicationShelf: CGFloat,
+                                       sizeFollowsCount: Bool) -> PaletteMetrics {
         let columns = PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
         let rows = max(1, Int(ceil(Double(max(1, itemCount)) / Double(columns))))
         // Room for the search field (about 68 pt), the footer (about 38 pt) and,
@@ -160,7 +199,9 @@ enum PaletteLayoutEngine {
         // width off the cards, never off the screen edge.
         let fitCardWidth = (maxPanelWidth - groupColumnWidth - 2 * padding - CGFloat(columns - 1) * spacing)
             / CGFloat(columns)
-        let cardWidth = max(80, min(maxCardWidth, fitCardWidth))
+        let cardCap = PaletteCardScale.maximumCardWidth(maxCardWidth, itemCount: itemCount,
+                                                        followsCount: sizeFollowsCount)
+        let cardWidth = max(PaletteCardScale.floor, min(cardCap, fitCardWidth))
 
         let thumbnailWidth = max(60, cardWidth - 2 * cardPadding)
         let thumbnailHeight = thumbnailWidth / aspect
@@ -194,21 +235,25 @@ enum PaletteLayoutEngine {
                                           available: CGSize,
                                           aspect: CGFloat,
                                           groupColumnWidth: CGFloat,
-                                          applicationShelf: CGFloat) -> PaletteMetrics {
+                                          applicationShelf: CGFloat,
+                                          sizeFollowsCount: Bool) -> PaletteMetrics {
         let compact = compactMetrics(itemCount: itemCount, columns: configuredColumns,
                                      maxCardWidth: maxCardWidth, available: available,
                                      aspect: aspect, groupColumnWidth: groupColumnWidth,
-                                     applicationShelf: 0)
+                                     applicationShelf: 0,
+                                     sizeFollowsCount: sizeFollowsCount)
+        let cardCap = PaletteCardScale.maximumCardWidth(maxCardWidth, itemCount: itemCount,
+                                                        followsCount: sizeFollowsCount)
         let columns = configuredColumns > 0
             ? PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
-            : automaticFullScreenColumns(itemCount: itemCount, maxCardWidth: maxCardWidth,
+            : automaticFullScreenColumns(itemCount: itemCount, maxCardWidth: cardCap,
                                          available: available, aspect: aspect,
                                          groupColumnWidth: groupColumnWidth,
                                          applicationShelf: applicationShelf,
                                          minimumCardWidth: compact.cardWidth,
                                          minimumGridWidth: compact.gridWidth)
         let cell = fullScreenCell(itemCount: itemCount, columns: columns,
-                                  maxCardWidth: maxCardWidth, available: available,
+                                  maxCardWidth: cardCap, available: available,
                                   aspect: aspect, groupColumnWidth: groupColumnWidth)
         return PaletteMetrics(
             layout: .fullScreen, columns: cell.columns, rows: cell.rows,
@@ -263,7 +308,7 @@ enum PaletteLayoutEngine {
 
         // Width decides the card, exactly as in the windowed palette: never
         // wider than the user's maximum, never wider than the cell.
-        let cardWidth = max(80, min(cellWidth, maxCardWidth))
+        let cardWidth = max(PaletteCardScale.floor, min(cellWidth, maxCardWidth))
         let thumbnailWidth = max(60, cardWidth - 2 * cardPadding)
         let thumbnailHeight = thumbnailWidth / aspect
         return FullScreenCell(
@@ -633,7 +678,8 @@ final class WindowPalette {
             maxCardWidth: CGFloat(store.paletteMaxCardWidth),
             available: available,
             groupColumnWidth: groupColumnWidth,
-            showsApplicationShelf: model.mode == .search
+            showsApplicationShelf: model.mode == .search,
+            sizeFollowsCount: store.paletteCardSizeFollowsCount
         )
         model.metrics = metrics
         model.columns = metrics.columns

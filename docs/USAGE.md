@@ -196,8 +196,14 @@ still caps how large a card may get.
 
 Settings ▸ Panels controls the switcher: live previews, per-app colours, the
 theme, columns (Automatic or 2–8), maximum card size, opacity and the full-screen
-layout. Previews need **Screen Recording**; without it the cards fall back to
-app icons. The full-screen switcher uses the same `⌥⇥` / `⌥Space` keys.
+layout. **Size follows the number of windows** makes the previews larger when
+few windows are open: one window takes the whole maximum, two a little less, and
+from nine windows on about 70% of it. The count is the windows open when the
+switcher opens, not the search filter, so typing does not resize the panel; the
+profile never goes above the maximum or below 80 pt, and a fixed column count
+still decides the grid. Previews need **Screen Recording**; without it the cards
+fall back to app icons. The full-screen switcher uses the same `⌥⇥` / `⌥Space`
+keys.
 
 ## Groups
 
