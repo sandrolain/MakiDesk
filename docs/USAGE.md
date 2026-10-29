@@ -659,7 +659,14 @@ Notices appear on the display and in the corner chosen in
 
 ## Settings
 
-The Settings window is split into tabs:
+The Settings window has a **sidebar** on the left; the section you pick is
+remembered for the next time, and opening **Dropzones…** from the menu goes
+straight to that section. Pages that hold several groups of options — General,
+Windows, Panels and Notifications — begin with a **strip of sub-sections**
+(Permissions · Behaviour · About, Placement · Focus · Overlay · macOS, and so
+on), so nothing is buried at the bottom of a long scroll. The sub-section is a
+place inside the page, not a preference: reopening Settings starts at the
+first one.
 
 - **General** — permissions, build, animations, keyboard shortcuts, licensing,
   reset and finish setup.
@@ -673,7 +680,9 @@ The Settings window is split into tabs:
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.
 
-The selected tab is remembered. The window is painted with the selected
+The window is a normal macOS window — its own title bar, with close, minimise and
+zoom — and opens at 800 × 580 or larger, so nothing is clipped beside the
+sidebar. The window is painted with the selected
 palette theme — background, cards, accent and a matching light or dark
 appearance for the native controls — and takes keyboard focus when it opens.
 The theme accent also paints the text caret and the selection in every field of

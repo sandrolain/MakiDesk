@@ -140,14 +140,13 @@ struct MakiDeskApp: App {
                               || ShelfController.shared.hasSelection == false)
                 }
                 Divider()
-                menuButton("Dropzones…", icon: "bolt.square.on.square") {
+                menuButton("Dropzones…", icon: "bolt.square") {
                     // The Settings tab is persisted: select it before opening.
                     UserDefaults.standard.set("dropzones", forKey: "settingsTab")
-                    NSApp.activate()
-                    NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
+                    SettingsController.shared.show()
                 }
             } label: {
-                Label("Dropzones", systemImage: "bolt.square.on.square")
+                Label("Dropzones", systemImage: "bolt.square")
             }
 
             Divider()
@@ -379,58 +378,22 @@ struct MakiDeskApp: App {
         } label: {
             Image(nsImage: MenuBarIcon.image())
                 .accessibilityLabel("MakiDesk")
-                .modifier(SettingsOpenerBridge())
+                .onAppear(perform: openSetupOnFirstRun)
         }
-        Window("Settings", id: "makidesk-settings") {
-            SettingsView(store: store)
-        }
-        .defaultSize(width: 760, height: 720)
-        .windowResizability(.contentMinSize)
-    }
-}
-
-/// Opens the Settings window on first launch and on demand. The status-item
-/// label is the only SwiftUI view that is alive before the menu is opened, so it
-/// is used to reach the `openWindow` environment action. The legacy
-/// `sendAction(Selector(("showSettingsWindow:")))` does not work for an
-/// accessory app without a main menu (it silently reaches no responder).
-private struct SettingsOpenerBridge: ViewModifier {
-    @Environment(\.openWindow) private var openWindow
-
-    private func showSettings() {
-        openWindow(id: "makidesk-settings")
     }
 
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                guard !SettingsOpenerBridge.didAttemptFirstRun else { return }
-                guard !UserDefaults.standard.bool(forKey: "setupCompleted") else { return }
-                SettingsOpenerBridge.didAttemptFirstRun = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    makiLog.notice("FirstRun: opening setup window")
-                    showSettings()
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .makiDeskOpenSettings)) { _ in
-                showSettings()
-                // Ask the live view to take focus now (reopen) and once more
-                // when a new window has been built.
-                NotificationCenter.default.post(name: .makiDeskFocusSettings, object: nil)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    NotificationCenter.default.post(name: .makiDeskFocusSettings, object: nil)
-                }
-            }
+    /// The first launch opens Settings, where the permissions are explained.
+    private func openSetupOnFirstRun() {
+        guard !Self.didAttemptFirstRun else { return }
+        guard !UserDefaults.standard.bool(forKey: "setupCompleted") else { return }
+        Self.didAttemptFirstRun = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            makiLog.notice("FirstRun: opening setup window")
+            SettingsController.shared.show()
+        }
     }
 
     private static var didAttemptFirstRun = false
-}
-
-extension Notification.Name {
-    /// Requests that the Settings window be opened (see `SettingsOpenerBridge`).
-    static let makiDeskOpenSettings = Notification.Name("makiDeskOpenSettings")
-    /// Asks the live Settings view to activate the app and take keyboard focus.
-    static let makiDeskFocusSettings = Notification.Name("makiDeskFocusSettings")
 }
 
 /// Notes are written while the user types, but the session (tabs, cursors,

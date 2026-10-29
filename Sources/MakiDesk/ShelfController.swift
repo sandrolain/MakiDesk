@@ -462,7 +462,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         hint.alignment = .right
 
         let zones = NSButton()
-        zones.image = NSImage(systemSymbolName: "bolt.square.on.square",
+        zones.image = NSImage(systemSymbolName: "bolt.square",
                               accessibilityDescription: "Run a dropzone on the selection")
         zones.isBordered = false
         zones.imagePosition = .imageOnly
@@ -1561,7 +1561,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         dropzoneKeyboardMode = true
         panel?.makeFirstResponder(table)
         HUDController.shared.show("← → choose · ↩ run · Esc back",
-                                  symbol: "bolt.square.on.square")
+                                  symbol: "bolt.square")
     }
 
     private func leaveDropzoneKeyboardMode() {

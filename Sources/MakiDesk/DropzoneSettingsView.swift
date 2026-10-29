@@ -331,7 +331,7 @@ struct DropzoneSettingsView: View {
 
     private var emptyDetail: some View {
         VStack(spacing: 10) {
-            Image(systemName: "bolt.square.on.square")
+            Image(systemName: "bolt.square")
                 .font(.system(size: 30))
                 .foregroundStyle(theme.accent)
             Text(model.zones.isEmpty ? "Commands on drop" : "Select a dropzone")

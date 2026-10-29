@@ -180,8 +180,8 @@ screenshots or recordings.
 
 A theme that covers the panels, the Settings window, the overlay and the text
 caret, configurable animations, a focus border, a searchable Keyboard Shortcuts window,
-and Settings split into General, Windows, Layouts, Panels, Notifications,
-Groups and Dropzones. Utility windows open on the display where the focused
+and Settings with a sidebar — General, Windows, Layouts, Panels, Notifications,
+Groups and Dropzones — whose longer pages split into a strip of sub-sections. Utility windows open on the display where the focused
 window is, and recenter when they were last used on another one.
 
 <p align="center">

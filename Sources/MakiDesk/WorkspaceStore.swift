@@ -1173,27 +1173,13 @@ final class WorkspaceStore {
     }
 
     func openSettings() {
-        // The status-item bridge holds the `openSettings` environment action.
-        // The legacy `showSettingsWindow:` selector reaches no responder in an
-        // accessory app, so route the request through the bridge instead.
-        NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
-        bringSettingsToFront()
+        SettingsController.shared.show()
     }
 
     /// Brings the Settings window to the front and gives this accessory app the
     /// keyboard focus, without touching auxiliary windows.
     func bringSettingsToFront() {
-        // A floating window cannot become main, and an accessory app with no
-        // main window is not allowed to activate: Settings lives at the normal
-        // level. Only touch its own window, never an auxiliary dialog.
-        NSApp.activate()
-        DispatchQueue.main.async {
-            let all = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }
-            let settings = all.filter { $0.identifier?.rawValue == "MakiDeskSettingsWindow" }
-            for window in (settings.isEmpty ? all.filter(\.canBecomeMain) : settings) {
-                window.makeKeyAndOrderFront(nil)
-            }
-        }
+        SettingsController.shared.show()
     }
 
     // MARK: - Shortcuts
@@ -1233,7 +1219,7 @@ final class WorkspaceStore {
         switch action {
         case .openSettings:
             NSApp.activate()
-            NotificationCenter.default.post(name: .makiDeskOpenSettings, object: nil)
+            SettingsController.shared.show()
             return
         case .openKeyboardShortcuts:
             ShortcutsWindowController.shared.show()

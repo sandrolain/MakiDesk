@@ -160,8 +160,16 @@ baseline; saving writes only on `⌘S`.
 The panels share the app theme: the switcher, notes, clipboard, shelf, HUD,
 overlay and Settings all read `PaletteTheme` and repaint on
 `.makiDeskThemeChanged`. Settings keeps native controls but paints its
-background, tab bar and section cards with the theme, and flips the window
-appearance to match light or dark themes. Animations
+background, sidebar and section cards with the theme, and flips the window
+appearance to match light or dark themes. Its window is AppKit's own
+(`SettingsController`), not a SwiftUI `Window` scene: SwiftUI builds those with
+`.borderless` in the style mask and keeps the title bar behind the hosted
+content, which on macOS 26 left the standard close/minimise/zoom buttons drawn
+under the content, invisible and unclickable. Its sections are a single enum whose
+raw values are the persisted selection, so the menu's deep links and an existing
+preference keep pointing at the same page. Pages with many groups split them
+into a strip of sub-sections, held as view state: the choice lasts while the
+window is open and is deliberately not a stored preference. Animations
 have one switch and one duration in Settings; macOS Reduce Motion always wins.
 The keyboard reference is a plain data catalogue (`ShortcutCatalog`) rendered by
 a searchable window.
