@@ -32,7 +32,8 @@ For performance or lifecycle work, read the findings and current implementation 
 - Trace the caller, state owner, asynchronous completion and teardown before changing a shared API. Use `rg` to locate all callers.
 - Fix the cause with a focused change. Preserve existing dependency injection and pure geometry helpers; avoid adding another global cache or controller for state already owned elsewhere.
 - Keep model/discovery in the index and store, AX primitives in the controller, presentation in panels, and pure layout logic independent of AppKit I/O. Avoid growing `WorkspaceStore` or `ShelfController` with unrelated responsibilities.
-- Preserve persisted keys, defaults and formats unless the task requires a compatible migration. Update README/settings documentation when behavior changes.
+- Preserve persisted keys, defaults and formats unless the task requires a compatible migration.
+- **Keep the user-facing docs current with every new integration or behaviour change, in the same commit.** A new panel, command, setting or shortcut goes into `docs/USAGE.md` (the section and the shortcut/menu lists it belongs to), architecture, lifecycle or performance-relevant changes into `docs/ARCHITECTURE.md`, anything that touches data, permissions or network into `docs/PRIVACY.md`, and `README.md` gets its line in the feature list. A change that leaves those documents stale is not finished; state in the reply what was updated.
 - Do not upgrade dependencies, regenerate lockfiles, change signing identity or mix broad refactoring into a bug fix without a task-related reason.
 
 ## Responsiveness and concurrency invariants
