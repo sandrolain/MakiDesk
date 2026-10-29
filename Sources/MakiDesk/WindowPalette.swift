@@ -39,6 +39,9 @@ struct PaletteMetrics {
     /// Width reserved for the groups side column (G3), already part of
     /// `panelSize`; zero when the column is hidden.
     let groupColumnWidth: CGFloat
+    /// Width reserved for the actions column (T63) on the right, already part of
+    /// `panelSize`.
+    var actionColumnWidth: CGFloat = 0
 
     /// Corner radius of the panel's background, following the card scale.
     var panelCornerRadius: CGFloat { layout == .fullScreen ? 28 : 20 }
@@ -133,6 +136,7 @@ enum PaletteLayoutEngine {
     static func metrics(itemCount: Int, layout: PaletteLayout,
                         columns: Int, maxCardWidth: CGFloat,
                         available: CGSize, groupColumnWidth: CGFloat = 0,
+                        actionColumnWidth: CGFloat = 0,
                         showsApplicationShelf: Bool = false,
                         sizeFollowsCount: Bool = false) -> PaletteMetrics {
         // The screen's own proportions drive the shape of every preview box, so
@@ -145,6 +149,7 @@ enum PaletteLayoutEngine {
                                   columns: columns, maxCardWidth: maxCardWidth,
                                   available: available, aspect: aspect,
                                   groupColumnWidth: groupColumnWidth,
+                                  actionColumnWidth: actionColumnWidth,
                                   applicationShelf: applicationShelf,
                                   sizeFollowsCount: sizeFollowsCount)
         case .fullScreen:
@@ -152,6 +157,7 @@ enum PaletteLayoutEngine {
                                      columns: columns, maxCardWidth: maxCardWidth,
                                      available: available, aspect: aspect,
                                      groupColumnWidth: groupColumnWidth,
+                                     actionColumnWidth: actionColumnWidth,
                                      applicationShelf: applicationShelf,
                                      sizeFollowsCount: sizeFollowsCount)
         }
@@ -163,9 +169,20 @@ enum PaletteLayoutEngine {
         layout == .fullScreen ? 112 : 92
     }
 
-    /// Width of the groups side column (G3): room for the number, an optional
-    /// name, the member count and the row's three commands.
-    static let groupColumnWidth: CGFloat = 196
+    /// One width for both side columns (G3, T63): the groups and the actions
+    /// line up, and the grid gives the same room to either of them.
+    static let sideColumnWidth: CGFloat = 196
+
+    /// Width of the groups side column: room for the number, an optional name,
+    /// the member count and the row's three commands.
+    static let groupColumnWidth = sideColumnWidth
+
+    /// Width of the actions column: a badge and its label on one line, and the
+    /// layout buttons with their words.
+    static let actionColumnWidth = sideColumnWidth
+    /// The same column as a strip of badges and icons, used only when the words
+    /// would push the cards under their floor. The commands never disappear.
+    static let compactActionColumnWidth: CGFloat = 52
 
     /// Height taken by the two text lines and the spacing between them, for a
     /// given font size. Kept here so the card and the grid maths agree.
@@ -180,25 +197,35 @@ enum PaletteLayoutEngine {
                                        available: CGSize,
                                        aspect: CGFloat,
                                        groupColumnWidth: CGFloat,
+                                       actionColumnWidth: CGFloat,
                                        applicationShelf: CGFloat,
                                        sizeFollowsCount: Bool) -> PaletteMetrics {
         let columns = PaletteLayoutEngine.columns(configured: configuredColumns, itemCount: itemCount)
         let rows = max(1, Int(ceil(Double(max(1, itemCount)) / Double(columns))))
-        // Room for the search field (about 68 pt), the footer (about 38 pt) and,
-        // in search mode, the applications shelf.
-        let chrome: CGFloat = 120 + applicationShelf
+        // Room for the search field (about 68 pt) and, in search mode, the
+        // applications shelf. The footer is gone: its keys and commands moved
+        // to the side column (T63).
+        let chrome: CGFloat = 84 + applicationShelf
         let spacing: CGFloat = 16
         let padding: CGFloat = 20
         let fontSize: CGFloat = 12
         let cardPadding: CGFloat = 10
         let maxPanelWidth = min(1400, max(available.width, 600))
         let maxPanelHeight = min(900, max(available.height, 400))
+        // The actions column keeps its words until they would push the cards
+        // under their floor: then it becomes the icon strip (T63).
+        var actionWidth = actionColumnWidth
+        if actionWidth > 0 {
+            let withWords = CGFloat(columns) * PaletteCardScale.floor + 2 * padding
+                + CGFloat(columns - 1) * spacing + groupColumnWidth + actionWidth
+            if withWords > maxPanelWidth { actionWidth = compactActionColumnWidth }
+        }
 
         // The wanted size, shrunk only as far as needed to make the configured
         // columns fit the screen's width (T15); the groups column takes its
         // width off the cards, never off the screen edge.
-        let fitCardWidth = (maxPanelWidth - groupColumnWidth - 2 * padding - CGFloat(columns - 1) * spacing)
-            / CGFloat(columns)
+        let fitCardWidth = (maxPanelWidth - groupColumnWidth - actionWidth
+            - 2 * padding - CGFloat(columns - 1) * spacing) / CGFloat(columns)
         let cardCap = PaletteCardScale.maximumCardWidth(maxCardWidth, itemCount: itemCount,
                                                         followsCount: sizeFollowsCount)
         let cardWidth = max(PaletteCardScale.floor, min(cardCap, fitCardWidth))
@@ -208,7 +235,7 @@ enum PaletteLayoutEngine {
         let cardHeight = thumbnailHeight + 2 * cardPadding + textBlockHeight(fontSize: fontSize)
 
         let width = CGFloat(columns) * cardWidth + 2 * padding + CGFloat(columns - 1) * spacing
-            + groupColumnWidth
+            + groupColumnWidth + actionWidth
         let height = min(CGFloat(rows) * cardHeight + 2 * padding + CGFloat(rows - 1) * spacing + chrome,
                          maxPanelHeight)
         return PaletteMetrics(
@@ -219,7 +246,8 @@ enum PaletteLayoutEngine {
             fontSize: fontSize, iconSize: 30, badgeSize: 22,
             badgeSymbolSize: 11,
             panelSize: CGSize(width: width, height: height),
-            groupColumnWidth: groupColumnWidth
+            groupColumnWidth: groupColumnWidth,
+            actionColumnWidth: actionWidth
         )
     }
 
@@ -235,11 +263,13 @@ enum PaletteLayoutEngine {
                                           available: CGSize,
                                           aspect: CGFloat,
                                           groupColumnWidth: CGFloat,
+                                          actionColumnWidth: CGFloat,
                                           applicationShelf: CGFloat,
                                           sizeFollowsCount: Bool) -> PaletteMetrics {
         let compact = compactMetrics(itemCount: itemCount, columns: configuredColumns,
                                      maxCardWidth: maxCardWidth, available: available,
                                      aspect: aspect, groupColumnWidth: groupColumnWidth,
+                                     actionColumnWidth: actionColumnWidth,
                                      applicationShelf: 0,
                                      sizeFollowsCount: sizeFollowsCount)
         let cardCap = PaletteCardScale.maximumCardWidth(maxCardWidth, itemCount: itemCount,
@@ -249,12 +279,14 @@ enum PaletteLayoutEngine {
             : automaticFullScreenColumns(itemCount: itemCount, maxCardWidth: cardCap,
                                          available: available, aspect: aspect,
                                          groupColumnWidth: groupColumnWidth,
+                                         actionColumnWidth: actionColumnWidth,
                                          applicationShelf: applicationShelf,
                                          minimumCardWidth: compact.cardWidth,
                                          minimumGridWidth: compact.gridWidth)
         let cell = fullScreenCell(itemCount: itemCount, columns: columns,
                                   maxCardWidth: cardCap, available: available,
-                                  aspect: aspect, groupColumnWidth: groupColumnWidth)
+                                  aspect: aspect, groupColumnWidth: groupColumnWidth,
+                                  actionColumnWidth: actionColumnWidth)
         return PaletteMetrics(
             layout: .fullScreen, columns: cell.columns, rows: cell.rows,
             cardWidth: cell.cardWidth, cardHeight: cell.cardHeight,
@@ -264,7 +296,8 @@ enum PaletteLayoutEngine {
             fontSize: cell.fontSize, iconSize: 30 * (cell.fontSize / 12),
             badgeSize: 22 * (cell.fontSize / 12), badgeSymbolSize: 11 * (cell.fontSize / 12),
             panelSize: CGSize(width: max(600, available.width), height: max(400, available.height)),
-            groupColumnWidth: groupColumnWidth
+            groupColumnWidth: groupColumnWidth,
+            actionColumnWidth: actionColumnWidth
         )
     }
 
@@ -272,8 +305,9 @@ enum PaletteLayoutEngine {
 
     private static let fullScreenPadding: CGFloat = 40
     private static let fullScreenSpacing: CGFloat = 24
-    /// Room for the search field and the footer, which grow with the font.
-    private static let fullScreenChrome: CGFloat = 170
+    /// Room for the search field, which grows with the font. The footer became
+    /// the side column (T63).
+    private static let fullScreenChrome: CGFloat = 134
     /// The divider between the groups column and the grid.
     private static let fullScreenDividerWidth: CGFloat = 1
 
@@ -294,11 +328,13 @@ enum PaletteLayoutEngine {
                                        maxCardWidth: CGFloat,
                                        available: CGSize,
                                        aspect: CGFloat,
-                                       groupColumnWidth: CGFloat) -> FullScreenCell {
+                                       groupColumnWidth: CGFloat,
+                                       actionColumnWidth: CGFloat) -> FullScreenCell {
         let count = max(1, itemCount)
         let rows = (count + columns - 1) / columns
-        let cellWidth = (available.width - groupColumnWidth - fullScreenDividerWidth
-            - 2 * fullScreenPadding - CGFloat(columns - 1) * fullScreenSpacing) / CGFloat(columns)
+        let cellWidth = (available.width - groupColumnWidth - actionColumnWidth
+            - 2 * fullScreenDividerWidth - 2 * fullScreenPadding
+            - CGFloat(columns - 1) * fullScreenSpacing) / CGFloat(columns)
 
         // A gentle font grow: the box, not the text, takes most of the extra
         // room, so enlarging the layout grows the previews first.
@@ -328,6 +364,7 @@ enum PaletteLayoutEngine {
                                                    available: CGSize,
                                                    aspect: CGFloat,
                                                    groupColumnWidth: CGFloat,
+                                                   actionColumnWidth: CGFloat,
                                                    applicationShelf: CGFloat,
                                                    minimumCardWidth: CGFloat,
                                                    minimumGridWidth: CGFloat) -> Int {
@@ -335,7 +372,8 @@ enum PaletteLayoutEngine {
         let candidates = (1...limit).map { columns in
             fullScreenCell(itemCount: itemCount, columns: columns, maxCardWidth: maxCardWidth,
                            available: available, aspect: aspect,
-                           groupColumnWidth: groupColumnWidth)
+                           groupColumnWidth: groupColumnWidth,
+                           actionColumnWidth: actionColumnWidth)
         }
         func gridWidth(_ cell: FullScreenCell) -> CGFloat {
             CGFloat(cell.columns) * cell.cardWidth
@@ -345,11 +383,11 @@ enum PaletteLayoutEngine {
             CGFloat(cell.rows) * cell.cardHeight
                 + CGFloat(max(0, cell.rows - 1)) * fullScreenSpacing
         }
-        // Only a grid that fits the width is usable: the groups column and its
-        // one-point divider are already taken by the layout.
+        // Only a grid that fits the width is usable: both columns and their
+        // one-point dividers are already taken by the layout.
         let fitting = candidates.filter { cell in
-            gridWidth(cell) + 2 * fullScreenPadding + groupColumnWidth
-                + fullScreenDividerWidth <= available.width + 0.5
+            gridWidth(cell) + 2 * fullScreenPadding + groupColumnWidth + actionColumnWidth
+                + 2 * fullScreenDividerWidth <= available.width + 0.5
         }
         guard !fitting.isEmpty else { return 1 }
 
@@ -678,6 +716,7 @@ final class WindowPalette {
             maxCardWidth: CGFloat(store.paletteMaxCardWidth),
             available: available,
             groupColumnWidth: groupColumnWidth,
+            actionColumnWidth: PaletteLayoutEngine.actionColumnWidth,
             showsApplicationShelf: model.mode == .search,
             sizeFollowsCount: store.paletteCardSizeFollowsCount
         )
@@ -1764,9 +1803,11 @@ struct PaletteView: View {
                         }
                     }
                 }
-
-                footer
             }
+            Rectangle()
+                .fill(model.theme.surface.opacity(0.8))
+                .frame(width: 1)
+            actionsColumn
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: model.metrics.panelCornerRadius)
@@ -2020,37 +2061,102 @@ struct PaletteView: View {
         .buttonStyle(.plain)
     }
 
-    /// Footer: the key hints and the layout commands. The hints follow the mode,
-    /// because the keys do — while browsing ⌥ is held (and releasing it picks the
-    /// highlighted window), while searching it is not and the field has the keys.
-    private var footer: some View {
-        HStack(spacing: 16 * scale) {
-            if model.mode == .browse {
-                keyHint("⏎", "open")
-                keyHint("⌥Q", "close")
-                keyHint("⌥⇧Q", "quit")
-                keyHint("⌥M", "minimize")
-                keyHint("1…9", "group")
-                keyHint("⌥Space", "search")
-            } else {
-                if model.appSelection != nil {
-                    keyHint("←→", "apps")
-                    keyHint("↓", "windows")
-                    keyHint("⏎", "launch")
-                } else {
-                    keyHint("↑↓", "choose")
-                    if !model.matchingApplications.isEmpty { keyHint("↑", "apps") }
-                    keyHint("⏎", "open")
-                    keyHint("⌥Space", "next")
+    // MARK: - Actions column (T63)
+
+    /// The keys, the status line and the layout commands that used to sit under
+    /// the grid, now a column on the right with the shape of the groups one.
+    /// Its contents follow the mode; its width never does, so changing mode
+    /// cannot make the grid jump.
+    private var actionsColumn: some View {
+        // The strip variant keeps every command, with the words in the tooltip.
+        let compact = model.metrics.actionColumnWidth < PaletteLayoutEngine.actionColumnWidth
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Image(systemName: "command").font(.system(size: 10 * scale))
+                    Text("ACTIONS")
+                        .font(.system(size: 10 * scale, weight: .bold))
+                        .tracking(0.6)
+                    Spacer(minLength: 0)
                 }
-                keyHint("esc", "close")
+                .foregroundStyle(model.theme.subtext)
+                .padding(.bottom, 2)
+
+                ForEach(hintKeys.indices, id: \.self) { index in
+                    hintRow(hintKeys[index].key, hintKeys[index].label, compact: compact)
+                }
+
+                Rectangle()
+                    .fill(model.theme.border.opacity(0.5))
+                    .frame(height: 1)
+                    .padding(.vertical, 2)
+
+                status
+
+                if model.appSelection == nil {
+                    VStack(spacing: 3) {
+                        commandButton("Tile", symbol: "square.grid.3x3", compact: compact) { onLayoutCommand(.tile) }
+                        commandButton("Golden", symbol: "circle.hexagongrid", compact: compact) { onLayoutCommand(.goldenSpiral) }
+                        commandButton("Content", symbol: "rectangle.3.group", compact: compact) { onLayoutCommand(.content) }
+                        commandButton("Auto", symbol: "wand.and.stars", compact: compact) { onLayoutCommand(.auto) }
+                        commandButton("Focus", symbol: "eye", compact: compact) { onLayoutCommand(.focus) }
+                    }
+                    .padding(.top, 4)
+                }
             }
-            Spacer()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .frame(width: model.metrics.actionColumnWidth, alignment: .top)
+        .frame(maxHeight: .infinity)
+    }
+
+    /// The keys of the mode in force, one per row. The hints are decorative for
+    /// VoiceOver: the buttons next to them keep their own labels.
+    private var hintKeys: [(key: String, label: String)] {
+        if model.mode == .browse {
+            return [("⏎", "open"), ("⌥Q", "close"), ("⌥⇧Q", "quit"),
+                    ("⌥M", "minimize"), ("1…9", "group"), ("⌥Space", "search")]
+        }
+        if model.appSelection != nil {
+            return [("←→", "apps"), ("↓", "windows"), ("⏎", "launch"), ("esc", "close")]
+        }
+        var rows: [(key: String, label: String)] = [("↑↓", "choose")]
+        if !model.matchingApplications.isEmpty { rows.append(("↑", "apps")) }
+        rows.append(("⏎", "open"))
+        rows.append(("⌥Space", "next"))
+        rows.append(("esc", "close"))
+        return rows
+    }
+
+    private func hintRow(_ key: String, _ label: String, compact: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(key)
+                .font(.system(size: 10.5 * scale, weight: .semibold))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .frame(minWidth: 34, alignment: .center)
+                .background(RoundedRectangle(cornerRadius: 5).fill(model.theme.surface))
+                .foregroundStyle(model.theme.text)
+            if compact == false {
+                Text(label)
+                    .font(.system(size: 11 * scale))
+                    .foregroundStyle(model.theme.subtext)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .help("\(key) \(label)")
+        .accessibilityHidden(true)
+    }
+
+    /// What the commands will act on, or what is being edited.
+    private var status: some View {
+        Group {
             if let selection = model.appSelection,
                selection < model.matchingApplications.count {
                 Text(model.matchingApplications[selection].name)
                     .font(.system(size: 11 * scale, weight: .semibold))
-                    .lineLimit(1)
                     .foregroundStyle(model.theme.text)
             } else if let slot = model.selectedGroupSlot {
                 let name = model.groupRows.first { $0.slot == slot }?.displayName ?? "Group \(slot)"
@@ -2064,30 +2170,33 @@ struct PaletteView: View {
                     .font(.system(size: 11 * scale))
                     .foregroundStyle(model.theme.subtext)
             }
-            if model.appSelection == nil {
-                commandButton("Tile", symbol: "square.grid.3x3") { onLayoutCommand(.tile) }
-                commandButton("Golden", symbol: "circle.hexagongrid") { onLayoutCommand(.goldenSpiral) }
-                commandButton("Content", symbol: "rectangle.3.group") { onLayoutCommand(.content) }
-                commandButton("Auto", symbol: "wand.and.stars") { onLayoutCommand(.auto) }
-                commandButton("Focus", symbol: "eye") { onLayoutCommand(.focus) }
-            }
         }
-        .padding(.horizontal, model.metrics.padding)
-        .padding(.bottom, 12 * scale)
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 1)
     }
 
     private func commandButton(_ title: String, symbol: String? = nil,
+                               compact: Bool = false,
                                action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 if let symbol { Image(systemName: symbol).font(.system(size: 10 * scale)) }
-                Text(title).font(.system(size: 11 * scale, weight: .semibold))
+                if compact == false {
+                    Text(title).font(.system(size: 11 * scale, weight: .semibold))
+                    Spacer(minLength: 0)
+                }
             }
-            .padding(.horizontal, 8).padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
             .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.surface))
             .foregroundStyle(model.theme.text)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .help(title)
     }
 
     private func activateSelection() {
@@ -2100,18 +2209,6 @@ struct PaletteView: View {
         if model.selection < list.count { onActivate(list[model.selection].id) }
     }
 
-    private func keyHint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            Text(key)
-                .font(.system(size: 11 * scale, weight: .semibold))
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 5).fill(model.theme.surface))
-                .foregroundStyle(model.theme.text)
-            Text(label)
-                .font(.system(size: 11 * scale))
-                .foregroundStyle(model.theme.subtext)
-        }
-    }
 }
 
 /// The sizes of the label block under a preview (T56). Kept pure and apart from

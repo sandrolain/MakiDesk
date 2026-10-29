@@ -314,10 +314,12 @@ final class GeometryTests: XCTestCase {
     private func paletteMetrics(_ layout: PaletteLayout, count: Int,
                                 columns: Int = 0, maxCardWidth: CGFloat = 250,
                                 groupColumnWidth: CGFloat = 0,
+                                actionColumnWidth: CGFloat = 0,
                                 available: CGSize = CGSize(width: 1440, height: 900)) -> PaletteMetrics {
         PaletteLayoutEngine.metrics(itemCount: count, layout: layout,
                                     columns: columns, maxCardWidth: maxCardWidth, available: available,
-                                    groupColumnWidth: groupColumnWidth)
+                                    groupColumnWidth: groupColumnWidth,
+                                    actionColumnWidth: actionColumnWidth)
     }
 
     func testFullScreenMetricsFitTheVisibleFrame() {
@@ -509,6 +511,82 @@ final class GeometryTests: XCTestCase {
         XCTAssertEqual(with.columns, without.columns)
         XCTAssertLessThan(with.cardWidth, without.cardWidth)
         XCTAssertLessThanOrEqual(with.panelSize.width, available.width + 0.01)
+    }
+
+    // MARK: - Palette actions column (T63)
+
+    func testTheTwoSideColumnsShareOneWidth() {
+        XCTAssertEqual(PaletteLayoutEngine.groupColumnWidth,
+                       PaletteLayoutEngine.actionColumnWidth, accuracy: 0.01)
+        XCTAssertEqual(PaletteLayoutEngine.groupColumnWidth,
+                       PaletteLayoutEngine.sideColumnWidth, accuracy: 0.01)
+    }
+
+    func testTheActionsColumnWidensTheCompactPanelByItsOwnWidth() {
+        let available = CGSize(width: 1440, height: 900)
+        let column = PaletteLayoutEngine.actionColumnWidth
+        let without = paletteMetrics(.compact, count: 1, available: available)
+        let with = paletteMetrics(.compact, count: 1, actionColumnWidth: column,
+                                  available: available)
+        XCTAssertEqual(with.columns, without.columns)
+        XCTAssertEqual(with.cardWidth, without.cardWidth, accuracy: 0.01)
+        XCTAssertEqual(with.panelSize.width - without.panelSize.width, column, accuracy: 0.01)
+        // The footer is gone, so the panel is a little shorter than before: the
+        // grid gets the room the keys used to take.
+        XCTAssertLessThan(with.panelSize.height, 900)
+    }
+
+    func testTheActionsColumnTakesItsWidthOffTheCardsOnANarrowScreen() {
+        let available = CGSize(width: 1000, height: 800)
+        let column = PaletteLayoutEngine.actionColumnWidth
+        let without = paletteMetrics(.compact, count: 9,
+                                     groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                     available: available)
+        let with = paletteMetrics(.compact, count: 9,
+                                  groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                  actionColumnWidth: column, available: available)
+        XCTAssertEqual(with.actionColumnWidth, column)
+        XCTAssertLessThan(with.cardWidth, without.cardWidth)
+        XCTAssertLessThanOrEqual(with.panelSize.width, available.width + 0.01)
+        XCTAssertGreaterThanOrEqual(with.cardWidth, PaletteCardScale.floor)
+    }
+
+    func testBothColumnsFitTheFullScreenGrid() {
+        let available = CGSize(width: 1440, height: 900)
+        let with = paletteMetrics(.fullScreen, count: 12,
+                                  groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                  actionColumnWidth: PaletteLayoutEngine.actionColumnWidth,
+                                  available: available)
+        XCTAssertEqual(with.panelSize.width, available.width, accuracy: 0.01)
+        let used = with.gridWidth + 2 * with.padding
+            + PaletteLayoutEngine.groupColumnWidth + PaletteLayoutEngine.actionColumnWidth + 2
+        XCTAssertLessThanOrEqual(used, available.width + 1)
+        XCTAssertGreaterThanOrEqual(with.cardWidth, PaletteCardScale.floor)
+    }
+
+    func testTheActionsColumnBecomesAnIconStripWhenTheCardsWouldShrink() {
+        // Too narrow for the words: the column keeps its commands as icons and
+        // the cards stay at their floor instead of being squeezed.
+        let available = CGSize(width: 640, height: 700)
+        let metrics = paletteMetrics(.compact, count: 9,
+                                     groupColumnWidth: PaletteLayoutEngine.groupColumnWidth,
+                                     actionColumnWidth: PaletteLayoutEngine.actionColumnWidth,
+                                     available: available)
+        XCTAssertEqual(metrics.actionColumnWidth,
+                       PaletteLayoutEngine.compactActionColumnWidth, accuracy: 0.01)
+        XCTAssertGreaterThanOrEqual(metrics.cardWidth, PaletteCardScale.floor)
+        XCTAssertLessThanOrEqual(metrics.panelSize.width, available.width + 0.01)
+    }
+
+    func testTheActionsColumnIsNeverDropped() {
+        for width in [640.0, 900.0, 1440.0] {
+            let available = CGSize(width: width, height: 800)
+            let metrics = paletteMetrics(.compact, count: 5,
+                                         actionColumnWidth: PaletteLayoutEngine.actionColumnWidth,
+                                         available: available)
+            XCTAssertGreaterThan(metrics.actionColumnWidth, 0)
+            XCTAssertGreaterThan(metrics.cardWidth, 0)
+        }
     }
 
     func testGroupsColumnShrinksTheFullScreenGridNotThePanel() {

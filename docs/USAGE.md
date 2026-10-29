@@ -154,10 +154,11 @@ With three or more windows in view, MakiDesk can lay them out as a set:
 | Suggested | `⌃⌥A` | The advisor chooses grid or spiral from the number of windows, the content measure, the kind of app and the window sizes, and says why. |
 | Content-weighted | `⌃⌥W` | A squarified treemap whose areas follow each window's weight. |
 
-The same commands are in the menu **Layout**, and as **Tile / Golden / Content /
-Auto** buttons in the window switcher. When windows are ticked in the switcher,
-the command applies only to those; otherwise it applies to every window in view.
-The **selected windows** variants are in the menu.
+The same commands are in the menu **Layout** and in the **Actions** column on
+the right of the window switcher — **Tile / Golden / Content / Auto / Focus**.
+When windows are ticked in the switcher, the command applies only to those;
+otherwise it applies to every window in view. The **selected windows** variants
+are in the menu.
 
 **Suggested layout.** Settings ▸ Layouts has *Ask before using the suggested
 layout*. With it on, `⌃⌥A` shows the advice and its reason and waits; running it
@@ -214,9 +215,12 @@ still caps how large a card may get.
   ticks its members. **⌥1…9** adds or removes the highlighted card from the
   group being edited. With a group selected, **Return** recalls it (`⌘↩` while
   searching).
-- With a group being edited, clicking a card toggles it too. The footer's
-  **Tile / Golden / Content / Auto** buttons act on the ticked windows (all in
-  view when none is ticked).
+- The **Actions** column on the right lists the keys of the current mode and
+  the layout buttons; with a group being edited they act on the ticked windows
+  (all in view when none is ticked). Its width never changes, so switching
+  between browsing, searching and choosing an application does not move the
+  grid; on a screen too narrow for the words it becomes a strip of icons and
+  the words move to the tooltips.
 - While browsing, `⌥Q` closes the highlighted window, `⌥⇧Q` quits its app
   (unforced, so save prompts appear) and `⌥M` minimizes it. **⌫** resets the
   selected group, with a confirming second press.
