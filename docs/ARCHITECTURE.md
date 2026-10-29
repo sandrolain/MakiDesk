@@ -163,6 +163,12 @@ have one switch and one duration in Settings; macOS Reduce Motion always wins.
 The keyboard reference is a plain data catalogue (`ShortcutCatalog`) rendered by
 a searchable window.
 
+`ThemedTextCursor` keeps the caret and the selection on the theme accent for
+every editable control. They all edit through AppKit's shared field editor, an
+`NSTextView` that posts `NSText.didBeginEditingNotification`, so one observer
+covers SwiftUI text fields, search fields and the Notes editor without owning
+any of them; a theme change repaints the open ones immediately.
+
 `HUDController` keeps what is on screen in two lanes (`HUDStack`): sticky
 notices the user must dismiss, and transients that expire. The budgets are
 separate, so a sticky notice never blocks the queue and a burst never pushes an

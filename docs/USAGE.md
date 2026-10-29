@@ -634,6 +634,8 @@ The Settings window is split into tabs:
 The selected tab is remembered. The window is painted with the selected
 palette theme — background, cards, accent and a matching light or dark
 appearance for the native controls — and takes keyboard focus when it opens.
+The theme accent also paints the text caret and the selection in every field of
+the app, Notes included, instead of leaving them system blue.
 **Reset to defaults** asks whether groups, notes, clipboard history and
 dropzones should go too; settings always reset.
 

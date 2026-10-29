@@ -354,6 +354,7 @@ final class WorkspaceStore {
         WindowOutlineController.shared.start()
         FocusDimController.shared.start()
         ChecklistController.shared.start()
+        ThemedTextCursor.shared.start()
         startEnhancedUIHandling()
         WindowIndex.shared.onChange = { [weak self] in
             self?.syncModel()
