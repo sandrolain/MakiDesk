@@ -327,6 +327,10 @@ struct MakiDeskApp: App {
             menuButton("Notification History…", icon: "bell") {
                 NotificationHistoryController.shared.show()
             }
+            menuButton("Dismiss All Notices", icon: "bell.slash") {
+                HUDController.shared.hide()
+            }
+            .disabled(!HUDController.shared.hasNotices)
             menuButton("Settings…", keys: shortcutKeys(.openSettings),
                        icon: "gearshape") {
                 store.applyShortcut(.openSettings)

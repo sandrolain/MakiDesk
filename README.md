@@ -146,10 +146,13 @@ index is off; the list refreshes when files change.
 
 ### Notices that stay readable
 
-Results are reported by a small, themed notice: confirmations, warnings and
-errors stay long enough to be read, progress updates in place, and two notices
-can be visible at once without one hiding the other. Choose the corner and the
-display and text size in Settings ▸ Notifications, and open **Notification
+Results are reported by a small, themed notice. Its state tints the icon and
+border — grey for information, accent for a confirmation, green for success,
+orange for a warning, red for an error — and errors can be kept until you
+dismiss them with their ✕, while progress updates in place. Two notices can be
+visible at once without one hiding the other, and a notice waiting for you
+never blocks the ones that close by themselves. Choose the corner, the display
+and the text size in Settings ▸ Notifications, and open **Notification
 History…** for the last 50 messages (memory only). Notices never end up in
 screenshots or recordings.
 

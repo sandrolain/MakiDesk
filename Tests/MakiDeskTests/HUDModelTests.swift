@@ -10,6 +10,8 @@ final class HUDModelTests: XCTestCase {
 
     func testSeverityDurations() {
         XCTAssertEqual(HUDTiming.duration(for: .confirmation, base: 1.4) ?? 0, 1.4, accuracy: 0.001)
+        XCTAssertEqual(HUDTiming.duration(for: .info, base: 1.4) ?? 0, 1.4, accuracy: 0.001)
+        XCTAssertEqual(HUDTiming.duration(for: .success, base: 1.4) ?? 0, 1.4, accuracy: 0.001)
         XCTAssertEqual(HUDTiming.duration(for: .warning, base: 1.4) ?? 0, 2.1, accuracy: 0.001)
         XCTAssertEqual(HUDTiming.duration(for: .error, base: 1.4) ?? 0, 3.0, accuracy: 0.001)
         XCTAssertNil(HUDTiming.duration(for: .progress, base: 1.4))
@@ -125,7 +127,9 @@ final class HUDModelTests: XCTestCase {
         XCTAssertEqual(HUDKind.inferred(for: "xmark.circle"), .warning)
         XCTAssertEqual(HUDKind.inferred(for: "hand.raised.fill"), .warning)
         XCTAssertEqual(HUDKind.inferred(for: "lock.fill"), .warning)
-        XCTAssertEqual(HUDKind.inferred(for: "checkmark.circle.fill"), .confirmation)
+        XCTAssertEqual(HUDKind.inferred(for: "checkmark.circle.fill"), .success)
+        XCTAssertEqual(HUDKind.inferred(for: "info.circle"), .info)
+        XCTAssertEqual(HUDKind.inferred(for: "bell"), .info)
         XCTAssertEqual(HUDKind.inferred(for: "folder"), .confirmation)
     }
 

@@ -554,8 +554,10 @@ measurement in place with a small badge that copies the values or dismisses it.
 
 ## Notifications
 
-MakiDesk reports results with a small notice: confirmations, warnings and
-errors. Notices appear on the display and in the corner chosen in
+MakiDesk reports results with a small notice. Each one carries a state that
+tints its icon and border: grey for information, the theme accent for a
+confirmation, green for success, orange for a warning and red for an error.
+Notices appear on the display and in the corner chosen in
 **Settings ▸ Notifications**, and are excluded from screenshots and recordings.
 
 - Up to two notices are visible at once; the rest wait in a queue, so two
@@ -563,11 +565,19 @@ errors. Notices appear on the display and in the corner chosen in
   confirmations (with a three-second floor); progress notices such as
   *Receiving files…* or *Transferring shelf items…* update in place and
   disappear when the work ends.
+- **Sticky notices.** With *Keep errors until I dismiss them* on, an error has
+  no timer and waits with a ✕ on its right edge until you take it away;
+  **Dismiss All Notices** in the menu closes everything at once. Sticky notices
+  sit in their own lane, so they never hold back the notices that close by
+  themselves, and the newest three are kept. Off (the default), nothing
+  changes: every notice closes after its duration.
 - **Settings ▸ Notifications** sets placement (bottom or top, centre or right),
   the display (focused window or pointer), the base duration, the text size
   (the icon, padding and corners grow with it), compact mode, the VoiceOver
-  announcement and whether to keep a history; **Preview** shows the result.
-  With *Reduce Motion* on, notices appear without the short fade.
+  announcement, sticky errors and whether to keep a history. One **Preview**
+  button per state shows it with the current placement, size and theme; the
+  error one follows the sticky option. With *Reduce Motion* on, notices appear
+  without the short fade.
 - **Notification History…** in the menu (or from Settings) lists the last 50
   notices. Search, press Return to copy the selected message, or Clear to empty
   the list. History lives **in memory only** and disappears when MakiDesk quits:

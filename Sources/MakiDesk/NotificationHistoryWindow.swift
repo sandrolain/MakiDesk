@@ -308,7 +308,9 @@ private struct NotificationHistoryRow: View {
 
     private var tint: Color {
         switch notice.kind {
+        case .info: return theme.subtext
         case .confirmation, .progress: return theme.accent
+        case .success: return .green
         case .warning: return .orange
         case .error: return .red
         }

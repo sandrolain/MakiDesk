@@ -32,6 +32,7 @@ struct SettingsView: View {
     @AppStorage(HUDSettings.voiceOverKey) private var hudVoiceOver = true
     @AppStorage(HUDSettings.compactKey) private var hudCompact = false
     @AppStorage(HUDSettings.textSizeKey) private var hudTextSize: Double = 14
+    @AppStorage(HUDSettings.errorsStickyKey) private var hudKeepErrors = false
     @State private var showResetConfirmation = false
     @State private var excludedAppsText = ""
     /// Owned here, not by the tab, so switching tabs does not throw away a draft.
@@ -574,28 +575,47 @@ struct SettingsView: View {
         SettingsSection("Duration") {
             SliderRow(title: "Base duration", value: $hudBaseDuration,
                       range: 1...5, step: 0.2, unit: " s", decimals: 1)
-            caption("Confirmations stay for the base duration, warnings about half as long again, errors twice as long with a 3 s floor. Up to two notices are visible; the rest wait in a queue. Progress notices stay until the work ends.")
+            caption("Confirmations, information and successes stay for the base duration, warnings about half as long again, errors twice as long with a 3 s floor. Up to two notices are visible; the rest wait in a queue. Progress notices stay until the work ends.")
+        }
+
+        SettingsSection("Sticky notices") {
+            Toggle("Keep errors until I dismiss them", isOn: $hudKeepErrors)
+            HStack {
+                Text(HUDController.shared.hasNotices
+                     ? "Notices on screen close with their ✕."
+                     : "Nothing is showing.")
+                    .font(.caption)
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                Button("Dismiss All Notices") {
+                    HUDController.shared.hide()
+                }
+                .disabled(!HUDController.shared.hasNotices)
+            }
+            caption("Off, every notice closes by itself after its duration, exactly as before. On, errors have no timer and stay in the corner with a ✕ until you take them away. Notices you must dismiss never hold back the others: they sit in their own lane, and the newest three are kept on screen. Everything stays in the history.")
         }
 
         SettingsSection("Appearance") {
             SliderRow(title: "Text size", value: $hudTextSize,
                       range: 12...20, step: 1, unit: " pt", decimals: 0)
-            HStack {
-                Text("The icon, padding and corners grow with the text.")
-                    .font(.caption)
-                    .foregroundStyle(theme.subtext)
-                Spacer()
-                Button("Preview") {
-                    HUDController.shared.show(
-                        "Notification preview",
-                        symbol: "bell",
-                        detail: "Text size \(Int(hudTextSize)) pt"
-                    )
+            Text("Preview")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(theme.text)
+            // One button per state: the tint, the symbol and the duration are
+            // what the state is for, so each is shown as itself (T60).
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 6,
+                                          alignment: .leading)],
+                      alignment: .leading, spacing: 6) {
+                ForEach(HUDKind.allCases, id: \.self) { kind in
+                    Button(kind.label) {
+                        HUDController.shared.preview(kind)
+                    }
+                    .controlSize(.small)
                 }
             }
             Toggle("Compact notices (title only)", isOn: $hudCompact)
             Toggle("Announce with VoiceOver", isOn: $hudVoiceOver)
-            caption("Severity tints the icon and border: accent for confirmations, orange for warnings, red for errors. Notices are excluded from screenshots and recordings. With Reduce Motion on, they appear without the short fade.")
+            caption("The state tints the icon and border: grey for information, accent for a confirmation, green for success, orange for a warning, red for an error. Each Preview button shows its state in the current placement, size and theme; the error one follows the sticky option above. The icon, padding and corners grow with the text. Notices are excluded from screenshots and recordings, and with Reduce Motion on they appear without the short fade.")
         }
 
         SettingsSection("History") {

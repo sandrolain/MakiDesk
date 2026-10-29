@@ -163,6 +163,18 @@ have one switch and one duration in Settings; macOS Reduce Motion always wins.
 The keyboard reference is a plain data catalogue (`ShortcutCatalog`) rendered by
 a searchable window.
 
+`HUDController` keeps what is on screen in two lanes (`HUDStack`): sticky
+notices the user must dismiss, and transients that expire. The budgets are
+separate, so a sticky notice never blocks the queue and a burst never pushes an
+unread error away; one `layout()` stacks progress, sticky notices and
+transients together. A sticky notice carries a ✕ on its right edge, in its own
+small, click-taking panel — the notice panel itself still ignores the mouse, so
+a click meant for the app under it reaches the app; the control is centred
+vertically rather than put in the corner, where the rounded shape would leave it
+looking half outside the notice. `HUDStickyPolicy` owns the "nothing sticky by
+default, errors if the option is on" rule and `HUDTiming.duration(for:base:)`
+returns `nil` for a sticky notice.
+
 ## Permissions
 
 - **Accessibility** — AX window discovery/frames, `CGEvent` for clipboard paste,
