@@ -417,7 +417,9 @@ it too (Settings ▸ Panels). It holds files, folders, links, text and images:
   A selected row can be dragged alone; `⌘A` selects every item. Dragging a file
   lets the destination move it — Finder moves the original on the same volume
   and the row leaves the shelf; hold Option (or drag to another volume) to copy
-  it and keep the row. Text, links and images are always copied.
+  it and keep the row. Text, links and images are always copied. When the last
+  item leaves that way the shelf closes by itself, without taking the focus back
+  from where you dropped it.
 - **Save…** and the context menu copy or move everything to a folder. Text
   becomes a `.txt`, an image a `.png`, a link a `.webloc`; files keep their
   names, with a numeric suffix if needed.

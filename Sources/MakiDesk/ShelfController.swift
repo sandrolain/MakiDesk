@@ -1116,6 +1116,9 @@ final class ShelfController: NSObject, NSWindowDelegate,
         // thumbnail (T40). The staging folder takes it away on close.
         guard operation.contains(.move) else { return }
         for id in draggedIDs { remove(itemID: id, deleteStagedFile: false) }
+        // Nothing left: the shelf has done its job and gets out of the way.
+        // Focus is not restored — the user just dropped elsewhere.
+        if items.isEmpty { hide(restoringFocus: false) }
     }
 
     // MARK: - Menu and folders
