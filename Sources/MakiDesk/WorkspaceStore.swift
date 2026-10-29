@@ -1254,6 +1254,9 @@ final class WorkspaceStore {
         case .openScreenshots:
             ScreenshotLibraryController.shared.show()
             return
+        case .runCommand:
+            CommandBoxController.shared.show()
+            return
         case .toggleFocusBorder:
             updateFocusBorderEnabled(!focusBorderEnabled)
             return
@@ -1581,7 +1584,7 @@ final class WorkspaceStore {
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
              .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
-             .newTimer, .captureScreenshot:
+             .newTimer, .captureScreenshot, .runCommand:
             return nil
         }
     }
@@ -1961,6 +1964,7 @@ final class WorkspaceStore {
         case .toggleChecklist: return "checklist"
         case .newTimer: return "timer"
         case .captureScreenshot: return "screenshot"
+        case .runCommand: return "command"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

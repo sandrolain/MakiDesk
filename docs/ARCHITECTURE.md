@@ -182,6 +182,13 @@ every editable control. They all edit through AppKit's shared field editor, an
 covers SwiftUI text fields, search fields and the Notes editor without owning
 any of them; a theme change repaints the open ones immediately.
 
+`CommandCatalog` (T38) is the typed form of the menu: phrases, a one-line
+summary and the action each one runs, all values. `CommandBoxController` shows
+them in a panel with an `NSTextField` that reports the arrows, Tab, Return and
+Escape through `doCommandBy:`, so the palette's keys work while the field has the
+keyboard. Running a command goes through the same `applyShortcut` the menu uses,
+so a phrase and a menu row cannot diverge.
+
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and
 announces only a fresh image, with Shelf and Copy text as actions. Its policy —

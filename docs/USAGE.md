@@ -16,6 +16,7 @@ through Accessibility.
 - [Notes](#notes)
 - [Checklist](#checklist)
 - [Timers](#timers)
+- [Command box](#command-box)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
@@ -387,6 +388,40 @@ named after what it is (`25m`, `8:30`).
 - Timers live for the session only — nothing is written to disk and nothing
   survives a restart, because a timer that runs out while MakiDesk is closed
   could not announce itself.
+
+## Command box
+
+`⌃Space` (or **Run a Command…** in the menu) opens a field where a command is
+written in words. It is the menu and the shortcuts, typed:
+
+| What you type | What it does |
+|---|---|
+| `tile left`, `tile right`, `tile top`, `tile bottom` | The front window on that half |
+| `tile top left`, `tile bottom right`, … | The four quarters |
+| `center`, `golden`, `full screen`, `minimize` | The same actions as the keys |
+| `layout grid` / `spiral` / `suggested` / `content` | Lay out every window in view |
+| `group 3`, `add group 3` | Recall a group, or put the front window in it |
+| `leave group`, `everything back`, `undo`, `focus selection` | The focus commands |
+| `notes`, `clipboard`, `shelf`, `switcher`, `search`, `checklist` | Open a panel |
+| `settings`, `shortcuts`, `screenshots`, `screenshot`, `ocr`, `measure`, `colour` | The app commands |
+| `minimap`, `focus border`, `focus dim`, `peek`, `clear peek` | Presentation |
+| `timer 25m`, `timer 8:30` | Start a timer with the same syntax as the timer field |
+| `dismiss notices` | Take every notice away |
+
+- The list under the field filters as you type; `↑`/`↓` choose, **Tab** completes
+  the phrase (and leaves a space for its argument), **Return** runs, `Esc` closes.
+  A click on a row with no argument runs it at once; one that needs an argument
+  completes the field instead.
+- A phrase that takes no argument refuses one, and a wrong argument says what was
+  expected: the box stays open with the reason instead of running something else.
+- Every row is one of the commands already in the menu, so the two cannot drift.
+- A command acts on the app you were in, not on the box: it closes first, gives
+  the keys back and only then runs, so `tile right` moves the window the
+  shortcut would have moved. That is also why nothing happens while the field is
+  still open.
+- macOS also gives `⌃Space` to the input source: if that takes the combination,
+  the keyboard-shortcut window (or Settings ▸ General) shows it as blocked and
+  **Keyboard Shortcuts…** records another one for the command box.
 
 ## Clipboard history
 
@@ -765,6 +800,7 @@ families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `�
 | Focus dim | `⌃⌥⇧D` |
 | Timers | `⌃⌥⇧T` |
 | Screenshots | `⌃⌥⇧S` |
+| Command box | `⌃Space` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
 | Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H` |

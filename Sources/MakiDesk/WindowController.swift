@@ -60,6 +60,8 @@ enum WindowController {
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).
         case captureScreenshot
+        /// Open the command box (T38).
+        case runCommand
         /// Act on the current selection, group or pending advice.
         case focusSelection
         case leaveGroup

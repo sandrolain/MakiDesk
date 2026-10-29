@@ -171,6 +171,13 @@ over it: arrow, rectangle, pen, highlighter and a mosaic that hides what is
 private. ⌘Z undoes, Return saves, and the PNG lands on the shelf ready to drag
 out (and on the clipboard, if you want it).
 
+### Commands, typed
+
+`⌃Space` opens a field for the menu in words: `tile left`, `layout grid`,
+`group 3`, `timer 25m`, `screenshot`. The list filters as you type, Tab completes
+the phrase, Return runs it; a wrong argument says what it expected instead of
+running something else. Every row is an action MakiDesk already has.
+
 ### Notices that stay readable
 
 Results are reported by a small, themed notice. Its state tints the icon and
