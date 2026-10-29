@@ -16,6 +16,7 @@ through Accessibility.
 - [Notes](#notes)
 - [Checklist](#checklist)
 - [Timers](#timers)
+- [Application launcher](#application-launcher)
 - [Command box](#command-box)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
@@ -388,6 +389,26 @@ named after what it is (`25m`, `8:30`).
 - Timers live for the session only — nothing is written to disk and nothing
   survives a restart, because a timer that runs out while MakiDesk is closed
   could not announce itself.
+
+## Application launcher
+
+`⌃⌥Space` (or **Open an Application…** in the menu) is the fast app launcher: a
+field, the installed applications, and nothing else. It is not the window
+switcher — there are no thumbnails, and every key belongs to opening an app.
+
+- The field starts on the applications opened most recently from here, then the
+  rest of the installed ones in alphabetical order.
+- Typing matches the **name first** (exact, then prefix, then a word), then the
+  executable and the bundle id; recent use breaks ties inside a match of the same
+  quality, so it never lifts a worse match over a better one.
+- `↑`/`↓` choose, **Return** opens (or brings an already running app forward),
+  **`⌘`Return** asks for a **new instance**, `Esc` closes. A click on a row opens
+  it without another key.
+- The scan covers `/Applications`, `/System/Applications` and `~/Applications`
+  and runs off the main thread; no Accessibility or Screen Recording is needed.
+- Applications that only allow one instance ignore `⌘`Return and simply come to
+  the front. What the launcher remembers is only the order of that empty field:
+  one entry per app, the 80 most recent.
 
 ## Command box
 
@@ -800,6 +821,7 @@ families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `�
 | Focus dim | `⌃⌥⇧D` |
 | Timers | `⌃⌥⇧T` |
 | Screenshots | `⌃⌥⇧S` |
+| Application launcher | `⌃⌥Space` |
 | Command box | `⌃Space` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
 | Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |

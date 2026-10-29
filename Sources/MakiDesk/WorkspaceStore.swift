@@ -1257,6 +1257,9 @@ final class WorkspaceStore {
         case .runCommand:
             CommandBoxController.shared.show()
             return
+        case .appLauncher:
+            ApplicationLauncherController.shared.show()
+            return
         case .toggleFocusBorder:
             updateFocusBorderEnabled(!focusBorderEnabled)
             return
@@ -1584,7 +1587,7 @@ final class WorkspaceStore {
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
              .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
-             .newTimer, .captureScreenshot, .runCommand:
+             .newTimer, .captureScreenshot, .runCommand, .appLauncher:
             return nil
         }
     }
@@ -1965,6 +1968,7 @@ final class WorkspaceStore {
         case .newTimer: return "timer"
         case .captureScreenshot: return "screenshot"
         case .runCommand: return "command"
+        case .appLauncher: return "launcher"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

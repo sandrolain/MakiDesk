@@ -182,6 +182,14 @@ every editable control. They all edit through AppKit's shared field editor, an
 covers SwiftUI text fields, search fields and the Notes editor without owning
 any of them; a theme change repaints the open ones immediately.
 
+`ApplicationLauncherController` (T37) is a separate panel from the window
+palette: a field, the installed applications and no captures. Ranking lives in
+`ApplicationSearch.launcherResults` — the same name/executable/bundle-id order
+as the palette's shelf, with recent use only ordering an empty field and
+breaking ties — and `ApplicationUsageStore` keeps that history in one bounded
+JSON table in the defaults. `ApplicationCatalog` owns the coalesced scan and the
+`⌘Return` new-instance launch, so the launcher does not duplicate either.
+
 `CommandCatalog` (T38) is the typed form of the menu: phrases, a one-line
 summary and the action each one runs, all values. `CommandBoxController` shows
 them in a panel with an `NSTextField` that reports the arrows, Tab, Return and

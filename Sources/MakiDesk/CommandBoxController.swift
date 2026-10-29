@@ -204,8 +204,9 @@ private struct CommandBoxView: View {
                 Image(systemName: "command")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(theme.accent)
-                CommandTextField(text: $model.text,
-                                 onSubmit: onSubmit,
+                PaletteTextField(text: $model.text,
+                                 placeholder: "Command",
+                                 onSubmit: { _ in onSubmit() },
                                  onCancel: onCancel,
                                  onMove: { model.move($0); model.clampSelection() },
                                  onTab: { model.complete() })
@@ -296,98 +297,5 @@ private struct CommandBoxView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(CommandCatalog.display(entry)): \(entry.summary)")
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-/// An `NSTextField` that lets the arrows, Tab, Return and Escape reach the box
-/// while the field keeps the keyboard.
-private struct CommandTextField: NSViewRepresentable {
-    @Binding var text: String
-    let onSubmit: () -> Void
-    let onCancel: () -> Void
-    let onMove: (Int) -> Void
-    let onTab: () -> Void
-
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
-        field.delegate = context.coordinator
-        field.isBordered = false
-        field.drawsBackground = false
-        field.focusRingType = .none
-        field.font = .systemFont(ofSize: 18)
-        field.textColor = NSColor(WorkspaceStore.shared.theme.text)
-        field.placeholderString = "Command"
-        field.usesSingleLineMode = true
-        field.lineBreakMode = .byTruncatingTail
-        field.cell?.wraps = false
-        field.cell?.isScrollable = true
-        context.coordinator.field = field
-        DispatchQueue.main.async {
-            field.window?.makeFirstResponder(field)
-        }
-        return field
-    }
-
-    func updateNSView(_ nsView: NSTextField, context: Context) {
-        if nsView.stringValue != text { nsView.stringValue = text }
-        if nsView.currentEditor() == nil, nsView.window?.firstResponder !== nsView.currentEditor() {
-            DispatchQueue.main.async {
-                guard nsView.window?.firstResponder !== nsView.currentEditor() else { return }
-                nsView.window?.makeFirstResponder(nsView)
-            }
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit, onCancel: onCancel,
-                    onMove: onMove, onTab: onTab)
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        weak var field: NSTextField?
-        private let text: Binding<String>
-        private let onSubmit: () -> Void
-        private let onCancel: () -> Void
-        private let onMove: (Int) -> Void
-        private let onTab: () -> Void
-
-        init(text: Binding<String>, onSubmit: @escaping () -> Void,
-             onCancel: @escaping () -> Void, onMove: @escaping (Int) -> Void,
-             onTab: @escaping () -> Void) {
-            self.text = text
-            self.onSubmit = onSubmit
-            self.onCancel = onCancel
-            self.onMove = onMove
-            self.onTab = onTab
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text.wrappedValue = field.stringValue
-        }
-
-        func control(_ control: NSControl, textView: NSTextView,
-                     doCommandBy selector: Selector) -> Bool {
-            switch selector {
-            case #selector(NSResponder.moveUp(_:)):
-                onMove(-1)
-                return true
-            case #selector(NSResponder.moveDown(_:)):
-                onMove(1)
-                return true
-            case #selector(NSResponder.insertTab(_:)):
-                onTab()
-                return true
-            case #selector(NSResponder.insertNewline(_:)):
-                onSubmit()
-                return true
-            case #selector(NSResponder.cancelOperation(_:)):
-                onCancel()
-                return true
-            default:
-                return false
-            }
-        }
     }
 }

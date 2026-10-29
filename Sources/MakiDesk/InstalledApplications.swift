@@ -16,6 +16,20 @@ struct InstalledApplication: Identifiable, Hashable, Sendable {
 
     var id: String { path }
     var url: URL { URL(fileURLWithPath: path) }
+
+    /// The key use is remembered under: the bundle id, so an app that moves
+    /// keeps its history, and the path when the bundle has no identifier.
+    var usageKey: String {
+        guard let bundleIdentifier, !bundleIdentifier.isEmpty else { return path }
+        return bundleIdentifier
+    }
+}
+
+/// How often and how recently an application was opened from the launcher
+/// (T37). A value type, so ranking can be tested with a fixed table.
+struct ApplicationUsage: Codable, Equatable, Sendable {
+    var count: Int
+    var lastUsed: Date
 }
 
 /// Pure matching rules for the palette's application shelf, so ranking can be
@@ -43,6 +57,66 @@ enum ApplicationSearch {
         }
         .prefix(limit)
         .map(\.0)
+    }
+
+    /// Results for the application launcher (T37): the palette's ranking, with
+    /// use taken into account.
+    ///
+    /// An empty query is still useful: recently used applications come first,
+    /// then the rest in the scanner's alphabetical order, so the field shows
+    /// something the moment it opens. Once something is typed, rank decides —
+    /// exact name, then prefix, then a word — and recent use only breaks a tie,
+    /// so typing "ca" never puts Calculator above Calendar just because it was
+    /// opened yesterday.
+    static func launcherResults(_ applications: [InstalledApplication],
+                                query: String,
+                                usage: [String: ApplicationUsage],
+                                limit: Int = 8) -> [InstalledApplication] {
+        guard limit > 0 else { return [] }
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmed.isEmpty {
+            let used = applications
+                .filter { usage[$0.usageKey] != nil }
+                .sorted { lhs, rhs in
+                    let left = usage[lhs.usageKey]!, right = usage[rhs.usageKey]!
+                    if left.lastUsed != right.lastUsed { return left.lastUsed > right.lastUsed }
+                    if left.count != right.count { return left.count > right.count }
+                    return nameOrder(lhs, rhs)
+                }
+            let rest = applications.filter { usage[$0.usageKey] == nil }
+            return Array((used + rest).prefix(limit))
+        }
+
+        let needle = normalize(trimmed)
+        let tokens = needle.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        let ranked = applications.compactMap { application -> (InstalledApplication, Int)? in
+            guard let rank = rank(application, needle: needle, tokens: tokens) else { return nil }
+            return (application, rank)
+        }
+        return ranked.sorted { lhs, rhs in
+            if lhs.1 != rhs.1 { return lhs.1 < rhs.1 }
+            switch (usage[lhs.0.usageKey], usage[rhs.0.usageKey]) {
+            case let (left?, right?):
+                if left.lastUsed != right.lastUsed { return left.lastUsed > right.lastUsed }
+                if left.count != right.count { return left.count > right.count }
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            case (nil, nil):
+                break
+            }
+            return nameOrder(lhs.0, rhs.0)
+        }
+        .prefix(limit)
+        .map(\.0)
+    }
+
+    private static func nameOrder(_ lhs: InstalledApplication, _ rhs: InstalledApplication) -> Bool {
+        let order = lhs.name.localizedStandardCompare(rhs.name)
+        if order != .orderedSame { return order == .orderedAscending }
+        return lhs.path < rhs.path
     }
 
     /// Lower is better; nil means no match. The order is stable and deliberate:
@@ -214,13 +288,68 @@ final class ApplicationCatalog {
     }
 
     /// Opens the bundle. The completion runs on the main queue with the error,
-    /// if any; the caller decides how to report it.
+    /// if any; the caller decides how to report it. `newInstance` asks Launch
+    /// Services for another copy of the app instead of activating the running
+    /// one; applications that only allow one instance ignore it and come to the
+    /// front instead (T37).
     func launch(_ application: InstalledApplication,
+                newInstance: Bool = false,
                 completion: @escaping @MainActor @Sendable (Error?) -> Void) {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
+        if newInstance { configuration.createsNewApplicationInstance = true }
         NSWorkspace.shared.openApplication(at: application.url, configuration: configuration) { _, error in
             Task { @MainActor in completion(error) }
         }
+    }
+}
+
+/// Remembers which applications were opened from the launcher, so an empty
+/// field can put them first (T37).
+///
+/// One bounded JSON table: it is tiny, and losing it costs only the order of a
+/// list. The defaults are injectable so tests use their own suite.
+@MainActor
+final class ApplicationUsageStore {
+    static let shared = ApplicationUsageStore()
+    nonisolated static let defaultsKey = "applicationLauncherUsage"
+    /// Only the most recent ones are kept: older entries would never reorder a
+    /// list of eight.
+    nonisolated static let maximumEntries = 80
+
+    private let defaults: UserDefaults
+    private(set) var usage: [String: ApplicationUsage]
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        usage = Self.load(from: defaults)
+    }
+
+    /// Counts one opening of `application` and makes it the most recent.
+    func record(_ application: InstalledApplication, at date: Date = Date()) {
+        let key = application.usageKey
+        var entry = usage[key] ?? ApplicationUsage(count: 0, lastUsed: date)
+        entry.count += 1
+        entry.lastUsed = date
+        usage[key] = entry
+
+        if usage.count > Self.maximumEntries {
+            let kept = usage.sorted { $0.value.lastUsed > $1.value.lastUsed }
+                .prefix(Self.maximumEntries)
+            usage = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        }
+        persist()
+    }
+
+    private func persist() {
+        guard let data = try? JSONEncoder().encode(usage) else { return }
+        defaults.set(data, forKey: Self.defaultsKey)
+    }
+
+    private nonisolated static func load(from defaults: UserDefaults) -> [String: ApplicationUsage] {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let decoded = try? JSONDecoder().decode([String: ApplicationUsage].self, from: data)
+        else { return [:] }
+        return decoded
     }
 }

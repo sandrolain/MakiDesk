@@ -171,6 +171,12 @@ over it: arrow, rectangle, pen, highlighter and a mosaic that hides what is
 private. ⌘Z undoes, Return saves, and the PNG lands on the shelf ready to drag
 out (and on the clipboard, if you want it).
 
+### Applications, one keystroke away
+
+`⌃⌥Space` opens the fast application launcher: type a name, Return opens it or
+brings it forward, `⌘Return` asks for a new instance. Recent applications come
+first; no window thumbnails, no Accessibility permission needed.
+
 ### Commands, typed
 
 `⌃Space` opens a field for the menu in words: `tile left`, `layout grid`,

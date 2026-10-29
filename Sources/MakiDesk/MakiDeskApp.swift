@@ -384,6 +384,10 @@ struct MakiDeskApp: App {
                        icon: "command") {
                 CommandBoxController.shared.show()
             }
+            menuButton("Open an Application…", keys: shortcutKeys(.appLauncher),
+                       icon: "square.grid.2x2") {
+                ApplicationLauncherController.shared.show()
+            }
             menuButton("Notification History…", icon: "bell") {
                 NotificationHistoryController.shared.show()
             }
