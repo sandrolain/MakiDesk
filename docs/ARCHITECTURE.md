@@ -59,6 +59,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text history, pasteboard poll, picker. |
 | `ShelfController.swift`, `ShelfShake.swift` | Drag shelf, file promises, Quick Look, drag out, shake detector. |
 | `ScreenshotLibrary.swift` | Screenshot inventory, Quick Look, native file drags, configurable grid, sorting, date groups and file operations. |
+| `MarkupModel.swift` | Pure screenshot markup: arrow, rectangle, pen, highlighter and pixel mosaic, rendered into pixels for both the preview and the saved file. |
+| `ScreenshotAnnotationController.swift` | Area capture (shared selector) → in-place annotation editor → PNG on the shelf and on the clipboard. |
 | `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
 | `SettingsView.swift` | Tabbed settings, permissions, reset. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |

@@ -163,6 +163,11 @@ captures by month or week. Choose **Folder…** to browse another directory, or
 through the Spotlight index, while the name scan keeps the list usable when the
 index is off; the list refreshes when files change.
 
+**Mark up while you capture.** `⌃⌥⇧S` selects an area and opens a small editor
+over it: arrow, rectangle, pen, highlighter and a mosaic that hides what is
+private. ⌘Z undoes, Return saves, and the PNG lands on the shelf ready to drag
+out (and on the clipboard, if you want it).
+
 ### Notices that stay readable
 
 Results are reported by a small, themed notice. Its state tints the icon and

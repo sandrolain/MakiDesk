@@ -58,6 +58,8 @@ enum WindowController {
         case toggleChecklist
         /// Open the field that starts a timer (T61).
         case newTimer
+        /// Capture an area, annotate it and put it on the shelf (T40).
+        case captureScreenshot
         /// Act on the current selection, group or pending advice.
         case focusSelection
         case leaveGroup

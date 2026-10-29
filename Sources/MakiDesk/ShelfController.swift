@@ -333,6 +333,34 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     /// Adds text from the clipboard history (T21), opening the shelf if needed.
+    /// Puts an image on the shelf as a staged PNG (T40).
+    ///
+    /// The shelf is temporary, so the file lives in its staging folder: it goes
+    /// away with the shelf, and dragging it out copies it where the user drops
+    /// it. Returns the file, so the caller can also copy it to the clipboard.
+    @discardableResult
+    func add(image: CGImage, name: String) -> URL? {
+        guard let data = NSBitmapImageRep(cgImage: image)
+            .representation(using: .png, properties: [:]) else { return nil }
+        makeStaging()
+        guard let staging else { return nil }
+        var url = staging.appendingPathComponent(name)
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            let base = (name as NSString).deletingPathExtension
+            url = staging.appendingPathComponent("\(base)-\(counter).png")
+            counter += 1
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            return nil
+        }
+        add(ShelfItem.file(url, staged: true))
+        show(at: NSEvent.mouseLocation, activating: false)
+        return url
+    }
+
     func add(text: String) {
         guard text.isEmpty == false else { return }
         if isVisible == false {
@@ -764,8 +792,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
     private func removeStaging() {
         guard let staging else { return }
-        try? FileManager.default.removeItem(at: staging)
         self.staging = nil
+        // The same race as a drag out: a file just handed to another app may
+        // still be read. A few seconds are enough, and the folder is temporary
+        // anyway.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 5) {
+            try? FileManager.default.removeItem(at: staging)
+        }
     }
 
     // MARK: - Drop
@@ -891,10 +924,10 @@ final class ShelfController: NSObject, NSWindowDelegate,
         return table.selectedRowIndexes.compactMap { $0 < items.count ? items[$0] : nil }
     }
 
-    private func remove(itemID: UUID) {
+    private func remove(itemID: UUID, deleteStagedFile: Bool = true) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
         let item = items.remove(at: index)
-        if case let .file(url, staged) = item.content, staged {
+        if case let .file(url, staged) = item.content, staged, deleteStagedFile {
             try? FileManager.default.removeItem(at: url)
         }
         previewFiles[itemID] = nil
@@ -1076,10 +1109,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let draggedIDs = draggingItemIDs
         draggingItemIDs.removeAll()
         // A moved file no longer lives at the URL the shelf references, so the
-        // entry would only linger as unavailable. Removed staged copies are
-        // already gone from the staging directory.
+        // entry would only linger as unavailable. The staged file itself is
+        // **not** deleted here: a destination that copies rather than moves may
+        // still be reading it, and deleting it under the copy truncated the
+        // image — a half-written PNG that Preview opens and the Finder cannot
+        // thumbnail (T40). The staging folder takes it away on close.
         guard operation.contains(.move) else { return }
-        for id in draggedIDs { remove(itemID: id) }
+        for id in draggedIDs { remove(itemID: id, deleteStagedFile: false) }
     }
 
     // MARK: - Menu and folders

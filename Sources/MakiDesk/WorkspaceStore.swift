@@ -221,6 +221,9 @@ final class WorkspaceStore {
         rawValue: UserDefaults.standard.string(forKey: "checklistScreen") ?? ""
     ) ?? ChecklistSettings.defaultScreen
 
+    /// Whether an annotated screenshot is also copied to the clipboard (T40).
+    var screenshotCopyToClipboard = UserDefaults.standard.object(forKey: "screenshotCopyToClipboard") as? Bool ?? true
+
     /// The countdown card (T61): shown while a timer exists, unless turned off.
     var timerOverlayVisible = UserDefaults.standard.object(forKey: TimerSettings.overlayVisibleKey) as? Bool ?? true
     var timerOverlayOpacity = TimerSettings.clampedOpacity(
@@ -977,6 +980,11 @@ final class WorkspaceStore {
         TimerController.shared.applySettings()
     }
 
+    func updateScreenshotCopyToClipboard(_ value: Bool) {
+        screenshotCopyToClipboard = value
+        UserDefaults.standard.set(value, forKey: "screenshotCopyToClipboard")
+    }
+
     func updateTimerSoundEnabled(_ value: Bool) {
         timerSoundEnabled = value
         UserDefaults.standard.set(value, forKey: TimerSettings.soundEnabledKey)
@@ -1147,6 +1155,7 @@ final class WorkspaceStore {
         updateTimerOverlayScreen(TimerSettings.defaultScreen)
         updateTimerSoundEnabled(true)
         updateTimerSoundName(TimerSettings.defaultSound)
+        updateScreenshotCopyToClipboard(true)
         // A remapped shortcut is settings too: put the table back and drop the
         // file. A file from a newer version stays untouched (T53).
         let shortcutStore = ShortcutStore()
@@ -1206,6 +1215,12 @@ final class WorkspaceStore {
             return
         }
         // The colour picker reads one pixel the same way (T36).
+        // The annotated screenshot captures the screen; like OCR it needs
+        // Screen Recording, not Accessibility (T40).
+        if action == .captureScreenshot {
+            ScreenshotAnnotationController.shared.capture()
+            return
+        }
         if action == .sampleColor {
             ColorSamplerController.shared.sample()
             return
@@ -1554,7 +1569,7 @@ final class WorkspaceStore {
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
              .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
-             .newTimer:
+             .newTimer, .captureScreenshot:
             return nil
         }
     }
@@ -1933,6 +1948,7 @@ final class WorkspaceStore {
         case .toggleFocusDim: return "focus dim"
         case .toggleChecklist: return "checklist"
         case .newTimer: return "timer"
+        case .captureScreenshot: return "screenshot"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

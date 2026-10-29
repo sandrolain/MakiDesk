@@ -740,6 +740,13 @@ struct SettingsView: View {
                 }
             }
             if panelsPage == .tools {
+                SettingsSection("Screenshot") {
+                    Toggle("Copy the annotated screenshot too", isOn: Binding(
+                        get: { store.screenshotCopyToClipboard },
+                        set: { store.updateScreenshotCopyToClipboard($0) }
+                    ))
+                    caption("⌃⌥⇧S (or menu ▸ Capture Area…) opens the area selector, then a small editor: arrow, rectangle, pen, highlighter and «hide details» for anything private. Ret saves, Esc throws it away, ⌘Z undoes. The result lands on the shelf as a PNG — drag it out, or paste it when the option above is on. The file lives in the shelf's temporary folder and goes away with it.")
+                }
                 SettingsSection("Text recognition") {
                     Toggle("Fast recognition (less accurate)", isOn: Binding(
                         get: { store.ocrFastRecognition },

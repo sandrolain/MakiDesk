@@ -106,6 +106,7 @@ enum ShortcutDefinitions {
         ShortcutSectionDefinition(title: "Timers", note: "A length with a unit, or a time of day with a colon.", definitions: timers),
         ShortcutSectionDefinition(title: "Peek", note: "The designated window is put away; the hold brings it back.", definitions: peek),
         ShortcutSectionDefinition(title: "Text & colour", note: nil, definitions: capture),
+        ShortcutSectionDefinition(title: "Screenshots", note: "The capture goes to the shelf.", definitions: screenshots),
         ShortcutSectionDefinition(title: "Measure", note: "Or drag with ⌥ from the centre; the pinned badge copies the values.", definitions: measure),
         ShortcutSectionDefinition(title: "App", note: "No global Quit: ⌥⇧Q stays inside the window switcher.", definitions: app),
     ]
@@ -225,6 +226,12 @@ enum ShortcutDefinitions {
         def("capture.colour", "Pick a colour from the screen", section: "Text & colour",
             key: kVK_ANSI_E, action: .sampleColor,
             note: "Click a point to copy its colour in the format chosen in Settings ▸ Panels; Esc cancels."),
+    ]
+
+    private static let screenshots: [ShortcutDefinition] = [
+        def("capture.annotate", "Annotate a screenshot", section: "Screenshots",
+            key: kVK_ANSI_S, modifiers: ctrlOptShift, action: .captureScreenshot,
+            note: "Drag an area, mark it up, and it lands on the shelf; Ret saves, Esc cancels."),
     ]
 
     private static let measure: [ShortcutDefinition] = [

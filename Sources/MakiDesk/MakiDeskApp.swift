@@ -119,6 +119,10 @@ struct MakiDeskApp: App {
             } label: {
                 Label("Timers", systemImage: "timer")
             }
+            menuButton("Capture Area…", keys: shortcutKeys(.captureScreenshot),
+                       icon: "camera.viewfinder") {
+                ScreenshotAnnotationController.shared.capture()
+            }
             menuButton("Screenshots", keys: shortcutKeys(.openScreenshots),
                        icon: "menubar.dock.rectangle") {
                 ScreenshotLibraryController.shared.show()

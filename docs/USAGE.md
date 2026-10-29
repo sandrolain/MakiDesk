@@ -20,6 +20,7 @@ through Accessibility.
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
 - [Screenshots](#screenshots)
+- [Annotated screenshots](#annotated-screenshots)
 - [Text from the screen](#text-from-the-screen)
 - [Colour picker](#colour-picker)
 - [Measure](#measure)
@@ -555,6 +556,32 @@ move, trash and drag actions apply. It is off by default. If macOS has not
 granted access to the folder (Desktop, Documents, external volumes), the empty
 state explains it and offers **Open Privacy Settings**.
 
+## Annotated screenshots
+
+`⌃⌥⇧S`, or **Capture Area…** in the menu, opens the shared area selector — the
+same snapping, loupe and `Esc` as text recognition — and then a small editor on
+the capture:
+
+| Tool | What it does |
+|---|---|
+| Arrow | Points at something: drag from the tail to the head. |
+| Rectangle | Draws attention to a region without covering it. |
+| Pen | Free hand. |
+| Highlighter | A wide, translucent stroke that keeps what is under it readable. |
+| Hide details | Replaces the region with a mosaic of its own pixels — for names, tokens, faces. |
+
+- Four colours (red, yellow, blue, black). **⌘Z** undoes the last mark, `Esc`
+  throws the capture away, **Return** saves.
+- The result is a PNG on the **shelf**, ready to drag into a chat, a note or a
+  folder. **Settings ▸ Panels ▸ Screenshot** also copies it to the clipboard.
+  The file lives in the shelf's temporary folder and goes away with it.
+- Annotations are made on the capture itself, at the selection's own size, and
+  the saved image is rendered at the capture's pixel size, so a Retina capture
+  stays sharp.
+- It needs Screen Recording, like the previews; Accessibility is not involved.
+- Window and whole-screen captures are drags over the selector (it snaps to
+  window edges). **Video recording is not implemented.**
+
 ## Text from the screen
 
 Press `⌃⌥O` and drag over the text you want. MakiDesk recognizes it locally with
@@ -675,7 +702,8 @@ first one.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
   width, corner and display), the countdown card (visibility, opacity, corner
   and display), the window switcher/search appearance (including the groups
-  column and its announcements), and text recognition quality and correction.
+  column and its announcements), the annotated screenshot's clipboard copy, and
+  text recognition quality and correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.
@@ -705,6 +733,7 @@ families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `�
 | Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
 | Focus dim | `⌃⌥⇧D` |
 | Timers | `⌃⌥⇧T` |
+| Screenshots | `⌃⌥⇧S` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
 | Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H` |
