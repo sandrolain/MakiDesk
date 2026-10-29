@@ -611,6 +611,7 @@ final class ScreenshotLibraryController: NSObject, NSWindowDelegate,
             chooseFolder: { [weak self] in self?.chooseFolder() },
             moveSelection: { [weak self] in self?.chooseMoveDestination() },
             previewSelection: { [weak self] in self?.toggleQuickLook() },
+            recognizeSelection: { [weak self] in self?.recognizeSelection() },
             openFile: { NSWorkspace.shared.open($0) }
         ))
         window.center()
@@ -657,6 +658,18 @@ final class ScreenshotLibraryController: NSObject, NSWindowDelegate,
             guard response == .OK, let url = panel.url else { return }
             self?.model.moveSelected(to: url)
         }
+    }
+
+    /// Reads the text in the selected screenshot: the picture is already on
+    /// disk, so no capture and no Screen Recording is involved (T41).
+    private func recognizeSelection() {
+        let selected = model.selectedFiles
+        guard selected.count == 1, let file = selected.first,
+              let image = NSImage(contentsOf: file.url),
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return
+        }
+        TextRecognitionController.shared.recognize(image: cgImage)
     }
 
     private func toggleQuickLook() {
@@ -728,6 +741,7 @@ private struct ScreenshotLibraryView: View {
     let chooseFolder: () -> Void
     let moveSelection: () -> Void
     let previewSelection: () -> Void
+    let recognizeSelection: () -> Void
     let openFile: (URL) -> Void
     @State private var cardFrames: [String: CGRect] = [:]
     @State private var marqueeStart: CGPoint?
@@ -917,6 +931,11 @@ private struct ScreenshotLibraryView: View {
             }
             .help("Quick Look selected screenshots (Space)")
             .disabled(model.selectedPaths.isEmpty)
+            Button(action: recognizeSelection) {
+                Label("Recognize Text", systemImage: "text.viewfinder")
+            }
+            .help("Read the text in the selected screenshot, without capturing anything")
+            .disabled(model.selectedFiles.count != 1 || model.isOperating)
             Button(role: .destructive, action: model.trashSelected) {
                 Label("Move to Trash", systemImage: "trash")
             }

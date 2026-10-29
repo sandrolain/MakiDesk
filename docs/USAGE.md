@@ -594,6 +594,20 @@ Press `⌃⌥O` and drag over the text you want. MakiDesk recognizes it locally 
 Vision, copies the result to the clipboard and shows a short preview. `Esc`, or
 a click without dragging, cancels without copying anything.
 
+- The same reading is in the **Text & Color** menu without dragging: **from the
+  window under the pointer**, **from the frontmost window** and **from the whole
+  screen**. The first two read the window itself, so overlapping windows do not
+  get in the way.
+- A picture you already have needs no capture and no permission: **Recognize
+  Text** is in a shelf row's context menu for an image (or an image file) and in
+  the screenshot library's toolbar for the selected screenshot.
+- The notice that reports the result also offers **Send to Note**, **Send to
+  Shelf** and, when the text was not copied, **Copy** — so the text can go
+  straight where it is needed.
+- A **Reading text…** notice stays on screen while Vision works — a large area
+  can take a couple of seconds — and goes away on its own when the result or the
+  error arrives. It is excluded from screenshots and recordings, like every
+  notice.
 - The area is captured at native resolution; an image longer than 3000 px on
   one side is downscaled before recognition.
 - **Settings ▸ Panels ▸ Text recognition** chooses where the text goes:
@@ -605,8 +619,9 @@ a click without dragging, cancels without copying anything.
   history lives in memory only, so “history only” keeps no copy after MakiDesk
   quits; the same section chooses fast or accurate recognition and language
   correction, and the language is detected automatically.
-- Screen Recording is required for the selection. The image is not written to
-  disk and nothing is uploaded. The first use loads Vision's models (about
+- Screen Recording is required by the sources that take a picture (area, window,
+  screen). Reading a shelf image or a screenshot file needs no permission at
+  all. The image is not written to disk and nothing is uploaded. The first use loads Vision's models (about
   100 MB), which stay in memory while MakiDesk runs.
 - If no text is found, the clipboard is left untouched.
 

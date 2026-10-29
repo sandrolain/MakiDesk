@@ -64,6 +64,10 @@ struct TextRecognitionResult: Equatable, Sendable {
 enum TextRecognitionError: Error, Equatable, LocalizedError {
     case noText
     case visionFailed(String)
+    /// The picture for a source could not be taken (T41).
+    case captureFailed
+    /// There was no window under the pointer, or none in front.
+    case noWindow
 
     var errorDescription: String? {
         switch self {
@@ -71,6 +75,10 @@ enum TextRecognitionError: Error, Equatable, LocalizedError {
             return "No text found."
         case let .visionFailed(message):
             return "Text recognition failed: \(message)"
+        case .captureFailed:
+            return "The picture could not be captured."
+        case .noWindow:
+            return "No window to read."
         }
     }
 }

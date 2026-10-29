@@ -324,6 +324,22 @@ struct MakiDeskApp: App {
                         reveal: store.ocrRevealHistory
                     )
                 }
+                // The same service, without dragging over the screen (T41).
+                menuButton("Recognize Text from the Window Under the Pointer",
+                           icon: "macwindow") {
+                    TextRecognitionController.shared.recognize(.windowUnderPointer)
+                }
+                menuButton("Recognize Text from the Frontmost Window",
+                           icon: "macwindow.on.rectangle") {
+                    TextRecognitionController.shared.recognize(.frontmostWindow)
+                }
+                menuButton("Recognize Text from the Whole Screen",
+                           icon: "rectangle.dashed") {
+                    TextRecognitionController.shared.recognize(.wholeScreen)
+                }
+                menuButton("Recognize Text from a Screenshot…", icon: "photo") {
+                    ScreenshotLibraryController.shared.show()
+                }
                 menuButton("Pick a Color from the Screen", keys: shortcutKeys(.sampleColor),
                            icon: "eyedropper") {
                     ColorSamplerController.shared.sample()

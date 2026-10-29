@@ -216,11 +216,128 @@ final class TextRecognitionControllerTests: XCTestCase {
 
     // MARK: - Helpers
 
+    // MARK: - Progress (T41)
+
+    func testAPendingRecognitionShowsTheProgressNoticeAndTakesItDown() async {
+        let recorder = ProgressRecorder()
+        let result = TextRecognitionResult(text: "Hello", durationMilliseconds: 4, scaled: false)
+        let controller = makeController(recognizer: StubRecognizer(outcome: .success(result)),
+                                        progress: { recorder.values.append($0) })
+
+        controller.recognizeArea()
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(recorder.values, [true, false])
+    }
+
+    func testTheProgressNoticeAlsoGoesAwayWhenRecognitionFails() async {
+        let recorder = ProgressRecorder()
+        let controller = makeController(recognizer: StubRecognizer(outcome: .failure(.noText)),
+                                        progress: { recorder.values.append($0) })
+
+        controller.recognizeArea()
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(recorder.values, [true, false])
+        XCTAssertEqual(feedback.values, [.noText])
+    }
+
+    // MARK: - Sources and images (T41)
+
+    func testEverySourceUsesTheSamePipeline() async {
+        let result = TextRecognitionResult(text: "From a window", durationMilliseconds: 3,
+                                           scaled: false)
+        for source in [TextRecognitionSource.windowUnderPointer,
+                       .frontmostWindow, .wholeScreen] {
+            let seen = SourceRecorder()
+            let controller = makeController(
+                recognizer: StubRecognizer(outcome: .success(result)),
+                captureSource: { requested in
+                    seen.sources.append(requested)
+                    return Self.selection().image!
+                }
+            )
+
+            controller.recognize(source, options: .standard, output: .pasteboard, reveal: .never)
+            await waitUntil { self.feedback.values.isEmpty == false }
+
+            XCTAssertEqual(seen.sources, [source])
+            XCTAssertEqual(pasteboard.string(forType: .string), "From a window")
+            feedback.reset()
+            pasteboard.clearContents()
+        }
+    }
+
+    func testAnImageTheUserAlreadyHasSkipsTheCapture() async {
+        let result = TextRecognitionResult(text: "From the shelf", durationMilliseconds: 2,
+                                           scaled: false)
+        let seen = SourceRecorder()
+        let controller = makeController(
+            recognizer: StubRecognizer(outcome: .success(result)),
+            // A capture would fail: reading an existing image must not ask for one.
+            captureSource: { requested in
+                seen.sources.append(requested)
+                throw TextRecognitionError.captureFailed
+            }
+        )
+
+        controller.recognizeImage(Self.selection().image!, output: .pasteboard)
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertTrue(seen.sources.isEmpty)
+        XCTAssertEqual(pasteboard.string(forType: .string), "From the shelf")
+        XCTAssertEqual(feedback.values, [.copied(result, .pasteboard)])
+    }
+
+    func testACaptureWithNoWindowReportsIt() async {
+        let controller = makeController(
+            recognizer: StubRecognizer(outcome: .success(
+                TextRecognitionResult(text: "x", durationMilliseconds: 1, scaled: false)
+            )),
+            captureSource: { _ in throw TextRecognitionError.noWindow }
+        )
+
+        controller.recognize(.windowUnderPointer, options: .standard,
+                             output: .pasteboard, reveal: .never)
+        await waitUntil { self.feedback.values.isEmpty == false }
+
+        XCTAssertEqual(feedback.values, [.failed("No window to read.")])
+        XCTAssertNil(pasteboard.string(forType: .string))
+    }
+
+    func testTheWindowUnderThePointerSkipsOurOwnFloatingAndTinyWindows() {
+        let point = CGPoint(x: 50, y: 50)
+        let big = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let stack = [
+            WindowController.CGWindowEntry(pid: 1, frame: big, number: 10, name: nil,
+                                           layer: 0, alpha: 1),        // ours? no: pid 1
+            WindowController.CGWindowEntry(pid: 2, frame: big, number: 11, name: nil,
+                                           layer: 0, alpha: 0),
+            WindowController.CGWindowEntry(pid: 3, frame: big, number: 12, name: nil,
+                                           layer: 3, alpha: 1),
+            WindowController.CGWindowEntry(pid: 4, frame: CGRect(x: 40, y: 40, width: 10, height: 10),
+                                           number: 13, name: nil, layer: 0, alpha: 1),
+            WindowController.CGWindowEntry(pid: 5, frame: big, number: 14, name: nil,
+                                           layer: 0, alpha: 1)
+        ]
+        // Our own process is skipped even when it is first.
+        XCTAssertEqual(TextRecognitionController.windowUnderPointer(in: stack, at: point,
+                                                                    ownPID: 1)?.number, 14)
+        // A point outside every window finds nothing.
+        XCTAssertNil(TextRecognitionController.windowUnderPointer(in: stack,
+                                                                  at: CGPoint(x: 900, y: 900),
+                                                                  ownPID: 9))
+    }
+
     private func makeController(
         recognizer: TextRecognizing,
         selectRegion: @escaping TextRecognitionController.RegionSelector = {
             TextRecognitionControllerTests.selection()
         },
+        captureSource: @escaping TextRecognitionController.SourceCapture = { _ in
+            TextRecognitionControllerTests.selection().image!
+        },
+        progress: @escaping TextRecognitionController.ProgressHandler = { _ in },
         frontmostPID: @escaping TextRecognitionController.PIDProvider = { 42 },
         secureInput: @escaping () -> Bool = { false },
         showHistory: @escaping TextRecognitionController.HistoryPresenter = {}
@@ -230,6 +347,8 @@ final class TextRecognitionControllerTests: XCTestCase {
             pasteboard: pasteboard,
             history: history,
             selectRegion: selectRegion,
+            captureSource: captureSource,
+            progress: progress,
             frontmostPID: frontmostPID,
             secureInput: secureInput,
             showHistory: showHistory,
@@ -264,11 +383,24 @@ final class TextRecognitionControllerTests: XCTestCase {
 }
 
 @MainActor
+private final class ProgressRecorder {
+    var values: [Bool] = []
+}
+
+private final class SourceRecorder {
+    var sources: [TextRecognitionSource] = []
+}
+
+@MainActor
 private final class FeedbackRecorder {
     private(set) var values: [TextRecognitionController.Feedback] = []
 
     func record(_ feedback: TextRecognitionController.Feedback) {
         values.append(feedback)
+    }
+
+    func reset() {
+        values.removeAll()
     }
 }
 

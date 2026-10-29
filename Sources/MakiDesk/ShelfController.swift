@@ -1143,6 +1143,11 @@ final class ShelfController: NSObject, NSWindowDelegate,
             notes.target = self
             menu.addItem(notes)
         }
+        if recognisableImage() != nil {
+            let recognise = NSMenuItem(title: "Recognize Text", action: #selector(recognizeImage), keyEquivalent: "")
+            recognise.target = self
+            menu.addItem(recognise)
+        }
         if selected.count == 1, let file = selected[0].fileURL, file.isFileURL {
             let reveal = NSMenuItem(title: "Reveal in Finder", action: #selector(revealSelected), keyEquivalent: "")
             reveal.target = self
@@ -1160,6 +1165,31 @@ final class ShelfController: NSObject, NSWindowDelegate,
         remove.target = self
         menu.addItem(remove)
         return menu
+    }
+
+    /// The one image a recognition could read: an image already on the shelf,
+    /// or an image file dropped on it (T41).
+    private func recognisableImage() -> NSImage? {
+        let selected = selectedItems.isEmpty ? items : selectedItems
+        guard selected.count == 1, let item = selected.first else { return nil }
+        switch item.content {
+        case let .image(image):
+            return image
+        case let .file(url, _):
+            guard let type = UTType(filenameExtension: url.pathExtension),
+                  type.conforms(to: .image) else { return nil }
+            return NSImage(contentsOf: url)
+        default:
+            return nil
+        }
+    }
+
+    @objc private func recognizeImage() {
+        guard let image = recognisableImage(),
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return
+        }
+        TextRecognitionController.shared.recognize(image: cgImage)
     }
 
     @objc private func removeSelected() {
