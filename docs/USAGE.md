@@ -7,6 +7,7 @@ through Accessibility.
 - [Getting started](#getting-started)
 - [Window tiling](#window-tiling)
 - [Focus border](#focus-border)
+- [Focus dim](#focus-dim)
 - [Layouts](#layouts)
 - [Window switcher and search](#window-switcher-and-search)
 - [Groups](#groups)
@@ -114,6 +115,27 @@ receiving your keys is obvious even when several windows look alike.
 - It is hidden for full-screen windows, when the desktop is focused, and for
   windows that cannot take keyboard focus.
 - It uses the Accessibility permission only; no extra grant is needed.
+
+## Focus dim
+
+Where the border marks the window, the focus dim takes the rest of the screen
+away: a dark veil covers everything stacked **below** the focused window, which
+itself and everything above it stay clear. Off by default.
+
+- `⌃⌥⇧D` toggles it; the **Window** menu has the same switch. **Settings ▸
+  Windows ▸ Focus dim** sets opacity (10–80%), fade, colour, what stays sharp
+  (the focused window or the whole app), whether every display is lit or only
+  the active one, whether clicking the desktop dims everything, and whether
+  switching apps ends it.
+- Nothing is measured per window: the veil is a full-display panel ordered under
+  the target, so moving or resizing it needs no update. Menu bar, Dock and
+  MakiDesk's own panels sit at higher levels and stay bright; the veil is left
+  out of screenshots, recordings and screen sharing.
+- A full-screen window covers the veil, so the effect is simply absent there.
+  Reduce Transparency turns the veil solid; Reduce Motion removes the fade.
+- It needs Accessibility to know the focused window, and falls back to the
+  frontmost app's topmost window when it is unavailable. No Screen Recording
+  permission is involved.
 
 ## Layouts
 

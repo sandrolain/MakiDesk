@@ -87,6 +87,17 @@ key/main window and the `NSWindow` move, resize and focus notifications.
 `FocusBorder` owns the outset and corner arithmetic and is tested without a
 window server.
 
+`FocusDimController` (T62) dims everything outside the focused window with one
+click-through panel per display at the ordinary window level, ordered under the
+target with `order(.below, relativeTo:)`. The relationship is the stacking
+order, so a window that moves or resizes needs no update and no frame is read.
+`FocusDim` owns the anchor rules — which display is lit, the topmost window of a
+display, the lowest window of the frontmost app, and the drift rule — and is
+tested without a window server. A one-second drift check runs only while the
+veil is up and re-orders the panel when it has slipped above its anchor; a
+pending fade-out is invalidated by generation, so a veil that comes back before
+it ends is not ordered out from under the new one.
+
 The `WorkspaceStore` reads the index freshly before a command (`syncNow`) and
 keeps a model for the palette/overlay. It never assumes that a window found a
 moment ago is still there.

@@ -52,6 +52,8 @@ enum WindowController {
         /// Toggle presentation the user configured in Settings.
         case toggleFocusBorder
         case toggleMiniMap
+        /// Dim everything outside the focused window (T62).
+        case toggleFocusDim
         /// Act on the current selection, group or pending advice.
         case focusSelection
         case leaveGroup
@@ -355,6 +357,15 @@ enum WindowController {
         /// The window level: 0 is where application windows live, anything else
         /// floats above them (panels, widgets, menu-bar strips).
         let layer: Int
+        /// The window's alpha; 0 marks a window the app keeps but does not
+        /// show, which must not be used as a focus anchor (T62).
+        let alpha: CGFloat
+    }
+
+    /// The on-screen windows in front-to-back order, for overlays that place
+    /// themselves in the stack instead of by geometry (T62).
+    static func onScreenStack() -> [CGWindowEntry] {
+        cgWindowOrder()
     }
 
     private static func cgWindowList(_ options: CGWindowListOption) -> [CGWindowEntry] {
@@ -369,9 +380,10 @@ enum WindowController {
             }
             let number = CGWindowID((entry[kCGWindowNumber as String] as? NSNumber)?.intValue ?? 0)
             let layer = (entry[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0
+            let alpha = (entry[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1
             return CGWindowEntry(pid: pid, frame: frame, number: number,
                                  name: entry[kCGWindowName as String] as? String,
-                                 layer: layer)
+                                 layer: layer, alpha: CGFloat(alpha))
         }
     }
 

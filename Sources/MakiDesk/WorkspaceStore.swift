@@ -96,6 +96,7 @@ final class WorkspaceStore {
         if purposes.contains(.change) { checkFrontmostChange(focused) }
         if purposes.contains(.now) || purposes.contains(.change) {
             WindowOutlineController.shared.refresh(frontmost: focused)
+            FocusDimController.shared.refresh(frontmost: focused)
         }
     }
     var shortcutsRegistered = 0
@@ -178,6 +179,29 @@ final class WorkspaceStore {
     var focusBorderWidth = FocusBorder.clampedWidth(
         UserDefaults.standard.object(forKey: "focusBorderWidth") as? Double ?? FocusBorder.defaultWidth
     )
+
+    /// Dim everything outside the focused window (T62). Off by default: it
+    /// changes the whole screen, so it is opt-in.
+    var focusDimEnabled = UserDefaults.standard.object(forKey: "focusDimEnabled") as? Bool ?? false
+    var focusDimOpacity = FocusDim.clampedOpacity(
+        UserDefaults.standard.object(forKey: "focusDimOpacity") as? Double ?? FocusDim.defaultOpacity
+    )
+    var focusDimFade = FocusDim.clampedFade(
+        UserDefaults.standard.object(forKey: "focusDimFade") as? Double ?? FocusDim.defaultFade
+    )
+    var focusDimColour = FocusDim.Colour(
+        rawValue: UserDefaults.standard.string(forKey: "focusDimColour") ?? ""
+    ) ?? .black
+    var focusDimSource = FocusDim.Source(
+        rawValue: UserDefaults.standard.string(forKey: "focusDimSource") ?? ""
+    ) ?? .window
+    var focusDimDisplayMode = FocusDim.DisplayMode(
+        rawValue: UserDefaults.standard.string(forKey: "focusDimDisplayMode") ?? ""
+    ) ?? .independent
+    /// Whether clicking the desktop dims everything instead of lifting the veil.
+    var focusDimDesktopDims = UserDefaults.standard.object(forKey: "focusDimDesktopDims") as? Bool ?? false
+    /// Whether switching to another app ends the effect.
+    var focusDimStopsOnAppChange = UserDefaults.standard.object(forKey: "focusDimStopsOnAppChange") as? Bool ?? false
 
     var effectiveAnimationsEnabled: Bool {
         animationsEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -310,16 +334,19 @@ final class WorkspaceStore {
         loadGroups()
         WindowIndex.shared.start()
         WindowOutlineController.shared.start()
+        FocusDimController.shared.start()
         startEnhancedUIHandling()
         WindowIndex.shared.onChange = { [weak self] in
             self?.syncModel()
             WindowOutlineController.shared.refresh()
+            FocusDimController.shared.refreshPlacement()
         }
         WindowIndex.shared.onFocusChange = { [weak self] in
             guard let self else { return }
             if let snapshot = self.recentFocusSnapshot() {
                 self.checkFrontmostChange(snapshot)
                 WindowOutlineController.shared.refresh(frontmost: snapshot)
+                FocusDimController.shared.refresh(frontmost: snapshot)
             } else {
                 self.requestFocusRead(.change)
             }
@@ -797,6 +824,60 @@ final class WorkspaceStore {
         WindowOutlineController.shared.applySettings()
     }
 
+    /// Turns the focus dim on or off. `announce` is off for a factory reset,
+    /// which must not post notices.
+    func updateFocusDimEnabled(_ value: Bool, announce: Bool = true) {
+        focusDimEnabled = value
+        UserDefaults.standard.set(value, forKey: "focusDimEnabled")
+        FocusDimController.shared.applySettings()
+        guard announce else { return }
+        HUDController.shared.show(value ? "Dimming everything but the focus" : "Focus dim off",
+                                  symbol: "circle.lefthalf.filled")
+    }
+
+    func updateFocusDimOpacity(_ value: Double) {
+        let clamped = FocusDim.clampedOpacity(value)
+        focusDimOpacity = clamped
+        UserDefaults.standard.set(clamped, forKey: "focusDimOpacity")
+        FocusDimController.shared.applySettings()
+    }
+
+    func updateFocusDimFade(_ value: Double) {
+        let clamped = FocusDim.clampedFade(value)
+        focusDimFade = clamped
+        UserDefaults.standard.set(clamped, forKey: "focusDimFade")
+        FocusDimController.shared.applySettings()
+    }
+
+    func updateFocusDimColour(_ value: FocusDim.Colour) {
+        focusDimColour = value
+        UserDefaults.standard.set(value.rawValue, forKey: "focusDimColour")
+        FocusDimController.shared.applySettings()
+    }
+
+    func updateFocusDimSource(_ value: FocusDim.Source) {
+        focusDimSource = value
+        UserDefaults.standard.set(value.rawValue, forKey: "focusDimSource")
+        FocusDimController.shared.applySettings()
+    }
+
+    func updateFocusDimDisplayMode(_ value: FocusDim.DisplayMode) {
+        focusDimDisplayMode = value
+        UserDefaults.standard.set(value.rawValue, forKey: "focusDimDisplayMode")
+        FocusDimController.shared.applySettings()
+    }
+
+    func updateFocusDimDesktopDims(_ value: Bool) {
+        focusDimDesktopDims = value
+        UserDefaults.standard.set(value, forKey: "focusDimDesktopDims")
+        FocusDimController.shared.applySettings()
+    }
+
+    func updateFocusDimStopsOnAppChange(_ value: Bool) {
+        focusDimStopsOnAppChange = value
+        UserDefaults.standard.set(value, forKey: "focusDimStopsOnAppChange")
+    }
+
     func updateShelfShakeEnabled(_ value: Bool) {
         shelfShakeEnabled = value
         UserDefaults.standard.set(value, forKey: "shelfShakeEnabled")
@@ -937,6 +1018,14 @@ final class WorkspaceStore {
         updateAnimationDuration(0.22)
         updateFocusBorderEnabled(true)
         updateFocusBorderWidth(FocusBorder.defaultWidth)
+        updateFocusDimEnabled(false, announce: false)
+        updateFocusDimOpacity(FocusDim.defaultOpacity)
+        updateFocusDimFade(FocusDim.defaultFade)
+        updateFocusDimColour(.black)
+        updateFocusDimSource(.window)
+        updateFocusDimDisplayMode(.independent)
+        updateFocusDimDesktopDims(false)
+        updateFocusDimStopsOnAppChange(false)
         // A remapped shortcut is settings too: put the table back and drop the
         // file. A file from a newer version stays untouched (T53).
         let shortcutStore = ShortcutStore()
@@ -1033,6 +1122,9 @@ final class WorkspaceStore {
             return
         case .toggleFocusBorder:
             updateFocusBorderEnabled(!focusBorderEnabled)
+            return
+        case .toggleFocusDim:
+            updateFocusDimEnabled(!focusDimEnabled)
             return
         case .toggleMiniMap:
             updateMiniMapVisibility(!showMiniMap)
@@ -1348,7 +1440,7 @@ final class WorkspaceStore {
              .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor,
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
-             .clearPeek, .applySuggestedLayout:
+             .clearPeek, .applySuggestedLayout, .toggleFocusDim:
             return nil
         }
     }
@@ -1724,6 +1816,7 @@ final class WorkspaceStore {
         case .openKeyboardShortcuts: return "shortcuts"
         case .openScreenshots: return "screenshots"
         case .toggleFocusBorder: return "focus border"
+        case .toggleFocusDim: return "focus dim"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

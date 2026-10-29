@@ -283,6 +283,64 @@ struct SettingsView: View {
             caption("A border in the theme accent follows the focused window, including MakiDesk's own windows. It is hidden for full-screen windows, the desktop and windows that cannot take keyboard focus. It needs no permission beyond Accessibility.")
         }
 
+        SettingsSection("Focus dim") {
+            Toggle("Dim everything but the focused window", isOn: Binding(
+                get: { store.focusDimEnabled },
+                set: { store.updateFocusDimEnabled($0) }
+            ))
+            caption("A dark veil covers what is behind the focused window; the window itself and everything above it stay clear. It follows the window as you move or resize it and needs no permission beyond Accessibility. Menu bar, Dock and MakiDesk's own panels stay above the veil; it is left out of screenshots and recordings.")
+
+            SliderRow(title: "Opacity",
+                      value: Binding(get: { store.focusDimOpacity },
+                                     set: { store.updateFocusDimOpacity($0) }),
+                      range: FocusDim.opacityRange, step: 0.05,
+                      unit: "%", percent: true)
+                .disabled(!store.focusDimEnabled)
+            SliderRow(title: "Fade",
+                      value: Binding(get: { store.focusDimFade },
+                                     set: { store.updateFocusDimFade($0) }),
+                      range: FocusDim.fadeRange, step: 0.05,
+                      unit: " s", decimals: 2)
+                .disabled(!store.focusDimEnabled)
+
+            Picker("Keep sharp", selection: Binding(
+                get: { store.focusDimSource },
+                set: { store.updateFocusDimSource($0) }
+            )) {
+                ForEach(FocusDim.Source.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.focusDimEnabled)
+
+            Picker("Displays", selection: Binding(
+                get: { store.focusDimDisplayMode },
+                set: { store.updateFocusDimDisplayMode($0) }
+            )) {
+                ForEach(FocusDim.DisplayMode.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.focusDimEnabled)
+
+            Picker("Colour", selection: Binding(
+                get: { store.focusDimColour },
+                set: { store.updateFocusDimColour($0) }
+            )) {
+                ForEach(FocusDim.Colour.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.focusDimEnabled)
+
+            Toggle("Dim the desktop too", isOn: Binding(
+                get: { store.focusDimDesktopDims },
+                set: { store.updateFocusDimDesktopDims($0) }
+            ))
+            .disabled(!store.focusDimEnabled)
+
+            Toggle("Turn off when you switch apps", isOn: Binding(
+                get: { store.focusDimStopsOnAppChange },
+                set: { store.updateFocusDimStopsOnAppChange($0) }
+            ))
+            .disabled(!store.focusDimEnabled)
+            caption("Off, the veil follows whichever window you focus, in any app. On, the first switch to another app ends it. Reduce Transparency turns the veil into a solid surface and Reduce Motion removes the fade.")
+        }
+
         SettingsSection("macOS integration") {
             Label(
                 store.macOSTilingEnabled

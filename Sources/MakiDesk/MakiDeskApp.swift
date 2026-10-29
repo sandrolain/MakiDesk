@@ -140,6 +140,13 @@ struct MakiDeskApp: App {
                     store.updateFocusBorderEnabled(!store.focusBorderEnabled)
                 }
                 menuButton(
+                    store.focusDimEnabled ? "Stop Focus Dim" : "Focus Dim — dim everything else",
+                    keys: shortcutKeys(.toggleFocusDim),
+                    icon: "circle.lefthalf.filled"
+                ) {
+                    store.updateFocusDimEnabled(!store.focusDimEnabled)
+                }
+                menuButton(
                     store.showMiniMap ? "Hide Mini Map" : "Show Mini Map",
                     keys: shortcutKeys(.toggleMiniMap),
                     icon: "rectangle.inset.filled"
