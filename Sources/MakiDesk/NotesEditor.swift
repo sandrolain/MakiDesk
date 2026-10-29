@@ -278,10 +278,31 @@ final class LineNumberRulerView: NSRulerView {
         return (line, offset - lineStarts[line - 1] + 1)
     }
 
+    /// The rect the gutter asks TextKit about, in the text container's own
+    /// coordinates and never outside the text that has a layout.
+    ///
+    /// This is the fix for a crash: `glyphRange(forBoundingRect:)` fills glyph
+    /// holes as it goes, and a rect that reaches past the laid-out text — a
+    /// container that is still zero-width while the panel opens, or a visible
+    /// rect that is the whole document during a live resize — makes it throw an
+    /// Objective-C exception that nothing can catch. Pure, so the clamp is
+    /// tested without a text view.
+    nonisolated static func glyphQueryRect(visible: CGRect, containerOrigin: CGPoint,
+                                           used: CGRect) -> CGRect? {
+        guard used.width > 0.5, used.height > 0.5 else { return nil }
+        let local = visible.offsetBy(dx: -containerOrigin.x, dy: -containerOrigin.y)
+        let clamped = local.intersection(used.insetBy(dx: -1, dy: -1))
+        guard clamped.isNull == false, clamped.width > 0, clamped.height > 0 else { return nil }
+        return clamped
+    }
+
     override func drawHashMarksAndLabels(in rect: NSRect) {
         guard let textView, let layoutManager = textView.layoutManager,
               let container = textView.textContainer,
               let scrollView = scrollView else { return }
+        // Before the view has been laid out the container is still zero-width;
+        // asking TextKit for glyphs then is what used to take the app down.
+        guard container.size.width > 1, textView.bounds.width > 1 else { return }
         rebuildLineStartsIfNeeded()
 
         theme.background.setFill()
@@ -299,8 +320,6 @@ final class LineNumberRulerView: NSRulerView {
         defer { NSGraphicsContext.restoreGraphicsState() }
         bounds.intersection(rect).clip()
 
-        let visibleRect = scrollView.contentView.bounds
-        let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: container)
         let inset = textView.textContainerInset.height
         let string = textView.string as NSString
         let attributes: [NSAttributedString.Key: Any] = [
@@ -317,6 +336,14 @@ final class LineNumberRulerView: NSRulerView {
                        withAttributes: attributes)
             return
         }
+
+        let used = layoutManager.usedRect(for: container)
+        guard let query = Self.glyphQueryRect(visible: scrollView.contentView.bounds,
+                                              containerOrigin: textView.textContainerOrigin,
+                                              used: used),
+              layoutManager.numberOfGlyphs > 0 else { return }
+        let glyphRange = layoutManager.glyphRange(forBoundingRect: query, in: container)
+        guard glyphRange.length > 0 else { return }
         layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { fragmentRect, _, _, glyphRange, _ in
             let character = layoutManager.characterIndexForGlyph(at: glyphRange.location)
             let startsLine = character == 0 || (character > 0 && string.character(at: character - 1) == 10)
