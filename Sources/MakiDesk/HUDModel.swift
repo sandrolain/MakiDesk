@@ -61,6 +61,19 @@ enum HUDPosition: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+extension HUDPosition {
+    /// The same corner in the nine-position vocabulary the small panels use,
+    /// for the shared placement rule (T59, T61).
+    var palettePosition: PalettePosition {
+        switch self {
+        case .bottomCenter: return .bottomCenter
+        case .bottomRight: return .bottomRight
+        case .topCenter: return .topCenter
+        case .topRight: return .topRight
+        }
+    }
+}
+
 /// One notice, as shown and as kept in the in-memory history.
 struct HUDNotice: Identifiable, Equatable, Sendable {
     let id: UUID
@@ -75,6 +88,16 @@ struct HUDNotice: Identifiable, Equatable, Sendable {
     /// A notice the user must take away: no timer, and a ✕ in its corner
     /// (T60). Errors become sticky only when the option is on.
     var sticky: Bool = false
+}
+
+/// One thing a notice offers, besides being read (T61).
+///
+/// The handler is a session value: it never goes into the history and never
+/// outlives the notice it belongs to.
+struct HUDAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let handler: () -> Void
 }
 
 /// Notices, screen and timing preferences. Defaults reproduce the pre-T52
@@ -183,8 +206,10 @@ enum HUDTiming {
 /// Which notices wait for the user (T60). Nothing is sticky by default: the
 /// option switches errors, and a call site can always ask for one.
 enum HUDStickyPolicy {
-    static func isSticky(kind: HUDKind, keepErrors: Bool) -> Bool {
-        kind == .error && keepErrors
+    /// A notice with an action cannot vanish before it is used, so it is
+    /// always sticky; otherwise only errors are, and only when asked (T60).
+    static func isSticky(kind: HUDKind, keepErrors: Bool, hasActions: Bool = false) -> Bool {
+        hasActions || (kind == .error && keepErrors)
     }
 }
 
@@ -326,22 +351,6 @@ enum HUDLayout {
         return result
     }
 
-    /// The ✕ hit area. Small enough to sit inside the notice, large enough to
-    /// hit without aiming.
-    static let closeControlSize: CGFloat = 24
-
-    /// The ✕ of a sticky notice: a small square centred on the notice's right
-    /// edge, inside the rounded shape. The corner is no place for it — the
-    /// notice is a rounded rectangle, so a control near the corner sits on the
-    /// curve and looks like it is outside the notice. It is the only
-    /// interactive part of a notice, and it lives in its own click-taking
-    /// panel, so the rest of the notice stays click-through (T60).
-    static func closeFrame(for notice: CGRect, size: CGFloat = closeControlSize,
-                           inset: CGFloat = 6) -> CGRect {
-        CGRect(x: notice.maxX - size - inset,
-               y: notice.midY - size / 2,
-               width: size, height: size)
-    }
 }
 
 /// The last notices, newest first, in memory only: messages can name windows,

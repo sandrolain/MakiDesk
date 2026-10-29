@@ -21,11 +21,6 @@ final class HUDController {
         var notice: HUDNotice
         var size: CGSize
         let panel: NSPanel
-        /// Only for a sticky notice: the small panel that carries ✕, so the
-        /// rest of the notice keeps passing clicks through (T60).
-        var closePanel: NSPanel?
-        /// `NSControl.target` is not retained: the entry keeps the target alive.
-        var closeTarget: CloseTarget?
         var hideWork: DispatchWorkItem?
 
         init(notice: HUDNotice, size: CGSize, panel: NSPanel) {
@@ -35,23 +30,13 @@ final class HUDController {
         }
     }
 
-    /// Bridges the ✕ button to the notice it belongs to.
-    private final class CloseTarget: NSObject {
-        private let handler: () -> Void
-
-        init(handler: @escaping () -> Void) {
-            self.handler = handler
-        }
-
-        @objc func fire() {
-            handler()
-        }
-    }
-
     private let defaults: UserDefaults
     private var historyStore = HUDHistory()
     /// What is on screen, by id: sticky notices and transients in two lanes.
     private var entries: [UUID: Entry] = [:]
+    /// The actions a notice offers, kept beside it: a notice can be copied into
+    /// the history, a handler cannot.
+    private var actions: [UUID: [HUDAction]] = [:]
     private var stack = HUDStack()
     private var pending: [HUDNotice] = []
     private var progress: Entry?
@@ -70,7 +55,8 @@ final class HUDController {
     func show(_ text: String, symbol: String = "checkmark.circle.fill",
               detail: String? = nil, kind: HUDKind? = nil,
               overrideDuration: TimeInterval? = nil,
-              sticky: Bool? = nil) {
+              sticky: Bool? = nil,
+              actions: [HUDAction] = []) {
         let resolved = kind ?? HUDKind.inferred(for: symbol)
         if resolved == .progress {
             _ = showProgress(text, symbol: symbol, detail: detail)
@@ -78,7 +64,8 @@ final class HUDController {
         }
         let isSticky = sticky ?? HUDStickyPolicy.isSticky(
             kind: resolved,
-            keepErrors: HUDSettings.errorsSticky(defaults: defaults)
+            keepErrors: HUDSettings.errorsSticky(defaults: defaults),
+            hasActions: actions.isEmpty == false
         )
         let notice = HUDNotice(id: UUID(), text: text, symbol: symbol, detail: detail,
                                kind: resolved, date: Date(),
@@ -86,7 +73,7 @@ final class HUDController {
                                sticky: isSticky)
         record(notice)
         if isSticky {
-            presentSticky(notice)
+            presentSticky(notice, actions: actions)
             return
         }
         guard pending.isEmpty else {
@@ -140,9 +127,9 @@ final class HUDController {
         for entry in entries.values {
             entry.hideWork?.cancel()
             entry.panel.orderOut(nil)
-            entry.closePanel?.orderOut(nil)
         }
         entries.removeAll()
+        actions.removeAll()
         stack.clear()
         pending.removeAll()
         progress?.panel.orderOut(nil)
@@ -152,10 +139,10 @@ final class HUDController {
     /// Takes one notice away, from either lane (the ✕ and the timer).
     func dismiss(_ id: UUID) {
         guard stack.remove(id) else { return }
+        actions[id] = nil
         if let entry = entries.removeValue(forKey: id) {
             entry.hideWork?.cancel()
             entry.panel.orderOut(nil)
-            entry.closePanel?.orderOut(nil)
         }
         layout()
         fillTransientSlots()
@@ -203,15 +190,17 @@ final class HUDController {
         }
     }
 
-    /// A sticky notice has no timer: only ✕ or Dismiss All take it away. When
-    /// the lane is full the oldest one leaves; it stays in the history.
-    private func presentSticky(_ notice: HUDNotice) {
-        let entry = makeEntry(notice)
+    /// A sticky notice has no timer: a click on it, Dismiss All or one of its
+    /// actions take it away. When the lane is full the oldest one leaves; it
+    /// stays in the history.
+    private func presentSticky(_ notice: HUDNotice, actions: [HUDAction]) {
+        let entry = makeEntry(notice, actions: actions)
         entries[notice.id] = entry
+        self.actions[notice.id] = actions.isEmpty ? nil : actions
         if let evicted = stack.addSticky(notice.id),
            let old = entries.removeValue(forKey: evicted) {
             old.panel.orderOut(nil)
-            old.closePanel?.orderOut(nil)
+            self.actions[evicted] = nil
         }
         layout()
         announce(notice)
@@ -224,10 +213,10 @@ final class HUDController {
         }
     }
 
-    private func makeEntry(_ notice: HUDNotice) -> Entry {
-        let hosting = makeHosting(notice)
+    private func makeEntry(_ notice: HUDNotice, actions: [HUDAction] = []) -> Entry {
+        let hosting = makeHosting(notice, actions: actions)
         let size = fittingSize(hosting)
-        let panel = makePanel()
+        let panel = makePanel(interactive: notice.sticky)
         panel.contentView = hosting
         panel.setContentSize(size)
         panel.orderFrontRegardless()
@@ -238,74 +227,35 @@ final class HUDController {
                 panel.animator().alphaValue = 1
             }
         }
-        let entry = Entry(notice: notice, size: size, panel: panel)
-        if notice.sticky { attachClose(to: entry) }
-        return entry
+        return Entry(notice: notice, size: size, panel: panel)
     }
 
-    /// Puts ✕ in its own click-taking panel over the notice's corner. The
-    /// notice itself keeps ignoring the mouse, so a click meant for the app
-    /// under it still reaches the app.
-    private func attachClose(to entry: Entry) {
-        let id = entry.notice.id
-        let target = CloseTarget { [weak self] in self?.dismiss(id) }
-        let side = HUDLayout.closeControlSize
-        let button = NSButton(frame: NSRect(x: 0, y: 0, width: side, height: side))
-        button.isBordered = false
-        button.bezelStyle = .regularSquare
-        button.imagePosition = .imageOnly
-        button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil)
-        button.contentTintColor = NSColor(WorkspaceStore.shared.theme.subtext)
-        button.target = target
-        button.action = #selector(CloseTarget.fire)
-        button.setAccessibilityLabel("Dismiss notice")
-        button.setAccessibilityHelp("Takes this notice away. It stays in the notification history.")
-        button.autoresizingMask = [.width, .height]
-
-        let container = NSView(frame: button.frame)
-        container.addSubview(button)
-
-        let panel = NSPanel(contentRect: button.frame,
-                            styleMask: [.borderless, .nonactivatingPanel],
-                            backing: .buffered, defer: false)
-        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)))
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary,
-                                    .stationary, .ignoresCycle]
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.animationBehavior = .none
-        panel.sharingType = .none
-        panel.contentView = container
-        panel.orderFrontRegardless()
-        if WorkspaceStore.shared.effectiveAnimationsEnabled {
-            panel.alphaValue = 0
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.12
-                panel.animator().alphaValue = 1
-            }
-        }
-
-        entry.closePanel = panel
-        entry.closeTarget = target
+    /// Runs an action and takes the notice away: an action is an answer.
+    private func run(_ action: HUDAction, for id: UUID) {
+        action.handler()
+        dismiss(id)
     }
 
     private func rebuild(_ entry: Entry) {
-        let hosting = makeHosting(entry.notice)
+        let hosting = makeHosting(entry.notice, actions: actions[entry.notice.id] ?? [])
         let size = fittingSize(hosting)
         entry.size = size
         entry.panel.contentView = hosting
         entry.panel.setContentSize(size)
     }
 
-    private func makeHosting(_ notice: HUDNotice) -> NSHostingView<HUDView> {
-        NSHostingView(rootView: HUDView(
+    private func makeHosting(_ notice: HUDNotice,
+                             actions: [HUDAction]) -> HUDPanelHostingView {
+        let hosting = HUDPanelHostingView(rootView: HUDView(
             notice: notice,
+            actions: actions,
             compact: HUDSettings.compact(defaults: defaults),
-            textSize: HUDSettings.textSize(defaults: defaults)
+            textSize: HUDSettings.textSize(defaults: defaults),
+            onDismiss: { [weak self] in self?.dismiss(notice.id) },
+            onAction: { [weak self] action in self?.run(action, for: notice.id) }
         ))
+        hosting.interactive = notice.sticky
+        return hosting
     }
 
     private func fittingSize(_ hosting: NSHostingView<HUDView>) -> CGSize {
@@ -327,11 +277,10 @@ final class HUDController {
         )
         for (entry, frame) in zip(ordered, frames) where frame != .zero {
             entry.panel.setFrame(frame, display: true)
-            entry.closePanel?.setFrame(HUDLayout.closeFrame(for: frame), display: true)
         }
     }
 
-    private func makePanel() -> NSPanel {
+    private func makePanel(interactive: Bool) -> NSPanel {
         let panel = NSPanel(contentRect: .zero,
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
@@ -341,7 +290,9 @@ final class HUDController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.ignoresMouseEvents = true
+        // A transient notice never takes a click; a sticky one is a small card
+        // the user has to be able to take away (T60).
+        panel.ignoresMouseEvents = interactive == false
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         // Notices never belong in a screenshot or a recording, even when a
@@ -352,21 +303,7 @@ final class HUDController {
 
     /// The display chosen in Settings, with the palette's rule and fallback.
     private func targetScreen() -> NSScreen? {
-        let screens = NSScreen.screens
-        guard screens.isEmpty == false else { return nil }
-        let location = HUDSettings.screenLocation(defaults: defaults)
-        let focusedID = NSScreen.main.flatMap(Self.displayID)
-        let focusedIndex = focusedID.flatMap { id in
-            screens.firstIndex { Self.displayID($0) == id }
-        }
-        let index = location.screenIndex(frames: screens.map(\.frame),
-                                         focusedIndex: focusedIndex,
-                                         mouse: NSEvent.mouseLocation)
-        return index.map { screens[$0] } ?? NSScreen.main ?? screens.first
-    }
-
-    private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
-        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        HUDSettings.screenLocation(defaults: defaults).targetScreen()
     }
 
     // MARK: - History and accessibility
@@ -393,12 +330,29 @@ final class HUDController {
     }
 }
 
+/// The hosting view of a notice. A sticky notice is a small card the user has
+/// to be able to click, even while another app owns the keyboard.
+private final class HUDPanelHostingView: NSHostingView<HUDView> {
+    var interactive = false
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        interactive
+    }
+}
+
 /// One notice, in-theme so it never clashes with the palette. The severity
 /// tints the icon and the border; progress shows an indeterminate spinner.
+///
+/// A sticky notice is closed by clicking anywhere on it — the ✕ in its corner
+/// is a hint, not a target — and can offer actions, which are buttons of their
+/// own (T61).
 private struct HUDView: View {
     let notice: HUDNotice
+    var actions: [HUDAction] = []
     var compact = false
     var textSize: CGFloat = HUDSettings.defaultTextSize
+    var onDismiss: () -> Void = {}
+    var onAction: (HUDAction) -> Void = { _ in }
 
     /// In-theme so the notice never clashes with the palette.
     private var theme: PaletteTheme { WorkspaceStore.shared.theme }
@@ -425,7 +379,26 @@ private struct HUDView: View {
         }
     }
 
+    private var spokenText: String {
+        [notice.text, notice.detail].compactMap { $0 }.joined(separator: ". ")
+    }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            text
+            if actions.isEmpty == false { actionRow }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: type.cornerRadius, style: .continuous)
+                .fill(theme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: type.cornerRadius, style: .continuous)
+                        .strokeBorder(borderColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private var text: some View {
         VStack(alignment: .leading, spacing: type.spacing) {
             HStack(spacing: 8) {
                 if notice.kind == .progress {
@@ -441,6 +414,14 @@ private struct HUDView: View {
                     .font(.system(size: type.titleSize, weight: .medium))
                     .foregroundStyle(theme.text)
                     .fixedSize()
+                if notice.sticky {
+                    // The whole card closes; this only says so.
+                    Spacer(minLength: 8)
+                    Image(systemName: "xmark")
+                        .font(.system(size: max(8, type.titleSize - 3), weight: .semibold))
+                        .foregroundStyle(theme.subtext)
+                        .accessibilityHidden(true)
+                }
             }
             if compact == false, let detail = notice.detail, detail.isEmpty == false {
                 Text(detail)
@@ -454,18 +435,37 @@ private struct HUDView: View {
         }
         .padding(.horizontal, type.horizontalPadding)
         .padding(.vertical, type.verticalPadding)
-        // Room for the ✕ panel on the right edge of a sticky notice.
-        .padding(.trailing, notice.sticky ? 26 : 0)
-        .background(
-            RoundedRectangle(cornerRadius: type.cornerRadius, style: .continuous)
-                .fill(theme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: type.cornerRadius, style: .continuous)
-                        .strokeBorder(borderColor, lineWidth: 1)
-                )
-        )
+        .padding(.trailing, notice.sticky ? 4 : 0)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if notice.sticky { onDismiss() }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(notice.kind.label)
-        .accessibilityValue([notice.text, notice.detail].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityValue(spokenText)
+        .accessibilityAction(named: "Dismiss") {
+            if notice.sticky { onDismiss() }
+        }
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            ForEach(actions) { action in
+                Button {
+                    onAction(action)
+                } label: {
+                    Text(action.title)
+                        .font(.system(size: type.detailSize, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(tint.opacity(0.16)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, type.horizontalPadding)
+        .padding(.bottom, type.verticalPadding)
     }
 }

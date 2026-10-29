@@ -2,9 +2,10 @@ import CoreGraphics
 import XCTest
 @testable import MakiDesk
 
-/// The mini map keeps its corner unless the checklist card is already there;
-/// then it steps out of the way, with a margin, without leaving the display.
-final class MiniMapPlacementTests: XCTestCase {
+/// The small panels keep their corner unless the checklist card is already
+/// there; then they step out of the way, with a margin, without leaving the
+/// display.
+final class CornerPlacementTests: XCTestCase {
     private let screen = CGRect(x: 0, y: 0, width: 1440, height: 900)
     private let mapSize = CGSize(width: 240, height: 160)
 
@@ -16,7 +17,7 @@ final class MiniMapPlacementTests: XCTestCase {
     }
 
     private func frame(_ position: PalettePosition, avoiding obstacle: CGRect?) -> CGRect {
-        MiniMapPlacement.frame(size: mapSize, position: position, screen: screen,
+        CornerPlacement.frame(size: mapSize, position: position, screen: screen,
                                avoiding: obstacle)
     }
 
@@ -40,7 +41,7 @@ final class MiniMapPlacementTests: XCTestCase {
         XCTAssertFalse(placed.intersects(obstacle))
         // Below it, still in the same column, with the margin between. The map
         // keeps its own corner margin, so the columns only roughly line up.
-        XCTAssertEqual(placed.maxY, obstacle.minY - MiniMapPlacement.spacing)
+        XCTAssertEqual(placed.maxY, obstacle.minY - CornerPlacement.spacing)
         XCTAssertEqual(placed.maxX,
                        PalettePosition.topRight.origin(size: mapSize, in: screen).x + mapSize.width)
         XCTAssertTrue(screen.contains(placed))
@@ -50,7 +51,7 @@ final class MiniMapPlacementTests: XCTestCase {
         let obstacle = card(top: false)
         let placed = frame(.bottomRight, avoiding: obstacle)
         XCTAssertFalse(placed.intersects(obstacle))
-        XCTAssertEqual(placed.minY, obstacle.maxY + MiniMapPlacement.spacing)
+        XCTAssertEqual(placed.minY, obstacle.maxY + CornerPlacement.spacing)
         XCTAssertTrue(screen.contains(placed))
     }
 
@@ -69,14 +70,14 @@ final class MiniMapPlacementTests: XCTestCase {
         let placed = frame(.topRight, avoiding: obstacle)
         XCTAssertFalse(placed.intersects(obstacle))
         XCTAssertTrue(screen.contains(placed))
-        XCTAssertLessThanOrEqual(placed.maxX, obstacle.minX - MiniMapPlacement.spacing)
+        XCTAssertLessThanOrEqual(placed.maxX, obstacle.minX - CornerPlacement.spacing)
     }
 
     func testANegativeOriginDisplayIsHandled() {
         let left = CGRect(x: -1920, y: -200, width: 1920, height: 1080)
         let obstacle = CGRect(x: left.maxX - 320 - 6, y: left.maxY - 206,
                               width: 320, height: 200)
-        let placed = MiniMapPlacement.frame(size: mapSize, position: .topRight,
+        let placed = CornerPlacement.frame(size: mapSize, position: .topRight,
                                             screen: left, avoiding: obstacle)
         XCTAssertFalse(placed.intersects(obstacle))
         XCTAssertTrue(left.contains(placed))

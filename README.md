@@ -80,6 +80,15 @@ stays over the other apps without taking the keyboard — clicking the add field
 does, and `Esc` gives it back — and its items come back after a restart. Left
 out of screenshots; solid with Reduce Transparency.
 
+### A timer that gets out of the way
+
+`⌃⌥⇧T` starts one: `25m`, `1h 30m`, or `8:30` for the next half past eight —
+a colon is a time of day, so `1:30` is half past one at night — with an optional
+label to tell them apart. Several run at once, nearest first, in a small card
+that fades as the pointer comes near and returns when it leaves. The notice at the end stays until you click it away, offers **5 more minutes**,
+and a system sound rings — both chosen in Settings; the count is read from the
+deadline, so sleeping cannot make it drift.
+
 ### Clipboard history, kept private
 
 Text only, in memory, never on disk. `⌥V` opens the list; Return or a click
@@ -159,7 +168,8 @@ index is off; the list refreshes when files change.
 Results are reported by a small, themed notice. Its state tints the icon and
 border — grey for information, accent for a confirmation, green for success,
 orange for a warning, red for an error — and errors can be kept until you
-dismiss them with their ✕, while progress updates in place. Two notices can be
+click them away, while progress updates in place. A notice can offer an action:
+the timer's *Time's up* brings **5 more minutes**. Two notices can be
 visible at once without one hiding the other, and a notice waiting for you
 never blocks the ones that close by themselves. Choose the corner, the display
 and the text size in Settings ▸ Notifications, and open **Notification

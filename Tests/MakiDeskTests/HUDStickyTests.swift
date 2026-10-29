@@ -36,6 +36,13 @@ final class HUDStickyTests: XCTestCase {
         XCTAssertTrue(HUDStickyPolicy.isSticky(kind: .error, keepErrors: true))
     }
 
+    func testANoticeWithAnActionCannotVanishBeforeItIsUsed() {
+        for kind in HUDKind.allCases {
+            XCTAssertTrue(HUDStickyPolicy.isSticky(kind: kind, keepErrors: false,
+                                                   hasActions: true), kind.label)
+        }
+    }
+
     func testAStickyNoticeHasNoTimer() {
         XCTAssertNil(HUDTiming.duration(for: notice(.error, sticky: true), base: 1.4))
         // A sticky notice also ignores an explicit duration.
@@ -144,16 +151,4 @@ final class HUDStickyTests: XCTestCase {
         }
     }
 
-    func testTheCloseControlSitsInsideTheNoticeCorner() {
-        let notice = CGRect(x: 100, y: 200, width: 320, height: 60)
-        let close = HUDLayout.closeFrame(for: notice)
-        XCTAssertTrue(notice.contains(close))
-        // Centred on the right edge: a corner would put it on the rounded
-        // curve, where it looks like it is outside the notice.
-        XCTAssertEqual(close.midY, notice.midY)
-        XCTAssertEqual(close.maxX, notice.maxX - 6)
-        XCTAssertEqual(close.width, HUDLayout.closeControlSize)
-        XCTAssertEqual(close.height, HUDLayout.closeControlSize)
-        XCTAssertEqual(close.minX, notice.maxX - HUDLayout.closeControlSize - 6)
-    }
 }

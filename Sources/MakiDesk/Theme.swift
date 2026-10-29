@@ -125,8 +125,8 @@ enum PalettePosition: String, CaseIterable, Identifiable {
     }
 
     /// Origin for a panel of `size` inside `frame` (Cocoa coordinates).
-    func origin(size: CGSize, in frame: CGRect) -> CGPoint {
-        let margin: CGFloat = 24
+    /// `margin` is the distance kept from the two edges the position names.
+    func origin(size: CGSize, in frame: CGRect, margin: CGFloat = 24) -> CGPoint {
         let x: CGFloat
         switch self {
         case .topLeft, .middleLeft, .bottomLeft: x = frame.minX + margin

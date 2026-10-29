@@ -287,21 +287,7 @@ final class ChecklistController: NSObject, NSWindowDelegate {
 
     /// The display chosen in Settings, with the palette's rule and fallback.
     private func targetScreen() -> NSScreen? {
-        let screens = NSScreen.screens
-        guard screens.isEmpty == false else { return nil }
-        let location = WorkspaceStore.shared.checklistScreen
-        let focusedID = NSScreen.main.flatMap(Self.displayID)
-        let focusedIndex = focusedID.flatMap { id in
-            screens.firstIndex { Self.displayID($0) == id }
-        }
-        let index = location.screenIndex(frames: screens.map(\.frame),
-                                         focusedIndex: focusedIndex,
-                                         mouse: NSEvent.mouseLocation)
-        return index.map { screens[$0] } ?? NSScreen.main ?? screens.first
-    }
-
-    private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
-        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+        WorkspaceStore.shared.checklistScreen.targetScreen()
     }
 
     // MARK: - Typing

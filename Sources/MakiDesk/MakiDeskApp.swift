@@ -87,6 +87,38 @@ struct MakiDeskApp: App {
                        icon: "checklist") {
                 store.updateChecklistVisible(!store.checklistVisible)
             }
+            Menu {
+                // No remaining time in these titles: a title that changed every
+                // second rebuilt the open menu and closed it under the pointer.
+                let timers = TimerController.shared.listedTimers
+                if timers.isEmpty {
+                    Button("No timers") {}.disabled(true)
+                }
+                ForEach(timers) { timer in
+                    Menu(timer.isPaused ? "\(timer.label) (paused)" : timer.label) {
+                        Button(timer.isPaused ? "Resume" : "Pause") {
+                            timer.isPaused
+                                ? TimerController.shared.resume(timer.id)
+                                : TimerController.shared.pause(timer.id)
+                        }
+                        Button("Delete") { TimerController.shared.remove(timer.id) }
+                    }
+                }
+                Divider()
+                ForEach(TimerSettings.quickStarts) { quick in
+                    menuButton(quick.title) {
+                        TimerInputController.shared.show(
+                            prefill: TimerText.duration(quick.seconds)
+                        )
+                    }
+                }
+                Divider()
+                menuButton("New Timer…", keys: shortcutKeys(.newTimer), icon: "timer") {
+                    TimerInputController.shared.show()
+                }
+            } label: {
+                Label("Timers", systemImage: "timer")
+            }
             menuButton("Screenshots", keys: shortcutKeys(.openScreenshots),
                        icon: "menubar.dock.rectangle") {
                 ScreenshotLibraryController.shared.show()

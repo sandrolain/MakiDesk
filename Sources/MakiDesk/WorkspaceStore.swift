@@ -221,6 +221,25 @@ final class WorkspaceStore {
         rawValue: UserDefaults.standard.string(forKey: "checklistScreen") ?? ""
     ) ?? ChecklistSettings.defaultScreen
 
+    /// The countdown card (T61): shown while a timer exists, unless turned off.
+    var timerOverlayVisible = UserDefaults.standard.object(forKey: TimerSettings.overlayVisibleKey) as? Bool ?? true
+    var timerOverlayOpacity = TimerSettings.clampedOpacity(
+        UserDefaults.standard.object(forKey: TimerSettings.overlayOpacityKey) as? Double
+            ?? TimerSettings.defaultOpacity
+    )
+    var timerOverlayPosition = HUDPosition(
+        rawValue: UserDefaults.standard.string(forKey: TimerSettings.overlayPositionKey) ?? ""
+    ) ?? TimerSettings.defaultPosition
+    var timerOverlayScreen = PaletteScreenLocation(
+        rawValue: UserDefaults.standard.string(forKey: TimerSettings.overlayScreenKey) ?? ""
+    ) ?? TimerSettings.defaultScreen
+    /// A sound when a timer ends (T61). On by default: a timer that ends in
+    /// silence is only half a timer.
+    var timerSoundEnabled = UserDefaults.standard.object(forKey: TimerSettings.soundEnabledKey) as? Bool ?? true
+    var timerSoundName = TimerSettings.resolvedSound(
+        UserDefaults.standard.string(forKey: TimerSettings.soundNameKey)
+    )
+
     var effectiveAnimationsEnabled: Bool {
         animationsEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
@@ -354,6 +373,7 @@ final class WorkspaceStore {
         WindowOutlineController.shared.start()
         FocusDimController.shared.start()
         ChecklistController.shared.start()
+        TimerController.shared.start()
         ThemedTextCursor.shared.start()
         startEnhancedUIHandling()
         WindowIndex.shared.onChange = { [weak self] in
@@ -932,6 +952,42 @@ final class WorkspaceStore {
         ChecklistController.shared.applySettings()
     }
 
+    func updateTimerOverlayVisible(_ value: Bool) {
+        timerOverlayVisible = value
+        UserDefaults.standard.set(value, forKey: TimerSettings.overlayVisibleKey)
+        TimerController.shared.applySettings()
+    }
+
+    func updateTimerOverlayOpacity(_ value: Double) {
+        let clamped = TimerSettings.clampedOpacity(value)
+        timerOverlayOpacity = clamped
+        UserDefaults.standard.set(clamped, forKey: TimerSettings.overlayOpacityKey)
+        TimerController.shared.applySettings()
+    }
+
+    func updateTimerOverlayPosition(_ value: HUDPosition) {
+        timerOverlayPosition = value
+        UserDefaults.standard.set(value.rawValue, forKey: TimerSettings.overlayPositionKey)
+        TimerController.shared.applySettings()
+    }
+
+    func updateTimerOverlayScreen(_ value: PaletteScreenLocation) {
+        timerOverlayScreen = value
+        UserDefaults.standard.set(value.rawValue, forKey: TimerSettings.overlayScreenKey)
+        TimerController.shared.applySettings()
+    }
+
+    func updateTimerSoundEnabled(_ value: Bool) {
+        timerSoundEnabled = value
+        UserDefaults.standard.set(value, forKey: TimerSettings.soundEnabledKey)
+    }
+
+    func updateTimerSoundName(_ value: String) {
+        let resolved = TimerSettings.resolvedSound(value)
+        timerSoundName = resolved
+        UserDefaults.standard.set(resolved, forKey: TimerSettings.soundNameKey)
+    }
+
     func updateShelfShakeEnabled(_ value: Bool) {
         shelfShakeEnabled = value
         UserDefaults.standard.set(value, forKey: "shelfShakeEnabled")
@@ -1085,6 +1141,12 @@ final class WorkspaceStore {
         updateChecklistWidth(ChecklistSettings.defaultWidth)
         updateChecklistPosition(ChecklistSettings.defaultPosition)
         updateChecklistScreen(ChecklistSettings.defaultScreen)
+        updateTimerOverlayVisible(true)
+        updateTimerOverlayOpacity(TimerSettings.defaultOpacity)
+        updateTimerOverlayPosition(TimerSettings.defaultPosition)
+        updateTimerOverlayScreen(TimerSettings.defaultScreen)
+        updateTimerSoundEnabled(true)
+        updateTimerSoundName(TimerSettings.defaultSound)
         // A remapped shortcut is settings too: put the table back and drop the
         // file. A file from a newer version stays untouched (T53).
         let shortcutStore = ShortcutStore()
@@ -1187,6 +1249,9 @@ final class WorkspaceStore {
             return
         case .toggleChecklist:
             updateChecklistVisible(!checklistVisible)
+            return
+        case .newTimer:
+            TimerInputController.shared.show()
             return
         case .toggleMiniMap:
             updateMiniMapVisibility(!showMiniMap)
@@ -1502,7 +1567,8 @@ final class WorkspaceStore {
              .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor,
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
-             .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist:
+             .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
+             .newTimer:
             return nil
         }
     }
@@ -1880,6 +1946,7 @@ final class WorkspaceStore {
         case .toggleFocusBorder: return "focus border"
         case .toggleFocusDim: return "focus dim"
         case .toggleChecklist: return "checklist"
+        case .newTimer: return "timer"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

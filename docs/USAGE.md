@@ -15,6 +15,7 @@ through Accessibility.
 - [Peek](#peek)
 - [Notes](#notes)
 - [Checklist](#checklist)
+- [Timers](#timers)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
@@ -343,6 +344,45 @@ use it.
   left out of screenshots and recordings, and Reduce Transparency makes it
   solid.
 
+## Timers
+
+`⌃⌥⇧T` or the **Timers** menu starts a countdown. The menu has 1, 5, 10 and 25
+minutes one click away; the field takes anything else:
+
+| Input | Means |
+|---|---|
+| `25` or `25m` | 25 minutes |
+| `1h 30m`, `90s`, `2m 30s` | A length, with its unit or as words (`1 hour 30 minutes`) |
+| `8:30` | The **next** half past eight — today if it is still ahead, tomorrow otherwise |
+| `fino a 8:30`, `until 8:30` | The same, said out loud |
+
+A colon always means a **time of day**: `1:30` is half past one at night, not
+ninety minutes. A length written with a colon is refused instead of guessed.
+
+The card also has an optional **label** — *Tea*, *Focus*, *Stand up* — which the
+card and the menu show instead of the length. Leave it empty and the timer is
+named after what it is (`25m`, `8:30`).
+
+- Several timers run at once, nearest first on the card. The **Timers** menu
+  lists them by label with Pause/Resume and Delete; the remaining time is on the
+  card, so the menu keeps still while it is open.
+- The card sits in the corner chosen in **Settings ▸ Panels ▸ Timers**, on the
+  same edge margin as a tiled window, above the other apps and clear of the
+  checklist. It is not clickable: bringing the pointer near makes it fade away,
+  and it comes back once the pointer is well clear of it, so it never covers
+  what you are reading. Pause, resume and delete from the timers menu.
+- When a timer runs out it posts a notice that stays until you click it away,
+  even if the card was hidden, and plays a system sound. The notice offers **5
+  more minutes** as a one-click action. **Settings ▸ Panels ▸
+  Timers** chooses the sound (Glass by default, *Try* to hear it) or turns it
+  off; the Mac's own volume and mute still apply.
+- The count is read from the deadline, not from a count of ticks: sleeping,
+  changing the hour or the time zone cannot make it drift, and a timer whose
+  time passed while the Mac slept is over when it wakes.
+- Timers live for the session only — nothing is written to disk and nothing
+  survives a restart, because a timer that runs out while MakiDesk is closed
+  could not announce itself.
+
 ## Clipboard history
 
 `⌥V` opens a list of the last texts you copied. It is **in memory only** and
@@ -598,11 +638,13 @@ Notices appear on the display and in the corner chosen in
   *Receiving files…* or *Transferring shelf items…* update in place and
   disappear when the work ends.
 - **Sticky notices.** With *Keep errors until I dismiss them* on, an error has
-  no timer and waits with a ✕ on its right edge until you take it away;
-  **Dismiss All Notices** in the menu closes everything at once. Sticky notices
-  sit in their own lane, so they never hold back the notices that close by
-  themselves, and the newest three are kept. Off (the default), nothing
-  changes: every notice closes after its duration.
+  no timer and waits until you take it away: **click anywhere on the notice**
+  (the ✕ in its corner only says so). **Dismiss All Notices** in the menu closes
+  everything at once. Sticky notices sit in their own lane, so they never hold
+  back the notices that close by themselves, and the newest three are kept. Off
+  (the default), nothing changes: every notice closes after its duration.
+- A notice can carry **actions**: the timer's *Time's up* offers **5 more
+  minutes**, and using an action closes the notice.
 - **Settings ▸ Notifications** sets placement (bottom or top, centre or right),
   the display (focused window or pointer), the base duration, the text size
   (the icon, padding and corners grow with it), compact mode, the VoiceOver
@@ -624,9 +666,9 @@ The Settings window is split into tabs:
 - **Windows** — gap, drag-to-snap key, macOS tiling, focus border, overlay.
 - **Layouts** — suggested layout behaviour and the seven content weights.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
-  width, corner and display), the window switcher/search appearance (including
-  the groups column and its announcements), and text recognition quality and
-  correction.
+  width, corner and display), the countdown card (visibility, opacity, corner
+  and display), the window switcher/search appearance (including the groups
+  column and its announcements), and text recognition quality and correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.
@@ -653,6 +695,7 @@ families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `�
 | Layouts | `⌃⌥G`, `⌃⌥S`, `⌃⌥A`, `⌃⌥W` |
 | Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
 | Focus dim | `⌃⌥⇧D` |
+| Timers | `⌃⌥⇧T` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
 | Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H` |

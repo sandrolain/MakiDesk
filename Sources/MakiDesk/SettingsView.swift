@@ -471,6 +471,54 @@ struct SettingsView: View {
             caption("⌃⌥L shows or hides a small card with the items you tick off; it stays above the other apps, in the chosen corner at the same distance from the edges as a tiled window (half the Gap in Settings ▸ Windows). Opacity is the resting value: pointing at the card or typing in it brings it to 100% until the pointer leaves, so the setting only applies while it waits. Ticking a box does not take the keyboard away from the app you are in — clicking the add field does, and Esc gives it back. Items live in checklist.json next to your groups, survive a restart and are left alone by a factory reset; the card is left out of screenshots and recordings, its height follows the list, and Reduce Transparency makes it solid.")
         }
 
+        SettingsSection("Timers") {
+            Toggle("Show the countdown card", isOn: Binding(
+                get: { store.timerOverlayVisible },
+                set: { store.updateTimerOverlayVisible($0) }
+            ))
+            SliderRow(title: "Opacity",
+                      value: Binding(get: { store.timerOverlayOpacity },
+                                     set: { store.updateTimerOverlayOpacity($0) }),
+                      range: TimerSettings.opacityRange, step: 0.05,
+                      unit: "%", percent: true)
+                .disabled(!store.timerOverlayVisible)
+            Picker("Corner", selection: Binding(
+                get: { store.timerOverlayPosition },
+                set: { store.updateTimerOverlayPosition($0) }
+            )) {
+                ForEach(HUDPosition.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.timerOverlayVisible)
+            Picker("Show on", selection: Binding(
+                get: { store.timerOverlayScreen },
+                set: { store.updateTimerOverlayScreen($0) }
+            )) {
+                ForEach(PaletteScreenLocation.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.timerOverlayVisible)
+
+            Toggle("Play a sound when a timer ends", isOn: Binding(
+                get: { store.timerSoundEnabled },
+                set: { store.updateTimerSoundEnabled($0) }
+            ))
+            HStack {
+                Picker("Sound", selection: Binding(
+                    get: { store.timerSoundName },
+                    set: { store.updateTimerSoundName($0) }
+                )) {
+                    ForEach(TimerSettings.soundNames, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                .disabled(!store.timerSoundEnabled)
+                Button("Try") {
+                    TimerChime.shared.play(store.timerSoundName)
+                }
+                .disabled(!store.timerSoundEnabled)
+            }
+            caption("⌃⌥⇧T or the Timers menu starts one: a length with a unit (25m, 1h 30m, 40s), a bare number of minutes (25) or a time of day with a colon (8:30, meaning the next half past eight). The card sits in the chosen corner and steps aside as the pointer comes near, coming back once it moves away; it stays above the other apps and is left out of screenshots. Several timers run at once, nearest first, each with an optional label. Timers live for the session only — nothing is written to disk and nothing survives a restart — and a finished one posts a notice until you dismiss it, with a system sound when the option above is on. The sound follows the Mac's volume and mute.")
+        }
+
         SettingsSection("Window switcher") {
             Picker("Open on screen with", selection: Binding(
                 get: { store.paletteScreenLocation },
@@ -616,7 +664,7 @@ struct SettingsView: View {
             Toggle("Keep errors until I dismiss them", isOn: $hudKeepErrors)
             HStack {
                 Text(HUDController.shared.hasNotices
-                     ? "Notices on screen close with their ✕."
+                     ? "Click a notice on screen to take it away."
                      : "Nothing is showing.")
                     .font(.caption)
                     .foregroundStyle(theme.subtext)
@@ -626,7 +674,7 @@ struct SettingsView: View {
                 }
                 .disabled(!HUDController.shared.hasNotices)
             }
-            caption("Off, every notice closes by itself after its duration, exactly as before. On, errors have no timer and stay in the corner with a ✕ until you take them away. Notices you must dismiss never hold back the others: they sit in their own lane, and the newest three are kept on screen. Everything stays in the history.")
+            caption("Off, every notice closes by itself after its duration, exactly as before. On, errors have no timer and stay in the corner until you click them away. Notices you must dismiss never hold back the others: they sit in their own lane, and the newest three are kept on screen. Everything stays in the history.")
         }
 
         SettingsSection("Appearance") {

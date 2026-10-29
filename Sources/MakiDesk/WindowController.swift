@@ -56,6 +56,8 @@ enum WindowController {
         case toggleFocusDim
         /// Show or hide the checklist card (T59).
         case toggleChecklist
+        /// Open the field that starts a timer (T61).
+        case newTimer
         /// Act on the current selection, group or pending advice.
         case focusSelection
         case leaveGroup

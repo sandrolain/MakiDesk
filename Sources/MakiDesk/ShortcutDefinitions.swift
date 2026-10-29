@@ -103,6 +103,7 @@ enum ShortcutDefinitions {
         ShortcutSectionDefinition(title: "Panels", note: "⌥ opens a panel; ⌃⌥ acts on windows and the desktop.", definitions: panels),
         ShortcutSectionDefinition(title: "Focus", note: "What leaves the screen is per window, and undoable.", definitions: focus),
         ShortcutSectionDefinition(title: "Groups", note: "⇧ recalls a group; ⌘ adds or removes the front window.", definitions: groups),
+        ShortcutSectionDefinition(title: "Timers", note: "A length with a unit, or a time of day with a colon.", definitions: timers),
         ShortcutSectionDefinition(title: "Peek", note: "The designated window is put away; the hold brings it back.", definitions: peek),
         ShortcutSectionDefinition(title: "Text & colour", note: nil, definitions: capture),
         ShortcutSectionDefinition(title: "Measure", note: "Or drag with ⌥ from the centre; the pinned badge copies the values.", definitions: measure),
@@ -203,6 +204,12 @@ enum ShortcutDefinitions {
                 key: key, modifiers: ctrlOptCmd, action: .assignToGroup(slot)),
         ]
     }
+
+    private static let timers: [ShortcutDefinition] = [
+        def("timer.new", "New timer…", section: "Timers", key: kVK_ANSI_T,
+            modifiers: ctrlOptShift, action: .newTimer,
+            note: "25m, 1h 30m or 8:30 for the next half past eight; Ret starts, Esc closes."),
+    ]
 
     private static let peek: [ShortcutDefinition] = [
         def("peek.designate", "Designate / undesignate the front window", section: "Peek",

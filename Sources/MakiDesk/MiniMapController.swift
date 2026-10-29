@@ -128,7 +128,7 @@ final class MiniMapController {
     /// the checklist card is already in that corner.
     private func place(_ panel: NSPanel) {
         guard let screen = NSScreen.main else { return }
-        let frame = MiniMapPlacement.frame(
+        let frame = CornerPlacement.frame(
             size: panel.frame.size,
             position: WorkspaceStore.shared.miniMapPosition,
             screen: screen.visibleFrame,

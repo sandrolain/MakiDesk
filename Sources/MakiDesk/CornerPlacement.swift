@@ -1,19 +1,22 @@
 import CoreGraphics
 
-/// Where the mini map goes when the checklist card is in the way (T59).
+/// The corner rule shared by the small panels: the mini map and the timer
+/// overlay (T59, T61).
 ///
-/// The map keeps the corner chosen in Settings. When that corner is taken, it
-/// steps **below** the card (above, for the lower corners) and only then to the
-/// side, always with a margin and always inside the display, so two small
-/// panels never sit on top of each other.
-enum MiniMapPlacement {
+/// A panel keeps the corner chosen in Settings. When that corner already holds
+/// the checklist card, it steps **below** it (above, for the lower corners) and
+/// only then to the side, always with a margin and always inside the display,
+/// so two small panels never sit on top of each other.
+enum CornerPlacement {
     /// Air between the map and the card, and the distance that already counts
     /// as an overlap.
     static let spacing: CGFloat = 8
 
     static func frame(size: CGSize, position: PalettePosition, screen: CGRect,
-                      avoiding obstacle: CGRect?, spacing: CGFloat = spacing) -> CGRect {
-        let base = CGRect(origin: position.origin(size: size, in: screen), size: size)
+                      avoiding obstacle: CGRect?, margin: CGFloat = 24,
+                      spacing: CGFloat = spacing) -> CGRect {
+        let base = CGRect(origin: position.origin(size: size, in: screen, margin: margin),
+                          size: size)
         guard let obstacle, obstacle.isEmpty == false else { return base }
         let blocked = obstacle.insetBy(dx: -spacing, dy: -spacing)
         guard base.intersects(blocked) else { return base }
@@ -53,7 +56,8 @@ enum MiniMapPlacement {
         // 3. A card almost as large as the display: the vertical move is still
         //    the least bad answer, and it stays on the screen.
         var fallback = base
-        fallback.origin.y = position.origin(size: size, in: screen).y < obstacle.minY ? below : above
+        fallback.origin.y = position.origin(size: size, in: screen, margin: margin).y < obstacle.minY
+            ? below : above
         return clamped(fallback, in: screen, size: size)
     }
 
