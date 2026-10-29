@@ -47,7 +47,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `WindowScene.swift`, `WorkspaceStore` (focus) | Scene/focus state, send-away and undo. |
 | `PeekController.swift`, `PeekPanel.swift` | Designated-window overlay and hold state machine. |
 | `HUDController.swift` | Small passive feedback panel. |
-| `MiniMapController.swift` | Transient real-window overview overlay. |
+| `MiniMapController.swift` | Transient real-window overview overlay; `MiniMapPlacement` keeps it clear of the checklist. |
 | `ShortcutManager.swift` | Carbon global hot keys (no Input Monitoring). |
 | `NotesStore.swift` | Notes, drafts, session, external-file baselines, Trash. |
 | `NotesPanel.swift` | Notes window, sidebar, toolbar, tabs-free navigation, anchoring. |
@@ -174,6 +174,18 @@ vertically rather than put in the corner, where the rounded shape would leave it
 looking half outside the notice. `HUDStickyPolicy` owns the "nothing sticky by
 default, errors if the option is on" rule and `HUDTiming.duration(for:base:)`
 returns `nil` for a sticky notice.
+
+`ChecklistController` (T59) owns one small card: a borderless, non-activating
+panel at the floating level, in every space, sized to its content and placed in
+a corner by `ChecklistSettings.frame` (the same corner arithmetic the notices
+use). `Checklist` holds the items and their rules — trim, 200 characters per
+item, 50 items, one-step moves, clear completed — and `ChecklistFile` writes
+them atomically to `checklist.json` from a serial queue, setting an unreadable
+file aside as `.bak`. Ticking never activates MakiDesk; the panel takes the keys
+only when the add field is clicked, and `PanelFocusReturn` gives them back on
+hide or on `Esc`. The card is SwiftUI in an `NSHostingView` and the controller
+re-measures it after each change, so the list grows and shrinks with its
+content.
 
 ## Permissions
 

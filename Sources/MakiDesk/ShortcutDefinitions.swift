@@ -182,6 +182,8 @@ enum ShortcutDefinitions {
         def("panel.notes", "Notes", section: "Panels", key: kVK_ANSI_N, modifiers: optionKey, action: .toggleNotes),
         def("panel.clipboard", "Clipboard history", section: "Panels", key: kVK_ANSI_V, modifiers: optionKey, action: .clipboardHistory),
         def("panel.shelf", "Shelf", section: "Panels", key: kVK_ANSI_D, action: .toggleShelf),
+        def("panel.checklist", "Checklist", section: "Panels", key: kVK_ANSI_L, action: .toggleChecklist,
+            note: "A small card with the items you tick off; it stays over the other apps."),
     ]
 
     private static let focus: [ShortcutDefinition] = [

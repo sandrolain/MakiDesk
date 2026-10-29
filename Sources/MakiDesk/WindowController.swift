@@ -54,6 +54,8 @@ enum WindowController {
         case toggleMiniMap
         /// Dim everything outside the focused window (T62).
         case toggleFocusDim
+        /// Show or hide the checklist card (T59).
+        case toggleChecklist
         /// Act on the current selection, group or pending advice.
         case focusSelection
         case leaveGroup

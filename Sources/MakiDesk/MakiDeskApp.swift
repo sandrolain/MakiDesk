@@ -82,6 +82,11 @@ struct MakiDeskApp: App {
             menuButton("Shelf", keys: shortcutKeys(.toggleShelf), icon: "tray.and.arrow.down") {
                 ShelfController.shared.toggle()
             }
+            menuButton(store.checklistVisible ? "Hide Checklist" : "Show Checklist",
+                       keys: shortcutKeys(.toggleChecklist),
+                       icon: "checklist") {
+                store.updateChecklistVisible(!store.checklistVisible)
+            }
             menuButton("Screenshots", keys: shortcutKeys(.openScreenshots),
                        icon: "menubar.dock.rectangle") {
                 ScreenshotLibraryController.shared.show()
@@ -403,6 +408,7 @@ final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             NotesStore.shared.flushIfNeeded(cleanClose: true)
+            ChecklistStore.shared.flushBlocking()
             ShelfController.shared.shutdown()
             ScreenshotLibraryController.shared.shutdown()
         }

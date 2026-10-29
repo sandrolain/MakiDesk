@@ -294,7 +294,8 @@ struct HUDStack: Equatable {
 /// display, including displays with a negative origin.
 enum HUDLayout {
     static func frames(anchor: HUDPosition, screen: CGRect, sizes: [CGSize],
-                       gap: CGFloat = 8, margin: CGFloat = 24) -> [CGRect] {
+                       gap: CGFloat = 8, margin: CGFloat = 24,
+                       minimumEdge: CGFloat = 8) -> [CGRect] {
         var result: [CGRect] = []
         var offset: CGFloat = 0
         for size in sizes {
@@ -316,7 +317,8 @@ enum HUDLayout {
             case .topCenter, .topRight:
                 y = screen.maxY - margin - offset - size.height
             }
-            let clampedX = min(max(x, screen.minX + 8), screen.maxX - size.width - 8)
+            let clampedX = min(max(x, screen.minX + minimumEdge),
+                               screen.maxX - size.width - minimumEdge)
             result.append(CGRect(x: clampedX.rounded(), y: y.rounded(),
                                  width: size.width.rounded(), height: size.height.rounded()))
             offset += size.height + gap

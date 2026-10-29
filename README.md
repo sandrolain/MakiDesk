@@ -70,6 +70,16 @@ syntax-highlighted languages, a searchable sidebar, external files opened as
 drafts, a line-number gutter, and a panel you can dock to either screen edge.
 External files are written only when you press `⌘S`.
 
+### A checklist you cannot leave behind
+
+`⌃⌥L` puts a small card over the desktop with the things you tick off: add,
+tick, reorder, delete, clear what is done. It keeps your corner, sits on the
+same edge margin as a tiled window, and can rest faint, turning solid as soon as the
+pointer is over it or you type in it. It
+stays over the other apps without taking the keyboard — clicking the add field
+does, and `Esc` gives it back — and its items come back after a restart. Left
+out of screenshots; solid with Reduce Transparency.
+
 ### Clipboard history, kept private
 
 Text only, in memory, never on disk. `⌥V` opens the list; Return or a click
@@ -202,6 +212,7 @@ Taskfile commands and the signing notes.
 | `⌥N` | notes |
 | `⌥V` | clipboard history |
 | `⌃⌥D` | shelf |
+| `⌃⌥L` | checklist |
 
 Every command, including the panels' own keys, is in the **Keyboard Shortcuts**
 window (menu bar or Settings ▸ General) and in the [usage guide](docs/USAGE.md#keyboard-shortcuts).

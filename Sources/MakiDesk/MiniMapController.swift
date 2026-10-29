@@ -124,11 +124,17 @@ final class MiniMapController {
         return panel
     }
 
-    /// Places the panel at the configured screen position.
+    /// Places the panel at the configured screen position, stepping aside when
+    /// the checklist card is already in that corner.
     private func place(_ panel: NSPanel) {
         guard let screen = NSScreen.main else { return }
-        panel.setFrameOrigin(WorkspaceStore.shared.miniMapPosition.origin(
-            size: panel.frame.size, in: screen.visibleFrame))
+        let frame = MiniMapPlacement.frame(
+            size: panel.frame.size,
+            position: WorkspaceStore.shared.miniMapPosition,
+            screen: screen.visibleFrame,
+            avoiding: ChecklistController.shared.panelFrame
+        )
+        if panel.frame != frame { panel.setFrame(frame, display: false) }
     }
 }
 

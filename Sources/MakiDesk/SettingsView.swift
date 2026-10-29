@@ -437,6 +437,40 @@ struct SettingsView: View {
             caption("⌃⌥D opens the shelf near the pointer; the shake opens it during a drag. It collects files, folders, links, text and images, lets you drag them out or copy/move them to a folder, and empties when closed. Space previews, Delete removes, Esc closes. The shelf is temporary: nothing is written to disk except files promised by apps such as Photos, in a temporary folder removed on close.")
         }
 
+        SettingsSection("Checklist") {
+            Toggle("Show the checklist", isOn: Binding(
+                get: { store.checklistVisible },
+                set: { store.updateChecklistVisible($0) }
+            ))
+            SliderRow(title: "Opacity",
+                      value: Binding(get: { store.checklistOpacity },
+                                     set: { store.updateChecklistOpacity($0) }),
+                      range: ChecklistSettings.opacityRange, step: 0.05,
+                      unit: "%", percent: true)
+                .disabled(!store.checklistVisible)
+            SliderRow(title: "Width",
+                      value: Binding(get: { store.checklistWidth },
+                                     set: { store.updateChecklistWidth($0) }),
+                      range: ChecklistSettings.widthRange, step: 10,
+                      unit: " pt", decimals: 0)
+                .disabled(!store.checklistVisible)
+            Picker("Corner", selection: Binding(
+                get: { store.checklistPosition },
+                set: { store.updateChecklistPosition($0) }
+            )) {
+                ForEach(HUDPosition.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.checklistVisible)
+            Picker("Show on", selection: Binding(
+                get: { store.checklistScreen },
+                set: { store.updateChecklistScreen($0) }
+            )) {
+                ForEach(PaletteScreenLocation.allCases) { Text($0.label).tag($0) }
+            }
+            .disabled(!store.checklistVisible)
+            caption("⌃⌥L shows or hides a small card with the items you tick off; it stays above the other apps, in the chosen corner at the same distance from the edges as a tiled window (half the Gap in Settings ▸ Windows). Opacity is the resting value: pointing at the card or typing in it brings it to 100% until the pointer leaves, so the setting only applies while it waits. Ticking a box does not take the keyboard away from the app you are in — clicking the add field does, and Esc gives it back. Items live in checklist.json next to your groups, survive a restart and are left alone by a factory reset; the card is left out of screenshots and recordings, its height follows the list, and Reduce Transparency makes it solid.")
+        }
+
         SettingsSection("Window switcher") {
             Picker("Open on screen with", selection: Binding(
                 get: { store.paletteScreenLocation },

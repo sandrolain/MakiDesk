@@ -203,6 +203,24 @@ final class WorkspaceStore {
     /// Whether switching to another app ends the effect.
     var focusDimStopsOnAppChange = UserDefaults.standard.object(forKey: "focusDimStopsOnAppChange") as? Bool ?? false
 
+    /// The checklist card (T59). Shown only when the user asked for it, and
+    /// its items are user data: a factory reset leaves them alone.
+    var checklistVisible = UserDefaults.standard.object(forKey: "checklistVisible") as? Bool ?? false
+    var checklistOpacity = ChecklistSettings.clampedOpacity(
+        UserDefaults.standard.object(forKey: "checklistOpacity") as? Double
+            ?? ChecklistSettings.defaultOpacity
+    )
+    var checklistWidth = ChecklistSettings.clampedWidth(
+        UserDefaults.standard.object(forKey: "checklistWidth") as? Double
+            ?? ChecklistSettings.defaultWidth
+    )
+    var checklistPosition = HUDPosition(
+        rawValue: UserDefaults.standard.string(forKey: "checklistPosition") ?? ""
+    ) ?? ChecklistSettings.defaultPosition
+    var checklistScreen = PaletteScreenLocation(
+        rawValue: UserDefaults.standard.string(forKey: "checklistScreen") ?? ""
+    ) ?? ChecklistSettings.defaultScreen
+
     var effectiveAnimationsEnabled: Bool {
         animationsEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
@@ -335,6 +353,7 @@ final class WorkspaceStore {
         WindowIndex.shared.start()
         WindowOutlineController.shared.start()
         FocusDimController.shared.start()
+        ChecklistController.shared.start()
         startEnhancedUIHandling()
         WindowIndex.shared.onChange = { [weak self] in
             self?.syncModel()
@@ -647,6 +666,8 @@ final class WorkspaceStore {
     func updateGap(_ value: Double) {
         gap = value.clamped(to: 0...80)
         UserDefaults.standard.set(gap, forKey: "windowGap")
+        // The checklist sits on the same margin as the windows.
+        ChecklistController.shared.applySettings()
     }
 
     func updateMiniMapVisibility(_ value: Bool) {
@@ -878,6 +899,38 @@ final class WorkspaceStore {
         UserDefaults.standard.set(value, forKey: "focusDimStopsOnAppChange")
     }
 
+    func updateChecklistVisible(_ value: Bool) {
+        checklistVisible = value
+        UserDefaults.standard.set(value, forKey: "checklistVisible")
+        ChecklistController.shared.applySettings()
+    }
+
+    func updateChecklistOpacity(_ value: Double) {
+        let clamped = ChecklistSettings.clampedOpacity(value)
+        checklistOpacity = clamped
+        UserDefaults.standard.set(clamped, forKey: "checklistOpacity")
+        ChecklistController.shared.applySettings()
+    }
+
+    func updateChecklistWidth(_ value: Double) {
+        let clamped = ChecklistSettings.clampedWidth(value)
+        checklistWidth = clamped
+        UserDefaults.standard.set(clamped, forKey: "checklistWidth")
+        ChecklistController.shared.applySettings()
+    }
+
+    func updateChecklistPosition(_ value: HUDPosition) {
+        checklistPosition = value
+        UserDefaults.standard.set(value.rawValue, forKey: "checklistPosition")
+        ChecklistController.shared.applySettings()
+    }
+
+    func updateChecklistScreen(_ value: PaletteScreenLocation) {
+        checklistScreen = value
+        UserDefaults.standard.set(value.rawValue, forKey: "checklistScreen")
+        ChecklistController.shared.applySettings()
+    }
+
     func updateShelfShakeEnabled(_ value: Bool) {
         shelfShakeEnabled = value
         UserDefaults.standard.set(value, forKey: "shelfShakeEnabled")
@@ -1026,6 +1079,11 @@ final class WorkspaceStore {
         updateFocusDimDisplayMode(.independent)
         updateFocusDimDesktopDims(false)
         updateFocusDimStopsOnAppChange(false)
+        updateChecklistVisible(false)
+        updateChecklistOpacity(ChecklistSettings.defaultOpacity)
+        updateChecklistWidth(ChecklistSettings.defaultWidth)
+        updateChecklistPosition(ChecklistSettings.defaultPosition)
+        updateChecklistScreen(ChecklistSettings.defaultScreen)
         // A remapped shortcut is settings too: put the table back and drop the
         // file. A file from a newer version stays untouched (T53).
         let shortcutStore = ShortcutStore()
@@ -1125,6 +1183,9 @@ final class WorkspaceStore {
             return
         case .toggleFocusDim:
             updateFocusDimEnabled(!focusDimEnabled)
+            return
+        case .toggleChecklist:
+            updateChecklistVisible(!checklistVisible)
             return
         case .toggleMiniMap:
             updateMiniMapVisibility(!showMiniMap)
@@ -1440,7 +1501,7 @@ final class WorkspaceStore {
              .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor,
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
-             .clearPeek, .applySuggestedLayout, .toggleFocusDim:
+             .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist:
             return nil
         }
     }
@@ -1817,6 +1878,7 @@ final class WorkspaceStore {
         case .openScreenshots: return "screenshots"
         case .toggleFocusBorder: return "focus border"
         case .toggleFocusDim: return "focus dim"
+        case .toggleChecklist: return "checklist"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

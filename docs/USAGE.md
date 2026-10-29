@@ -14,6 +14,7 @@ through Accessibility.
 - [Focus](#focus)
 - [Peek](#peek)
 - [Notes](#notes)
+- [Checklist](#checklist)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
@@ -89,7 +90,10 @@ The mini-map shows connected displays in their relative positions and sizes.
 Window boxes use solid outlines and translucent fills; the focused window has a
 more opaque fill and the theme accent around it. In the switcher, the selected
 window card also highlights its matching box in the mini-map, and its title is
-shown below the display overview.
+shown below the display overview. If the checklist card already sits in the
+corner the mini-map would use, the map steps below it (or above, in a lower
+corner) with a small margin, and only moves beside it when there is no room
+that way.
 
 **macOS tiling.** macOS also tiles a window dragged with ⌥. Settings ▸ Windows
 detects that system switch and lets you turn it off so only MakiDesk reacts, or
@@ -310,6 +314,34 @@ even when you never save it to a file.
   disappears, the draft stays and is marked *Not available* / *file missing*.
 - Notes and drafts live in `~/Library/Application Support/MakiDesk/Note/`.
   The factory reset has a **Notes** tick that removes them.
+
+## Checklist
+
+`⌃⌥L` shows or hides a small card with the things you mean to do. It stays over
+the other apps, in the corner chosen in **Settings ▸ Panels** (top right by
+default), at the same distance from the edges as a tiled window — half the
+**Gap** in Settings ▸ Windows — and at the opacity you set (30–100%). That
+opacity is the **resting**
+value: pointing at the card or typing in it brings it to 100% until the pointer
+leaves, so it can stay faint in the corner and become readable the moment you
+use it.
+
+- Type an item and press Return; click the circle to tick it (the text gets a
+  line through), the arrows to move it and the ✕ to delete it. **Clear
+  completed** takes every ticked item away. Items hold up to 200 characters and
+  keep the line breaks you type; the list stops at 50.
+- Ticking does not take the keyboard from the app you are in: the card only
+  takes the keys when you click the add field, and `Esc` gives them straight
+  back. The card is as big as its content — height follows the list — and
+  nothing outside it is covered, so clicks on the app under it still reach the
+  app.
+- The mini-map keeps out of the card's way: when both belong in the same
+  corner, the map appears below the card instead of on top of it.
+- The items are written to `~/Library/Application Support/MakiDesk/checklist.json`
+  after each change and come back on the next launch; a factory reset leaves
+  them alone while the card's settings go back to their defaults. The card is
+  left out of screenshots and recordings, and Reduce Transparency makes it
+  solid.
 
 ## Clipboard history
 
@@ -591,9 +623,10 @@ The Settings window is split into tabs:
   reset and finish setup.
 - **Windows** — gap, drag-to-snap key, macOS tiling, focus border, overlay.
 - **Layouts** — suggested layout behaviour and the seven content weights.
-- **Panels** — shelf shake settings, the window switcher/search appearance
-  (including the groups column and its announcements), and text recognition
-  quality and correction.
+- **Panels** — shelf shake settings, the checklist card (visibility, opacity,
+  width, corner and display), the window switcher/search appearance (including
+  the groups column and its announcements), and text recognition quality and
+  correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.
@@ -616,7 +649,8 @@ families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `�
 |---|---|
 | Window | `⌃⌥← → ↑ ↓`, `⌃⌥U I J K`, `⌃⌥↩`, `⌃⌥C`, `⌃⌥P`, `⌃⌥F`, `⌃⌥M` |
 | Layouts | `⌃⌥G`, `⌃⌥S`, `⌃⌥A`, `⌃⌥W` |
-| Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D` |
+| Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
+| Focus dim | `⌃⌥⇧D` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
 | Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H` |
