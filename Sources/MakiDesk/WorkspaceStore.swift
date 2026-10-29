@@ -223,6 +223,10 @@ final class WorkspaceStore {
 
     /// Whether an annotated screenshot is also copied to the clipboard (T40).
     var screenshotCopyToClipboard = UserDefaults.standard.object(forKey: "screenshotCopyToClipboard") as? Bool ?? true
+    /// Whether a capture macOS saved gets a notice with Shelf and Copy text
+    /// (T48). Off by default: a banner for every screenshot is noise until the
+    /// user asks for it.
+    var screenshotSavedNotice = UserDefaults.standard.object(forKey: "screenshotSavedNotice") as? Bool ?? false
 
     /// The countdown card (T61): shown while a timer exists, unless turned off.
     var timerOverlayVisible = UserDefaults.standard.object(forKey: TimerSettings.overlayVisibleKey) as? Bool ?? true
@@ -377,6 +381,7 @@ final class WorkspaceStore {
         FocusDimController.shared.start()
         ChecklistController.shared.start()
         TimerController.shared.start()
+        ScreenshotCaptureWatcher.shared.applySettings()
         ThemedTextCursor.shared.start()
         startEnhancedUIHandling()
         WindowIndex.shared.onChange = { [weak self] in
@@ -985,6 +990,12 @@ final class WorkspaceStore {
         UserDefaults.standard.set(value, forKey: "screenshotCopyToClipboard")
     }
 
+    func updateScreenshotSavedNotice(_ value: Bool) {
+        screenshotSavedNotice = value
+        UserDefaults.standard.set(value, forKey: "screenshotSavedNotice")
+        ScreenshotCaptureWatcher.shared.applySettings()
+    }
+
     func updateTimerSoundEnabled(_ value: Bool) {
         timerSoundEnabled = value
         UserDefaults.standard.set(value, forKey: TimerSettings.soundEnabledKey)
@@ -1156,6 +1167,7 @@ final class WorkspaceStore {
         updateTimerSoundEnabled(true)
         updateTimerSoundName(TimerSettings.defaultSound)
         updateScreenshotCopyToClipboard(true)
+        updateScreenshotSavedNotice(false)
         // A remapped shortcut is settings too: put the table back and drop the
         // file. A file from a newer version stays untouched (T53).
         let shortcutStore = ShortcutStore()

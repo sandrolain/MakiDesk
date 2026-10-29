@@ -182,6 +182,14 @@ every editable control. They all edit through AppKit's shared field editor, an
 covers SwiftUI text fields, search fields and the Notes editor without owning
 any of them; a theme change repaints the open ones immediately.
 
+`ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
+folder while the opt-in notice is on, baselines the files already there, and
+announces only a fresh image, with Shelf and Copy text as actions. Its policy —
+enabled, not while secure input is on, image, younger than eight seconds — is a
+pure rule with tests; the scan runs on a worker and publishes on the main actor,
+and the library and the watcher share the localised capture names
+(`ScreenshotNames`) so they cannot drift.
+
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost
 window and the whole screen — and from an image the caller already has. One

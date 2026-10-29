@@ -556,6 +556,15 @@ card size; sort order, grouping and size are remembered. Thumbnails are decoded
 off the main thread and kept in a 32 MiB cache, released when the library
 closes.
 
+**Recognize Text** in the toolbar reads the selected screenshot without taking a
+new capture — no Screen Recording beyond the file already on disk.
+
+**Announce new screenshots** (Settings ▸ Panels ▸ Screenshot, off by default)
+puts a notice on screen when macOS saves a capture with `⌘⇧3`, `⌘⇧4` or `⌘⇧5`:
+the file name, **Shelf** and **Copy text**. It never takes the focus, stays
+silent while a password field has the keyboard, and follows the library's
+folder. The notice stays until you use one of its buttons or dismiss it.
+
 **Videos** in the same toolbar also lists screen recordings (`.mov`, `.mp4`):
 they get a film badge and their length, Quick Look plays them, and the same
 move, trash and drag actions apply. It is off by default. If macOS has not
@@ -723,8 +732,9 @@ first one.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
   width, corner and display), the countdown card (visibility, opacity, corner
   and display), the window switcher/search appearance (including the groups
-  column and its announcements), the annotated screenshot's clipboard copy, and
-  text recognition quality and correction.
+  column and its announcements), the annotated screenshot's clipboard copy, the
+  notice for screenshots macOS saves, and text recognition quality and
+  correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.

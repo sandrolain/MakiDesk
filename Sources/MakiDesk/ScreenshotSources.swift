@@ -43,6 +43,36 @@ enum SystemScreenshotFolder {
     }
 }
 
+/// What macOS calls its captures and what the library lists (T40B, T48).
+///
+/// One place for the names, because two watchers now look at the same folder:
+/// the library window and the notice for a capture that has just been saved.
+enum ScreenshotNames {
+    /// The localised prefixes macOS gives its captures.
+    static let prefixes = [
+        "screenshot", "screen shot", "schermata", "bildschirmfoto",
+        "captura de pantalla", "capture d'écran", "截屏", "スクリーンショット"
+    ]
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "tif", "tiff", "pdf"]
+    /// `⌘⇧5` can also record a movie into the same folder (T48).
+    static let videoExtensions: Set<String> = ["mov", "mp4"]
+    /// macOS names recordings in the system language, not "Screenshot…".
+    static let videoPrefixes = [
+        "screen recording", "registrazione schermo", "bildschirmaufnahme",
+        "grabación de pantalla", "enregistrement d'écran", "录屏", "画面収録"
+    ]
+
+    /// Whether a file name is a capture the library lists.
+    static func isCapture(_ name: String, recordings: Bool = false) -> Bool {
+        let lower = name.lowercased()
+        let prefixes = Self.prefixes + (recordings ? videoPrefixes : [])
+        guard prefixes.contains(where: lower.hasPrefix) else { return false }
+        let ext = (name as NSString).pathExtension.lowercased()
+        let extensions = imageExtensions.union(recordings ? videoExtensions : [])
+        return extensions.contains(ext)
+    }
+}
+
 /// Spotlight's list of screen captures in one folder.
 enum ScreenshotIndexState: Equatable, Sendable {
     /// Not running: the library is closed.

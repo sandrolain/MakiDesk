@@ -745,6 +745,11 @@ struct SettingsView: View {
                         get: { store.screenshotCopyToClipboard },
                         set: { store.updateScreenshotCopyToClipboard($0) }
                     ))
+                    Toggle("Announce screenshots macOS saves", isOn: Binding(
+                        get: { store.screenshotSavedNotice },
+                        set: { store.updateScreenshotSavedNotice($0) }
+                    ))
+                    caption("A notice with the capture's name and two actions — put it on the shelf, or read its text — appears when macOS saves a screenshot with ⌘⇧3/4/5. Off by default, and silent while a password field has the keyboard. It follows the folder chosen in the screenshot library.")
                     caption("⌃⌥⇧S (or menu ▸ Capture Area…) opens the area selector, then a small editor: arrow, rectangle, pen, highlighter and «hide details» for anything private. Ret saves, Esc throws it away, ⌘Z undoes. The result lands on the shelf as a PNG — drag it out, or paste it when the option above is on. The file lives in the shelf's temporary folder and goes away with it.")
                 }
                 SettingsSection("Text recognition") {

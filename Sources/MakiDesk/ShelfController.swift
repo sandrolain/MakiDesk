@@ -333,6 +333,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     /// Adds text from the clipboard history (T21), opening the shelf if needed.
+    /// Puts a file the user picked on the shelf, as a reference: the shelf keeps
+    /// pointing at the original, and says "Not available" if it goes away (T48).
+    func add(file url: URL) {
+        add(ShelfItem.file(url))
+        show(at: NSEvent.mouseLocation, activating: false)
+    }
+
     /// Puts an image on the shelf as a staged PNG (T40).
     ///
     /// The shelf is temporary, so the file lives in its staging folder: it goes

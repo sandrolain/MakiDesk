@@ -89,20 +89,6 @@ final class ScreenshotLibraryModel {
     private var refreshWork: DispatchWorkItem?
 
     private static let folderKey = "screenshotLibraryFolderPath"
-    private static let screenshotPrefixes = [
-        "screenshot", "screen shot", "schermata", "bildschirmfoto",
-        "captura de pantalla", "capture d'écran", "截屏", "スクリーンショット"
-    ]
-    private static let imageExtensions: Set<String> = [
-        "png", "jpg", "jpeg", "tif", "tiff", "pdf"
-    ]
-    /// `⌘⇧5` can also record a movie into the same folder (T48).
-    private static let videoExtensions: Set<String> = ["mov", "mp4"]
-    /// macOS names recordings in the system language, not "Screenshot…".
-    private static let videoPrefixes = [
-        "screen recording", "registrazione schermo", "bildschirmaufnahme",
-        "grabación de pantalla", "enregistrement d'écran", "录屏", "画面収録"
-    ]
 
     init(folderURL overrideFolderURL: URL? = nil,
          defaults: UserDefaults = .standard,
@@ -324,10 +310,10 @@ final class ScreenshotLibraryModel {
         let generation = scanGeneration
         let path = folderURL.path
         isLoading = true
-        let prefixes = Self.screenshotPrefixes
-            + (showsRecordings ? Self.videoPrefixes : [])
-        let extensions = Self.imageExtensions
-            .union(showsRecordings ? Self.videoExtensions : [])
+        let prefixes = ScreenshotNames.prefixes
+            + (showsRecordings ? ScreenshotNames.videoPrefixes : [])
+        let extensions = ScreenshotNames.imageExtensions
+            .union(showsRecordings ? ScreenshotNames.videoExtensions : [])
         let indexedPaths = spotlight.paths
         let scanDirectory = self.scanDirectory
 
