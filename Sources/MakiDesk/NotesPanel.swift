@@ -285,6 +285,14 @@ final class NotesDropView: NSView {
     }
 }
 
+/// The Markdown commands offered by the editor's Format menu (T65).
+enum MarkdownCommand: Int {
+    case bold, italic, code, link
+    case bullet, numbered, checkbox, quote
+    case indent, outdent
+    case fence, table
+}
+
 // MARK: - Panel content
 
 @MainActor
@@ -307,6 +315,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private let openButton = IconButton()
     private let saveButton = IconButton()
     private let saveAsButton = IconButton()
+    private let formatButton = IconButton()
     private let revealButton = IconButton()
     private let closeButton = IconButton()
     private let floatButton = IconButton()
@@ -471,6 +480,9 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
                          tip: "Save (⌘S)", action: #selector(save))
         configureToolbar(saveAsButton, symbol: "square.and.arrow.down.on.square", label: "Save As",
                          tip: "Save As… (⇧⌘S)", action: #selector(saveAsFromMenu))
+        configureToolbar(formatButton, symbol: "textformat", label: "Format",
+                         tip: "Markdown formatting (⌘B bold, ⌘I italic, ⌘K link)",
+                         action: #selector(showFormatMenu))
         configureToolbar(revealButton, symbol: "doc.text.magnifyingglass", label: "Reveal",
                          tip: "Reveal in Finder", action: #selector(revealCurrent))
         configureToolbar(closeButton, symbol: "xmark.circle", label: "Close",
@@ -512,9 +524,10 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             subview.translatesAutoresizingMaskIntoConstraints = false
             main.addSubview(subview)
         }
-        for subview in [newButton, openButton, saveButton, saveAsButton, revealButton,
-                        closeButton, floatButton, anchorLeftButton, anchorRightButton,
-                        toolbarSeparator1, toolbarSeparator2, toolbarHairline] {
+        for subview in [newButton, openButton, saveButton, saveAsButton, formatButton,
+                        revealButton, closeButton, floatButton, anchorLeftButton,
+                        anchorRightButton, toolbarSeparator1, toolbarSeparator2,
+                        toolbarHairline] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             toolbarBar.addSubview(subview)
         }
@@ -573,7 +586,11 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             saveAsButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
             saveAsButton.heightAnchor.constraint(equalToConstant: 40),
 
-            toolbarSeparator1.leadingAnchor.constraint(equalTo: saveAsButton.trailingAnchor, constant: 8),
+            formatButton.leadingAnchor.constraint(equalTo: saveAsButton.trailingAnchor, constant: 4),
+            formatButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
+            formatButton.heightAnchor.constraint(equalToConstant: 40),
+
+            toolbarSeparator1.leadingAnchor.constraint(equalTo: formatButton.trailingAnchor, constant: 8),
             toolbarSeparator1.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
             toolbarSeparator1.widthAnchor.constraint(equalToConstant: 1),
             toolbarSeparator1.heightAnchor.constraint(equalToConstant: 20),
@@ -1110,6 +1127,9 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         guard flags.contains(.command) else { return false }
         let shift = flags.contains(.shift)
         guard let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        // The formatting keys belong to the editor: with the search field or a
+        // toolbar control focused they must reach that control instead (T65).
+        let formatsToEditor = (view.window?.firstResponder as? NSTextView) === editor.textView
         switch key {
         case "s":
             shift ? saveAs() : save()
@@ -1128,6 +1148,26 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         case "o":
             openDocument()
             return true
+        case "b":
+            guard shift == false, formatsToEditor else { return false }
+            applyMarkdown(.bold)
+            return true
+        case "i":
+            guard shift == false, formatsToEditor else { return false }
+            applyMarkdown(.italic)
+            return true
+        case "k":
+            guard formatsToEditor else { return false }
+            applyMarkdown(shift ? .code : .link)
+            return true
+        case "]":
+            guard shift, formatsToEditor else { return false }
+            applyMarkdown(.indent)
+            return true
+        case "[":
+            guard shift, formatsToEditor else { return false }
+            applyMarkdown(.outdent)
+            return true
         case "=", "+":
             changeFontSize(by: 1)
             return true
@@ -1144,6 +1184,79 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             }
             return false
         }
+    }
+
+    // MARK: - Markdown (T65)
+
+    @objc private func showFormatMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        addFormatItem(menu, "Bold", .bold, "b", [.command])
+        addFormatItem(menu, "Italic", .italic, "i", [.command])
+        addFormatItem(menu, "Inline Code", .code, "k", [.command, .shift])
+        addFormatItem(menu, "Link", .link, "k", [.command])
+        menu.addItem(.separator())
+        addFormatItem(menu, "Bulleted List", .bullet)
+        addFormatItem(menu, "Numbered List", .numbered)
+        addFormatItem(menu, "Checkbox", .checkbox)
+        addFormatItem(menu, "Quote", .quote)
+        addFormatItem(menu, "Indent", .indent, "]", [.command, .shift])
+        addFormatItem(menu, "Outdent", .outdent, "[", [.command, .shift])
+        menu.addItem(.separator())
+        addFormatItem(menu, "Code Block", .fence)
+        addFormatItem(menu, "Table", .table)
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    private func addFormatItem(_ menu: NSMenu, _ title: String, _ command: MarkdownCommand,
+                               _ key: String = "", _ modifiers: NSEvent.ModifierFlags = []) {
+        let item = NSMenuItem(title: title, action: #selector(markdownMenuAction(_:)),
+                              keyEquivalent: key)
+        item.keyEquivalentModifierMask = modifiers
+        item.tag = command.rawValue
+        item.target = self
+        menu.addItem(item)
+    }
+
+    @objc private func markdownMenuAction(_ sender: NSMenuItem) {
+        guard let command = MarkdownCommand(rawValue: sender.tag) else { return }
+        applyMarkdown(command)
+    }
+
+    /// One formatter call, then the editor applies the result as a single edit;
+    /// the store and the highlighter hear about it through the normal change
+    /// pipeline, so this is typing as far as they are concerned (T65).
+    private func applyMarkdown(_ command: MarkdownCommand) {
+        guard let id = currentID, let note = store.note(id: id) else { return }
+        let text = editor.text
+        let selection = editor.textView.selectedRange()
+        let language = note.language == .plain ? "" : note.language.rawValue
+        let change: NotesMarkdownChange?
+        switch command {
+        case .bold: change = NotesMarkdownFormat.bold(in: text, selection: selection)
+        case .italic: change = NotesMarkdownFormat.italic(in: text, selection: selection)
+        case .code: change = NotesMarkdownFormat.code(in: text, selection: selection)
+        case .link: change = NotesMarkdownFormat.link(in: text, selection: selection)
+        case .bullet:
+            change = NotesMarkdownFormat.toggleList(.bullet, in: text, selection: selection)
+        case .numbered:
+            change = NotesMarkdownFormat.toggleList(.numbered, in: text, selection: selection)
+        case .checkbox:
+            change = NotesMarkdownFormat.toggleList(.checkbox, in: text, selection: selection)
+        case .quote: change = NotesMarkdownFormat.toggleQuote(in: text, selection: selection)
+        case .indent: change = NotesMarkdownFormat.indent(in: text, selection: selection)
+        case .outdent:
+            change = NotesMarkdownFormat.indent(in: text, selection: selection, outdent: true)
+        case .fence:
+            change = NotesMarkdownFormat.toggleFence(in: text, selection: selection,
+                                                     language: language)
+        case .table: change = NotesMarkdownFormat.table(in: text, selection: selection)
+        }
+        guard let change else { return }
+        editor.apply(change)
+        updatePosition()
+        focusEditor()
     }
 
     private func changeFontSize(by delta: CGFloat) {

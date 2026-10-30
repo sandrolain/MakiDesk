@@ -159,6 +159,24 @@ final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorag
 
     var text: String { textView.string }
 
+    /// Applies a formatter's change as **one** undoable edit (T65). Going through
+    /// `shouldChangeText` / `didChangeText` is what keeps ⌘Z to a single step and
+    /// lets the change pipeline (store, highlighter) see it as typing.
+    @discardableResult
+    func apply(_ change: NotesMarkdownChange) -> Bool {
+        guard let storage = textView.textStorage,
+              change.range.location >= 0,
+              NSMaxRange(change.range) <= storage.length,
+              textView.shouldChangeText(in: change.range,
+                                        replacementString: change.replacement) else {
+            return false
+        }
+        storage.replaceCharacters(in: change.range, with: change.replacement)
+        textView.didChangeText()
+        textView.setSelectedRange(change.selection)
+        return true
+    }
+
     func caretPosition(at offset: Int) -> (line: Int, column: Int) {
         ruler.caretPosition(at: offset)
     }

@@ -257,6 +257,13 @@ with tests) so an example is never rewritten, and the session's begin/end
 suspends the syntax highlighter (`NotesHighlighter.setSuspended`) and the
 automatic draft write, which then runs once for the whole rewrite.
 
+`NotesMarkdownFormat` (T65) turns the editor's formatting commands into values —
+the range to replace, the replacement and where the selection goes — on UTF-16
+ranges, so emoji never split a marker. The editor applies the result through
+`shouldChangeText` / `didChangeText`, which keeps it one undoable edit and lets
+the store and the syntax highlighter treat it as typing. The model never writes
+Markdown: this pure code does, and T66 serialises into it.
+
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost
 window and the whole screen — and from an image the caller already has. One

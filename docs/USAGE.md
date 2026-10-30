@@ -332,6 +332,12 @@ even when you never save it to a file.
   with unsaved changes (or a missing file) asks first.
 - **Find** `⌘F`, new `⌘T`, open `⌘O`, switch with `⌘1…9`, change the font with
   `⌘+` / `⌘−`.
+- **Markdown without a model**: the Format button (or `⌘B` bold, `⌘I` italic,
+  `⇧⌘K` code, `⌘K` link) wraps the selection or the word under the cursor and
+  toggles it again. The menu adds bulleted, numbered and checkbox lists, quotes,
+  indent/outdent, a code block closed with the note's own language, and a table
+  whose columns are aligned on their content. Each command is one edit: `⌘Z`
+  takes it back in one step.
 - **Writing Tools** (macOS 15.1 and later) is the system's own, in the text's
   context menu: Proofread, Rewrite, Summarise and the rest. The note stays plain
   text, so the result is plain text; fenced code blocks are left alone; while the
