@@ -12,6 +12,9 @@ final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorag
 
     var onTextChange: ((String) -> Void)?
     var onSelectionChange: ((NSRange) -> Void)?
+    /// A system Writing Tools session began (true) or ended (false): the panel
+    /// suspends autosave and the highlighter for its duration (T64).
+    var onWritingToolsSession: ((Bool) -> Void)?
 
     var fontSize: CGFloat = 13 {
         didSet { applyFont() }
@@ -78,6 +81,13 @@ final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorag
         textView.textContainerInset = NSSize(width: 10, height: 10)
         textView.isAutomaticLinkDetectionEnabled = false
 
+        if #available(macOS 15.0, *) {
+            // Writing Tools is the system's: no prompt of ours, a plain-text
+            // result (the editor is not rich), and code left out (T64).
+            textView.writingToolsBehavior = .complete
+            textView.allowedWritingToolsResultOptions = [.plainText]
+        }
+
         addSubview(scrollView)
         NSLayoutConstraint.activate([
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -115,6 +125,14 @@ final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorag
     }
 
     private func applyFont() {
+        applyBaseStyles()
+    }
+
+    /// Puts the theme's font, colour and paragraph style back over the whole
+    /// text. Used when a syntax is removed — a plain note must not keep the
+    /// previous grammar's colours — and after Writing Tools, which inserts text
+    /// with the system's own attributes (T64).
+    func applyBaseStyles() {
         let attributes = baseAttributes
         if let storage = textView.textStorage, storage.length > 0 {
             storage.beginEditing()
@@ -168,6 +186,29 @@ final class NotesEditorView: NSView, NSTextViewDelegate, @MainActor NSTextStorag
 
     func textViewDidChangeSelection(_ notification: Notification) {
         onSelectionChange?(textView.selectedRange())
+    }
+
+    // MARK: - Writing Tools (T64)
+
+    /// Fenced code is an example, not prose: the system must not rewrite it.
+    @available(macOS 15.0, *)
+    @objc(textView:writingToolsIgnoredRangesInEnclosingRange:)
+    func textView(_ textView: NSTextView,
+                  writingToolsIgnoredRangesInEnclosingRange enclosingRange: NSRange) -> [NSValue] {
+        NotesWritingTools.ignoredRanges(in: enclosingRange, of: textView.string)
+            .map { NSValue(range: $0) }
+    }
+
+    @available(macOS 15.0, *)
+    @objc(textViewWritingToolsWillBegin:)
+    func textViewWritingToolsWillBegin(_ textView: NSTextView) {
+        onWritingToolsSession?(true)
+    }
+
+    @available(macOS 15.0, *)
+    @objc(textViewWritingToolsDidEnd:)
+    func textViewWritingToolsDidEnd(_ textView: NSTextView) {
+        onWritingToolsSession?(false)
     }
 }
 
@@ -320,6 +361,11 @@ final class LineNumberRulerView: NSRulerView {
         defer { NSGraphicsContext.restoreGraphicsState() }
         bounds.intersection(rect).clip()
 
+        // A Writing Tools session shows a preview of the rewrite, and the text
+        // can be replaced under this draw: the numbers are neither meaningful
+        // nor safe to place until it ends (T64).
+        if #available(macOS 15.0, *), textView.isWritingToolsActive { return }
+
         let inset = textView.textContainerInset.height
         let string = textView.string as NSString
         let attributes: [NSAttributedString.Key: Any] = [
@@ -343,9 +389,14 @@ final class LineNumberRulerView: NSRulerView {
                                               used: used),
               layoutManager.numberOfGlyphs > 0 else { return }
         let glyphRange = layoutManager.glyphRange(forBoundingRect: query, in: container)
-        guard glyphRange.length > 0 else { return }
+        guard glyphRange.length > 0,
+              NSMaxRange(glyphRange) <= layoutManager.numberOfGlyphs else { return }
         layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { fragmentRect, _, _, glyphRange, _ in
             let character = layoutManager.characterIndexForGlyph(at: glyphRange.location)
+            // The layout manager can still count the text it had before a
+            // replacement (a note switched, Writing Tools applying or undoing):
+            // indexing the snapshot taken above must stay inside it.
+            guard character >= 0, character <= string.length else { return }
             let startsLine = character == 0 || (character > 0 && string.character(at: character - 1) == 10)
             guard startsLine else { return }
             let point = self.convert(NSPoint(x: 0, y: fragmentRect.minY + inset), from: textView)

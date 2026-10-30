@@ -250,6 +250,13 @@ never saw a frame removes it again and reports "nothing captured" instead of
 leaving an empty movie. The menu-bar menu owns pause/resume/stop while a
 recording runs, and its icon changes so the recording is not forgotten.
 
+`NotesEditorView` (T20) adopts the system's Writing Tools (T64) instead of
+writing prompts: the text view asks for a plain-text result, the delegate hands
+the system the fenced code blocks of the note (`NotesWritingTools`, a pure scan
+with tests) so an example is never rewritten, and the session's begin/end
+suspends the syntax highlighter (`NotesHighlighter.setSuspended`) and the
+automatic draft write, which then runs once for the whole rewrite.
+
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost
 window and the whole screen — and from an image the caller already has. One

@@ -162,6 +162,9 @@ final class NotesHighlighter {
     private var work: DispatchWorkItem?
     private var italicFont: NSFont?
     private var boldFont: NSFont?
+    /// Writing Tools shows its own preview: while a session runs, scheduled
+    /// passes are dropped so the preview is not re-styled under it (T64).
+    private var suspended = false
 
     init?(textView: NSTextView, language: NotesLanguage, theme: NotesSyntaxTheme,
           baseAttributes: [NSAttributedString.Key: Any]) {
@@ -188,8 +191,22 @@ final class NotesHighlighter {
         apply()
     }
 
+    /// Stops colouring while a system Writing Tools session owns the text, and
+    /// colours once more when it ends (T64).
+    func setSuspended(_ value: Bool) {
+        suspended = value
+        if value {
+            work?.cancel()
+            work = nil
+            parserWork?.cancel()
+        } else {
+            apply()
+        }
+    }
+
     /// Called on every edit: the pass runs when the typing pauses.
     func schedule() {
+        guard suspended == false else { return }
         work?.cancel()
         revision &+= 1
         parserWork?.cancel()

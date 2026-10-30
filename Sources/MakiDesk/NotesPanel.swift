@@ -323,6 +323,10 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     private var highlighter: NotesHighlighter?
     private var currentID: UUID?
+    /// While a system Writing Tools session owns the text (T64): its preview is
+    /// not a note yet, so it is neither saved nor coloured.
+    private var writingToolsActive = false
+    private var writingToolsNoteID: UUID?
     private var filtered: [Note] = []
     private var searchWork: DispatchWorkItem?
     private var searchRevision: UInt64 = 0
@@ -353,8 +357,31 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
         editor.onTextChange = { [weak self] text in
             guard let self, let id = self.currentID else { return }
+            // Writing Tools shows a preview of the rewrite: it reaches the
+            // store once, when the session ends (T64).
+            guard self.writingToolsActive == false else { return }
             self.store.updateText(text, for: id)
             self.highlighter?.schedule()
+            self.updatePosition()
+        }
+        editor.onWritingToolsSession = { [weak self] active in
+            guard let self else { return }
+            self.writingToolsActive = active
+            self.highlighter?.setSuspended(active)
+            if active {
+                self.writingToolsNoteID = self.currentID
+                return
+            }
+            // The session ended: one write for the whole rewrite, then the text
+            // is coloured again. A note switched meanwhile owns a different text.
+            let id = self.writingToolsNoteID ?? self.currentID
+            self.writingToolsNoteID = nil
+            guard let id, id == self.currentID else { return }
+            self.store.updateText(self.editor.text, for: id)
+            // Writing Tools inserts its result with the system's attributes: the
+            // note's own font and colour come back before the syntax pass.
+            self.editor.applyBaseStyles()
+            self.highlighter?.apply()
             self.updatePosition()
         }
         editor.onSelectionChange = { [weak self] range in
@@ -694,10 +721,19 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     private func installHighlighter(for note: Note) {
         highlighter = nil
-        guard note.language != .plain else { return }
+        guard note.language != .plain else {
+            // Back to plain text: the previous grammar's colours go with it.
+            editor.applyBaseStyles()
+            return
+        }
         highlighter = NotesHighlighter(textView: editor.textView, language: note.language,
                                        theme: theme, baseAttributes: editor.baseAttributes)
-        highlighter?.apply()
+        if highlighter == nil {
+            // A grammar that is not configured: plain text, not stale colours.
+            editor.applyBaseStyles()
+        } else {
+            highlighter?.apply()
+        }
     }
 
     private func updatePosition() {

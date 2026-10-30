@@ -332,6 +332,11 @@ even when you never save it to a file.
   with unsaved changes (or a missing file) asks first.
 - **Find** `⌘F`, new `⌘T`, open `⌘O`, switch with `⌘1…9`, change the font with
   `⌘+` / `⌘−`.
+- **Writing Tools** (macOS 15.1 and later) is the system's own, in the text's
+  context menu: Proofread, Rewrite, Summarise and the rest. The note stays plain
+  text, so the result is plain text; fenced code blocks are left alone; while the
+  session runs the syntax colours and the automatic save wait, and the rewrite is
+  a single `⌘Z` away. Nothing leaves the Mac and no prompt of ours is involved.
 - **Languages**: Plain Text, Swift, JSON, Markdown, Shell, Python, JavaScript,
   TypeScript, HTML and CSS. The language popup in the status bar changes it. An unknown
   file opens as plain text, never as an error.
