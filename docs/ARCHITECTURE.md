@@ -97,8 +97,33 @@ click-through panel per display at the ordinary window level, ordered under the
 target with `order(.below, relativeTo:)`. The relationship is the stacking
 order, so a window that moves or resizes needs no update and no frame is read.
 `FocusDim` owns the anchor rules — which display is lit, the topmost window of a
-display, the lowest window of the frontmost app, and the drift rule — and is
-tested without a window server. A one-second drift check runs only while the
+display, the lowest window of the frontmost app, the focused window but only
+when it still belongs to the app in front, and the drift rule — and is tested
+without a window server. That last check matters: a focus read that lands after
+the user has already moved to another app names the previous app's window, and
+anchoring there would keep the app that just lost the focus lit over the veil. A fixed set of windows (`FocusDim.Source
+.selection`, T62 phase 2) would light everything between its windows if it were
+anchored as it stands, so the set is brought forward first, once per pick, the
+way the switcher and the groups activate a window: macOS keeps the active app's
+windows above the others, so activating the apps is the only public way to lift
+a background window (Accessibility's raise reports success and changes nothing).
+The picks are activated in reverse pick order, which leaves the first pick in
+front and the set contiguous at the top; the veil then anchors under the lowest
+of them on each display, with no geometry and no hole to track. The activation is
+postponed while the switcher is open — it would take the keyboard away from it —
+and completed by `WindowPalette.hide()` and by the drift check; a window the user
+activates from the switcher is queued as the last step, so the set lands under it
+and the keyboard ends where they chose. It is never repeated for the same set, so
+choosing another app later is not fought. The set is
+`WorkspaceStore.veilSelection`, filled by ⌥-clicking cards in the switcher (or
+⌥K on the highlighted one) and toggled through the pure `FocusDim.toggled`,
+which keeps pick order because *Only the active display* reads the first pick.
+It is session state, resolved against the current snapshot by stable identity; a
+minimised window is skipped while it is in the Dock, a window that is gone cannot
+be anchored to, and an empty plan takes the veil down. The
+selection mode is planned before the focus is read: it does not depend on which
+window or app has the keyboard, so it also holds while the switcher or another
+MakiDesk panel is in front. A one-second drift check runs only while the
 veil is up and re-orders the panel when it has slipped above its anchor; a
 pending fade-out is invalidated by generation, so a veil that comes back before
 it ends is not ordered out from under the new one.

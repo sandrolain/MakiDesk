@@ -31,7 +31,8 @@ arrow keys walk a ladder of positions; hold the snap key while dragging to get
 the same positions with the mouse. MakiDesk replaces macOS's basic ⌥-tiling with
 a richer one, and can turn the system one off for you. A focus border in the
 theme accent follows the window receiving your keys, including MakiDesk's own
-windows, and an optional focus dim takes the rest of the screen away.
+windows, and an optional focus dim takes the rest of the screen away — around
+the focused window, the whole app, or a set of windows picked in the switcher.
 
 <p align="center">
   <img src="docs/assets/layouts.png" alt="Grid, golden spiral and content-weighted layouts" width="92%">

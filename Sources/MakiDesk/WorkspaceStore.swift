@@ -95,8 +95,14 @@ final class WorkspaceStore {
         recordFrontmostWindowFocus(focused)
         if purposes.contains(.change) { checkFrontmostChange(focused) }
         if purposes.contains(.now) || purposes.contains(.change) {
-            WindowOutlineController.shared.refresh(frontmost: focused)
-            FocusDimController.shared.refresh(frontmost: focused)
+            // A read that completed after the user moved to another app names
+            // the previous one: neither the focus border nor the focus dim may
+            // follow it there. The panels read the focus again instead.
+            let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let current = FocusDim.readBelongsToFront(readPID: pid, frontPID: front)
+                ? focused : nil
+            WindowOutlineController.shared.refresh(frontmost: current)
+            FocusDimController.shared.refresh(frontmost: current)
         }
     }
     var shortcutsRegistered = 0
@@ -264,6 +270,11 @@ final class WorkspaceStore {
     /// The windows last ticked in the switcher, so the menu can run a layout on
     /// the same subset after the palette has closed (T14).
     var lastLayoutSelection: [ActionableWindow] = []
+    /// The windows that must stay sharp under the focus dim (T62), in the order
+    /// they were picked in the switcher. Session state, like the layout
+    /// selection: the set is resolved against the live inventory at every plan,
+    /// so a minimised window is skipped and a closed one cannot be anchored.
+    var veilSelection: [ActionableWindow] = []
     /// The numbered window groups (1…9), restored at start and saved on every
     /// change by `GroupStore` (G2).
     var groups: [Int: WindowGroup] = [:]
@@ -881,6 +892,13 @@ final class WorkspaceStore {
         UserDefaults.standard.set(value, forKey: "focusDimEnabled")
         FocusDimController.shared.applySettings()
         guard announce else { return }
+        if value, focusDimSource == .selection, veilSelection.isEmpty {
+            // Nothing would stay sharp, so the veil cannot come up: say what
+            // creates the set instead of leaving an effect that does nothing.
+            HUDController.shared.show("⌥-click windows in the switcher to keep them sharp",
+                                      symbol: "rectangle.dashed")
+            return
+        }
         HUDController.shared.show(value ? "Dimming everything but the focus" : "Focus dim off",
                                   symbol: "circle.lefthalf.filled")
     }
@@ -903,6 +921,27 @@ final class WorkspaceStore {
         focusDimColour = value
         UserDefaults.standard.set(value.rawValue, forKey: "focusDimColour")
         FocusDimController.shared.applySettings()
+    }
+
+    /// Adds or removes `window` from the keep-sharp set (T62): the direct way to
+    /// say which windows the veil must leave clear, one pick per window and no
+    /// group needed. Turning the set on while the dim is already up also
+    /// switches its source, so the pick has a visible effect instead of
+    /// collecting windows the veil is not looking at.
+    func toggleVeilSelection(_ window: ActionableWindow) {
+        let ids = FocusDim.toggled(veilSelection.map(\.id), with: window.id)
+        var byID = Dictionary(veilSelection.map { ($0.id, $0) },
+                              uniquingKeysWith: { _, new in new })
+        byID[window.id] = window
+        veilSelection = ids.compactMap { byID[$0] }
+        guard focusDimEnabled else { return }
+        if focusDimSource == .selection {
+            // Not `refreshPlacement`: with an empty set the veil was hidden, and
+            // only a full re-plan brings it back.
+            FocusDimController.shared.applySettings()
+        } else {
+            updateFocusDimSource(.selection)
+        }
     }
 
     func updateFocusDimSource(_ value: FocusDim.Source) {

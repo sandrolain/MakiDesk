@@ -132,13 +132,33 @@ itself and everything above it stay clear. Off by default.
 
 - `⌃⌥⇧D` toggles it; the **Window** menu has the same switch. **Settings ▸
   Windows ▸ Focus dim** sets opacity (10–80%), fade, colour, what stays sharp
-  (the focused window or the whole app), whether every display is lit or only
-  the active one, whether clicking the desktop dims everything, and whether
-  switching apps ends it.
+  (the focused window, the whole app, or a set of **selected windows**), whether
+  every display is lit or only the active one, whether clicking the desktop dims
+  everything, and whether switching apps ends it.
 - Nothing is measured per window: the veil is a full-display panel ordered under
   the target, so moving or resizing it needs no update. Menu bar, Dock and
   MakiDesk's own panels sit at higher levels and stay bright; the veil is left
   out of screenshots, recordings and screen sharing.
+- **Selected windows**: open the switcher (`⌥Tab`) and **⌥-click** each window
+  that must stay sharp — or move with the arrows and press **⌥K**. Every pick
+  gets an eye badge and the veil behind the palette follows at once, so the
+  palette stays open until you have the set you want. Then choose *Selected
+  windows* under **Keep sharp**; if the veil is already up, the first pick
+  switches it for you. No group and no layout command is involved.
+  When the switcher closes, the picked windows are brought forward — macOS only
+  lets a background window come on top by activating its app, so the apps are
+  activated in reverse pick order and the first pick ends in front, with the
+  keyboard on it. If instead you activate a window from the switcher, that
+  window keeps the keyboard: the set is brought forward first and the window you
+  chose goes above it, so the set stays sharp right under the window you are
+  using. The veil then sits under the lowest of them on each display,
+  so the whole set stays clear and everything below it is dimmed. Moving or
+  resizing a picked window needs no update: it stays above the veil. The set is
+  brought forward once per pick, not again when you later choose another app.
+  It lives for the session: a minimised window is skipped while it sits in the
+  Dock and rejoins the set when it comes back, a closed one drops out, and when
+  nothing is left the veil comes down. In *Only the active display*, only the
+  first window you picked stays lit and the other displays go fully dark.
 - A full-screen window covers the veil, so the effect is simply absent there.
   Reduce Transparency turns the veil solid; Reduce Motion removes the fade.
 - It needs Accessibility to know the focused window, and falls back to the

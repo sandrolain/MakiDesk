@@ -16,6 +16,15 @@ enum FocusDim {
         case window
         /// Every window of the frontmost app, anchored below its lowest one.
         case application
+        /// A fixed set of windows, picked in the switcher (T62 phase 2).
+        ///
+        /// A set scattered through the stacking order cannot be anchored as it
+        /// is: everything between its windows would stay clear too. The
+        /// controller therefore brings the set forward — activating the apps,
+        /// the only way macOS lets a background app's window go on top — which
+        /// leaves the picks contiguous at the top: the veil then anchors under
+        /// the lowest of them on each display, without measuring a frame.
+        case selection
 
         var id: String { rawValue }
 
@@ -23,6 +32,7 @@ enum FocusDim {
             switch self {
             case .window: return "Focused window"
             case .application: return "Whole app"
+            case .selection: return "Selected windows"
             }
         }
     }
@@ -128,6 +138,32 @@ enum FocusDim {
         return best?.id
     }
 
+    /// The keep-sharp set after picking `id`: added at the end when it is new,
+    /// removed when it was already there. Order is the order the user picked,
+    /// which is what *Only the active display* reads as "the first one".
+    static func toggled(_ selection: [String], with id: String) -> [String] {
+        var next = selection
+        if let index = next.firstIndex(of: id) {
+            next.remove(at: index)
+        } else {
+            next.append(id)
+        }
+        return next
+    }
+
+    /// Whether a focus read still describes the app in front.
+    ///
+    /// A read that lands after the user has moved to another app — through the
+    /// switcher, most often — names the previous app's window. Using it as the
+    /// anchor keeps that window, and everything above it, clear of the veil, so
+    /// the app that just lost the focus stays lit. The read is only rejected
+    /// when its app is known and differs; a read taken while the front app is
+    /// being activated still has the right app and is used.
+    static func readBelongsToFront(readPID: pid_t?, frontPID: pid_t?) -> Bool {
+        guard let readPID, let frontPID else { return true }
+        return readPID == frontPID
+    }
+
     /// The window a display's veil goes under: its topmost ordinary window,
     /// which is what the user is looking at there.
     static func topmostWindow(on display: CGRect, stack: [WindowController.CGWindowEntry],
@@ -169,8 +205,13 @@ enum FocusDim {
     /// window-server fallback); `focusedPID` is the app it belongs to.
     static func plan(screens: [Screen], stack: [WindowController.CGWindowEntry],
                      focused: CGWindowID?, focusedPID: pid_t?,
-                     source: Source, mode: DisplayMode, ownPID: pid_t) -> [Placement] {
+                     source: Source, mode: DisplayMode, ownPID: pid_t,
+                     selection: [CGWindowID] = []) -> [Placement] {
         guard !screens.isEmpty else { return [] }
+        if source == .selection {
+            return selectionPlan(screens: screens, stack: stack, selection: selection,
+                                 mode: mode)
+        }
         let focusedFrame = focused.flatMap { id in
             stack.first { $0.number == id }?.frame
         }
@@ -207,6 +248,41 @@ enum FocusDim {
                 anchor = focusedPID.flatMap {
                     lowestWindow(of: $0, on: screen.frame, stack: stack, ownPID: ownPID)
                 }
+            case .selection:
+                // Handled above, before any anchor is chosen.
+                anchor = nil
+            }
+            return Placement(display: screen.id, anchor: anchor)
+        }
+    }
+
+    /// One placement per display for a fixed set of windows.
+    ///
+    /// The picks sit at the top of the stack — the controller brings them
+    /// forward — so the veil goes under the lowest of them on each display they
+    /// reach and the whole set stays clear. `.independent` keeps every pick sharp
+    /// wherever it is; `.single` keeps only the first pick (the window the set
+    /// was built around) and darkens the other displays completely.
+    private static func selectionPlan(screens: [Screen], stack: [WindowController.CGWindowEntry],
+                                      selection: [CGWindowID], mode: DisplayMode) -> [Placement] {
+        let entries = selection.compactMap { id in
+            stack.first { $0.number == id && $0.layer == 0 && $0.alpha > 0.01 }
+        }
+        guard !entries.isEmpty else {
+            return screens.map { Placement(display: $0.id, anchor: nil) }
+        }
+        let kept: [WindowController.CGWindowEntry]
+        switch mode {
+        case .independent: kept = entries
+        case .single: kept = Array(entries.prefix(1))
+        }
+        let keep = Set(kept.map(\.number))
+        return screens.map { screen in
+            // Front to back: the last kept window that reaches this display is
+            // the lowest of the set there, and the point the veil goes under.
+            var anchor: CGWindowID?
+            for entry in stack where keep.contains(entry.number) {
+                if overlaps(entry.frame, screen.frame) { anchor = entry.number }
             }
             return Placement(display: screen.id, anchor: anchor)
         }

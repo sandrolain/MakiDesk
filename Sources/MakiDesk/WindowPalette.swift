@@ -481,6 +481,9 @@ final class PaletteModel {
     /// Ticked cards. The ticks are the group being edited: they are empty
     /// outside group editing and follow the group's live members inside it.
     var selectedIDs: Set<String> = []
+    /// Windows in the focus dim's keep-sharp set (T62), drawn with an eye badge
+    /// so the veil's own selection is visible while picking it.
+    var veilIDs: Set<String> = []
     /// Bumped when the search field should take focus (Opt+Space only).
     var focusToken = 0
     /// The nine groups, as the side column shows them (G3).
@@ -741,6 +744,7 @@ final class WindowPalette {
                 onRecallGroup: { [weak self] slot in self?.recallGroupFromColumn(slot) },
                 onResetGroup: { [weak self] slot in self?.requestGroupReset(slot) },
                 onToggleGroupMember: { [weak self] id in self?.toggleGroupMember(id) },
+                onToggleVeilWindow: { [weak self] id in self?.toggleVeilWindow(id) },
                 onHoverCard: { [weak self] index in self?.pointerHovered(index) },
                 onHoverApplication: { [weak self] index in self?.pointerHoveredApplication(index) },
                 onLaunchApplication: { [weak self] id in self?.launchApplication(id) },
@@ -756,7 +760,12 @@ final class WindowPalette {
         if rescan { loadPreviews(for: model.items, refresh: true) }
     }
 
-    func hide() {
+    func hide() { hide(afterChoosing: nil) }
+
+    /// `chosen` is the window the user activated from the switcher, if any: the
+    /// focus dim brings its picked set forward *under* it instead of over it
+    /// (T62).
+    private func hide(afterChoosing chosen: ActionableWindow?) {
         loadGeneration += 1
         previewGeneration += 1
         pendingReleaseActivation = false
@@ -774,6 +783,9 @@ final class WindowPalette {
         // icons are NSImages: drop them at this lifetime boundary.
         model.applicationIcons.removeAll()
         panel?.orderOut(nil)
+        // The focus dim may have been waiting for the picks: now that the
+        // switcher is out, the picked windows can be brought forward (T62).
+        FocusDimController.shared.paletteDidHide(choosing: chosen)
         MainActor.assumeIsolated { WindowCapture.cancelPaletteCapture() }
         model.previews.removeAll()
         previewCosts.removeAll()
@@ -1182,6 +1194,14 @@ final class WindowPalette {
             toggleGroupMember(window.id, slot: digit)
             return true
         }
+        // ⌥K keeps the highlighted window sharp under the focus dim (T62):
+        // the keyboard counterpart of ⌥-clicking a card.
+        if (key == "k" || (key.isEmpty && event.keyCode == 40)),
+           let window = selectedWindow() {
+            suppressReleaseActivation = true
+            toggleVeilWindow(window.id)
+            return true
+        }
         let isQ = key == "q" || (key.isEmpty && event.keyCode == 12)
         let isM = key == "m" || (key.isEmpty && event.keyCode == 46)
         guard isQ || isM else { return false }
@@ -1300,6 +1320,15 @@ final class WindowPalette {
         refreshGroupState()
     }
 
+    /// Adds or removes the card from the focus dim's keep-sharp set (T62). The
+    /// palette stays open: the point is picking several windows in one visit,
+    /// and the veil behind the palette follows each pick.
+    private func toggleVeilWindow(_ id: String) {
+        guard let store, let window = model.items.first(where: { $0.id == id }) else { return }
+        store.toggleVeilSelection(window)
+        syncVeilSelection()
+    }
+
     /// Adds or removes the card from the group currently being edited.
     private func toggleGroupMember(_ id: String) {
         guard let slot = model.selectedGroupSlot else { return }
@@ -1334,8 +1363,16 @@ final class WindowPalette {
     private func refreshGroupState() {
         refreshGroupRows()
         refreshGroupBadges()
+        syncVeilSelection()
         guard model.selectedGroupSlot != nil else { return }
         syncGroupTicks()
+    }
+
+    /// Keeps the eye badges aligned with the veil's set, which also loses a
+    /// window when it closes.
+    private func syncVeilSelection() {
+        guard let store else { return }
+        model.veilIDs = Set(store.veilSelection.map(\.id))
     }
 
     /// Recomputes which groups each visible card belongs to, for the badges on
@@ -1560,7 +1597,7 @@ final class WindowPalette {
     /// off-screen window back on screen, not just to the front.
     private func activate(_ id: String) {
         guard let window = model.items.first(where: { $0.id == id }) else { hide(); return }
-        hide()
+        hide(afterChoosing: window)
         WorkspaceStore.shared.bringOnScreen(window)
     }
 
@@ -1644,6 +1681,8 @@ struct PaletteView: View {
     let onRecallGroup: (Int) -> Void
     let onResetGroup: (Int) -> Void
     let onToggleGroupMember: (String) -> Void
+    /// Adds or removes the window from the focus dim's keep-sharp set (T62).
+    let onToggleVeilWindow: (String) -> Void
     /// The pointer moved over a card (T28).
     let onHoverCard: (Int) -> Void
     /// The pointer moved over an application in the search shelf.
@@ -1723,6 +1762,7 @@ struct PaletteView: View {
                                             tinted: model.tintedCards,
                                             selected: model.appSelection == nil && index == model.selection,
                                             layoutSelected: model.selectedIDs.contains(window.id),
+                                            keptSharp: model.veilIDs.contains(window.id),
                                             metrics: model.metrics,
                                             theme: model.theme,
                                             groupSlots: PaletteGroupVisibility.badges(
@@ -1743,6 +1783,17 @@ struct PaletteView: View {
                                         if case .active = phase { onHoverCard(index) }
                                     }
                                     .onTapGesture {
+                                        // ⌥-click keeps the window sharp under
+                                        // the focus dim and leaves the palette
+                                        // open, so several windows can be picked
+                                        // in one visit (T62).
+                                        let optionHeld = NSApp.currentEvent?
+                                            .modifierFlags.contains(.option)
+                                            ?? NSEvent.modifierFlags.contains(.option)
+                                        if model.mode == .browse, optionHeld {
+                                            onToggleVeilWindow(window.id)
+                                            return
+                                        }
                                         // In browse mode, with a group being
                                         // edited, a click adds or removes the
                                         // window from it; otherwise it opens
@@ -2116,7 +2167,8 @@ struct PaletteView: View {
     private var hintKeys: [(key: String, label: String)] {
         if model.mode == .browse {
             return [("⏎", "open"), ("⌥Q", "close"), ("⌥⇧Q", "quit"),
-                    ("⌥M", "minimize"), ("1…9", "group"), ("⌥Space", "search")]
+                    ("⌥M", "minimize"), ("⌥K", "keep sharp"), ("1…9", "group"),
+                    ("⌥Space", "search")]
         }
         if model.appSelection != nil {
             return [("←→", "apps"), ("↓", "windows"), ("⏎", "launch"), ("esc", "close")]
@@ -2164,11 +2216,18 @@ struct PaletteView: View {
                     .font(.system(size: 11 * scale, weight: .semibold))
                     .foregroundStyle(model.theme.text)
             } else {
-                Text(model.selectedIDs.isEmpty
-                     ? "Layouts act on the windows in view"
-                     : "Layouts act on the ticked windows")
-                    .font(.system(size: 11 * scale))
-                    .foregroundStyle(model.theme.subtext)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.selectedIDs.isEmpty
+                         ? "Layouts act on the windows in view"
+                         : "Layouts act on the ticked windows")
+                        .font(.system(size: 11 * scale))
+                        .foregroundStyle(model.theme.subtext)
+                    if !model.veilIDs.isEmpty {
+                        Text("\(model.veilIDs.count) kept sharp")
+                            .font(.system(size: 11 * scale, weight: .semibold))
+                            .foregroundStyle(model.theme.text)
+                    }
+                }
             }
         }
         .lineLimit(2)
@@ -2243,6 +2302,8 @@ private struct PaletteCard: View {
     let tinted: Bool
     let selected: Bool
     let layoutSelected: Bool
+    /// In the focus dim's keep-sharp set (T62).
+    let keptSharp: Bool
     let metrics: PaletteMetrics
     let theme: PaletteTheme
     /// The groups this window belongs to, shown as number badges; the one being
@@ -2317,6 +2378,7 @@ private struct PaletteCard: View {
             .overlay(alignment: .topTrailing) { stateBadge }
             .overlay(alignment: .topLeading) { selectionTick }
             .overlay(alignment: .bottomLeading) { groupBadges }
+            .overlay(alignment: .bottomTrailing) { keptSharpBadge }
             // The app icon sits beside the name, not over the thumbnail (T56):
             // the preview belongs to the window, the icon identifies the app.
             HStack(alignment: .center, spacing: 8 * (metrics.fontSize / 12)) {
@@ -2360,6 +2422,21 @@ private struct PaletteCard: View {
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().stroke(theme.border, lineWidth: 1))
                 .padding(6)
+        }
+    }
+
+    /// The focus dim's keep-sharp mark (T62), bottom-right: the corner left
+    /// free by the group badges and the state badge.
+    @ViewBuilder private var keptSharpBadge: some View {
+        if keptSharp {
+            Image(systemName: "eye.fill")
+                .font(.system(size: metrics.badgeSymbolSize + 2, weight: .bold))
+                .foregroundStyle(theme.accent)
+                .padding(6)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(theme.border, lineWidth: 1))
+                .padding(7)
+                .help("Kept sharp by the focus dim")
         }
     }
 

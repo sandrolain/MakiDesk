@@ -429,7 +429,7 @@ struct SettingsView: View {
                         get: { store.focusDimEnabled },
                         set: { store.updateFocusDimEnabled($0) }
                     ))
-                    caption("A dark veil covers what is behind the focused window; the window itself and everything above it stay clear. It follows the window as you move or resize it and needs no permission beyond Accessibility. Menu bar, Dock and MakiDesk's own panels stay above the veil; it is left out of screenshots and recordings.")
+                    caption("A dark veil covers what is behind the focused window; the window itself and everything above it stay clear. It follows the window as you move or resize it and needs no permission beyond Accessibility. Menu bar, Dock and MakiDesk's own panels stay above the veil; it is left out of screenshots and recordings. With “Selected windows”, ⌥-click windows in the switcher (or press ⌥K on the highlighted one) to keep them sharp: when the switcher closes their apps are brought forward, in reverse pick order, and the veil goes under the lowest of them, dimming everything below.")
 
                     SliderRow(title: "Opacity",
                               value: Binding(get: { store.focusDimOpacity },

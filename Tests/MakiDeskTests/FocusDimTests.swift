@@ -167,6 +167,22 @@ final class FocusDimTests: XCTestCase {
         ])
     }
 
+    func testAFocusReadFromTheAppJustLeftIsRejected() {
+        // The read lands after the user moved to another app: taking it would
+        // keep the previous app's window sharp over the veil.
+        XCTAssertFalse(FocusDim.readBelongsToFront(readPID: 100, frontPID: 200))
+    }
+
+    func testAFocusReadForTheAppInFrontIsUsed() {
+        XCTAssertTrue(FocusDim.readBelongsToFront(readPID: 200, frontPID: 200))
+    }
+
+    func testAReadWithoutAKnownAppIsKept() {
+        // No pid, or no front app: nothing to compare, so the old behaviour.
+        XCTAssertTrue(FocusDim.readBelongsToFront(readPID: nil, frontPID: 200))
+        XCTAssertTrue(FocusDim.readBelongsToFront(readPID: 200, frontPID: nil))
+    }
+
     func testAnEmptyDisplayIsFullyDimmed() {
         let stack = [
             entry(pid: 100, number: 10, frame: CGRect(x: 100, y: 100, width: 600, height: 500))
@@ -182,5 +198,139 @@ final class FocusDimTests: XCTestCase {
     func testNoScreensMeansNoPlan() {
         XCTAssertTrue(FocusDim.plan(screens: [], stack: [], focused: 1, focusedPID: 100,
                                     source: .window, mode: .independent, ownPID: ownPID).isEmpty)
+    }
+
+    // MARK: - A fixed set of windows (phase 2)
+
+    func testSelectionAnchorsUnderTheLowestPickedWindow() {
+        // The set sits on top, so the veil goes under its last window: window
+        // 20, between the picks, is under the anchor and stays dimmed.
+        let stack = [
+            entry(pid: 100, number: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 300)),
+            entry(pid: 200, number: 20, frame: CGRect(x: 600, y: 200, width: 400, height: 300)),
+            entry(pid: 300, number: 30, frame: CGRect(x: 200, y: 500, width: 400, height: 300))
+        ]
+        let plan = FocusDim.plan(screens: [twoDisplays[0]], stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [10, 30])
+        XCTAssertEqual(plan, [FocusDim.Placement(display: 1, anchor: 30)])
+    }
+
+    func testSelectionReadsTheStackNotThePickOrder() {
+        // Picked in this order, but window 10 is on top: the anchor is still
+        // the lowest of the set.
+        let stack = [
+            entry(number: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 300)),
+            entry(number: 30, frame: CGRect(x: 200, y: 500, width: 400, height: 300))
+        ]
+        let plan = FocusDim.plan(screens: [twoDisplays[0]], stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [30, 10])
+        XCTAssertEqual(plan.map(\.anchor), [30])
+    }
+
+    func testSelectionAnchorsEachDisplayUnderItsOwnLowestPick() {
+        let stack = [
+            entry(number: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 300)),
+            entry(number: 20, frame: CGRect(x: 1600, y: 100, width: 400, height: 300))
+        ]
+        let plan = FocusDim.plan(screens: twoDisplays, stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [10, 20])
+        XCTAssertEqual(plan, [
+            FocusDim.Placement(display: 1, anchor: 10),
+            FocusDim.Placement(display: 2, anchor: 20)
+        ])
+    }
+
+    func testSelectionLightsBothDisplaysForAStraddlingWindow() {
+        let stack = [
+            entry(number: 10, frame: CGRect(x: 1300, y: 100, width: 400, height: 500))
+        ]
+        let plan = FocusDim.plan(screens: twoDisplays, stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [10])
+        XCTAssertEqual(plan.map(\.anchor), [10, 10])
+    }
+
+    func testSelectionDimsTheOtherDisplaysInSingleMode() {
+        // Single mode keeps the first pick only: the second display, which
+        // holds nothing of it, goes fully dark.
+        let stack = [
+            entry(number: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 300)),
+            entry(number: 20, frame: CGRect(x: 1600, y: 100, width: 400, height: 300))
+        ]
+        let plan = FocusDim.plan(screens: twoDisplays, stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .single, ownPID: ownPID,
+                                 selection: [10, 20])
+        XCTAssertEqual(plan.map(\.anchor), [10, nil])
+    }
+
+    func testSelectionFallsBackToTheFirstPickStillLive() {
+        let stack = [
+            entry(number: 20, frame: CGRect(x: 1600, y: 100, width: 400, height: 300))
+        ]
+        let plan = FocusDim.plan(screens: twoDisplays, stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .single, ownPID: ownPID,
+                                 selection: [10, 20])
+        XCTAssertEqual(plan.map(\.anchor), [nil, 20])
+    }
+
+    func testSelectionIgnoresAWindowThatIsGone() {
+        let stack = [
+            entry(number: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 300))
+        ]
+        let plan = FocusDim.plan(screens: [twoDisplays[0]], stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [10, 99])
+        XCTAssertEqual(plan.map(\.anchor), [10])
+    }
+
+    func testSelectionWithNothingLiveDimsEveryDisplay() {
+        let plan = FocusDim.plan(screens: twoDisplays, stack: [],
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [10, 20])
+        XCTAssertEqual(plan.map(\.anchor), [nil, nil])
+    }
+
+    func testSelectionIgnoresFloatingWindows() {
+        let stack = [
+            entry(number: 10, frame: CGRect(x: 100, y: 100, width: 400, height: 300), layer: 3)
+        ]
+        let plan = FocusDim.plan(screens: [twoDisplays[0]], stack: stack,
+                                 focused: nil, focusedPID: nil, source: .selection,
+                                 mode: .independent, ownPID: ownPID,
+                                 selection: [10])
+        XCTAssertEqual(plan.map(\.anchor), [nil])
+    }
+
+    // MARK: - Picking the set
+
+    func testPickingWindowsKeepsTheirOrderAndTogglingRemovesOne() {
+        var picked = FocusDim.toggled([], with: "a")
+        picked = FocusDim.toggled(picked, with: "b")
+        picked = FocusDim.toggled(picked, with: "c")
+        XCTAssertEqual(picked, ["a", "b", "c"])
+        XCTAssertEqual(FocusDim.toggled(picked, with: "b"), ["a", "c"])
+        XCTAssertEqual(FocusDim.toggled(picked, with: "zzz"), ["a", "b", "c", "zzz"])
+    }
+
+    func testPickingAWindowAgainPutsItLast() {
+        // Order matters: "Only the active display" keeps the first pick.
+        let again = FocusDim.toggled(FocusDim.toggled(["a", "b", "c"], with: "a"), with: "a")
+        XCTAssertEqual(again, ["b", "c", "a"])
+    }
+
+    func testASelectionLabelIsOfferedAsASource() {
+        XCTAssertTrue(FocusDim.Source.allCases.contains(.selection))
+        XCTAssertEqual(FocusDim.Source.selection.label, "Selected windows")
     }
 }
