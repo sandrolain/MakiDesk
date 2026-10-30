@@ -444,7 +444,7 @@ written in words. It is the menu and the shortcuts, typed:
 | `group 3`, `add group 3` | Recall a group, or put the front window in it |
 | `leave group`, `everything back`, `undo`, `focus selection` | The focus commands |
 | `notes`, `clipboard`, `shelf`, `switcher`, `search`, `checklist` | Open a panel |
-| `settings`, `shortcuts`, `screenshots`, `screenshot`, `ocr`, `measure`, `colour` | The app commands |
+| `settings`, `shortcuts`, `screenshots`, `screenshot`, `capture window`, `capture screen`, `record`, `ocr`, `measure`, `colour` | The app commands |
 | `minimap`, `focus border`, `focus dim`, `peek`, `clear peek` | Presentation |
 | `timer 25m`, `timer 8:30` | Start a timer with the same syntax as the timer field |
 | `dismiss notices` | Take every notice away |
@@ -660,6 +660,8 @@ the capture:
 | Pen | Free hand. |
 | Highlighter | A wide, translucent stroke that keeps what is under it readable. |
 | Hide details | Replaces the region with a mosaic of its own pixels — for names, tokens, faces. |
+| Text | Click where the label goes and type it; Return commits it in the current colour. |
+| Crop | Drag the part you want to keep and confirm; the marks move with the image and the editor follows its new size. |
 
 - Four colours (red, yellow, blue, black). **⌘Z** undoes the last mark, `Esc`
   throws the capture away, **Return** saves.
@@ -670,8 +672,27 @@ the capture:
   the saved image is rendered at the capture's pixel size, so a Retina capture
   stays sharp.
 - It needs Screen Recording, like the previews; Accessibility is not involved.
-- Window and whole-screen captures are drags over the selector (it snaps to
-  window edges). **Video recording is not implemented.**
+- **⌃⌥⇧W** captures the window in front and **⌃⌥⇧C** the display under the
+  pointer, both in the same editor (**Capture Window…** and **Capture Screen…**
+  in the menu). Dragging over the selector still snaps to window edges.
+
+### Recording an area
+
+**⌃⌥⇧R**, or **Record Area…** in the menu, opens the same selector; drag the
+area to record. The recording starts at once and runs from the menu bar:
+**Pause**, **Resume** and **Stop** in the menu, and the menu-bar icon turns into
+a red record dot while it runs. The same key stops it.
+
+- The movie is H.264 at 30 fps and lands on the **shelf** when you stop, ready
+  to drag into a chat, a note or a folder. The stop notice says how long it ran.
+- **Settings ▸ Panels ▸ Screenshot ▸ Record the system's sound too** includes
+  what the Mac plays in the movie. The microphone is not used, so no
+  microphone permission is involved. A paused stretch is cut out of the movie
+  instead of freezing on the last frame.
+- A recording that captured nothing (no frames) is discarded instead of leaving
+  an empty file; the notice says why.
+- Files are written to `~/Library/Application Support/MakiDesk/Recordings` and
+  stay there after they leave the shelf.
 
 ## Text from the screen
 
@@ -840,7 +861,7 @@ families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `�
 | Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
 | Focus dim | `⌃⌥⇧D` |
 | Timers | `⌃⌥⇧T` |
-| Screenshots | `⌃⌥⇧S` |
+| Screenshots | `⌃⌥⇧S`, `⌃⌥⇧W`, `⌃⌥⇧C`, `⌃⌥⇧R` |
 | Application launcher | `⌃⌥Space` |
 | Command box | `⌃Space` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |

@@ -60,6 +60,12 @@ enum WindowController {
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).
         case captureScreenshot
+        /// Capture the window in front (T40).
+        case captureWindow
+        /// Capture the whole display under the pointer (T40).
+        case captureScreen
+        /// Record an area to a movie on the shelf; the same key stops it (T40).
+        case recordArea
         /// Open the command box (T38).
         case runCommand
         /// Open the fast application launcher (T37).

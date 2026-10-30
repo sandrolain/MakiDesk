@@ -6,16 +6,23 @@ import SwiftUI
 @Observable
 @MainActor
 final class ScreenshotAnnotationModel {
-    let base: CGImage
+    /// The capture being annotated. A crop replaces it with a smaller one.
+    private(set) var base: CGImage
     var marks: [Markup] = []
     var tool: MarkupTool = .arrow
     var colourIndex = 0
+    /// The size the capture is drawn at, in points. A crop keeps the same pixel
+    /// scale, so the editor and its panel shrink with the image.
+    var imageSize: CGSize
+    /// Told about a new size so the window can follow the image (T40).
+    @ObservationIgnored var onResize: ((CGSize) -> Void)?
     /// The capture with the committed marks, rebuilt after each change so the
     /// preview and the exported file come from the same renderer.
     private(set) var preview: CGImage
 
-    init(base: CGImage) {
+    init(base: CGImage, imageSize: CGSize) {
         self.base = base
+        self.imageSize = imageSize
         self.preview = base
     }
 
@@ -28,6 +35,20 @@ final class ScreenshotAnnotationModel {
         guard marks.isEmpty == false else { return }
         marks.removeLast()
         refresh()
+    }
+
+    /// Crops the capture and moves the marks with it. The displayed size keeps
+    /// the pixel scale, so a crop shrinks the panel instead of zooming in.
+    func crop(to rect: CGRect) {
+        guard rect.width > 0.02, rect.height > 0.02 else { return }
+        let result = MarkupCrop.crop(base, marks: marks, rect: rect)
+        guard result.base.width != base.width || result.base.height != base.height else { return }
+        base = result.base
+        marks = result.marks
+        imageSize = CGSize(width: max(120, imageSize.width * rect.width),
+                           height: max(90, imageSize.height * rect.height))
+        refresh()
+        onResize?(imageSize)
     }
 
     /// Re-renders on the main actor: a commit is a user action, and the render
@@ -82,6 +103,86 @@ final class ScreenshotAnnotationController {
         }
     }
 
+    /// The window in front of the app that was in front before our menu opened
+    /// (T40). Our own menu bar makes MakiDesk the front app, so the last
+    /// external one is the window the user was looking at.
+    func captureWindow() {
+        guard isBusy == false else { return }
+        HUDController.shared.hide()
+        let pid = ExternalApplicationFocus.shared.lastApplication?.processIdentifier
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let front = pid.map {
+                WindowController.readFocusedWindow(
+                    pid: $0,
+                    appName: NSRunningApplication(processIdentifier: $0)?.localizedName,
+                    indexed: WindowIndex.shared.snapshot(includeMinimized: true)
+                )
+            }
+            guard case let .window(info)? = front, let id = info.windowID else {
+                HUDController.shared.show("No window to capture",
+                                          symbol: "exclamationmark.triangle.fill", kind: .warning)
+                return
+            }
+            self.isSelecting = true
+            defer { self.isSelecting = false }
+            do {
+                let window = try await ScreenRegionCapture.window(id)
+                let screen = WindowController.screen(forAXFrame: info.frame) ?? NSScreen.main
+                guard let screen, let display = Self.display(for: screen) else {
+                    throw ScreenRegionError.displayUnavailable
+                }
+                let scale = screen.backingScaleFactor
+                let image = try await ScreenRegionCapture.capture(window: window, scale: scale)
+                self.present(image: image, selection: ScreenRegionSelector.Selection(
+                    rect: CGRect(origin: .zero, size: CGSize(width: image.width, height: image.height)),
+                    display: display, image: image, point: nil
+                ))
+            } catch {
+                self.announce(error)
+            }
+        }
+    }
+
+    /// The whole display under the pointer (T40).
+    func captureScreen() {
+        guard isBusy == false else { return }
+        HUDController.shared.hide()
+        let pointer = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
+        guard let screen, let display = Self.display(for: screen) else {
+            HUDController.shared.show("No display to capture",
+                                      symbol: "exclamationmark.triangle.fill", kind: .warning)
+            return
+        }
+        isSelecting = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isSelecting = false }
+            do {
+                let image = try await ScreenRegionCapture.capture(display: display)
+                self.present(image: image, selection: ScreenRegionSelector.Selection(
+                    rect: CGRect(origin: .zero, size: display.frame.size),
+                    display: display, image: image, point: nil
+                ))
+            } catch {
+                self.announce(error)
+            }
+        }
+    }
+
+    private func announce(_ error: Error) {
+        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        HUDController.shared.show(message, symbol: "exclamationmark.triangle.fill", kind: .warning)
+    }
+
+    private static func display(for screen: NSScreen) -> ScreenRegionDisplay? {
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+            as? NSNumber else { return nil }
+        return ScreenRegionDisplay(id: CGDirectDisplayID(number.uint32Value),
+                                   frame: screen.frame, scale: screen.backingScaleFactor)
+    }
+
     // MARK: - Editor
 
     private func present(image: CGImage, selection: ScreenRegionSelector.Selection) {
@@ -95,11 +196,10 @@ final class ScreenshotAnnotationController {
         let displayed = CGSize(width: max(140, selection.rect.width * scale),
                                height: max(100, selection.rect.height * scale))
 
-        let model = ScreenshotAnnotationModel(base: image)
+        let model = ScreenshotAnnotationModel(base: image, imageSize: displayed)
         self.model = model
         let hosting = NSHostingView(rootView: AnnotationEditorView(
             model: model,
-            imageSize: displayed,
             onDone: { [weak self] in self?.finish() },
             onCancel: { [weak self] in self?.close() }
         ))
@@ -129,6 +229,7 @@ final class ScreenshotAnnotationController {
                               width: size.width, height: size.height),
                        display: false)
         panel.onUndo = { [weak model] in model?.undo() }
+        model.onResize = { [weak self] size in self?.resizeEditor(to: size) }
         window = panel
         focusReturn.capture()
         NSApp.activate(ignoringOtherApps: true)
@@ -158,6 +259,20 @@ final class ScreenshotAnnotationController {
             kind: url == nil ? .warning : .success
         )
         close()
+    }
+
+    /// A crop made the image smaller: the panel follows it, centred where it is.
+    private func resizeEditor(to imageSize: CGSize) {
+        guard let window else { return }
+        let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        // The tool strip has a width of its own: a narrow crop keeps it readable
+        // instead of squeezing the buttons.
+        let size = CGSize(width: max(imageSize.width, 360), height: imageSize.height + 44)
+        window.setFrame(CGRect(x: (visible.midX - size.width / 2).rounded(),
+                               y: (visible.midY - size.height / 2).rounded(),
+                               width: size.width, height: size.height),
+                        display: true)
     }
 
     private func close() {
@@ -199,16 +314,23 @@ private final class ScreenshotEditorPanel: NSPanel {
 }
 
 /// The editor: the capture, a vector preview of the stroke in progress, and the
-/// tool strip. `Esc` cancels, `Return` saves.
+/// tool strip. `Esc` cancels, `Return` saves. Text is typed where it is clicked;
+/// crop is dragged and confirmed on the spot (T40).
 private struct AnnotationEditorView: View {
     @Bindable var model: ScreenshotAnnotationModel
-    let imageSize: CGSize
     let onDone: () -> Void
     let onCancel: () -> Void
 
     @State private var dragPoints: [CGPoint] = []
+    /// The crop rectangle, in view points, while it waits to be confirmed.
+    @State private var cropRect: CGRect?
+    /// Where a label is being typed, in view points.
+    @State private var textAnchor: CGPoint?
+    @State private var textDraft = ""
+    @FocusState private var textFocused: Bool
 
     private var theme: PaletteTheme { WorkspaceStore.shared.theme }
+    private var imageSize: CGSize { model.imageSize }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -224,7 +346,7 @@ private struct AnnotationEditorView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(theme.border.opacity(0.6), lineWidth: 1)
         )
-        .onExitCommand(perform: onCancel)
+        .onExitCommand(perform: escape)
     }
 
     private var canvas: some View {
@@ -241,35 +363,122 @@ private struct AnnotationEditorView: View {
             }
             .frame(width: imageSize.width, height: imageSize.height)
             .allowsHitTesting(false)
+            if let cropRect {
+                cropOverlay(cropRect)
+            }
+            if let textAnchor {
+                textField(at: textAnchor)
+            }
         }
         .frame(width: imageSize.width, height: imageSize.height)
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { value in
-                    let point = normalized(value.location)
-                    if model.tool.isTwoPoint {
-                        dragPoints = [normalized(value.startLocation), point]
-                    } else {
-                        if dragPoints.isEmpty { dragPoints = [point] } else { dragPoints.append(point) }
+                    switch model.tool {
+                    case .crop:
+                        // Normalised like every other tool: the canvas draws in
+                        // the image's space, not the view's (T40).
+                        dragPoints = [normalized(value.startLocation), normalized(value.location)]
+                    case .text:
+                        break
+                    default:
+                        let point = normalized(value.location)
+                        if model.tool.isTwoPoint {
+                            dragPoints = [normalized(value.startLocation), point]
+                        } else if dragPoints.isEmpty {
+                            dragPoints = [point]
+                        } else {
+                            dragPoints.append(point)
+                        }
                     }
                 }
                 .onEnded { value in
-                    let start = normalized(value.startLocation)
-                    let end = normalized(value.location)
-                    var points = model.tool.isTwoPoint ? [start, end] : dragPoints + [end]
-                    dragPoints = []
-                    guard points.count >= 2 else { return }
-                    if model.tool.isTwoPoint {
-                        let dx = end.x - start.x
-                        let dy = end.y - start.y
-                        guard (dx * dx + dy * dy).squareRoot() > 0.004 else { return }
-                        points = [start, end]
+                    let start = value.startLocation
+                    let end = value.location
+                    switch model.tool {
+                    case .crop:
+                        dragPoints = []
+                        let first = normalized(start)
+                        let last = normalized(end)
+                        let rect = CGRect(x: min(first.x, last.x) * imageSize.width,
+                                          y: min(first.y, last.y) * imageSize.height,
+                                          width: abs(last.x - first.x) * imageSize.width,
+                                          height: abs(last.y - first.y) * imageSize.height)
+                        cropRect = rect.width > 24 && rect.height > 24 ? rect : nil
+                    case .text:
+                        textAnchor = end
+                        textDraft = ""
+                        // Focus once the field exists: in the same turn the
+                        // field is not there yet and the keys go nowhere.
+                        DispatchQueue.main.async { textFocused = true }
+                    default:
+                        let first = normalized(start)
+                        let last = normalized(end)
+                        var points = model.tool.isTwoPoint ? [first, last] : dragPoints + [last]
+                        dragPoints = []
+                        guard points.count >= 2 else { return }
+                        if model.tool.isTwoPoint {
+                            let dx = last.x - first.x
+                            let dy = last.y - first.y
+                            guard (dx * dx + dy * dy).squareRoot() > 0.004 else { return }
+                            points = [first, last]
+                        }
+                        guard model.tool.isMark else { return }
+                        model.add(Markup(tool: model.tool, points: points,
+                                         colourIndex: model.colourIndex))
                     }
-                    model.add(Markup(tool: model.tool, points: points,
-                                     colourIndex: model.colourIndex))
                 }
         )
+    }
+
+    /// A drag with the crop tool, the buttons that confirm it, and the dashed
+    /// outline of where the image will end.
+    private func cropOverlay(_ rect: CGRect) -> some View {
+        ZStack {
+            Rectangle()
+                .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                .foregroundStyle(theme.accent)
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .allowsHitTesting(false)
+            HStack(spacing: 6) {
+                Button("Crop") { applyCrop(rect) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .tint(theme.accent)
+                Button("Cancel") { cropRect = nil }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.subtext)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 6).fill(theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(theme.border.opacity(0.6), lineWidth: 1))
+            .position(x: min(max(rect.midX, 80), max(80, imageSize.width - 80)),
+                      y: rect.minY < 44 ? rect.minY + 22 : rect.minY - 22)
+        }
+    }
+
+    /// The label being typed, right where it will land.
+    private func textField(at point: CGPoint) -> some View {
+        TextField("Text", text: $textDraft)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(theme.text)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .frame(width: 240)
+            .background(RoundedRectangle(cornerRadius: 6).fill(theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.accent, lineWidth: 1))
+            .focused($textFocused)
+            .onAppear { textFocused = true }
+            .onSubmit(commitText)
+            .onExitCommand { textAnchor = nil; textDraft = "" }
+            .position(x: min(max(point.x + 122, 122), max(122, imageSize.width - 122)),
+                      y: min(max(point.y + 16, 16), max(16, imageSize.height - 16)))
     }
 
     private var toolbar: some View {
@@ -277,6 +486,8 @@ private struct AnnotationEditorView: View {
             ForEach(MarkupTool.allCases) { tool in
                 Button {
                     model.tool = tool
+                    cropRect = nil
+                    textAnchor = nil
                 } label: {
                     Image(systemName: tool.symbol)
                         .font(.system(size: 12, weight: .medium))
@@ -359,6 +570,40 @@ private struct AnnotationEditorView: View {
         return Color(.sRGB, red: entry.red, green: entry.green, blue: entry.blue)
     }
 
+    /// Esc leaves the label field or the pending crop before it closes the
+    /// editor: a half-typed sentence must not throw the capture away.
+    private func escape() {
+        if textAnchor != nil {
+            textAnchor = nil
+            textDraft = ""
+            return
+        }
+        if cropRect != nil {
+            cropRect = nil
+            return
+        }
+        onCancel()
+    }
+
+    private func commitText() {
+        guard let anchor = textAnchor else { return }
+        let label = textDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        textAnchor = nil
+        textDraft = ""
+        guard label.isEmpty == false else { return }
+        model.add(Markup(tool: .text, points: [normalized(anchor)],
+                         colourIndex: model.colourIndex, text: label))
+    }
+
+    private func applyCrop(_ rect: CGRect) {
+        cropRect = nil
+        let normalizedRect = CGRect(x: rect.minX / max(1, imageSize.width),
+                                    y: rect.minY / max(1, imageSize.height),
+                                    width: rect.width / max(1, imageSize.width),
+                                    height: rect.height / max(1, imageSize.height))
+        model.crop(to: normalizedRect)
+    }
+
     private func normalized(_ point: CGPoint) -> CGPoint {
         Markup.clamped(CGPoint(x: point.x / max(1, imageSize.width),
                                y: point.y / max(1, imageSize.height)))
@@ -401,6 +646,20 @@ private struct AnnotationEditorView: View {
             context.stroke(path, with: .color(colour),
                            style: StrokeStyle(lineWidth: previewWidth, lineCap: .round,
                                               lineJoin: .round))
+        case .crop:
+            // What is being selected has to be obvious while the mouse is down:
+            // the area keeps its brightness, the rest goes dark.
+            let rect = CGRect(x: min(points[0].x, points[1].x),
+                              y: min(points[0].y, points[1].y),
+                              width: abs(points[1].x - points[0].x),
+                              height: abs(points[1].y - points[0].y))
+            guard rect.width > 1, rect.height > 1 else { return }
+            var outside = Path()
+            outside.addRect(CGRect(origin: .zero, size: size))
+            outside.addRect(rect)
+            context.fill(outside, with: .color(.black.opacity(0.45)),
+                         style: FillStyle(eoFill: true))
+            context.stroke(Path(rect), with: .color(theme.accent), lineWidth: 1.5)
         case .pixelate:
             let rect = CGRect(x: min(points[0].x, points[1].x),
                               y: min(points[0].y, points[1].y),
@@ -417,6 +676,9 @@ private struct AnnotationEditorView: View {
                            style: StrokeStyle(lineWidth: mark.tool == .highlighter
                                               ? previewWidth * 4.2 : previewWidth,
                                               lineCap: .round, lineJoin: .round))
+        case .text:
+            // The label is committed through the field, not by dragging.
+            break
         }
     }
 

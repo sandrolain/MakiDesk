@@ -620,7 +620,7 @@ final class ScreenRegionSelector {
         snapStateY = .none
     }
 
-    private static func availableDisplays() -> [ScreenRegionDisplay] {
+    static func availableDisplays() -> [ScreenRegionDisplay] {
         NSScreen.screens.compactMap { screen in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
                 as? NSNumber else { return nil }

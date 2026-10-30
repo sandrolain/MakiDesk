@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreText
 import Foundation
 
 /// The quick tools of the screenshot editor (T40).
@@ -11,6 +12,10 @@ enum MarkupTool: String, CaseIterable, Identifiable, Sendable {
     case pen
     case highlighter
     case pixelate
+    /// A typed label, placed with one click (T40).
+    case text
+    /// Not a mark: the editor's crop rectangle, applied to the capture itself.
+    case crop
 
     var id: String { rawValue }
 
@@ -21,6 +26,8 @@ enum MarkupTool: String, CaseIterable, Identifiable, Sendable {
         case .pen: return "Pen"
         case .highlighter: return "Highlighter"
         case .pixelate: return "Hide details"
+        case .text: return "Text"
+        case .crop: return "Crop"
         }
     }
 
@@ -31,12 +38,20 @@ enum MarkupTool: String, CaseIterable, Identifiable, Sendable {
         case .pen: return "pencil.tip"
         case .highlighter: return "highlighter"
         case .pixelate: return "squareshape.split.3x3"
+        case .text: return "textformat"
+        case .crop: return "crop"
         }
     }
 
     /// Tools drawn between two points, rather than following the hand.
     var isTwoPoint: Bool {
-        self == .arrow || self == .rectangle || self == .pixelate
+        self == .arrow || self == .rectangle || self == .pixelate || self == .crop
+    }
+
+    /// Tools that turn a finished mark into pixels. Crop changes the capture
+    /// instead, and text is typed rather than dragged.
+    var isMark: Bool {
+        self != .crop
     }
 }
 
@@ -47,12 +62,16 @@ struct Markup: Identifiable, Equatable, Sendable {
     var tool: MarkupTool
     var points: [CGPoint]
     var colourIndex: Int
+    /// The label of the text tool; empty for every other tool.
+    var text: String
 
-    init(id: UUID = UUID(), tool: MarkupTool, points: [CGPoint], colourIndex: Int = 0) {
+    init(id: UUID = UUID(), tool: MarkupTool, points: [CGPoint], colourIndex: Int = 0,
+         text: String = "") {
         self.id = id
         self.tool = tool
         self.points = points.map(Self.clamped)
         self.colourIndex = colourIndex
+        self.text = text
     }
 
     static func clamped(_ point: CGPoint) -> CGPoint {
@@ -105,9 +124,18 @@ enum MarkupRenderer {
     }
 
     /// Normalised (top-left) to the context's pixels (bottom-left origin).
+    ///
+    /// Points outside 0…1 are left outside instead of being pulled onto the
+    /// edge: after a crop a stroke can cross the new border, and the context's
+    /// own clip does the cutting without bending the line.
     static func point(_ normalized: CGPoint, in size: CGSize) -> CGPoint {
-        CGPoint(x: min(max(normalized.x, 0), 1) * size.width,
-                y: (1 - min(max(normalized.y, 0), 1)) * size.height)
+        CGPoint(x: normalized.x * size.width,
+                y: (1 - normalized.y) * size.height)
+    }
+
+    /// The point size the text tool uses on an image of this size.
+    static func textSize(in size: CGSize) -> CGFloat {
+        min(max(min(size.width, size.height) * 0.03, 15), 140)
     }
 
     /// The stroke a tool uses on an image of this size, in pixels.
@@ -116,6 +144,7 @@ enum MarkupRenderer {
         switch tool {
         case .highlighter: return min(max(base * 4.2, 10), 60)
         case .pixelate: return 0
+        case .crop: return 0
         default: return min(max(base, 3), 16)
         }
     }
@@ -143,6 +172,10 @@ enum MarkupRenderer {
                   to: point(mark.points[1], in: size),
                   colour: mark.colourIndex, width: lineWidth(for: .arrow, in: size),
                   in: context)
+        case .text:
+            text(mark, in: context, size: size)
+        case .crop:
+            break
         case .pen, .highlighter:
             let points = mark.points.map { point($0, in: size) }
             guard points.count >= 2 else { return }
@@ -157,6 +190,34 @@ enum MarkupRenderer {
             for point in points.dropFirst() { context.addLine(to: point) }
             context.strokePath()
         }
+    }
+
+    /// The label, one line per newline, its top-left corner at the anchor.
+    /// CoreText draws at a baseline, so the position is lifted by the ascent.
+    private static func text(_ mark: Markup, in context: CGContext, size: CGSize) {
+        guard mark.text.isEmpty == false, let anchor = mark.points.first else { return }
+        let fontSize = textSize(in: size)
+        let font = CTFontCreateWithName("HelveticaNeue-Bold" as CFString, fontSize, nil)
+        let colour = MarkupPalette.colour(mark.colourIndex)
+        let lineHeight = CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
+        let origin = point(anchor, in: size)
+        context.saveGState()
+        // A soft shadow keeps the label readable over a light or a busy area.
+        context.setShadow(offset: CGSize(width: 0, height: -1), blur: fontSize * 0.12,
+                          color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.55))
+        for (row, line) in mark.text.components(separatedBy: "\n").enumerated() {
+            guard line.isEmpty == false else { continue }
+            let attributed = CFAttributedStringCreate(nil, line as CFString, [
+                kCTFontAttributeName: font,
+                kCTForegroundColorAttributeName: colour,
+            ] as CFDictionary)
+            guard let attributed else { continue }
+            let ctLine = CTLineCreateWithAttributedString(attributed)
+            context.textPosition = CGPoint(x: origin.x,
+                                           y: origin.y - CTFontGetAscent(font) - CGFloat(row) * lineHeight)
+            CTLineDraw(ctLine, context)
+        }
+        context.restoreGState()
     }
 
     private static func arrow(from start: CGPoint, to end: CGPoint, colour: Int,
@@ -212,6 +273,16 @@ enum MarkupRenderer {
         guard let mosaic = small.makeImage() else { return }
         context.interpolationQuality = .none
         context.draw(mosaic, in: rect)
+    }
+}
+
+/// A readable, collision-free name for the recording that goes on the shelf.
+enum RecordingNaming {
+    static func name(at date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return "MakiDesk Recording \(formatter.string(from: date)).mov"
     }
 }
 

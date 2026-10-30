@@ -81,6 +81,9 @@ enum CommandCatalog {
         entry("screenshots", "Open the screenshot library", .shortcut(.openScreenshots)),
         // Capture and measuring
         entry("screenshot", "Capture an area and annotate it", .shortcut(.captureScreenshot)),
+        entry("capture window", "Capture the window in front", .shortcut(.captureWindow)),
+        entry("capture screen", "Capture the whole display", .shortcut(.captureScreen)),
+        entry("record", "Record an area of the screen", .shortcut(.recordArea)),
         entry("ocr", "Read text from a selected area", .shortcut(.recognizeText)),
         entry("measure", "Measure an area of the screen", .shortcut(.measureArea)),
         entry("colour", "Pick a colour from the screen", .shortcut(.sampleColor)),

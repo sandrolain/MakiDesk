@@ -59,8 +59,10 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text history, pasteboard poll, picker. |
 | `ShelfController.swift`, `ShelfShake.swift` | Drag shelf, file promises, Quick Look, drag out, shake detector. |
 | `ScreenshotLibrary.swift` | Screenshot inventory, Quick Look, native file drags, configurable grid, sorting, date groups and file operations. |
-| `MarkupModel.swift` | Pure screenshot markup: arrow, rectangle, pen, highlighter and pixel mosaic, rendered into pixels for both the preview and the saved file. |
-| `ScreenshotAnnotationController.swift` | Area capture (shared selector) → in-place annotation editor → PNG on the shelf and on the clipboard. |
+| `MarkupModel.swift` | Pure screenshot markup: arrow, rectangle, pen, highlighter, text label and pixel mosaic, rendered into pixels for both the preview and the saved file. |
+| `MarkupCrop.swift` | Pure crop: the capture is replaced and every mark is mapped into the new space, dropped when it falls outside. |
+| `ScreenshotAnnotationController.swift` | Area, window or whole-display capture → in-place annotation editor (marks, text, crop) → PNG on the shelf and on the clipboard. |
+| `ScreenRecordingController.swift` | Area recording to an H.264 movie: `SCStream` → `AVAssetWriter`, pause with retimed frames, system audio, menu-bar control, `.mov` on the shelf. |
 | `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
 | `SettingsView.swift` | Tabbed settings, permissions, reset. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
@@ -229,6 +231,24 @@ enabled, not while secure input is on, image, younger than eight seconds — is 
 pure rule with tests; the scan runs on a worker and publishes on the main actor,
 and the library and the watcher share the localised capture names
 (`ScreenshotNames`) so they cannot drift.
+
+`ScreenshotAnnotationController` (T40) takes one picture — an area through the
+shared selector, the window in front of the app that was in front before our
+menu opened, or the display under the pointer — and shows it in one editor.
+Marks are values in normalised coordinates rendered into pixels by
+`MarkupRenderer`, so the preview and the saved file cannot disagree; a crop is
+the one operation that changes the capture itself, and `MarkupCrop` moves the
+marks into the new space so they stay where they were drawn.
+
+`ScreenRecordingController` (T40) records an area with `SCStream` into an
+`AVAssetWriter` (H.264, 30 fps, system audio when the setting is on). The stream
+hands its samples to one serial queue and pause/resume/stop are commands on that
+same queue, which is the documented invariant behind `@unchecked Sendable` on
+the session; a paused stretch is cut out by retiming the samples instead of
+leaving a frozen frame. The writer opens the file itself, so a session that
+never saw a frame removes it again and reports "nothing captured" instead of
+leaving an empty movie. The menu-bar menu owns pause/resume/stop while a
+recording runs, and its icon changes so the recording is not forgotten.
 
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost

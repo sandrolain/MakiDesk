@@ -82,6 +82,40 @@ enum ScreenRegionCapture {
         }
     }
 
+    /// One window, at the display's pixel scale (T40).
+    static func window(_ windowID: CGWindowID) async throws -> SCWindow {
+        guard isAuthorized else { throw ScreenRegionError.permissionDenied }
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.excludingDesktopWindows(
+                false, onScreenWindowsOnly: true
+            )
+        } catch {
+            throw ScreenRegionError.captureFailed(error.localizedDescription)
+        }
+        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+            throw ScreenRegionError.captureFailed("The window is no longer on screen.")
+        }
+        return window
+    }
+
+    /// A still of one window, at `scale` pixels per point (T40).
+    static func capture(window: SCWindow, scale: CGFloat) async throws -> CGImage {
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let configuration = SCStreamConfiguration()
+        configuration.width = max(1, Int((window.frame.width * scale).rounded()))
+        configuration.height = max(1, Int((window.frame.height * scale).rounded()))
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+        do {
+            return try await SCScreenshotManager.captureImage(
+                contentFilter: filter, configuration: configuration
+            )
+        } catch {
+            throw ScreenRegionError.captureFailed(error.localizedDescription)
+        }
+    }
+
     /// The crop of a global rectangle, at native pixel size.
     static func image(of rect: CGRect, in display: ScreenRegionDisplay,
                       from source: CGImage) throws -> CGImage {

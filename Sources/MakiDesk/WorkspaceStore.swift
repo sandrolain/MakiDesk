@@ -233,6 +233,9 @@ final class WorkspaceStore {
     /// (T48). Off by default: a banner for every screenshot is noise until the
     /// user asks for it.
     var screenshotSavedNotice = UserDefaults.standard.object(forKey: "screenshotSavedNotice") as? Bool ?? false
+    /// Whether a screen recording also captures the system's own sound (T40).
+    /// The microphone stays out: it needs a second permission and a mixdown.
+    var recordingIncludesAudio = UserDefaults.standard.object(forKey: "recordingIncludesAudio") as? Bool ?? true
 
     /// The countdown card (T61): shown while a timer exists, unless turned off.
     var timerOverlayVisible = UserDefaults.standard.object(forKey: TimerSettings.overlayVisibleKey) as? Bool ?? true
@@ -1035,6 +1038,11 @@ final class WorkspaceStore {
         ScreenshotCaptureWatcher.shared.applySettings()
     }
 
+    func updateRecordingIncludesAudio(_ value: Bool) {
+        recordingIncludesAudio = value
+        UserDefaults.standard.set(value, forKey: "recordingIncludesAudio")
+    }
+
     func updateTimerSoundEnabled(_ value: Bool) {
         timerSoundEnabled = value
         UserDefaults.standard.set(value, forKey: TimerSettings.soundEnabledKey)
@@ -1270,6 +1278,18 @@ final class WorkspaceStore {
         // Screen Recording, not Accessibility (T40).
         if action == .captureScreenshot {
             ScreenshotAnnotationController.shared.capture()
+            return
+        }
+        if action == .captureWindow {
+            ScreenshotAnnotationController.shared.captureWindow()
+            return
+        }
+        if action == .captureScreen {
+            ScreenshotAnnotationController.shared.captureScreen()
+            return
+        }
+        if action == .recordArea {
+            ScreenRecordingController.shared.toggle()
             return
         }
         if action == .sampleColor {
@@ -1626,7 +1646,8 @@ final class WorkspaceStore {
              .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
              .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
-             .newTimer, .captureScreenshot, .runCommand, .appLauncher:
+             .newTimer, .captureScreenshot, .captureWindow, .captureScreen,
+             .recordArea, .runCommand, .appLauncher:
             return nil
         }
     }
@@ -2006,6 +2027,9 @@ final class WorkspaceStore {
         case .toggleChecklist: return "checklist"
         case .newTimer: return "timer"
         case .captureScreenshot: return "screenshot"
+        case .captureWindow: return "window"
+        case .captureScreen: return "screen"
+        case .recordArea: return "recording"
         case .runCommand: return "command"
         case .appLauncher: return "launcher"
         case .toggleMiniMap: return "mini map"

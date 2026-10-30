@@ -232,6 +232,15 @@ enum ShortcutDefinitions {
         def("capture.annotate", "Annotate a screenshot", section: "Screenshots",
             key: kVK_ANSI_S, modifiers: ctrlOptShift, action: .captureScreenshot,
             note: "Drag an area, mark it up, and it lands on the shelf; Ret saves, Esc cancels."),
+        def("capture.window", "Annotate a window", section: "Screenshots",
+            key: kVK_ANSI_W, modifiers: ctrlOptShift, action: .captureWindow,
+            note: "The window in front, marked up in the same editor: text, crop, the whole strip."),
+        def("capture.screen", "Annotate the whole display", section: "Screenshots",
+            key: kVK_ANSI_C, modifiers: ctrlOptShift, action: .captureScreen,
+            note: "The display under the pointer, in the same editor."),
+        def("capture.record", "Record an area", section: "Screenshots",
+            key: kVK_ANSI_R, modifiers: ctrlOptShift, action: .recordArea,
+            note: "Drag the area; the movie lands on the shelf when you stop. The same key stops it, the menu bar pauses it."),
     ]
 
     private static let measure: [ShortcutDefinition] = [

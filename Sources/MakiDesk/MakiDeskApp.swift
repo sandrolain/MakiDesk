@@ -5,6 +5,9 @@ import SwiftUI
 struct MakiDeskApp: App {
     /// The migration from the app's previous name runs before the store reads
     /// its settings and its groups file.
+    /// The recording menu follows the controller's phase (T40).
+    @State private var recording = ScreenRecordingController.shared
+
     @State private var store: WorkspaceStore = {
         LegacyMigration.runIfNeeded()
         return WorkspaceStore.shared
@@ -122,6 +125,29 @@ struct MakiDeskApp: App {
             menuButton("Capture Area…", keys: shortcutKeys(.captureScreenshot),
                        icon: "camera.viewfinder") {
                 ScreenshotAnnotationController.shared.capture()
+            }
+            menuButton("Capture Window…", keys: shortcutKeys(.captureWindow),
+                       icon: "macwindow") {
+                ScreenshotAnnotationController.shared.captureWindow()
+            }
+            menuButton("Capture Screen…", keys: shortcutKeys(.captureScreen),
+                       icon: "display") {
+                ScreenshotAnnotationController.shared.captureScreen()
+            }
+            if recording.isRecording {
+                menuButton(recording.phase == .paused ? "Resume Recording" : "Pause Recording",
+                           icon: "pause.circle") {
+                    recording.togglePause()
+                }
+                menuButton("Stop Recording", keys: shortcutKeys(.recordArea),
+                           icon: "stop.circle") {
+                    recording.stop()
+                }
+            } else {
+                menuButton("Record Area…", keys: shortcutKeys(.recordArea),
+                           icon: "record.circle") {
+                    recording.toggle()
+                }
             }
             menuButton("Screenshots", keys: shortcutKeys(.openScreenshots),
                        icon: "menubar.dock.rectangle") {
@@ -404,9 +430,15 @@ struct MakiDeskApp: App {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
-            Image(nsImage: MenuBarIcon.image())
-                .accessibilityLabel("MakiDesk")
-                .onAppear(perform: openSetupOnFirstRun)
+            if recording.isRecording {
+                // A recording must never be forgotten: the icon itself changes.
+                Image(systemName: recording.phase == .paused ? "pause.circle" : "record.circle")
+                    .accessibilityLabel("MakiDesk — recording")
+            } else {
+                Image(nsImage: MenuBarIcon.image())
+                    .accessibilityLabel("MakiDesk")
+                    .onAppear(perform: openSetupOnFirstRun)
+            }
         }
     }
 

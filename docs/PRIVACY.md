@@ -21,7 +21,7 @@ for two macOS TCC permissions:
 | Permission | Why |
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
-| **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, and the area selected for text recognition. |
+| **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, the area selected for text recognition, the annotated captures and screen recordings (T40). A recording can include the system's own sound; the microphone is never used. |
 
 Both are granted by you in **System Settings ▸ Privacy & Security** and can be
 revoked there at any time. The app does not request Input Monitoring, Full Disk
@@ -87,6 +87,7 @@ All paths are under your user account:
 | Launcher use | `UserDefaults` (`applicationLauncherUsage`): bundle id, number of openings, last opening | Until reset; one entry per app, the 80 most recent |
 | Window previews/measure | RAM | Replaced/evicted while running |
 | Screenshot previews | RAM | While the screenshot window is open |
+| Screen recordings | `~/Library/Application Support/MakiDesk/Recordings` | Until you delete them: they outlive the shelf |
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
 can remove groups, notes, clipboard history and dropzones; settings always

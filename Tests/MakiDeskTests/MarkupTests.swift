@@ -121,6 +121,74 @@ final class MarkupTests: XCTestCase {
         XCTAssertEqual(pixel(result, x: 50, y: 50).r, 255)
     }
 
+    func testATypedLabelPaintsPixels() throws {
+        let base = white(width: 240, height: 100)
+        let label = Markup(tool: .text, points: [CGPoint(x: 0.06, y: 0.25)],
+                           colourIndex: 3, text: "Hello")
+        let result = try XCTUnwrap(MarkupRenderer.render(base, marks: [label]))
+        // The label starts at the top-left anchor: some pixel down and right of
+        // it must be dark, while a corner far away stays white.
+        var darkest = 255
+        for x in 10..<200 {
+            for y in 20..<70 {
+                darkest = min(darkest, pixel(result, x: x, y: y).r)
+            }
+        }
+        XCTAssertLessThan(darkest, 120)
+        XCTAssertGreaterThan(pixel(result, x: 230, y: 90).r, 245)
+    }
+
+    func testAnEmptyLabelDrawsNothing() throws {
+        let base = white()
+        let label = Markup(tool: .text, points: [CGPoint(x: 0.5, y: 0.5)],
+                           colourIndex: 3, text: "   ".trimmingCharacters(in: .whitespaces))
+        let result = try XCTUnwrap(MarkupRenderer.render(base, marks: [label]))
+        XCTAssertEqual(pixel(result, x: 50, y: 50).r, 255)
+    }
+
+    // MARK: - Crop
+
+    func testCropMovesTheMarksIntoTheNewImage() throws {
+        let base = white(width: 200, height: 100)
+        let mark = Markup(tool: .rectangle,
+                          points: [CGPoint(x: 0.25, y: 0.25), CGPoint(x: 0.75, y: 0.75)],
+                          colourIndex: 0)
+        let result = MarkupCrop.crop(base, marks: [mark],
+                                     rect: CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5))
+        XCTAssertEqual(result.base.width, 100)
+        XCTAssertEqual(result.base.height, 50)
+        let moved = try XCTUnwrap(result.marks.first)
+        XCTAssertEqual(moved.points[0].x, 0, accuracy: 0.001)
+        XCTAssertEqual(moved.points[0].y, 0, accuracy: 0.001)
+        XCTAssertEqual(moved.points[1].x, 1, accuracy: 0.001)
+        XCTAssertEqual(moved.points[1].y, 1, accuracy: 0.001)
+    }
+
+    func testCropDropsAMarkThatIsGone() {
+        let base = white()
+        let outside = Markup(tool: .pen, points: [CGPoint(x: 0.05, y: 0.05),
+                                                  CGPoint(x: 0.1, y: 0.1)])
+        let result = MarkupCrop.crop(base, marks: [outside],
+                                     rect: CGRect(x: 0.5, y: 0.5, width: 0.4, height: 0.4))
+        XCTAssertEqual(result.base.width, 40)
+        XCTAssertTrue(result.marks.isEmpty)
+    }
+
+    func testCropIsClippedToTheImage() {
+        let base = white()
+        let result = MarkupCrop.crop(base, marks: [],
+                                     rect: CGRect(x: 0.5, y: 0.5, width: 2, height: 2))
+        XCTAssertEqual(result.base.width, 50)
+        XCTAssertEqual(result.base.height, 50)
+    }
+
+    func testAnEmptyCropChangesNothing() {
+        let base = white()
+        let result = MarkupCrop.crop(base, marks: [], rect: .zero)
+        XCTAssertEqual(result.base.width, base.width)
+        XCTAssertEqual(result.base.height, base.height)
+    }
+
     // MARK: - Palette and names
 
     func testThePaletteIndexIsClamped() {
@@ -136,6 +204,13 @@ final class MarkupTests: XCTestCase {
         XCTAssertTrue(name.hasPrefix("MakiDesk Screenshot "), name)
         XCTAssertTrue(name.hasSuffix(".png"), name)
         XCTAssertTrue(name.contains(" at "), name)
+    }
+
+    func testTheRecordingFileNameSaysWhatItIs() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let name = RecordingNaming.name(at: date)
+        XCTAssertTrue(name.hasPrefix("MakiDesk Recording "), name)
+        XCTAssertTrue(name.hasSuffix(".mov"), name)
     }
 
     func testTheLineWidthGrowsWithTheImageAndTheTool() {
