@@ -454,9 +454,19 @@ final class TextRecognitionController {
             HUDController.shared.show("A selection is already open",
                                       symbol: "hand.raised.fill")
         case let .failed(message):
-            let short = message.count > 80 ? String(message.prefix(80)) + "…" : message
-            HUDController.shared.show("Text recognition failed: \(short)",
-                                      symbol: "exclamationmark.triangle.fill")
+            // The detector itself can fail to load (Vision/E5RT): the notice says
+            // so and keeps the reason underneath instead of showing a code (T41).
+            let short = message.count > 160 ? String(message.prefix(160)) + "…" : message
+            let isModelFailure = short.localizedCaseInsensitiveContains("initialize")
+                || short.localizedCaseInsensitiveContains("detector")
+                || short.localizedCaseInsensitiveContains("E5RT")
+            HUDController.shared.show(
+                isModelFailure
+                    ? "The text detector could not start — restarting the Mac usually clears it"
+                    : "Text recognition failed",
+                symbol: "exclamationmark.triangle.fill",
+                detail: short, kind: .warning
+            )
             WorkspaceStore.shared.status = "Text recognition failed"
         }
     }

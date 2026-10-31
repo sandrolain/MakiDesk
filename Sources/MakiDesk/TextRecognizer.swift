@@ -177,9 +177,38 @@ actor TextRecognizer: TextRecognizing {
     func recognize(_ image: CGImage,
                    options: TextRecognitionOptions) async throws -> TextRecognitionResult {
         try Task.checkCancellation()
-        let started = ContinuousClock.now
         let prepared = TextRecognitionImage.prepared(image)
+        do {
+            return try await run(prepared, options: options)
+        } catch let error as TextRecognitionError {
+            // "No text" is an answer, not a failure: a retry would only wait.
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Vision's text detector can fail to load on the first call in a
+            // process (the framework reports an E5RT compile error): one retry
+            // covers the transient case, then the caller is told (T41).
+            logFailure(error, attempt: 1)
+            try await Task.sleep(nanoseconds: 300_000_000)
+            try Task.checkCancellation()
+            do {
+                return try await run(prepared, options: options)
+            } catch let error as TextRecognitionError {
+                throw error
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                logFailure(error, attempt: 2)
+                throw TextRecognitionError.visionFailed(error.localizedDescription)
+            }
+        }
+    }
 
+    private func run(_ prepared: TextRecognitionImage.Prepared,
+                     options: TextRecognitionOptions) async throws -> TextRecognitionResult {
+        try Task.checkCancellation()
+        let started = ContinuousClock.now
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = options.quality.visionLevel
         request.usesLanguageCorrection = options.usesLanguageCorrection
@@ -198,9 +227,10 @@ actor TextRecognizer: TextRecognizing {
                 cancellable.cancel()
             }
         } catch {
-            // A superseded request is cancelled inside Vision; that is not a failure.
+            // A superseded request is cancelled inside Vision; that is not a
+            // failure, and the raw error lets the caller retry once.
             try Task.checkCancellation()
-            throw TextRecognitionError.visionFailed(error.localizedDescription)
+            throw error
         }
         try Task.checkCancellation()
 
@@ -221,5 +251,12 @@ actor TextRecognizer: TextRecognizing {
         return TextRecognitionResult(text: text,
                                      durationMilliseconds: milliseconds,
                                      scaled: prepared.scaled)
+    }
+
+    /// Domain, code and attempt only: the message may name a file or a language,
+    /// never the text being read.
+    private nonisolated func logFailure(_ error: Error, attempt: Int) {
+        let error = error as NSError
+        makiLog.error("ocr failed attempt=\(attempt, privacy: .public) domain=\(error.domain, privacy: .public) code=\(error.code, privacy: .public)")
     }
 }

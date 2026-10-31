@@ -734,6 +734,11 @@ a click without dragging, cancels without copying anything.
   notice.
 - The area is captured at native resolution; an image longer than 3000 px on
   one side is downscaled before recognition.
+- Vision's text detector can fail to start (the framework reports an E5RT
+  compile error, typically after a long uptime or a wake): MakiDesk retries once
+  and then says so instead of showing a raw error code. Restarting the app
+  usually clears it; if it persists, restart the Mac. The failure is logged as
+  `ocr failed attempt=… domain=… code=…` without any of the text read.
 - **Settings ▸ Panels ▸ Text recognition** chooses where the text goes:
   **clipboard**, **clipboard and history** (the default, what used to happen by
   accident) or **history only**, which leaves the system pasteboard untouched.
