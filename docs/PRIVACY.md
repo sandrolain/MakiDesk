@@ -21,6 +21,7 @@ for two macOS TCC permissions:
 | Permission | Why |
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
+| **Apple Intelligence** | Rewriting notes uses the on-device model only: no network, no account, no content in logs. The notice under Settings ▸ Panels ▸ Tools says when it is unavailable. |
 | **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, the area selected for text recognition, the annotated captures and screen recordings (T40). A recording can include the system's own sound; the microphone is never used. |
 
 Both are granted by you in **System Settings ▸ Privacy & Security** and can be
@@ -88,6 +89,7 @@ All paths are under your user account:
 | Window previews/measure | RAM | Replaced/evicted while running |
 | Screenshot previews | RAM | While the screenshot window is open |
 | Screen recordings | `~/Library/Application Support/MakiDesk/Recordings` | Until you delete them: they outlive the shelf |
+| Notes rewriting | RAM only | The note excerpt is sent to the on-device model and the proposal is discarded unless you Apply |
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
 can remove groups, notes, clipboard history and dropzones; settings always

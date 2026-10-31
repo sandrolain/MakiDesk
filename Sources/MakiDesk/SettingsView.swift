@@ -757,6 +757,9 @@ struct SettingsView: View {
                     caption("⌃⌥⇧S (or menu ▸ Capture Area…) opens the area selector, then a small editor: arrow, rectangle, pen, highlighter, text and crop, plus «hide details» for anything private. Ret saves, Esc throws it away, ⌘Z undoes. ⌃⌥⇧W and ⌃⌥⇧C capture the window in front or the whole display in the same editor. The result lands on the shelf as a PNG — drag it out, or paste it when the option above is on. The file lives in the shelf's temporary folder and goes away with it.")
                     caption("⌃⌥⇧R (or menu ▸ Record Area…) records the area you drag to a movie on the shelf; the same key stops it. The menu-bar menu pauses, resumes and stops a recording, and its icon changes while one runs. The system's own sound is included unless you turn it off above; the microphone is not used. Files go to Application Support ▸ MakiDesk ▸ Recordings.")
                 }
+                SettingsSection("Notes rewriting") {
+                    caption("Apple Intelligence on this Mac: \(NotesIntelligence.availability().summary) The notes editor's Format menu offers Improve wording, Format as Markdown and Summarize. The on-device model only writes a proposal — nothing leaves the Mac and nothing is logged — and it appears in a preview with Apply, Copy and Cancel before it touches the note. Apply is a single edit, one ⌘Z away.")
+                }
                 SettingsSection("Text recognition") {
                     Toggle("Fast recognition (less accurate)", isOn: Binding(
                         get: { store.ocrFastRecognition },

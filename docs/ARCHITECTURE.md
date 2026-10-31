@@ -264,6 +264,17 @@ ranges, so emoji never split a marker. The editor applies the result through
 the store and the syntax highlighter treat it as typing. The model never writes
 Markdown: this pure code does, and T66 serialises into it.
 
+`NotesIntelligence` (T66) asks the on-device model (Foundation Models, macOS 26,
+behind `#if canImport` and `@available`) for a structure — `@Generable`: title,
+summary, sections with paragraphs, bullets and table rows — and
+`NotesMarkdownSerializer` writes the Markdown, so the model never emits a
+marker and a fence or a table cannot come out broken. `NotesRewriteController`
+runs one request at a time with a generation, streams partial drafts into the
+preview panel, and drops whatever belongs to an older request; switching note or
+closing the panel ends the session. Apply reaches the editor as one undoable
+edit. The engine is a protocol, so the state machine is tested with a fake and
+the real one only exists on a system that reports the model available.
+
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost
 window and the whole screen — and from an image the caller already has. One

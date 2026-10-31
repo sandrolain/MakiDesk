@@ -67,6 +67,9 @@ final class NotesController: NSObject, NSWindowDelegate {
         let restoreFocus = focusReturn.takeRestoreAction(ownsKeyboard: window.isKeyWindow)
         if store.anchor == nil { store.updateWindowFrame(window.frame) }
         store.flushAsync()
+        // A rewrite belongs to the open note: closing the panel ends it (T66).
+        NotesRewriteController.shared.reset()
+        NotesRewritePanelController.shared.hide()
         window.orderOut(nil)
         restoreFocus?()
     }
@@ -728,6 +731,11 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         }
         store.refreshExternalState(id)
         let current = store.note(id: id) ?? note
+        if currentID != id {
+            // A rewrite belongs to the note it was started from (T66).
+            NotesRewriteController.shared.reset()
+            NotesRewritePanelController.shared.hide()
+        }
         currentID = id
         editor.isHidden = false
         emptyLabel.isHidden = true
@@ -1205,6 +1213,26 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         menu.addItem(.separator())
         addFormatItem(menu, "Code Block", .fence)
         addFormatItem(menu, "Table", .table)
+        menu.addItem(.separator())
+        let availability = NotesRewriteController.shared.availability
+        let header = NSMenuItem(title: "Rewrite with Apple Intelligence", action: nil,
+                                keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+        if availability.isAvailable {
+            for (index, action) in NotesRewriteAction.allCases.enumerated() {
+                let item = NSMenuItem(title: action.menuTitle,
+                                      action: #selector(rewriteMenuAction(_:)),
+                                      keyEquivalent: "")
+                item.tag = index
+                item.target = self
+                menu.addItem(item)
+            }
+        } else {
+            let item = NSMenuItem(title: availability.summary, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
         menu.popUp(positioning: nil,
                    at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
@@ -1227,6 +1255,66 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     /// One formatter call, then the editor applies the result as a single edit;
     /// the store and the highlighter hear about it through the normal change
     /// pipeline, so this is typing as far as they are concerned (T65).
+    @objc private func rewriteMenuAction(_ sender: NSMenuItem) {
+        let actions = NotesRewriteAction.allCases
+        guard sender.tag >= 0, sender.tag < actions.count else { return }
+        startRewrite(actions[sender.tag])
+    }
+
+    /// One rewrite at a time: the model proposes, the preview shows, and only
+    /// Apply changes the note — as one undoable edit (T66).
+    private func startRewrite(_ action: NotesRewriteAction) {
+        guard let id = currentID, let note = store.note(id: id) else { return }
+        let availability = NotesRewriteController.shared.availability
+        guard availability.isAvailable else {
+            presentRewriteNote(availability.summary)
+            return
+        }
+        let selection = editor.textView.selectedRange()
+        let source = NotesRewritePrompt.source(note.text, selection: selection)
+        guard source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return
+        }
+        let range = selection.length > 0
+            ? selection
+            : NSRange(location: 0, length: (note.text as NSString).length)
+        NotesRewriteController.shared.start(action: action, source: source, noteID: id)
+        NotesRewritePanelController.shared.show(onApply: { [weak self] text in
+            self?.applyRewrite(text, range: range, id: id)
+        }, onCancel: { [weak self] in
+            self?.focusEditor()
+        })
+    }
+
+    private func applyRewrite(_ text: String, range: NSRange, id: UUID) {
+        guard currentID == id else { return }
+        let length = (editor.text as NSString).length
+        guard NSMaxRange(range) <= length else {
+            presentRewriteNote("The note changed while the model was writing: try again.")
+            return
+        }
+        let change = NotesMarkdownChange(
+            range: range, replacement: text,
+            selection: NSRange(location: range.location,
+                               length: (text as NSString).length)
+        )
+        editor.apply(change)
+        focusEditor()
+    }
+
+    private func presentRewriteNote(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Notes rewriting"
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        if let window = view.window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
+
     private func applyMarkdown(_ command: MarkdownCommand) {
         guard let id = currentID, let note = store.note(id: id) else { return }
         let text = editor.text
