@@ -312,7 +312,7 @@ final class ApplicationCatalog {
 @MainActor
 final class ApplicationUsageStore {
     static let shared = ApplicationUsageStore()
-    nonisolated static let defaultsKey = "applicationLauncherUsage"
+    nonisolated static let defaultsKey = SettingsKey.applicationLauncherUsage.rawValue
     /// Only the most recent ones are kept: older entries would never reorder a
     /// list of eight.
     nonisolated static let maximumEntries = 80

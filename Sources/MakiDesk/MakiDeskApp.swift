@@ -441,7 +441,7 @@ struct MakiDeskApp: App {
     /// The first launch opens Settings, where the permissions are explained.
     private func openSetupOnFirstRun() {
         guard !Self.didAttemptFirstRun else { return }
-        guard !UserDefaults.standard.bool(forKey: "setupCompleted") else { return }
+        guard !UserDefaults.standard.bool(forKey: SettingsKey.setupCompleted.rawValue) else { return }
         Self.didAttemptFirstRun = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             MakiLog.app.notice("FirstRun: opening setup window")

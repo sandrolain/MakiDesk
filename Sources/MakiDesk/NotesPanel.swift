@@ -356,11 +356,11 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     init(store: NotesStore) {
         self.store = store
-        let themeID = UserDefaults.standard.string(forKey: "themeID") ?? "mocha"
+        let themeID = UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha"
         self.theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
         self.editor = NotesEditorView(theme: self.theme)
         super.init(nibName: nil, bundle: nil)
-        let savedSize = UserDefaults.standard.double(forKey: "notesFontSize")
+        let savedSize = UserDefaults.standard.double(forKey: SettingsKey.notesFontSize.rawValue)
         if savedSize >= 10, savedSize <= 24 { editor.fontSize = CGFloat(savedSize) }
         store.onChange = { [weak self] in self?.refreshChrome() }
     }
@@ -663,7 +663,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     // MARK: - Theme
 
     func applyTheme() {
-        let themeID = UserDefaults.standard.string(forKey: "themeID") ?? "mocha"
+        let themeID = UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha"
         theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
         let background = theme.background
         let sidebarColor = background.blended(withFraction: 0.05,
@@ -1359,7 +1359,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private func changeFontSize(by delta: CGFloat) {
         let size = min(24, max(10, editor.fontSize + delta))
         editor.fontSize = size
-        UserDefaults.standard.set(Double(size), forKey: "notesFontSize")
+        UserDefaults.standard.set(Double(size), forKey: SettingsKey.notesFontSize.rawValue)
         highlighter?.update(theme: theme, baseAttributes: editor.baseAttributes)
     }
 
@@ -1387,7 +1387,7 @@ final class NotesSplitView: NSView {
     static let minimumSidebar: CGFloat = 190
     static let maximumSidebar: CGFloat = 360
     private static let defaultSidebar: CGFloat = 230
-    private static let defaultsKey = "notesSidebarWidth"
+    private static let defaultsKey = SettingsKey.notesSidebarWidth.rawValue
 
     var dividerColor: NSColor = .separatorColor {
         didSet { divider.lineColor = dividerColor }

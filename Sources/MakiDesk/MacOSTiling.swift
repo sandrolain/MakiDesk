@@ -14,7 +14,7 @@ import Foundation
 /// whether the key exists at all).
 enum MacOSTiling {
     static let domain = "com.apple.WindowManager"
-    static let optionAcceleratorKey = "EnableTilingOptionAccelerator"
+    static let optionAcceleratorKey = SettingsKey.enableTilingOptionAccelerator.rawValue
 
     /// `true` when macOS tiles windows dragged with `⌥` held.
     static var optionDragEnabled: Bool {

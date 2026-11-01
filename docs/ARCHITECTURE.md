@@ -64,7 +64,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ScreenshotAnnotationController.swift` | Area, window or whole-display capture → in-place annotation editor (marks, text, crop) → PNG on the shelf and on the clipboard. |
 | `ScreenRecordingController.swift` | Area recording to an H.264 movie: `SCStream` → `AVAssetWriter`, pause with retimed frames, system audio, menu-bar control, `.mov` on the shelf. |
 | `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
-| `SettingsView.swift` | Tabbed settings, permissions, reset. |
+| `SettingsView.swift` | Tabbed settings, permissions, diagnostics, reset. |
+| `SettingsKey.swift` | Every `UserDefaults` key, spelled once; a test fails on any literal written outside it. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
 | `LegacyMigration.swift` | One-time migration from the project's previous name. |
 | `CanvasCore.swift` | Legacy geometry/helpers from the earlier canvas prototype; no longer referenced by the live app. |

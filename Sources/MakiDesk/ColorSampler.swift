@@ -274,7 +274,7 @@ final class ColorSamplerController {
     typealias FeedbackHandler = @MainActor (Feedback) -> Void
 
     static let shared = ColorSamplerController()
-    nonisolated static let formatDefaultsKey = "colorPickerFormat"
+    nonisolated static let formatDefaultsKey = SettingsKey.colorPickerFormat.rawValue
 
     private let selectPoint: PointSelector
     private let pasteboard: NSPasteboard

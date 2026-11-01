@@ -91,7 +91,7 @@ final class ScreenshotLibraryModel {
     /// `UserDefaults` key of the folder chosen in Settings. Public to the module
     /// because the saved-screenshot notice reads the same key: one literal, one
     /// owner (R13).
-    static let folderKey = "screenshotLibraryFolderPath"
+    static let folderKey = SettingsKey.screenshotLibraryFolderPath.rawValue
 
     init(folderURL overrideFolderURL: URL? = nil,
          defaults: UserDefaults = .standard,
@@ -101,10 +101,10 @@ final class ScreenshotLibraryModel {
         self.defaults = defaults
         self.systemFolder = systemFolder
         spotlight = index ?? ScreenshotSpotlightIndex()
-        sortOrder = ScreenshotSortOrder(rawValue: defaults.string(forKey: "screenshotLibrarySort") ?? "") ?? .newestFirst
-        showsRecordings = defaults.object(forKey: "screenshotLibraryShowsRecordings") as? Bool ?? false
-        grouping = ScreenshotGrouping(rawValue: defaults.string(forKey: "screenshotLibraryGrouping") ?? "") ?? .month
-        thumbnailScale = min(max(defaults.object(forKey: "screenshotLibraryScale") as? Double ?? 1, 0.75), 1.6)
+        sortOrder = ScreenshotSortOrder(rawValue: defaults.string(forKey: SettingsKey.screenshotLibrarySort.rawValue) ?? "") ?? .newestFirst
+        showsRecordings = defaults.object(forKey: SettingsKey.screenshotLibraryShowsRecordings.rawValue) as? Bool ?? false
+        grouping = ScreenshotGrouping(rawValue: defaults.string(forKey: SettingsKey.screenshotLibraryGrouping.rawValue) ?? "") ?? .month
+        thumbnailScale = min(max(defaults.object(forKey: SettingsKey.screenshotLibraryScale.rawValue) as? Double ?? 1, 0.75), 1.6)
         if let overrideFolderURL {
             folderURL = overrideFolderURL.standardizedFileURL
         } else if let path = defaults.string(forKey: Self.folderKey),
@@ -237,24 +237,24 @@ final class ScreenshotLibraryModel {
 
     func setSortOrder(_ order: ScreenshotSortOrder) {
         sortOrder = order
-        defaults.set(order.rawValue, forKey: "screenshotLibrarySort")
+        defaults.set(order.rawValue, forKey: SettingsKey.screenshotLibrarySort.rawValue)
     }
 
     func setGrouping(_ value: ScreenshotGrouping) {
         grouping = value
-        defaults.set(value.rawValue, forKey: "screenshotLibraryGrouping")
+        defaults.set(value.rawValue, forKey: SettingsKey.screenshotLibraryGrouping.rawValue)
     }
 
     func setThumbnailScale(_ value: Double) {
         thumbnailScale = value
-        defaults.set(value, forKey: "screenshotLibraryScale")
+        defaults.set(value, forKey: SettingsKey.screenshotLibraryScale.rawValue)
     }
 
     /// Lists or hides screen recordings; persisted, off by default (T48).
     func setShowsRecordings(_ value: Bool) {
         guard showsRecordings != value else { return }
         showsRecordings = value
-        defaults.set(value, forKey: "screenshotLibraryShowsRecordings")
+        defaults.set(value, forKey: SettingsKey.screenshotLibraryShowsRecordings.rawValue)
         refresh()
     }
 

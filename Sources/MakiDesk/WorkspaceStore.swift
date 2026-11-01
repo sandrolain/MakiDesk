@@ -118,125 +118,125 @@ final class WorkspaceStore {
     var shortcutFileState: ShortcutStore.State = .missing
     /// Rows the launch had to resolve out of a hand-edited or older file (Q01).
     var shortcutLoadReport = ShortcutLoadReport()
-    var gap = (UserDefaults.standard.object(forKey: "windowGap") == nil
+    var gap = (UserDefaults.standard.object(forKey: SettingsKey.windowGap.rawValue) == nil
         ? 12
-        : UserDefaults.standard.double(forKey: "windowGap")).clamped(to: 0...80)
-    var showMiniMap = UserDefaults.standard.object(forKey: "showMiniMap") as? Bool ?? true
-    var showPreview = UserDefaults.standard.object(forKey: "showPreview") as? Bool ?? true
+        : UserDefaults.standard.double(forKey: SettingsKey.windowGap.rawValue)).clamped(to: 0...80)
+    var showMiniMap = UserDefaults.standard.object(forKey: SettingsKey.showMiniMap.rawValue) as? Bool ?? true
+    var showPreview = UserDefaults.standard.object(forKey: SettingsKey.showPreview.rawValue) as? Bool ?? true
     /// OCR quality and correction (T41). Languages stay automatic.
-    var ocrFastRecognition = UserDefaults.standard.object(forKey: "ocrFastRecognition") as? Bool ?? false
-    var ocrLanguageCorrection = UserDefaults.standard.object(forKey: "ocrLanguageCorrection") as? Bool ?? true
+    var ocrFastRecognition = UserDefaults.standard.object(forKey: SettingsKey.ocrFastRecognition.rawValue) as? Bool ?? false
+    var ocrLanguageCorrection = UserDefaults.standard.object(forKey: SettingsKey.ocrLanguageCorrection.rawValue) as? Bool ?? true
     /// Where the recognized text goes (T54); unknown or missing values keep the
     /// previous behaviour.
     var ocrOutput = TextRecognitionOutput(
-        rawValue: UserDefaults.standard.string(forKey: "ocrOutputDestination") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.ocrOutputDestination.rawValue) ?? ""
     ) ?? .pasteboardAndHistory
     var ocrRevealHistory = OCRRevealHistory(
-        rawValue: UserDefaults.standard.string(forKey: "ocrRevealHistory") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.ocrRevealHistory.rawValue) ?? ""
     ) ?? .never
     var textRecognitionOptions: TextRecognitionOptions {
         TextRecognitionOptions(quality: ocrFastRecognition ? .fast : .accurate,
                                usesLanguageCorrection: ocrLanguageCorrection,
                                languages: [])
     }
-    var miniMapPosition = PalettePosition(rawValue: UserDefaults.standard.string(forKey: "miniMapPosition") ?? "") ?? .topRight
-    var themeID = PaletteTheme.normalized(UserDefaults.standard.string(forKey: "themeID") ?? "mocha")
-    var overlayScale = UserDefaults.standard.object(forKey: "overlayScale") as? Double ?? 1.0
-    var overlayOpacity = UserDefaults.standard.object(forKey: "overlayOpacity") as? Double ?? 0.94
+    var miniMapPosition = PalettePosition(rawValue: UserDefaults.standard.string(forKey: SettingsKey.miniMapPosition.rawValue) ?? "") ?? .topRight
+    var themeID = PaletteTheme.normalized(UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha")
+    var overlayScale = UserDefaults.standard.object(forKey: SettingsKey.overlayScale.rawValue) as? Double ?? 1.0
+    var overlayOpacity = UserDefaults.standard.object(forKey: SettingsKey.overlayOpacity.rawValue) as? Double ?? 0.94
     /// The largest a palette card may get, in points (the user's size setting).
-    var paletteMaxCardWidth = UserDefaults.standard.object(forKey: "paletteMaxCardWidth") as? Double ?? 250
+    var paletteMaxCardWidth = UserDefaults.standard.object(forKey: SettingsKey.paletteMaxCardWidth.rawValue) as? Double ?? 250
     /// Grid columns for the palette: 0 means "auto" (2–4 by window count), a
     /// positive value pins the count (T15).
-    var paletteColumns = UserDefaults.standard.object(forKey: "paletteColumns") as? Int ?? 0
+    var paletteColumns = UserDefaults.standard.object(forKey: SettingsKey.paletteColumns.rawValue) as? Int ?? 0
     /// Whether the card size follows the number of windows in the session
     /// (T57). Off by default: the card is bounded by Max size alone.
-    var paletteCardSizeFollowsCount = UserDefaults.standard.object(forKey: "paletteCardSizeFollowsCount") as? Bool ?? false
-    var paletteOpacity = UserDefaults.standard.object(forKey: "paletteOpacity") as? Double ?? 0.9
+    var paletteCardSizeFollowsCount = UserDefaults.standard.object(forKey: SettingsKey.paletteCardSizeFollowsCount.rawValue) as? Bool ?? false
+    var paletteOpacity = UserDefaults.standard.object(forKey: SettingsKey.paletteOpacity.rawValue) as? Double ?? 0.9
     /// Whether the palette cards are tinted with the per-app colour (T12).
-    var paletteTintedCards = UserDefaults.standard.object(forKey: "paletteTintedCards") as? Bool ?? true
+    var paletteTintedCards = UserDefaults.standard.object(forKey: SettingsKey.paletteTintedCards.rawValue) as? Bool ?? true
     /// Whether the palette opens full screen (T13).
-    var paletteFullScreen = UserDefaults.standard.object(forKey: "paletteFullScreen") as? Bool ?? false
+    var paletteFullScreen = UserDefaults.standard.object(forKey: SettingsKey.paletteFullScreen.rawValue) as? Bool ?? false
     var paletteScreenLocation = PaletteScreenLocation(
-        rawValue: UserDefaults.standard.string(forKey: "paletteScreenLocation") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.paletteScreenLocation.rawValue) ?? ""
     ) ?? .focusedWindow
     /// Whether the palette shows the groups column and the card badges (T55).
     /// Hiding it is a view choice: the groups, their shortcuts and the menu
     /// keep working.
-    var showGroupsInPalette = UserDefaults.standard.object(forKey: "showGroupsInPalette") as? Bool ?? true
+    var showGroupsInPalette = UserDefaults.standard.object(forKey: SettingsKey.showGroupsInPalette.rawValue) as? Bool ?? true
     /// Whether the column leaves out groups with no members (T55).
-    var showEmptyGroupsInPalette = UserDefaults.standard.object(forKey: "showEmptyGroupsInPalette") as? Bool ?? true
+    var showEmptyGroupsInPalette = UserDefaults.standard.object(forKey: SettingsKey.showEmptyGroupsInPalette.rawValue) as? Bool ?? true
     /// Whether group changes are announced in the HUD (T55). Outcomes still are.
-    var announceGroupChanges = UserDefaults.standard.object(forKey: "announceGroupChanges") as? Bool ?? true
-    var dragActivator = DragActivator(rawValue: UserDefaults.standard.string(forKey: "dragActivator") ?? "") ?? .fallback
-    var dragEnabled = UserDefaults.standard.object(forKey: "dragEnabled") as? Bool ?? true
+    var announceGroupChanges = UserDefaults.standard.object(forKey: SettingsKey.announceGroupChanges.rawValue) as? Bool ?? true
+    var dragActivator = DragActivator(rawValue: UserDefaults.standard.string(forKey: SettingsKey.dragActivator.rawValue) ?? "") ?? .fallback
+    var dragEnabled = UserDefaults.standard.object(forKey: SettingsKey.dragEnabled.rawValue) as? Bool ?? true
     /// Whether the intelligent layout offers what it suggests — with the reason —
     /// instead of applying it straight away (T18).
-    var layoutAsksFirst = UserDefaults.standard.object(forKey: "layoutAsksFirst") as? Bool ?? true
+    var layoutAsksFirst = UserDefaults.standard.object(forKey: SettingsKey.layoutAsksFirst.rawValue) as? Bool ?? true
     /// Per-kind priors for the content-weighted layout (T30), 0.5 … 2.0.
     var layoutPriors: [WindowKind: Double] = WorkspaceStore.loadLayoutPriors()
 
     /// Motion for lists and panels (T33). macOS Reduce Motion always wins.
-    var animationsEnabled = UserDefaults.standard.object(forKey: "animationsEnabled") as? Bool ?? true
+    var animationsEnabled = UserDefaults.standard.object(forKey: SettingsKey.animationsEnabled.rawValue) as? Bool ?? true
     var animationDuration = min(max(
-        UserDefaults.standard.object(forKey: "animationDuration") as? Double ?? 0.22,
+        UserDefaults.standard.object(forKey: SettingsKey.animationDuration.rawValue) as? Double ?? 0.22,
         0.08), 0.6)
 
     /// The coloured outline around the focused window (T36).
-    var focusBorderEnabled = UserDefaults.standard.object(forKey: "focusBorderEnabled") as? Bool ?? true
+    var focusBorderEnabled = UserDefaults.standard.object(forKey: SettingsKey.focusBorderEnabled.rawValue) as? Bool ?? true
     var focusBorderWidth = FocusBorder.clampedWidth(
-        UserDefaults.standard.object(forKey: "focusBorderWidth") as? Double ?? FocusBorder.defaultWidth
+        UserDefaults.standard.object(forKey: SettingsKey.focusBorderWidth.rawValue) as? Double ?? FocusBorder.defaultWidth
     )
 
     /// Dim everything outside the focused window (T62). Off by default: it
     /// changes the whole screen, so it is opt-in.
-    var focusDimEnabled = UserDefaults.standard.object(forKey: "focusDimEnabled") as? Bool ?? false
+    var focusDimEnabled = UserDefaults.standard.object(forKey: SettingsKey.focusDimEnabled.rawValue) as? Bool ?? false
     var focusDimOpacity = FocusDim.clampedOpacity(
-        UserDefaults.standard.object(forKey: "focusDimOpacity") as? Double ?? FocusDim.defaultOpacity
+        UserDefaults.standard.object(forKey: SettingsKey.focusDimOpacity.rawValue) as? Double ?? FocusDim.defaultOpacity
     )
     var focusDimFade = FocusDim.clampedFade(
-        UserDefaults.standard.object(forKey: "focusDimFade") as? Double ?? FocusDim.defaultFade
+        UserDefaults.standard.object(forKey: SettingsKey.focusDimFade.rawValue) as? Double ?? FocusDim.defaultFade
     )
     var focusDimColour = FocusDim.Colour(
-        rawValue: UserDefaults.standard.string(forKey: "focusDimColour") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.focusDimColour.rawValue) ?? ""
     ) ?? .black
     var focusDimSource = FocusDim.Source(
-        rawValue: UserDefaults.standard.string(forKey: "focusDimSource") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.focusDimSource.rawValue) ?? ""
     ) ?? .window
     var focusDimDisplayMode = FocusDim.DisplayMode(
-        rawValue: UserDefaults.standard.string(forKey: "focusDimDisplayMode") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.focusDimDisplayMode.rawValue) ?? ""
     ) ?? .independent
     /// Whether clicking the desktop dims everything instead of lifting the veil.
-    var focusDimDesktopDims = UserDefaults.standard.object(forKey: "focusDimDesktopDims") as? Bool ?? false
+    var focusDimDesktopDims = UserDefaults.standard.object(forKey: SettingsKey.focusDimDesktopDims.rawValue) as? Bool ?? false
     /// Whether switching to another app ends the effect.
-    var focusDimStopsOnAppChange = UserDefaults.standard.object(forKey: "focusDimStopsOnAppChange") as? Bool ?? false
+    var focusDimStopsOnAppChange = UserDefaults.standard.object(forKey: SettingsKey.focusDimStopsOnAppChange.rawValue) as? Bool ?? false
 
     /// The checklist card (T59). Shown only when the user asked for it, and
     /// its items are user data: a factory reset leaves them alone.
-    var checklistVisible = UserDefaults.standard.object(forKey: "checklistVisible") as? Bool ?? false
+    var checklistVisible = UserDefaults.standard.object(forKey: SettingsKey.checklistVisible.rawValue) as? Bool ?? false
     var checklistOpacity = ChecklistSettings.clampedOpacity(
-        UserDefaults.standard.object(forKey: "checklistOpacity") as? Double
+        UserDefaults.standard.object(forKey: SettingsKey.checklistOpacity.rawValue) as? Double
             ?? ChecklistSettings.defaultOpacity
     )
     var checklistWidth = ChecklistSettings.clampedWidth(
-        UserDefaults.standard.object(forKey: "checklistWidth") as? Double
+        UserDefaults.standard.object(forKey: SettingsKey.checklistWidth.rawValue) as? Double
             ?? ChecklistSettings.defaultWidth
     )
     var checklistPosition = HUDPosition(
-        rawValue: UserDefaults.standard.string(forKey: "checklistPosition") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.checklistPosition.rawValue) ?? ""
     ) ?? ChecklistSettings.defaultPosition
     var checklistScreen = PaletteScreenLocation(
-        rawValue: UserDefaults.standard.string(forKey: "checklistScreen") ?? ""
+        rawValue: UserDefaults.standard.string(forKey: SettingsKey.checklistScreen.rawValue) ?? ""
     ) ?? ChecklistSettings.defaultScreen
 
     /// Whether an annotated screenshot is also copied to the clipboard (T40).
-    var screenshotCopyToClipboard = UserDefaults.standard.object(forKey: "screenshotCopyToClipboard") as? Bool ?? true
+    var screenshotCopyToClipboard = UserDefaults.standard.object(forKey: SettingsKey.screenshotCopyToClipboard.rawValue) as? Bool ?? true
     /// Whether a capture macOS saved gets a notice with Shelf and Copy text
     /// (T48). Off by default: a banner for every screenshot is noise until the
     /// user asks for it.
-    var screenshotSavedNotice = UserDefaults.standard.object(forKey: "screenshotSavedNotice") as? Bool ?? false
+    var screenshotSavedNotice = UserDefaults.standard.object(forKey: SettingsKey.screenshotSavedNotice.rawValue) as? Bool ?? false
     /// Whether a screen recording also captures the system's own sound (T40).
     /// The microphone stays out: it needs a second permission and a mixdown.
-    var recordingIncludesAudio = UserDefaults.standard.object(forKey: "recordingIncludesAudio") as? Bool ?? true
+    var recordingIncludesAudio = UserDefaults.standard.object(forKey: SettingsKey.recordingIncludesAudio.rawValue) as? Bool ?? true
 
     /// The countdown card (T61): shown while a timer exists, unless turned off.
     var timerOverlayVisible = UserDefaults.standard.object(forKey: TimerSettings.overlayVisibleKey) as? Bool ?? true
@@ -262,14 +262,14 @@ final class WorkspaceStore {
     }
 
     /// Shake-to-open settings for the shelf (T31).
-    var shelfShakeEnabled = UserDefaults.standard.object(forKey: "shelfShakeEnabled") as? Bool ?? true
+    var shelfShakeEnabled = UserDefaults.standard.object(forKey: SettingsKey.shelfShakeEnabled.rawValue) as? Bool ?? true
     var shelfShakeSensitivity: ShelfShakeSensitivity = {
-        let raw = UserDefaults.standard.string(forKey: "shelfShakeSensitivity") ?? ""
+        let raw = UserDefaults.standard.string(forKey: SettingsKey.shelfShakeSensitivity.rawValue) ?? ""
         return ShelfShakeSensitivity(rawValue: raw) ?? .medium
     }()
-    var shelfExcludedApps: [String] = UserDefaults.standard.stringArray(forKey: "shelfExcludedApps") ?? []
+    var shelfExcludedApps: [String] = UserDefaults.standard.stringArray(forKey: SettingsKey.shelfExcludedApps.rawValue) ?? []
     var macOSTilingEnabled = MacOSTiling.optionDragEnabled
-    var setupCompleted = UserDefaults.standard.bool(forKey: "setupCompleted")
+    var setupCompleted = UserDefaults.standard.bool(forKey: SettingsKey.setupCompleted.rawValue)
     var screenRecordingTrusted = WindowCapture.isAuthorized
     /// The windows last ticked in the switcher, so the menu can run a layout on
     /// the same subset after the palette has closed (T14).
@@ -754,121 +754,121 @@ final class WorkspaceStore {
 
     func updateGap(_ value: Double) {
         gap = value.clamped(to: 0...80)
-        UserDefaults.standard.set(gap, forKey: "windowGap")
+        UserDefaults.standard.set(gap, forKey: SettingsKey.windowGap.rawValue)
         // The checklist sits on the same margin as the windows.
         ChecklistController.shared.applySettings()
     }
 
     func updateMiniMapVisibility(_ value: Bool) {
         showMiniMap = value
-        UserDefaults.standard.set(value, forKey: "showMiniMap")
+        UserDefaults.standard.set(value, forKey: SettingsKey.showMiniMap.rawValue)
     }
 
     func updateShowPreview(_ value: Bool) {
         showPreview = value
-        UserDefaults.standard.set(value, forKey: "showPreview")
+        UserDefaults.standard.set(value, forKey: SettingsKey.showPreview.rawValue)
         if value { maybePromptForScreenRecording() }
     }
 
     func updateOCRFastRecognition(_ value: Bool) {
         ocrFastRecognition = value
-        UserDefaults.standard.set(value, forKey: "ocrFastRecognition")
+        UserDefaults.standard.set(value, forKey: SettingsKey.ocrFastRecognition.rawValue)
     }
 
     func updateOCRLanguageCorrection(_ value: Bool) {
         ocrLanguageCorrection = value
-        UserDefaults.standard.set(value, forKey: "ocrLanguageCorrection")
+        UserDefaults.standard.set(value, forKey: SettingsKey.ocrLanguageCorrection.rawValue)
     }
 
     func updateOCROutput(_ value: TextRecognitionOutput) {
         ocrOutput = value
-        UserDefaults.standard.set(value.rawValue, forKey: "ocrOutputDestination")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.ocrOutputDestination.rawValue)
     }
 
     func updateOCRRevealHistory(_ value: OCRRevealHistory) {
         ocrRevealHistory = value
-        UserDefaults.standard.set(value.rawValue, forKey: "ocrRevealHistory")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.ocrRevealHistory.rawValue)
     }
 
     func updateMiniMapPosition(_ value: PalettePosition) {
         miniMapPosition = value
-        UserDefaults.standard.set(value.rawValue, forKey: "miniMapPosition")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.miniMapPosition.rawValue)
     }
 
     func updateTheme(_ value: String) {
         themeID = value
-        UserDefaults.standard.set(value, forKey: "themeID")
+        UserDefaults.standard.set(value, forKey: SettingsKey.themeID.rawValue)
         NotificationCenter.default.post(name: .makiDeskThemeChanged, object: nil)
     }
 
     func updateOverlayScale(_ value: Double) {
         overlayScale = value.clamped(to: 0.7...1.6)
-        UserDefaults.standard.set(overlayScale, forKey: "overlayScale")
+        UserDefaults.standard.set(overlayScale, forKey: SettingsKey.overlayScale.rawValue)
     }
 
     func updateOverlayOpacity(_ value: Double) {
         overlayOpacity = value.clamped(to: 0.4...1.0)
-        UserDefaults.standard.set(overlayOpacity, forKey: "overlayOpacity")
+        UserDefaults.standard.set(overlayOpacity, forKey: SettingsKey.overlayOpacity.rawValue)
     }
 
     /// Sets the largest a palette card may get (points). If the chosen number of
     /// columns would overflow the screen, cards shrink below this to fit (T15).
     func updatePaletteMaxCardWidth(_ value: Double) {
         paletteMaxCardWidth = value.clamped(to: 160...480)
-        UserDefaults.standard.set(paletteMaxCardWidth, forKey: "paletteMaxCardWidth")
+        UserDefaults.standard.set(paletteMaxCardWidth, forKey: SettingsKey.paletteMaxCardWidth.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Pins the palette grid columns; 0 restores the automatic count (T15).
     func updatePaletteColumns(_ value: Int) {
         paletteColumns = max(0, min(8, value))
-        UserDefaults.standard.set(paletteColumns, forKey: "paletteColumns")
+        UserDefaults.standard.set(paletteColumns, forKey: SettingsKey.paletteColumns.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Lets the card size follow the number of windows (T57).
     func updatePaletteCardSizeFollowsCount(_ value: Bool) {
         paletteCardSizeFollowsCount = value
-        UserDefaults.standard.set(value, forKey: "paletteCardSizeFollowsCount")
+        UserDefaults.standard.set(value, forKey: SettingsKey.paletteCardSizeFollowsCount.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
     func updatePaletteOpacity(_ value: Double) {
         paletteOpacity = value.clamped(to: 0.5...1.0)
-        UserDefaults.standard.set(paletteOpacity, forKey: "paletteOpacity")
+        UserDefaults.standard.set(paletteOpacity, forKey: SettingsKey.paletteOpacity.rawValue)
     }
 
     /// Tints the palette cards with the per-app colour, or leaves them neutral.
     func updatePaletteTintedCards(_ value: Bool) {
         paletteTintedCards = value
-        UserDefaults.standard.set(value, forKey: "paletteTintedCards")
+        UserDefaults.standard.set(value, forKey: SettingsKey.paletteTintedCards.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Opens the window switcher full screen (T13), or in the compact panel.
     func updatePaletteFullScreen(_ value: Bool) {
         paletteFullScreen = value
-        UserDefaults.standard.set(value, forKey: "paletteFullScreen")
+        UserDefaults.standard.set(value, forKey: SettingsKey.paletteFullScreen.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
     func updatePaletteScreenLocation(_ value: PaletteScreenLocation) {
         paletteScreenLocation = value
-        UserDefaults.standard.set(value.rawValue, forKey: "paletteScreenLocation")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.paletteScreenLocation.rawValue)
         // Placement is chosen at the next opening, so an open session stays put.
     }
 
     /// Shows or hides the groups column and the card badges (T55).
     func updatePaletteGroupsVisibility(_ value: Bool) {
         showGroupsInPalette = value
-        UserDefaults.standard.set(value, forKey: "showGroupsInPalette")
+        UserDefaults.standard.set(value, forKey: SettingsKey.showGroupsInPalette.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Whether the groups column lists groups with no members (T55).
     func updatePaletteEmptyGroups(_ value: Bool) {
         showEmptyGroupsInPalette = value
-        UserDefaults.standard.set(value, forKey: "showEmptyGroupsInPalette")
+        UserDefaults.standard.set(value, forKey: SettingsKey.showEmptyGroupsInPalette.rawValue)
         WindowPalette.shared.applySettings(from: self)
     }
 
@@ -876,27 +876,27 @@ final class WorkspaceStore {
     /// (T55).
     func updateGroupAnnouncements(_ value: Bool) {
         announceGroupChanges = value
-        UserDefaults.standard.set(value, forKey: "announceGroupChanges")
+        UserDefaults.standard.set(value, forKey: SettingsKey.announceGroupChanges.rawValue)
     }
 
     func updateDragActivator(_ value: DragActivator) {
         dragActivator = value
-        UserDefaults.standard.set(value.rawValue, forKey: "dragActivator")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.dragActivator.rawValue)
     }
 
     func updateDragEnabled(_ value: Bool) {
         dragEnabled = value
-        UserDefaults.standard.set(value, forKey: "dragEnabled")
+        UserDefaults.standard.set(value, forKey: SettingsKey.dragEnabled.rawValue)
     }
 
     func updateLayoutAsksFirst(_ value: Bool) {
         layoutAsksFirst = value
-        UserDefaults.standard.set(value, forKey: "layoutAsksFirst")
+        UserDefaults.standard.set(value, forKey: SettingsKey.layoutAsksFirst.rawValue)
     }
 
     private static func loadLayoutPriors() -> [WindowKind: Double] {
         var priors = LayoutAdvisor.defaultPriors
-        if let stored = UserDefaults.standard.dictionary(forKey: "layoutPriors") {
+        if let stored = UserDefaults.standard.dictionary(forKey: SettingsKey.layoutPriors.rawValue) {
             for (key, value) in stored {
                 if let kind = WindowKind(rawValue: key), let number = value as? NSNumber {
                     priors[kind] = min(max(number.doubleValue, 0.5), 2.0)
@@ -912,25 +912,25 @@ final class WorkspaceStore {
 
     func updateAnimationsEnabled(_ value: Bool) {
         animationsEnabled = value
-        UserDefaults.standard.set(value, forKey: "animationsEnabled")
+        UserDefaults.standard.set(value, forKey: SettingsKey.animationsEnabled.rawValue)
     }
 
     func updateAnimationDuration(_ value: Double) {
         let clamped = min(max(value, 0.08), 0.6)
         animationDuration = clamped
-        UserDefaults.standard.set(clamped, forKey: "animationDuration")
+        UserDefaults.standard.set(clamped, forKey: SettingsKey.animationDuration.rawValue)
     }
 
     func updateFocusBorderEnabled(_ value: Bool) {
         focusBorderEnabled = value
-        UserDefaults.standard.set(value, forKey: "focusBorderEnabled")
+        UserDefaults.standard.set(value, forKey: SettingsKey.focusBorderEnabled.rawValue)
         WindowOutlineController.shared.applySettings()
     }
 
     func updateFocusBorderWidth(_ value: Double) {
         let clamped = FocusBorder.clampedWidth(value)
         focusBorderWidth = clamped
-        UserDefaults.standard.set(clamped, forKey: "focusBorderWidth")
+        UserDefaults.standard.set(clamped, forKey: SettingsKey.focusBorderWidth.rawValue)
         WindowOutlineController.shared.applySettings()
     }
 
@@ -938,7 +938,7 @@ final class WorkspaceStore {
     /// which must not post notices.
     func updateFocusDimEnabled(_ value: Bool, announce: Bool = true) {
         focusDimEnabled = value
-        UserDefaults.standard.set(value, forKey: "focusDimEnabled")
+        UserDefaults.standard.set(value, forKey: SettingsKey.focusDimEnabled.rawValue)
         FocusDimController.shared.applySettings()
         guard announce else { return }
         if value, focusDimSource == .selection, veilSelection.isEmpty {
@@ -955,20 +955,20 @@ final class WorkspaceStore {
     func updateFocusDimOpacity(_ value: Double) {
         let clamped = FocusDim.clampedOpacity(value)
         focusDimOpacity = clamped
-        UserDefaults.standard.set(clamped, forKey: "focusDimOpacity")
+        UserDefaults.standard.set(clamped, forKey: SettingsKey.focusDimOpacity.rawValue)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimFade(_ value: Double) {
         let clamped = FocusDim.clampedFade(value)
         focusDimFade = clamped
-        UserDefaults.standard.set(clamped, forKey: "focusDimFade")
+        UserDefaults.standard.set(clamped, forKey: SettingsKey.focusDimFade.rawValue)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimColour(_ value: FocusDim.Colour) {
         focusDimColour = value
-        UserDefaults.standard.set(value.rawValue, forKey: "focusDimColour")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.focusDimColour.rawValue)
         FocusDimController.shared.applySettings()
     }
 
@@ -995,56 +995,56 @@ final class WorkspaceStore {
 
     func updateFocusDimSource(_ value: FocusDim.Source) {
         focusDimSource = value
-        UserDefaults.standard.set(value.rawValue, forKey: "focusDimSource")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.focusDimSource.rawValue)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimDisplayMode(_ value: FocusDim.DisplayMode) {
         focusDimDisplayMode = value
-        UserDefaults.standard.set(value.rawValue, forKey: "focusDimDisplayMode")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.focusDimDisplayMode.rawValue)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimDesktopDims(_ value: Bool) {
         focusDimDesktopDims = value
-        UserDefaults.standard.set(value, forKey: "focusDimDesktopDims")
+        UserDefaults.standard.set(value, forKey: SettingsKey.focusDimDesktopDims.rawValue)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimStopsOnAppChange(_ value: Bool) {
         focusDimStopsOnAppChange = value
-        UserDefaults.standard.set(value, forKey: "focusDimStopsOnAppChange")
+        UserDefaults.standard.set(value, forKey: SettingsKey.focusDimStopsOnAppChange.rawValue)
     }
 
     func updateChecklistVisible(_ value: Bool) {
         checklistVisible = value
-        UserDefaults.standard.set(value, forKey: "checklistVisible")
+        UserDefaults.standard.set(value, forKey: SettingsKey.checklistVisible.rawValue)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistOpacity(_ value: Double) {
         let clamped = ChecklistSettings.clampedOpacity(value)
         checklistOpacity = clamped
-        UserDefaults.standard.set(clamped, forKey: "checklistOpacity")
+        UserDefaults.standard.set(clamped, forKey: SettingsKey.checklistOpacity.rawValue)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistWidth(_ value: Double) {
         let clamped = ChecklistSettings.clampedWidth(value)
         checklistWidth = clamped
-        UserDefaults.standard.set(clamped, forKey: "checklistWidth")
+        UserDefaults.standard.set(clamped, forKey: SettingsKey.checklistWidth.rawValue)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistPosition(_ value: HUDPosition) {
         checklistPosition = value
-        UserDefaults.standard.set(value.rawValue, forKey: "checklistPosition")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.checklistPosition.rawValue)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistScreen(_ value: PaletteScreenLocation) {
         checklistScreen = value
-        UserDefaults.standard.set(value.rawValue, forKey: "checklistScreen")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.checklistScreen.rawValue)
         ChecklistController.shared.applySettings()
     }
 
@@ -1075,18 +1075,18 @@ final class WorkspaceStore {
 
     func updateScreenshotCopyToClipboard(_ value: Bool) {
         screenshotCopyToClipboard = value
-        UserDefaults.standard.set(value, forKey: "screenshotCopyToClipboard")
+        UserDefaults.standard.set(value, forKey: SettingsKey.screenshotCopyToClipboard.rawValue)
     }
 
     func updateScreenshotSavedNotice(_ value: Bool) {
         screenshotSavedNotice = value
-        UserDefaults.standard.set(value, forKey: "screenshotSavedNotice")
+        UserDefaults.standard.set(value, forKey: SettingsKey.screenshotSavedNotice.rawValue)
         ScreenshotCaptureWatcher.shared.applySettings()
     }
 
     func updateRecordingIncludesAudio(_ value: Bool) {
         recordingIncludesAudio = value
-        UserDefaults.standard.set(value, forKey: "recordingIncludesAudio")
+        UserDefaults.standard.set(value, forKey: SettingsKey.recordingIncludesAudio.rawValue)
     }
 
     func updateTimerSoundEnabled(_ value: Bool) {
@@ -1102,12 +1102,12 @@ final class WorkspaceStore {
 
     func updateShelfShakeEnabled(_ value: Bool) {
         shelfShakeEnabled = value
-        UserDefaults.standard.set(value, forKey: "shelfShakeEnabled")
+        UserDefaults.standard.set(value, forKey: SettingsKey.shelfShakeEnabled.rawValue)
     }
 
     func updateShelfShakeSensitivity(_ value: ShelfShakeSensitivity) {
         shelfShakeSensitivity = value
-        UserDefaults.standard.set(value.rawValue, forKey: "shelfShakeSensitivity")
+        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.shelfShakeSensitivity.rawValue)
     }
 
     /// Comma- or newline-separated bundle identifiers.
@@ -1123,7 +1123,7 @@ final class WorkspaceStore {
             unique.append(value)
         }
         shelfExcludedApps = unique
-        UserDefaults.standard.set(unique, forKey: "shelfExcludedApps")
+        UserDefaults.standard.set(unique, forKey: SettingsKey.shelfExcludedApps.rawValue)
     }
 
     func isShelfExcluded(bundleId: String?) -> Bool {
@@ -1140,7 +1140,7 @@ final class WorkspaceStore {
         let stored = Dictionary(uniqueKeysWithValues: layoutPriors.map {
             ($0.key.rawValue, $0.value)
         })
-        UserDefaults.standard.set(stored, forKey: "layoutPriors")
+        UserDefaults.standard.set(stored, forKey: SettingsKey.layoutPriors.rawValue)
     }
 
     /// Turns the macOS "hold ⌥ to tile" setting on/off (writes the system
@@ -1232,7 +1232,7 @@ final class WorkspaceStore {
         updateDragEnabled(true)
         updateLayoutAsksFirst(true)
         layoutPriors = LayoutAdvisor.defaultPriors
-        UserDefaults.standard.removeObject(forKey: "layoutPriors")
+        UserDefaults.standard.removeObject(forKey: SettingsKey.layoutPriors.rawValue)
         updateShelfShakeEnabled(true)
         updateShelfShakeSensitivity(.medium)
         updateShelfExcludedApps("")
@@ -1284,7 +1284,7 @@ final class WorkspaceStore {
 
     func completeSetup() {
         setupCompleted = true
-        UserDefaults.standard.set(true, forKey: "setupCompleted")
+        UserDefaults.standard.set(true, forKey: SettingsKey.setupCompleted.rawValue)
     }
 
     func openSettings() {

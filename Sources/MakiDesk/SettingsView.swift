@@ -7,7 +7,7 @@ struct SettingsView: View {
     enum SettingsTab: String, CaseIterable, Identifiable {
         /// The persisted selection. `MakiDeskApp` writes it before opening the
         /// window and `@AppStorage` reads it here, so the literal lives once.
-        static let defaultsKey = "settingsTab"
+        static let defaultsKey = SettingsKey.settingsTab.rawValue
 
         case general, windows, layouts, panels, notifications, groups, dropzones
 

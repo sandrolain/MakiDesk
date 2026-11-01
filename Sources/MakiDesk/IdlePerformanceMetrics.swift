@@ -17,10 +17,10 @@ final class IdlePerformanceMetrics {
 
     func start() {
         guard timer == nil else { return }
-        if UserDefaults.standard.bool(forKey: "IdlePerformanceDiagnostics") {
+        if UserDefaults.standard.bool(forKey: SettingsKey.idlePerformanceDiagnostics.rawValue) {
             // One-shot opt-in: sample every 5 seconds for ten minutes, then
             // return to the normal low-frequency sampler automatically.
-            UserDefaults.standard.set(false, forKey: "IdlePerformanceDiagnostics")
+            UserDefaults.standard.set(false, forKey: SettingsKey.idlePerformanceDiagnostics.rawValue)
             sampleInterval = 5
             diagnosticSamplesRemaining = 120
             logger.notice("Detailed idle CPU diagnostics enabled for 10 minutes")

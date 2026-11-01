@@ -201,7 +201,7 @@ extension Notification.Name {
 
 /// The persisted unit, shared by the menu and Settings ▸ Panels.
 enum MeasurementSettings {
-    nonisolated static let unitKey = "measureUnit"
+    nonisolated static let unitKey = SettingsKey.measureUnit.rawValue
 
     nonisolated static func unit(defaults: UserDefaults = .standard) -> MeasurementUnit {
         defaults.string(forKey: unitKey).flatMap(MeasurementUnit.init(rawValue:)) ?? .points
