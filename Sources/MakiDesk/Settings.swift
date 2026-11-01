@@ -83,6 +83,21 @@ enum SettingsDefaults {
         .hudCompact: false,
         .hudTextSize: Double(HUDSettings.defaultTextSize),
         .hudKeepErrors: false,
+
+        // Checklist (T59): hidden until asked for, 0.85, 320 pt, top right.
+        .checklistVisible: false,
+        .checklistOpacity: ChecklistSettings.defaultOpacity,
+        .checklistWidth: ChecklistSettings.defaultWidth,
+        .checklistPosition: ChecklistSettings.defaultPosition.rawValue,
+        .checklistScreen: ChecklistSettings.defaultScreen.rawValue,
+
+        // Countdown card (T61): shown, 0.6, top centre, a Glass chime.
+        .timerOverlayVisible: true,
+        .timerOverlayOpacity: TimerSettings.defaultOpacity,
+        .timerOverlayPosition: TimerSettings.defaultPosition.rawValue,
+        .timerOverlayScreen: TimerSettings.defaultScreen.rawValue,
+        .timerSoundEnabled: true,
+        .timerSoundName: TimerSettings.defaultSound,
         ]
     }
 }

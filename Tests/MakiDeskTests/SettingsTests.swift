@@ -81,4 +81,49 @@ final class SettingsTests: XCTestCase {
         Settings.remove(.hudVoiceOver, in: defaults)
         XCTAssertTrue(Settings.bool(.hudVoiceOver, in: defaults))
     }
+
+    // MARK: - Checklist and timers
+
+    func testTheChecklistDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertFalse(Settings.bool(.checklistVisible, in: defaults))
+        XCTAssertEqual(Settings.double(.checklistOpacity, in: defaults),
+                       ChecklistSettings.defaultOpacity, accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.checklistWidth, in: defaults),
+                       ChecklistSettings.defaultWidth, accuracy: 0.001)
+        XCTAssertEqual(Settings.value(.checklistPosition, in: defaults),
+                       ChecklistSettings.defaultPosition)
+        XCTAssertEqual(Settings.value(.checklistScreen, in: defaults),
+                       ChecklistSettings.defaultScreen)
+    }
+
+    func testTheTimerDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertTrue(Settings.bool(.timerOverlayVisible, in: defaults))
+        XCTAssertEqual(Settings.double(.timerOverlayOpacity, in: defaults),
+                       TimerSettings.defaultOpacity, accuracy: 0.001)
+        XCTAssertEqual(Settings.value(.timerOverlayPosition, in: defaults),
+                       TimerSettings.defaultPosition)
+        XCTAssertEqual(Settings.value(.timerOverlayScreen, in: defaults),
+                       TimerSettings.defaultScreen)
+        XCTAssertTrue(Settings.bool(.timerSoundEnabled, in: defaults))
+        XCTAssertEqual(Settings.string(.timerSoundName, in: defaults), TimerSettings.defaultSound)
+    }
+
+    /// The table is the list of keys whose reads have moved. Adding a domain
+    /// means adding it here, which forces the question "are its reads using
+    /// this, or still carrying their own fallback?".
+    func testTheTableCoversExactlyTheMigratedDomains() {
+        let expected: Set<SettingsKey> = [
+            .hudPosition, .hudScreenLocation, .hudBaseDuration, .hudHistoryEnabled,
+            .hudVoiceOver, .hudCompact, .hudTextSize, .hudKeepErrors,
+            .checklistVisible, .checklistOpacity, .checklistWidth, .checklistPosition,
+            .checklistScreen,
+            .timerOverlayVisible, .timerOverlayOpacity, .timerOverlayPosition,
+            .timerOverlayScreen, .timerSoundEnabled, .timerSoundName,
+        ]
+        XCTAssertEqual(Set(SettingsDefaults.table.keys), expected)
+    }
 }

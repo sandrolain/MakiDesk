@@ -212,21 +212,11 @@ final class WorkspaceStore {
 
     /// The checklist card (T59). Shown only when the user asked for it, and
     /// its items are user data: a factory reset leaves them alone.
-    var checklistVisible = UserDefaults.standard.object(forKey: SettingsKey.checklistVisible.rawValue) as? Bool ?? false
-    var checklistOpacity = ChecklistSettings.clampedOpacity(
-        UserDefaults.standard.object(forKey: SettingsKey.checklistOpacity.rawValue) as? Double
-            ?? ChecklistSettings.defaultOpacity
-    )
-    var checklistWidth = ChecklistSettings.clampedWidth(
-        UserDefaults.standard.object(forKey: SettingsKey.checklistWidth.rawValue) as? Double
-            ?? ChecklistSettings.defaultWidth
-    )
-    var checklistPosition = HUDPosition(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.checklistPosition.rawValue) ?? ""
-    ) ?? ChecklistSettings.defaultPosition
-    var checklistScreen = PaletteScreenLocation(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.checklistScreen.rawValue) ?? ""
-    ) ?? ChecklistSettings.defaultScreen
+    var checklistVisible = Settings.bool(.checklistVisible)
+    var checklistOpacity = ChecklistSettings.clampedOpacity(Settings.double(.checklistOpacity))
+    var checklistWidth = ChecklistSettings.clampedWidth(Settings.double(.checklistWidth))
+    var checklistPosition = Settings.value(.checklistPosition) ?? ChecklistSettings.defaultPosition
+    var checklistScreen = Settings.value(.checklistScreen) ?? ChecklistSettings.defaultScreen
 
     /// Whether an annotated screenshot is also copied to the clipboard (T40).
     var screenshotCopyToClipboard = UserDefaults.standard.object(forKey: SettingsKey.screenshotCopyToClipboard.rawValue) as? Bool ?? true
@@ -239,23 +229,14 @@ final class WorkspaceStore {
     var recordingIncludesAudio = UserDefaults.standard.object(forKey: SettingsKey.recordingIncludesAudio.rawValue) as? Bool ?? true
 
     /// The countdown card (T61): shown while a timer exists, unless turned off.
-    var timerOverlayVisible = UserDefaults.standard.object(forKey: TimerSettings.overlayVisibleKey) as? Bool ?? true
-    var timerOverlayOpacity = TimerSettings.clampedOpacity(
-        UserDefaults.standard.object(forKey: TimerSettings.overlayOpacityKey) as? Double
-            ?? TimerSettings.defaultOpacity
-    )
-    var timerOverlayPosition = HUDPosition(
-        rawValue: UserDefaults.standard.string(forKey: TimerSettings.overlayPositionKey) ?? ""
-    ) ?? TimerSettings.defaultPosition
-    var timerOverlayScreen = PaletteScreenLocation(
-        rawValue: UserDefaults.standard.string(forKey: TimerSettings.overlayScreenKey) ?? ""
-    ) ?? TimerSettings.defaultScreen
+    var timerOverlayVisible = Settings.bool(.timerOverlayVisible)
+    var timerOverlayOpacity = TimerSettings.clampedOpacity(Settings.double(.timerOverlayOpacity))
+    var timerOverlayPosition = Settings.value(.timerOverlayPosition) ?? TimerSettings.defaultPosition
+    var timerOverlayScreen = Settings.value(.timerOverlayScreen) ?? TimerSettings.defaultScreen
     /// A sound when a timer ends (T61). On by default: a timer that ends in
     /// silence is only half a timer.
-    var timerSoundEnabled = UserDefaults.standard.object(forKey: TimerSettings.soundEnabledKey) as? Bool ?? true
-    var timerSoundName = TimerSettings.resolvedSound(
-        UserDefaults.standard.string(forKey: TimerSettings.soundNameKey)
-    )
+    var timerSoundEnabled = Settings.bool(.timerSoundEnabled)
+    var timerSoundName = TimerSettings.resolvedSound(Settings.string(.timerSoundName))
 
     var effectiveAnimationsEnabled: Bool {
         animationsEnabled && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -1018,58 +999,58 @@ final class WorkspaceStore {
 
     func updateChecklistVisible(_ value: Bool) {
         checklistVisible = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.checklistVisible.rawValue)
+        Settings.set(value, for: .checklistVisible)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistOpacity(_ value: Double) {
         let clamped = ChecklistSettings.clampedOpacity(value)
         checklistOpacity = clamped
-        UserDefaults.standard.set(clamped, forKey: SettingsKey.checklistOpacity.rawValue)
+        Settings.set(clamped, for: .checklistOpacity)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistWidth(_ value: Double) {
         let clamped = ChecklistSettings.clampedWidth(value)
         checklistWidth = clamped
-        UserDefaults.standard.set(clamped, forKey: SettingsKey.checklistWidth.rawValue)
+        Settings.set(clamped, for: .checklistWidth)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistPosition(_ value: HUDPosition) {
         checklistPosition = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.checklistPosition.rawValue)
+        Settings.set(value.rawValue, for: .checklistPosition)
         ChecklistController.shared.applySettings()
     }
 
     func updateChecklistScreen(_ value: PaletteScreenLocation) {
         checklistScreen = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.checklistScreen.rawValue)
+        Settings.set(value.rawValue, for: .checklistScreen)
         ChecklistController.shared.applySettings()
     }
 
     func updateTimerOverlayVisible(_ value: Bool) {
         timerOverlayVisible = value
-        UserDefaults.standard.set(value, forKey: TimerSettings.overlayVisibleKey)
+        Settings.set(value, for: .timerOverlayVisible)
         TimerController.shared.applySettings()
     }
 
     func updateTimerOverlayOpacity(_ value: Double) {
         let clamped = TimerSettings.clampedOpacity(value)
         timerOverlayOpacity = clamped
-        UserDefaults.standard.set(clamped, forKey: TimerSettings.overlayOpacityKey)
+        Settings.set(clamped, for: .timerOverlayOpacity)
         TimerController.shared.applySettings()
     }
 
     func updateTimerOverlayPosition(_ value: HUDPosition) {
         timerOverlayPosition = value
-        UserDefaults.standard.set(value.rawValue, forKey: TimerSettings.overlayPositionKey)
+        Settings.set(value.rawValue, for: .timerOverlayPosition)
         TimerController.shared.applySettings()
     }
 
     func updateTimerOverlayScreen(_ value: PaletteScreenLocation) {
         timerOverlayScreen = value
-        UserDefaults.standard.set(value.rawValue, forKey: TimerSettings.overlayScreenKey)
+        Settings.set(value.rawValue, for: .timerOverlayScreen)
         TimerController.shared.applySettings()
     }
 
@@ -1091,13 +1072,13 @@ final class WorkspaceStore {
 
     func updateTimerSoundEnabled(_ value: Bool) {
         timerSoundEnabled = value
-        UserDefaults.standard.set(value, forKey: TimerSettings.soundEnabledKey)
+        Settings.set(value, for: .timerSoundEnabled)
     }
 
     func updateTimerSoundName(_ value: String) {
         let resolved = TimerSettings.resolvedSound(value)
         timerSoundName = resolved
-        UserDefaults.standard.set(resolved, forKey: TimerSettings.soundNameKey)
+        Settings.set(resolved, for: .timerSoundName)
     }
 
     func updateShelfShakeEnabled(_ value: Bool) {
