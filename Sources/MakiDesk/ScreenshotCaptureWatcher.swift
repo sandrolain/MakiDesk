@@ -155,10 +155,7 @@ final class ScreenshotCaptureWatcher {
         MakiLog.capture.notice("capture notice enabled=\(enabled, privacy: .public) secure=\(secure, privacy: .public) age=\(Int(age), privacy: .public) shown=\(allowed, privacy: .public)")
         guard allowed else { return }
         HUDController.shared.show(
-            "Screenshot saved",
-            symbol: "camera.viewfinder",
-            detail: url.lastPathComponent,
-            kind: .info,
+            HUDMessage.systemScreenshotSaved(named: url.lastPathComponent),
             actions: [
                 HUDAction(title: "Shelf") { ShelfController.shared.add(file: url) },
                 // Reading it is the other thing a capture is usually for (T41).

@@ -371,26 +371,17 @@ final class ColorSamplerController {
     private static func present(_ feedback: Feedback) {
         switch feedback {
         case let .copied(color):
-            HUDController.shared.show(
-                color.hex,
-                symbol: "eyedropper",
-                detail: "\(color.rgb) · \(color.hexWithAlpha)"
-            )
+            HUDController.shared.show(HUDMessage.colourPicked(
+                hex: color.hex, detail: "\(color.rgb) · \(color.hexWithAlpha)"))
             WorkspaceStore.shared.status = "Colour \(color.hex) copied"
         case .permissionDenied:
-            HUDController.shared.show(
-                "Screen Recording permission required",
-                symbol: "exclamationmark.triangle.fill",
-                detail: "Grant it in Settings ▸ General, then try again."
-            )
-            WorkspaceStore.shared.status = "Screen Recording permission required"
+            HUDController.shared.show(HUDMessage.screenRecordingRequired)
+            WorkspaceStore.shared.status = HUDMessage.screenRecordingRequired.title
         case .busy:
-            HUDController.shared.show("The colour picker is already open",
-                                      symbol: "hand.raised.fill")
+            HUDController.shared.show(HUDMessage.colourPickerAlreadyOpen)
         case let .failed(message):
             let short = message.count > 80 ? String(message.prefix(80)) + "…" : message
-            HUDController.shared.show("Colour not copied: \(short)",
-                                      symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.colourNotCopied(reason: short))
         }
     }
 }

@@ -92,8 +92,7 @@ final class ScreenshotAnnotationController {
             do {
                 let selection = try await ScreenRegionSelector.shared.select()
                 guard let image = selection.image else {
-                    HUDController.shared.show("The area could not be captured",
-                                              symbol: "exclamationmark.triangle.fill")
+                    HUDController.shared.show(HUDMessage.areaCaptureFailed)
                     return
                 }
                 self.present(image: image, selection: selection)
@@ -120,8 +119,7 @@ final class ScreenshotAnnotationController {
                 )
             }
             guard case let .window(info)? = front, let id = info.windowID else {
-                HUDController.shared.show("No window to capture",
-                                          symbol: "exclamationmark.triangle.fill", kind: .warning)
+                HUDController.shared.show(HUDMessage.noWindowToCapture)
                 return
             }
             self.isSelecting = true
@@ -151,8 +149,7 @@ final class ScreenshotAnnotationController {
         let pointer = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
         guard let screen, let display = Self.display(for: screen) else {
-            HUDController.shared.show("No display to capture",
-                                      symbol: "exclamationmark.triangle.fill", kind: .warning)
+            HUDController.shared.show(HUDMessage.noDisplayToCapture)
             return
         }
         isSelecting = true
@@ -253,11 +250,7 @@ final class ScreenshotAnnotationController {
             pasteboard.clearContents()
             pasteboard.setData(data, forType: .png)
         }
-        HUDController.shared.show(
-            url == nil ? "Screenshot annotated" : "Screenshot on the shelf",
-            symbol: url == nil ? "exclamationmark.triangle.fill" : "photo",
-            kind: url == nil ? .warning : .success
-        )
+        HUDController.shared.show(HUDMessage.screenshotSaved(onTheShelf: url != nil))
         close()
     }
 

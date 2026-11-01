@@ -57,8 +57,7 @@ final class MeasureController {
     /// no-op with a notice; pinned measurements are not cleared.
     func start() {
         guard isMeasuring == false else {
-            HUDController.shared.show("A selection is already open",
-                                      symbol: "hand.raised.fill")
+            HUDController.shared.show(HUDMessage.selectionAlreadyOpen)
             return
         }
         HUDController.shared.hide()
@@ -96,14 +95,12 @@ final class MeasureController {
             } catch ScreenRegionError.cancelled {
                 // Esc: nothing to add.
             } catch ScreenRegionError.alreadySelecting {
-                HUDController.shared.show("A selection is already open",
-                                          symbol: "hand.raised.fill")
+                HUDController.shared.show(HUDMessage.selectionAlreadyOpen)
             } catch ScreenRegionError.displayUnavailable {
-                HUDController.shared.show("No display is available for measuring",
-                                          symbol: "display.trianglebadge.exclamationmark")
+                HUDController.shared.show(HUDMessage.noDisplayForMeasuring)
             } catch {
-                HUDController.shared.show("Could not measure: \(error.localizedDescription)",
-                                          symbol: "exclamationmark.triangle.fill")
+                HUDController.shared.show(HUDMessage.measureFailed(
+                    reason: error.localizedDescription))
             }
         }
     }
@@ -150,12 +147,11 @@ final class MeasureController {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         guard pasteboard.setString(measurement.copyText(unit), forType: .string) else {
-            HUDController.shared.show("The measurement could not be copied",
-                                      symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.measurementCopyFailed)
             return
         }
-        HUDController.shared.show("Measurement copied", symbol: "ruler",
-                                  detail: measurement.dimensions(unit))
+        HUDController.shared.show(HUDMessage.measurementCopied(
+            detail: measurement.dimensions(unit)))
         WorkspaceStore.shared.status = "Measurement copied"
     }
 

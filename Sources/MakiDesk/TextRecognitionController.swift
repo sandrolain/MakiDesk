@@ -412,15 +412,7 @@ final class TextRecognitionController {
         case let .copied(result, output):
             let size = result.characterCount == 1
                 ? "1 character" : "\(result.characterCount) characters"
-            let title: String
-            switch output {
-            case .pasteboard:
-                title = "Text copied · \(size)"
-            case .pasteboardAndHistory:
-                title = "Text copied · \(size) · ⌥V keeps it"
-            case .historyOnly:
-                title = "Text in clipboard history · \(size) · ⌥V"
-            }
+            let message = HUDMessage.textCopied(size: size, preview: result.preview, to: output)
             // The text is in the clipboard (or the history); these are the two
             // places it is usually wanted next, plus a copy for the case where
             // it was not copied at all (T41).
@@ -435,24 +427,18 @@ final class TextRecognitionController {
                     pasteboard.setString(result.text, forType: .string)
                 })
             }
-            HUDController.shared.show(title, symbol: "text.viewfinder",
-                                      detail: result.preview, actions: actions)
-            WorkspaceStore.shared.status = title
+            HUDController.shared.show(message, actions: actions)
+            WorkspaceStore.shared.status = message.title
         case .noText:
-            HUDController.shared.show("No text found", symbol: "text.magnifyingglass")
-            WorkspaceStore.shared.status = "No text found"
+            HUDController.shared.show(HUDMessage.noTextFound)
+            WorkspaceStore.shared.status = HUDMessage.noTextFound.title
         case .cancelled:
             break
         case .permissionDenied:
-            HUDController.shared.show(
-                "Screen Recording permission required",
-                symbol: "exclamationmark.triangle.fill",
-                detail: "Grant it in Settings ▸ General, then try again."
-            )
-            WorkspaceStore.shared.status = "Screen Recording permission required"
+            HUDController.shared.show(HUDMessage.screenRecordingRequired)
+            WorkspaceStore.shared.status = HUDMessage.screenRecordingRequired.title
         case .busy:
-            HUDController.shared.show("A selection is already open",
-                                      symbol: "hand.raised.fill")
+            HUDController.shared.show(HUDMessage.selectionAlreadyOpen)
         case let .failed(message):
             // The detector itself can fail to load (Vision/E5RT): the notice says
             // so and keeps the reason underneath instead of showing a code (T41).
@@ -460,13 +446,8 @@ final class TextRecognitionController {
             let isModelFailure = short.localizedCaseInsensitiveContains("initialize")
                 || short.localizedCaseInsensitiveContains("detector")
                 || short.localizedCaseInsensitiveContains("E5RT")
-            HUDController.shared.show(
-                isModelFailure
-                    ? "The text detector could not start — restarting the Mac usually clears it"
-                    : "Text recognition failed",
-                symbol: "exclamationmark.triangle.fill",
-                detail: short, kind: .warning
-            )
+            HUDController.shared.show(HUDMessage.textFailed(reason: short,
+                                                           detectorCouldNotStart: isModelFailure))
             WorkspaceStore.shared.status = "Text recognition failed"
         }
     }

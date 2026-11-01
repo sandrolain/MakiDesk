@@ -83,6 +83,13 @@ final class HUDController {
         present(notice)
     }
 
+    /// Shows a catalog notice (R04): the text, the symbol and the severity come
+    /// from the message instead of being spelled at the call site.
+    func show(_ message: HUDMessage, actions: [HUDAction] = []) {
+        show(message.title, symbol: message.symbol, detail: message.detail,
+             kind: message.kind, actions: actions)
+    }
+
     /// Starts (or updates) the one persistent progress notice. It does not
     /// queue and does not expire.
     @discardableResult
