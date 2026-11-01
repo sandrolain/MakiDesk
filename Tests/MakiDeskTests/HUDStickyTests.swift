@@ -59,6 +59,7 @@ final class HUDStickyTests: XCTestCase {
         let suite = "MakiDeskHUDSticky-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        Settings.registerDefaults(in: defaults)
         XCTAssertFalse(HUDSettings.errorsSticky(defaults: defaults))
         defaults.set(true, forKey: HUDSettings.errorsStickyKey)
         XCTAssertTrue(HUDSettings.errorsSticky(defaults: defaults))

@@ -133,10 +133,13 @@ final class HUDModelTests: XCTestCase {
         XCTAssertEqual(HUDKind.inferred(for: "folder"), .confirmation)
     }
 
+    /// The defaults are the registered ones, not a fallback inside the read
+    /// (R02): an empty suite gets them from `SettingsDefaults`.
     func testSettingsFallBackToTheOldBehaviour() {
         let suite = "MakiDeskHUD-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        Settings.registerDefaults(in: defaults)
 
         XCTAssertEqual(HUDSettings.position(defaults: defaults), .bottomCenter)
         XCTAssertEqual(HUDSettings.screenLocation(defaults: defaults), .focusedWindow)

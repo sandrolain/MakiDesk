@@ -117,45 +117,43 @@ enum HUDSettings {
     static let defaultBaseDuration: TimeInterval = 1.4
     static let defaultTextSize: CGFloat = 14
 
+    // The defaults are in `SettingsDefaults` and reach these reads through
+    // `register(defaults:)`: the fallback is written once, not here (R02).
+
     static func position(defaults: UserDefaults = .standard) -> HUDPosition {
-        defaults.string(forKey: positionKey).flatMap(HUDPosition.init(rawValue:))
-            ?? .bottomCenter
+        Settings.value(.hudPosition, in: defaults) ?? .bottomCenter
     }
 
     static func screenLocation(defaults: UserDefaults = .standard) -> PaletteScreenLocation {
-        defaults.string(forKey: screenKey).flatMap(PaletteScreenLocation.init(rawValue:))
-            ?? .focusedWindow
+        Settings.value(.hudScreenLocation, in: defaults) ?? .focusedWindow
     }
 
     static func baseDuration(defaults: UserDefaults = .standard) -> TimeInterval {
-        let value = defaults.double(forKey: baseDurationKey)
-        return value > 0 ? value : defaultBaseDuration
+        // A stored zero would freeze every notice: the floor is behaviour, not
+        // a default.
+        max(0.1, Settings.double(.hudBaseDuration, in: defaults))
     }
 
     static func historyEnabled(defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: historyEnabledKey) != nil else { return true }
-        return defaults.bool(forKey: historyEnabledKey)
+        Settings.bool(.hudHistoryEnabled, in: defaults)
     }
 
     static func voiceOverEnabled(defaults: UserDefaults = .standard) -> Bool {
-        guard defaults.object(forKey: voiceOverKey) != nil else { return true }
-        return defaults.bool(forKey: voiceOverKey)
+        Settings.bool(.hudVoiceOver, in: defaults)
     }
 
     static func compact(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: compactKey)
+        Settings.bool(.hudCompact, in: defaults)
     }
 
     /// Whether an error waits for the user instead of timing out (T60).
     static func errorsSticky(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: errorsStickyKey)
+        Settings.bool(.hudKeepErrors, in: defaults)
     }
 
     /// Title size in points; the icon, detail and padding follow proportionally.
     static func textSize(defaults: UserDefaults = .standard) -> CGFloat {
-        let value = defaults.double(forKey: textSizeKey)
-        let resolved = value > 0 ? value : Double(defaultTextSize)
-        return CGFloat(min(22, max(11, resolved)))
+        CGFloat(min(22, max(11, Settings.double(.hudTextSize, in: defaults))))
     }
 }
 

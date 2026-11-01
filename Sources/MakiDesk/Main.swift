@@ -8,6 +8,10 @@ import Foundation
 @main
 enum MakiDeskMain {
     static func main() {
+        // Before anything reads a preference: the declared defaults are what
+        // makes "never set" and "the default" the same value (R02).
+        Settings.registerDefaults()
+
         var arguments = CommandLine.arguments.dropFirst()
         guard arguments.first == "--dump-shortcuts" else {
             MakiDeskApp.main()

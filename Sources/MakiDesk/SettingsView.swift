@@ -103,11 +103,11 @@ struct SettingsView: View {
     private var colorFormat: ColorClipboardFormat = .hex
     @AppStorage(HUDSettings.positionKey) private var hudPosition: HUDPosition = .bottomCenter
     @AppStorage(HUDSettings.screenKey) private var hudScreen: PaletteScreenLocation = .focusedWindow
-    @AppStorage(HUDSettings.baseDurationKey) private var hudBaseDuration: Double = 1.4
+    @AppStorage(HUDSettings.baseDurationKey) private var hudBaseDuration = HUDSettings.defaultBaseDuration
     @AppStorage(HUDSettings.historyEnabledKey) private var hudHistoryEnabled = true
     @AppStorage(HUDSettings.voiceOverKey) private var hudVoiceOver = true
     @AppStorage(HUDSettings.compactKey) private var hudCompact = false
-    @AppStorage(HUDSettings.textSizeKey) private var hudTextSize: Double = 14
+    @AppStorage(HUDSettings.textSizeKey) private var hudTextSize = Double(HUDSettings.defaultTextSize)
     @AppStorage(HUDSettings.errorsStickyKey) private var hudKeepErrors = false
     /// The highlight slides between sidebar rows (T58). Respects the app's
     /// animations switch and macOS Reduce Motion through the store.

@@ -66,6 +66,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
 | `SettingsView.swift` | Tabbed settings, permissions, diagnostics, reset. |
 | `SettingsKey.swift` | Every `UserDefaults` key, spelled once; a test fails on any literal written outside it. |
+| `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
 | `LegacyMigration.swift` | One-time migration from the project's previous name. |
 | `CanvasCore.swift` | Legacy geometry/helpers from the earlier canvas prototype; no longer referenced by the live app. |
