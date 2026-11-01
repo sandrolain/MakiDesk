@@ -139,7 +139,7 @@ final class CommandBoxController {
         case .timer:
             guard let input = TimerText.parse(argument) else { return }
             if let message = TimerController.shared.start(input) {
-                HUDController.shared.show(message, symbol: "exclamationmark.triangle.fill")
+                HUDController.shared.show(HUDMessage.timerNotStarted(reason: message))
             }
         case .dismissNotices:
             HUDController.shared.hide()

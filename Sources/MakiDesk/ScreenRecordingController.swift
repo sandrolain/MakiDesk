@@ -330,13 +330,12 @@ final class ScreenRecordingController {
             let result = await session.stop()
             self?.elapsed = 0
             guard let url = result.url else {
-                HUDController.shared.show(result.message ?? "The recording could not be saved",
-                                          symbol: "exclamationmark.triangle.fill", kind: .warning)
+                HUDController.shared.show(HUDMessage.recordingFailed(reason: result.message))
                 return
             }
             ShelfController.shared.add(file: url)
-            HUDController.shared.show("Recording on the shelf · \(RecordingClock.text(recorded))",
-                                      symbol: "record.circle", kind: .success)
+            HUDController.shared.show(
+                HUDMessage.recordingSaved(duration: RecordingClock.text(recorded)))
         }
     }
 
@@ -350,8 +349,8 @@ final class ScreenRecordingController {
 
         guard ScreenRegionCapture.isAuthorized else {
             phase = .idle
-            HUDController.shared.show(ScreenRecordingError.permissionDenied.localizedDescription,
-                                      symbol: "exclamationmark.triangle.fill", kind: .warning)
+            HUDController.shared.show(HUDMessage.recordingFailed(
+                reason: ScreenRecordingError.permissionDenied.localizedDescription))
             return
         }
 
@@ -371,8 +370,7 @@ final class ScreenRecordingController {
                 Task { @MainActor in
                     guard let self, self.session != nil else { return }
                     self.stop()
-                    HUDController.shared.show(message, symbol: "exclamationmark.triangle.fill",
-                                              kind: .warning)
+                    HUDController.shared.show(HUDMessage.recordingFailed(reason: message))
                 }
             }
             let filter = SCContentFilter(display: display, excludingWindows: [])
@@ -396,14 +394,13 @@ final class ScreenRecordingController {
             elapsed = 0
             phase = .recording
             startTicker()
-            HUDController.shared.show("Recording \(RecordingClock.text(0))",
-                                      symbol: "record.circle")
+            HUDController.shared.show(
+                HUDMessage.recordingStarted(duration: RecordingClock.text(0)))
         } catch {
             phase = .idle
             let message = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
-            HUDController.shared.show(message, symbol: "exclamationmark.triangle.fill",
-                                      kind: .warning)
+            HUDController.shared.show(HUDMessage.recordingFailed(reason: message))
         }
     }
 

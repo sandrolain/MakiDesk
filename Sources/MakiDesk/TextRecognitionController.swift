@@ -302,8 +302,7 @@ final class TextRecognitionController {
 
     static func showProgressNotice(_ running: Bool) {
         if running {
-            progressID = HUDController.shared.showProgress("Reading text…",
-                                                           symbol: "text.viewfinder")
+            progressID = HUDController.shared.showProgress(HUDMessage.readingText)
         } else if let id = progressID {
             HUDController.shared.finishProgress(id)
             progressID = nil

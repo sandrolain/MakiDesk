@@ -88,8 +88,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
     func show() {
         // A password prompt must not put the earlier history on screen.
         guard IsSecureEventInputEnabled() == false else {
-            HUDController.shared.show("Clipboard history is off while secure input is active",
-                                      symbol: "lock.fill")
+            HUDController.shared.show(HUDMessage.clipboardSecureInput)
             return
         }
         if isVisible {
@@ -180,7 +179,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         let pasteboard = NSPasteboard.general
         let item = NSPasteboardItem()
         guard item.setString(entry.text, forType: .string), pasteboard.writeObjects([item]) else {
-            HUDController.shared.show("Could not write to the clipboard", symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.clipboardWriteFailed)
             return
         }
         history.markPasteboardSeen()
@@ -188,8 +187,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
 
         if let target, targetIsUs == false {
             guard AXIsProcessTrusted() else {
-                HUDController.shared.show("Accessibility not granted · the text is on the clipboard",
-                                          symbol: "exclamationmark.triangle.fill")
+                HUDController.shared.show(HUDMessage.clipboardNeedsAccessibility)
                 return
             }
             if target.activate(options: []) {

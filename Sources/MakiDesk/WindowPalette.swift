@@ -1484,8 +1484,8 @@ final class WindowPalette {
         hide()
         ApplicationCatalog.shared.launch(application, newInstance: newInstance) { [weak self] error in
             if let error {
-                HUDController.shared.show("Could not open \(application.name)",
-                                          symbol: "exclamationmark.triangle.fill")
+                HUDController.shared.show(
+                    HUDMessage.applicationCouldNotOpen(name: application.name))
                 MakiLog.palette.error("application launch failed: \(error.localizedDescription, privacy: .private)")
             } else {
                 // The shelf opens on the applications opened most recently, so

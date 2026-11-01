@@ -386,6 +386,60 @@ extension HUDMessage {
         HUDMessage(title: "Grid · \(summary)", symbol: "square.grid.3x3.fill")
     }
 
+    // MARK: - Recording
+
+    static func recordingFailed(reason: String?) -> HUDMessage {
+        HUDMessage(title: reason ?? "The recording could not be saved",
+                   symbol: "exclamationmark.triangle.fill", kind: .warning)
+    }
+
+    static func recordingSaved(duration: String) -> HUDMessage {
+        HUDMessage(title: "Recording on the shelf · \(duration)",
+                   symbol: "record.circle", kind: .success)
+    }
+
+    static func recordingStarted(duration: String) -> HUDMessage {
+        HUDMessage(title: "Recording \(duration)", symbol: "record.circle")
+    }
+
+    // MARK: - Progress
+
+    static let readingText = HUDMessage(title: "Reading text…", symbol: "text.viewfinder")
+    static let receivingFiles = HUDMessage(
+        title: "Receiving files…", symbol: "arrow.down.circle")
+    static let transferringItems = HUDMessage(
+        title: "Transferring shelf items…", symbol: "folder")
+
+    // MARK: - Panels
+
+    static let clipboardSecureInput = HUDMessage(
+        title: "Clipboard history is off while secure input is active", symbol: "lock.fill")
+
+    static let clipboardWriteFailed = HUDMessage(
+        title: "Could not write to the clipboard", symbol: "exclamationmark.triangle.fill")
+
+    static let clipboardNeedsAccessibility = HUDMessage(
+        title: "Accessibility not granted · the text is on the clipboard",
+        symbol: "exclamationmark.triangle.fill")
+
+    static func timerFinished(label: String, ranOutWhileClosed: String?) -> HUDMessage {
+        HUDMessage(title: "Time's up · \(label)", symbol: "timer",
+                   detail: ranOutWhileClosed, kind: .warning)
+    }
+
+    static func intervalRanOutWhileClosed(when: String?) -> String {
+        when.map { "It ran out while MakiDesk was closed (\($0))." }
+            ?? "It ran out while MakiDesk was closed."
+    }
+
+    static func timerNotStarted(reason: String) -> HUDMessage {
+        HUDMessage(title: reason, symbol: "exclamationmark.triangle.fill")
+    }
+
+    static func applicationCouldNotOpen(name: String) -> HUDMessage {
+        HUDMessage(title: "Could not open \(name)", symbol: "exclamationmark.triangle.fill")
+    }
+
     /// Every member a test can walk: the ones with no parameters. The
     /// factories are checked through their own tests.
     static let catalogue: [HUDMessage] = [
@@ -401,5 +455,7 @@ extension HUDMessage {
         nothingInUse, nothingLeftInUse, nothingPutAway, everythingBack,
         nothingToUndo, undone, peekCleared, peekNotDesignated,
         peekNeedsScreenRecording, peekNoLongerOpen, nothingToArrange,
+        clipboardSecureInput, clipboardWriteFailed, clipboardNeedsAccessibility,
+        readingText, receivingFiles, transferringItems,
     ]
 }

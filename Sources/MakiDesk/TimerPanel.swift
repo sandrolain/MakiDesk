@@ -156,11 +156,9 @@ final class TimerController {
         }
         let when = timer.deadline.map { TimerText.clockDay($0, now: Date()) }
         HUDController.shared.show(
-            "Time's up · \(timer.label)",
-            symbol: "timer",
-            detail: when.map { "It ran out while MakiDesk was closed (\($0))." }
-                ?? "It ran out while MakiDesk was closed.",
-            kind: .warning,
+            HUDMessage.timerFinished(
+                label: timer.label,
+                ranOutWhileClosed: HUDMessage.intervalRanOutWhileClosed(when: when)),
             sticky: true,
             actions: [HUDAction(title: "5 more minutes") { [weak self] in
                 _ = self?.startCountdown(300, label: timer.label)
@@ -216,9 +214,7 @@ final class TimerController {
         }
         let label = timer.label
         HUDController.shared.show(
-            "Time's up · \(label)",
-            symbol: "timer",
-            kind: .warning,
+            HUDMessage.timerFinished(label: label, ranOutWhileClosed: nil),
             sticky: true,
             actions: [HUDAction(title: "5 more minutes") { [weak self] in
                 _ = self?.startCountdown(300, label: label)

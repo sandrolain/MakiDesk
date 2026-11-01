@@ -67,24 +67,26 @@ final class HUDMessageTests: XCTestCase {
         XCTAssertEqual(HUDMessage.transferFinished(moved: true, count: 2).title, "Moved 2 items")
     }
 
-    /// The migrated areas spell no notice by hand (R04): a title written there
-    /// again would be a second source for a sentence the catalog owns. The list
-    /// grows as areas move.
-    func testTheMigratedFilesSpellNoNotice() throws {
+    /// R04 is complete: no file spells a notice by hand any more. This is the
+    /// whole invariant the catalog buys, in one assertion — a notice written
+    /// inline again fails the suite instead of growing a second source.
+    func testNoFileSpellsANoticeByHand() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/MakiDesk")
-        let migrated = ["ShelfController.swift", "WorkspaceStore.swift",
-                        "TextRecognitionController.swift", "ColorSampler.swift",
-                        "MeasureController.swift", "ScreenshotAnnotationController.swift",
-                        "ScreenshotCaptureWatcher.swift"]
-        for name in migrated {
-            let text = try String(contentsOf: root.appendingPathComponent(name), encoding: .utf8)
-            XCTAssertTrue(text.contains("HUDMessage."), name)
+        let files = try FileManager.default
+            .contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "swift" }
+        XCTAssertGreaterThan(files.count, 50)
+
+        for file in files {
+            let text = try String(contentsOf: file, encoding: .utf8)
             XCTAssertFalse(text.contains("HUDController.shared.show(\""),
-                           "\(name) writes a notice by hand")
+                           "\(file.lastPathComponent) writes a notice by hand")
+            XCTAssertFalse(text.contains("HUDController.shared.showProgress(\""),
+                           "\(file.lastPathComponent) writes a progress notice by hand")
         }
     }
 

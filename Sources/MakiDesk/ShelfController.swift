@@ -862,8 +862,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         let destination = staging.appendingPathComponent("promises-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         let token = session
-        let progress = HUDController.shared.showProgress("Receiving files…",
-                                                         symbol: "arrow.down.circle")
+        let progress = HUDController.shared.showProgress(HUDMessage.receivingFiles)
         let group = DispatchGroup()
         for receiver in receivers {
             group.enter()
@@ -1279,8 +1278,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         transferInFlight = true
         let control = ShelfTransferControl()
         transferControl = control
-        let progress = HUDController.shared.showProgress("Transferring shelf items…",
-                                                         symbol: "folder")
+        let progress = HUDController.shared.showProgress(HUDMessage.transferringItems)
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var results: [ShelfTransferResult] = []
             for (index, request) in requests.enumerated() {
@@ -1880,8 +1878,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         var urls: [URL] = []
         var failure: String?
         let group = DispatchGroup()
-        let progress = HUDController.shared.showProgress("Receiving files…",
-                                                         symbol: "arrow.down.circle")
+        let progress = HUDController.shared.showProgress(HUDMessage.receivingFiles)
         for receiver in receivers {
             group.enter()
             receiver.receivePromisedFiles(atDestination: directory, options: [:],
