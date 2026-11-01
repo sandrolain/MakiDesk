@@ -52,7 +52,7 @@ enum AXEnhancedUIController {
                   AXUIElementSetAttributeValue(application, enhancedUIAttribute, kCFBooleanFalse) == .success else {
                 return
             }
-            makiLog.notice("Disabled AXEnhancedUserInterface for Chromium app pid=\(pid, privacy: .public)")
+            MakiLog.index.notice("Disabled AXEnhancedUserInterface for Chromium app pid=\(pid, privacy: .public)")
         }
     }
 

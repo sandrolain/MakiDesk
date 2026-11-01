@@ -331,6 +331,18 @@ struct SettingsView: View {
                     }
                     caption("Enable MakiDesk under System Settings ▸ Privacy & Security. Window previews need Screen Recording; without it the switcher shows app icons instead. If a permission stays “required” after a rebuild: remove MakiDesk with “−”, re-add it, or run `tccutil reset Accessibility com.makidesk.app`.")
                 }
+                SettingsSection("Diagnostics") {
+                    HStack(spacing: 12) {
+                        Button("Copy diagnostics") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(store.diagnostics.text, forType: .string)
+                        }
+                        Text("Versions, permissions and counts only.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    caption("Puts a short report on the clipboard for a bug report: the app and macOS versions, which permissions are on, how many shortcuts are active, taken or customised, the state of shortcuts.json and how many windows and groups are known. No window titles, note text, clipboard content, file paths or screenshots.")
+                }
             }
             if generalPage == .behaviour {
                 SettingsSection("Animations") {

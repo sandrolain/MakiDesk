@@ -625,7 +625,7 @@ enum WindowController {
             do {
                 try setFrame(frame, for: element)
             } catch {
-                makiLog.error("frame write to our own window failed error=\(error.localizedDescription, privacy: .public)")
+                MakiLog.index.error("frame write to our own window failed error=\(error.localizedDescription, privacy: .public)")
             }
             completion?()
             return
@@ -644,7 +644,7 @@ enum WindowController {
             do {
                 try setPosition(origin, for: element)
             } catch {
-                makiLog.error("position write to our own window failed error=\(error.localizedDescription, privacy: .public)")
+                MakiLog.index.error("position write to our own window failed error=\(error.localizedDescription, privacy: .public)")
             }
             completion?()
             return

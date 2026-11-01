@@ -95,7 +95,7 @@ final class ShortcutManager {
                 blockedShortcutIDs.insert(definition.id)
             }
         }
-        makiLog.notice("hotkeys registered=\(self.registeredCount, privacy: .public) blocked=\(self.failedCount, privacy: .public) off=\(self.disabledShortcutIDs.count, privacy: .public)")
+        MakiLog.shortcuts.notice("hotkeys registered=\(self.registeredCount, privacy: .public) blocked=\(self.failedCount, privacy: .public) off=\(self.disabledShortcutIDs.count, privacy: .public)")
     }
 
     /// Whether the system will let us own this combination right now. It

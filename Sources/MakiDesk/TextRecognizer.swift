@@ -247,7 +247,7 @@ actor TextRecognizer: TextRecognizing {
             + Int(elapsed.components.attoseconds / 1_000_000_000_000_000))
         let lineCount = text.split(separator: "\n", omittingEmptySubsequences: true).count
         // Counts and timings only: the recognized text never reaches a log.
-        makiLog.notice("ocr chars=\(text.count, privacy: .public) lines=\(lineCount, privacy: .public) ms=\(milliseconds, privacy: .public) scaled=\(prepared.scaled, privacy: .public)")
+        MakiLog.ocr.notice("ocr chars=\(text.count, privacy: .public) lines=\(lineCount, privacy: .public) ms=\(milliseconds, privacy: .public) scaled=\(prepared.scaled, privacy: .public)")
         return TextRecognitionResult(text: text,
                                      durationMilliseconds: milliseconds,
                                      scaled: prepared.scaled)
@@ -257,6 +257,6 @@ actor TextRecognizer: TextRecognizing {
     /// never the text being read.
     private nonisolated func logFailure(_ error: Error, attempt: Int) {
         let error = error as NSError
-        makiLog.error("ocr failed attempt=\(attempt, privacy: .public) domain=\(error.domain, privacy: .public) code=\(error.code, privacy: .public)")
+        MakiLog.ocr.error("ocr failed attempt=\(attempt, privacy: .public) domain=\(error.domain, privacy: .public) code=\(error.code, privacy: .public)")
     }
 }

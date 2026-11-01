@@ -11,6 +11,7 @@ titles, previews, notes, clipboard contents, recognized text or files anywhere.
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
 - [Window previews](#window-previews)
+- [Logs and diagnostics](#logs-and-diagnostics)
 - [Revoking and removing](#revoking-and-removing)
 
 ## Permissions
@@ -150,6 +151,20 @@ cards, the overlay and the content score. They stay in memory, are never
 uploaded, and are not part of the notes/groups data. Without Screen Recording
 the switcher falls back to app icons and the content-weighted layout uses the
 per-kind weights only.
+
+## Logs and diagnostics
+
+MakiDesk writes to the system log (`com.makidesk.app`, one category per part:
+`app`, `index`, `capture`, `palette`, `notes`, `ocr`, `shortcuts`, `store`).
+What goes there is deliberately narrow: durations, counts, revisions and ids the
+app chose itself. Window titles, note text, clipboard content, recognised text,
+file paths and screenshots are **not** logged, so a log excerpt can be shared.
+
+**Copy diagnostics** in Settings ▸ General ▸ Permissions puts a short report on
+the clipboard: the app and macOS versions, which permission is on, how many
+shortcuts are active, taken or customised, the state of `shortcuts.json` (never
+its path) and how many windows and groups are known. Nothing else is read and
+nothing is sent: it is text on the clipboard, and you choose where it goes.
 
 ## Revoking and removing
 

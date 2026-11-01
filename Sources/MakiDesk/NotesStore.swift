@@ -429,7 +429,7 @@ final class NotesStore {
         selectedTab = note.id
         pendingDrafts.insert(note.id)
         enqueueDraftSave(note.id)
-        makiLog.notice("notes: created draft id=\(note.id.uuidString, privacy: .public)")
+        MakiLog.notes.notice("notes: created draft id=\(note.id.uuidString, privacy: .public)")
         scheduleSession()
         onChange?()
         return note
@@ -852,13 +852,13 @@ final class NotesStore {
                 try Self.writeDraft(snapshot, to: directory)
             } catch {
                 // The Trash copy is then the older one, but the note still goes.
-                makiLog.error("notes: could not refresh the draft before trashing it -> \(error.localizedDescription, privacy: .public)")
+                MakiLog.notes.error("notes: could not refresh the draft before trashing it -> \(error.localizedDescription, privacy: .public)")
             }
             if FileManager.default.fileExists(atPath: draft.path) {
                 try? FileManager.default.trashItem(at: draft, resultingItemURL: nil)
             }
         }
-        makiLog.notice("notes: deleted draft id=\(id.uuidString, privacy: .public)")
+        MakiLog.notes.notice("notes: deleted draft id=\(id.uuidString, privacy: .public)")
         scheduleSession()
         onChange?()
     }
@@ -893,7 +893,7 @@ final class NotesStore {
                 }
             }
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("session.json"))
-            makiLog.notice("notes: factory reset removed every draft in \(directory.lastPathComponent, privacy: .public)")
+            MakiLog.notes.notice("notes: factory reset removed every draft in \(directory.lastPathComponent, privacy: .public)")
             if let completion {
                 Task { @MainActor in completion() }
             }
@@ -1214,7 +1214,7 @@ final class NotesStore {
         let message = "Could not save notes. Changes remain in memory and will retry automatically."
         if persistenceError != message {
             persistenceError = message
-            makiLog.error("notes: could not write the drafts or the session")
+            MakiLog.notes.error("notes: could not write the drafts or the session")
             onChange?()
         }
         schedulePersistenceRetry()

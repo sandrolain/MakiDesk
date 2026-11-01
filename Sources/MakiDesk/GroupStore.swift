@@ -81,7 +81,7 @@ struct GroupStore {
             try data.write(to: fileURL, options: .atomic)
             return true
         } catch {
-            makiLog.error("groups: could not save -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("groups: could not save -> \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -102,9 +102,9 @@ struct GroupStore {
         }
         do {
             try FileManager.default.moveItem(at: fileURL, to: backup)
-            makiLog.error("groups: unreadable file set aside at \(backup.path, privacy: .public)")
+            MakiLog.store.error("groups: unreadable file set aside at \(backup.path, privacy: .public)")
         } catch {
-            makiLog.error("groups: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("groups: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
         }
     }
 }

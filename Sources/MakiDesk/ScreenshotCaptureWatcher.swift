@@ -69,7 +69,7 @@ final class ScreenshotCaptureWatcher {
         }
         watcher.start(folder: target)
         self.watcher = watcher
-        makiLog.notice("capture watcher started folder=\(target.lastPathComponent, privacy: .public)")
+        MakiLog.capture.notice("capture watcher started folder=\(target.lastPathComponent, privacy: .public)")
     }
 
     func stop() {
@@ -152,7 +152,7 @@ final class ScreenshotCaptureWatcher {
                                             isImage: true, age: age)
         // One line per capture that landed, with the decision and no path: it
         // is what tells "the notice was off" from "the file was not seen".
-        makiLog.notice("capture notice enabled=\(enabled, privacy: .public) secure=\(secure, privacy: .public) age=\(Int(age), privacy: .public) shown=\(allowed, privacy: .public)")
+        MakiLog.capture.notice("capture notice enabled=\(enabled, privacy: .public) secure=\(secure, privacy: .public) age=\(Int(age), privacy: .public) shown=\(allowed, privacy: .public)")
         guard allowed else { return }
         HUDController.shared.show(
             "Screenshot saved",

@@ -105,7 +105,7 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
         // in-process and its text input invalidation asserts the main thread.
         // `WindowController.setFrameAsync`/`setPositionAsync` keep them on main.
         guard WindowController.isOwnProcess(request.element) == false else {
-            makiLog.error("frame write for our own window reached a worker queue identity=\(identity, privacy: .public)")
+            MakiLog.index.error("frame write for our own window reached a worker queue identity=\(identity, privacy: .public)")
             return
         }
         lock.lock()
@@ -154,7 +154,7 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
                     }
                 }
             } catch {
-                makiLog.error("frame write failed window=\(identity, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                MakiLog.index.error("frame write failed window=\(identity, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             }
 
             if let completion = request.completion {

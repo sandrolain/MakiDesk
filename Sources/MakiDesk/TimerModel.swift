@@ -356,7 +356,7 @@ struct TimerStore: Sendable {
         } catch {
             // Never overwrite a file we could not understand: it stays next to
             // the new one as `.bak`.
-            makiLog.error("timers: unreadable file -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("timers: unreadable file -> \(error.localizedDescription, privacy: .public)")
             let backup = url.appendingPathExtension("bak")
             try? FileManager.default.removeItem(at: backup)
             try? FileManager.default.moveItem(at: url, to: backup)
@@ -390,7 +390,7 @@ struct TimerStore: Sendable {
                                                     withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
         } catch {
-            makiLog.error("timers: could not save -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("timers: could not save -> \(error.localizedDescription, privacy: .public)")
         }
     }
 }

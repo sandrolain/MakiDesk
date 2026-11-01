@@ -48,7 +48,8 @@ enum WindowCapture {
     }
 
     private static let cacheTTL: TimeInterval = 5
-    private static let cacheByteLimit = 64 * 1024 * 1024
+    /// The capture cache's share of `CaptureBudget` (R06).
+    private static let cacheByteLimit = CaptureBudget.cacheBytes
     @MainActor private static var cacheBytes = 0
     @MainActor private static var cache: [CacheKey: Cached] = [:]
     @MainActor private static var captureInFlight = false

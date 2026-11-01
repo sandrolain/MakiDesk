@@ -87,14 +87,14 @@ struct ShortcutStore {
 
         guard let payload = try? Self.makeDecoder().decode(Payload.self, from: data) else {
             backUpCorruptFile()
-            makiLog.error("shortcuts: unreadable file set aside")
+            MakiLog.shortcuts.error("shortcuts: unreadable file set aside")
             return Snapshot(bindings: .defaults, version: Self.currentVersion, state: .corrupt)
         }
 
         let (bindings, report) = ShortcutBindings.resolved(payload.bindings ?? [:])
         if report.isEmpty == false {
             // Counts only: which command owns which combination is user data.
-            makiLog.notice("shortcuts: \(report.changedCount, privacy: .public) conflicting row(s) resolved on load")
+            MakiLog.shortcuts.notice("shortcuts: \(report.changedCount, privacy: .public) conflicting row(s) resolved on load")
         }
         return Snapshot(bindings: bindings,
                         version: payload.version,

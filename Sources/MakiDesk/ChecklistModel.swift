@@ -232,7 +232,7 @@ struct ChecklistFile {
             try data.write(to: fileURL, options: .atomic)
             return true
         } catch {
-            makiLog.error("checklist: could not save -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("checklist: could not save -> \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -251,9 +251,9 @@ struct ChecklistFile {
         }
         do {
             try FileManager.default.moveItem(at: fileURL, to: backup)
-            makiLog.error("checklist: unreadable file set aside at \(backup.path, privacy: .public)")
+            MakiLog.store.error("checklist: unreadable file set aside at \(backup.path, privacy: .public)")
         } catch {
-            makiLog.error("checklist: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("checklist: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
         }
     }
 }

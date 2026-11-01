@@ -444,7 +444,7 @@ struct MakiDeskApp: App {
         guard !UserDefaults.standard.bool(forKey: "setupCompleted") else { return }
         Self.didAttemptFirstRun = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            makiLog.notice("FirstRun: opening setup window")
+            MakiLog.app.notice("FirstRun: opening setup window")
             SettingsController.shared.show()
         }
     }

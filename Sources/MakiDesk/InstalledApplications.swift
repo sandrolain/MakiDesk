@@ -282,7 +282,7 @@ final class ApplicationCatalog {
                 let waiters = self.waiters
                 self.waiters.removeAll()
                 waiters.forEach { $0(found) }
-                makiLog.debug("application catalog: \(found.count) bundles in \(milliseconds) ms")
+                MakiLog.palette.debug("application catalog: \(found.count) bundles in \(milliseconds) ms")
             }
         }
     }

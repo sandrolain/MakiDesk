@@ -381,7 +381,7 @@ final class DropzoneCoordinator {
         }
         snapshot.zones[index].markConfirmed()
         if case let .failure(error) = store.save(snapshot.zones) {
-            makiLog.error("dropzones: could not store the confirmation: \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("dropzones: could not store the confirmation: \(error.localizedDescription, privacy: .public)")
             return .saveFailed(error.localizedDescription)
         } else {
             NotificationCenter.default.post(name: .makiDeskDropzonesChanged, object: nil)

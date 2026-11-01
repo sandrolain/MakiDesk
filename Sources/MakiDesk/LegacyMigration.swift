@@ -52,7 +52,7 @@ enum LegacyMigration {
             try fileManager.moveItem(at: old, to: new)
             return true
         } catch {
-            makiLog.error("migration: could not move legacy folder -> \(error.localizedDescription, privacy: .public)")
+            MakiLog.store.error("migration: could not move legacy folder -> \(error.localizedDescription, privacy: .public)")
             return false
         }
     }

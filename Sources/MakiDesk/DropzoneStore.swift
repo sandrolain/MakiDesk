@@ -115,7 +115,7 @@ struct DropzoneStore {
 
         guard let payload = try? Self.makeDecoder().decode(Payload.self, from: data) else {
             backUpCorruptFile()
-            makiLog.error("dropzones: unreadable file set aside")
+            MakiLog.store.error("dropzones: unreadable file set aside")
             return Snapshot(zones: [], version: Self.currentVersion, state: .corrupt)
         }
 
@@ -134,7 +134,7 @@ struct DropzoneStore {
     @discardableResult
     func remove() -> Bool {
         guard load().canSave else {
-            makiLog.error("dropzones: reset left a newer file in place")
+            MakiLog.store.error("dropzones: reset left a newer file in place")
             return false
         }
         do {
@@ -143,7 +143,7 @@ struct DropzoneStore {
         } catch {
             let code = (error as NSError).code
             if code == CocoaError.fileNoSuchFile.rawValue { return true }
-            makiLog.error("dropzones: could not remove the configuration")
+            MakiLog.store.error("dropzones: could not remove the configuration")
             return false
         }
     }
@@ -178,7 +178,7 @@ struct DropzoneStore {
                                                    ofItemAtPath: fileURL.path)
             return .success(())
         } catch {
-            makiLog.error("dropzones: could not save")
+            MakiLog.store.error("dropzones: could not save")
             return .failure(.writeFailed(error.localizedDescription))
         }
     }

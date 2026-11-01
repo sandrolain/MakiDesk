@@ -272,7 +272,7 @@ final class FocusDimController {
         var windows = Array(picked.reversed())
         if let last { windows.append(last) }
         guard !windows.isEmpty else { return }
-        makiLog.debug("focus dim brought forward windows=\(windows.count)")
+        MakiLog.app.debug("focus dim brought forward windows=\(windows.count)")
         stepActivation(windows, index: 0, generation: activationGeneration)
     }
 

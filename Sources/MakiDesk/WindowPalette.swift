@@ -561,7 +561,8 @@ final class WindowPalette {
     private var pendingBrowseSteps = 0
     private var previewCosts: [String: Int] = [:]
     private var previewDimensions: [String: CGFloat] = [:]
-    private static let previewByteLimit = 32 * 1024 * 1024
+    /// The palette's share of `CaptureBudget` (R06).
+    private static let previewByteLimit = CaptureBudget.paletteBytes
     private var visiblePreviewIDs = Set<String>()
     private var pendingPreviewLoad: DispatchWorkItem?
     @ObservationIgnored private weak var store: WorkspaceStore?
@@ -606,6 +607,10 @@ final class WindowPalette {
 
         let wasVisible = isVisible
         if !wasVisible {
+            // Timed from here to the first image that arrives, which is what
+            // "is the palette usable" means in practice (R11).
+            openStartedAt = DispatchTime.now().uptimeNanoseconds
+            loggedFirstImage = false
             selectPresentationScreen(store.paletteScreenLocation)
             originWindowID = store.mostRecentFocusedWindowID
             openedBackwards = backwards
@@ -881,9 +886,19 @@ final class WindowPalette {
                 self.previewCosts[key] = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
                     .map { $0.bytesPerRow * $0.height } ?? 0
                 self.trimPreviews(protecting: self.selectedWindow()?.id)
+                if self.loggedFirstImage == false, let started = self.openStartedAt {
+                    self.loggedFirstImage = true
+                    let ms = (DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+                    MakiLog.palette.notice("first image after \(ms, privacy: .public) ms")
+                }
             }
         }
     }
+
+    /// When the current open started and whether its first image has been
+    /// timed yet (R11).
+    private var openStartedAt: UInt64?
+    private var loggedFirstImage = false
 
     private var previewMaxDimension: CGFloat {
         let limit: CGFloat = model.metrics.layout == .fullScreen ? 1280 : 640
@@ -1471,7 +1486,7 @@ final class WindowPalette {
             if let error {
                 HUDController.shared.show("Could not open \(application.name)",
                                           symbol: "exclamationmark.triangle.fill")
-                makiLog.error("application launch failed: \(error.localizedDescription, privacy: .private)")
+                MakiLog.palette.error("application launch failed: \(error.localizedDescription, privacy: .private)")
             } else {
                 // The shelf opens on the applications opened most recently, so
                 // an opening is what keeps it current (R12).

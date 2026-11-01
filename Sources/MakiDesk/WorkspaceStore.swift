@@ -5,7 +5,6 @@ import SwiftUI
 import Observation
 import os
 
-let makiLog = Logger(subsystem: "com.makidesk.app", category: "app")
 
 /// A window the switcher / search can act on.
 struct ActionableWindow: Identifiable {
@@ -526,7 +525,7 @@ final class WorkspaceStore {
         let trusted = AXIsProcessTrusted()
         let changed = trusted != accessibilityTrusted
         accessibilityTrusted = trusted
-        if changed { makiLog.notice("accessibility trust changed -> \(trusted, privacy: .public)") }
+        if changed { MakiLog.app.notice("accessibility trust changed -> \(trusted, privacy: .public)") }
         if trusted {
             // Accessibility has no change notification: once granted we can stop
             // polling. A revoked permission is caught by the next command.
@@ -581,6 +580,33 @@ final class WorkspaceStore {
         }
     }
 
+    /// What "Copy diagnostics" reports (R11). Read on demand, never polled.
+    var diagnostics: DiagnosticsReport {
+        let versions = ProcessInfo.processInfo.operatingSystemVersion
+        var fileState: String
+        switch shortcutFileState {
+        case .missing: fileState = "absent, defaults in use"
+        case .loaded: fileState = "loaded"
+        case .corrupt: fileState = "unreadable, set aside"
+        case let .futureVersion(version): fileState = "from a newer version (\(version)), read-only"
+        }
+        if shortcutLoadReport.isEmpty == false {
+            fileState += ", \(shortcutLoadReport.changedCount) row(s) resolved"
+        }
+        return DiagnosticsReport(
+            appVersion: bundleVersion,
+            macOS: "\(versions.majorVersion).\(versions.minorVersion).\(versions.patchVersion)",
+            accessibility: accessibilityTrusted,
+            screenRecording: screenRecordingTrusted,
+            shortcutsRegistered: shortcutsRegistered,
+            shortcutsBlocked: shortcutsBlocked,
+            shortcutsModified: shortcutBindings.modifiedCount,
+            shortcutFile: fileState,
+            windows: WindowIndex.shared.snapshot().count,
+            groups: groups.count
+        )
+    }
+
     var bundleIdentifier: String { Bundle.main.bundleIdentifier ?? "com.makidesk.app" }
 
     /// TCC keys permissions by the app's path: a build run from the build folder
@@ -596,14 +622,14 @@ final class WorkspaceStore {
         shortcutFileState = snapshot.state
         shortcutLoadReport = snapshot.report
         if case let .futureVersion(version) = snapshot.state {
-            makiLog.error("shortcuts: file from a newer version \(version, privacy: .public); defaults in use")
+            MakiLog.shortcuts.error("shortcuts: file from a newer version \(version, privacy: .public); defaults in use")
         }
         if let from = snapshot.migratedFrom {
             // A file from the older table: the new defaults are in force, the
             // user's overrides were re-resolved, and the file is rewritten once
             // so the notice is not repeated at every launch (S05).
             if case let .failure(error) = ShortcutStore().save(snapshot.bindings) {
-                makiLog.error("shortcuts: migration not saved (\(error.localizedDescription, privacy: .public))")
+                MakiLog.shortcuts.error("shortcuts: migration not saved (\(error.localizedDescription, privacy: .public))")
             }
             let changed = snapshot.report.changedCount
             HUDController.shared.show(
@@ -622,7 +648,7 @@ final class WorkspaceStore {
             onPress: { [weak self] in self?.showPeek() },
             onRelease: { [weak self] in self?.hidePeek() }
         ) == nil {
-            makiLog.error("peek hold key unavailable: ⌃⌥H is taken by another app")
+            MakiLog.shortcuts.error("peek hold key unavailable: ⌃⌥H is taken by another app")
         }
         shortcutManager = manager
         shortcutsRegistered = manager.registeredCount
@@ -706,7 +732,7 @@ final class WorkspaceStore {
 
     private func applyShortcutBindings(_ updated: ShortcutBindings) -> Bool {
         if case let .failure(error) = ShortcutStore().save(updated) {
-            makiLog.error("shortcuts: save failed (\(error.localizedDescription, privacy: .public))")
+            MakiLog.shortcuts.error("shortcuts: save failed (\(error.localizedDescription, privacy: .public))")
             status = "Shortcut not saved"
             return false
         }
@@ -1747,7 +1773,7 @@ final class WorkspaceStore {
         let generation = (frameGenerations[key] ?? 0) + 1
         frameGenerations[key] = generation
         pendingFrameTargets[key] = adjusted
-        makiLog.notice("frame command window=\(key, privacy: .public) app=\(target.appName, privacy: .public) reason=\(reason, privacy: .public) requested=(\(Int(adjusted.minX)),\(Int(adjusted.minY)),\(Int(adjusted.width)),\(Int(adjusted.height))) generation=\(generation, privacy: .public)")
+        MakiLog.index.notice("frame command window=\(key, privacy: .public) app=\(target.appName, privacy: .public) reason=\(reason, privacy: .public) requested=(\(Int(adjusted.minX)),\(Int(adjusted.minY)),\(Int(adjusted.width)),\(Int(adjusted.height))) generation=\(generation, privacy: .public)")
         let finish: @MainActor @Sendable () -> Void = { [weak self] in
             self?.verifyFrame(adjusted, target: target, reason: reason,
                               key: key, generation: generation, attempt: 0,
@@ -1844,7 +1870,7 @@ final class WorkspaceStore {
         }
         if let actual, withinTolerance(actual, wanted) {
             pendingFrameTargets[key] = nil
-            makiLog.notice("frame verified window=\(key, privacy: .public) attempt=\(attempt, privacy: .public) actual=(\(Int(actual.minX)),\(Int(actual.minY)),\(Int(actual.width)),\(Int(actual.height)))")
+            MakiLog.index.notice("frame verified window=\(key, privacy: .public) attempt=\(attempt, privacy: .public) actual=(\(Int(actual.minX)),\(Int(actual.minY)),\(Int(actual.width)),\(Int(actual.height)))")
             status = "\(target.appName) · \(reason)"
             showMiniMapIfEnabled(for: target, frame: wanted)
             return
@@ -1854,7 +1880,7 @@ final class WorkspaceStore {
             let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
             let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
             let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
-            makiLog.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
+            MakiLog.index.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
             status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
             HUDController.shared.show("\(target.appName) keeps its own size\nasked \(asked) · got \(got)",
                                       symbol: "exclamationmark.triangle.fill")

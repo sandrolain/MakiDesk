@@ -854,8 +854,9 @@ on), so nothing is buried at the bottom of a long scroll. The sub-section is a
 place inside the page, not a preference: reopening Settings starts at the
 first one.
 
-- **General** — permissions, build, animations, keyboard shortcuts, licensing,
-  reset and finish setup.
+- **General** — permissions and **Copy diagnostics** (a short report on the
+  clipboard for a bug report), build, animations, keyboard shortcuts,
+  licensing, reset and finish setup.
 - **Windows** — gap, drag-to-snap key, macOS tiling, focus border, overlay.
 - **Layouts** — suggested layout behaviour and the seven content weights.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
