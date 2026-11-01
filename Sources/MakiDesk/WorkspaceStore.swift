@@ -271,6 +271,12 @@ final class WorkspaceStore {
     /// One step back (T17): the scene that was on screen before the last
     /// transition, and where the windows it moved were standing. Overwritten by
     /// every transition, so there is exactly one level to undo.
+    /// Order in which apps first received a colour this session. Assigning in
+    /// first-seen order (instead of hashing to a random hue) lets the hues be
+    /// evenly spaced, so open apps never end up with near-identical tones.
+    /// Internal because the colour helpers live in `WorkspaceStore+Chrome`.
+    @ObservationIgnored var appColorOrder: [String: Int] = [:]
+
     @ObservationIgnored private var sceneUndo: SceneUndo?
     /// The windows the pending advice was computed for, and the timer that lets
     /// the offer lapse (T18).
@@ -1971,7 +1977,7 @@ final class WorkspaceStore {
 
     /// Finds the model entry for a freshly discovered window: by stable system id
     /// first, then by the AX element itself, then by title (A2).
-    private func matchingIndex(for target: WindowController.WindowInfo) -> Int? {
+    func matchingIndex(for target: WindowController.WindowInfo) -> Int? {
         if let index = windows.firstIndex(where: { $0.systemID == target.id }) { return index }
         for (index, window) in windows.enumerated() {
             if let element = elements[window.id], CFEqual(element, target.element) { return index }
@@ -3585,99 +3591,11 @@ final class WorkspaceStore {
                             ofModelWindowAt: index)
     }
 
-    // MARK: - Colors
-
-    /// Order in which apps first received a colour this session. Assigning in
-    /// first-seen order (instead of hashing to a random hue) lets the hues be
-    /// evenly spaced, so open apps never end up with near-identical tones.
-    @ObservationIgnored private var appColorOrder: [String: Int] = [:]
-
-    private func tint(for appName: String) -> String {
-        let palette = ["blue", "purple", "green", "orange", "pink"]
-        return palette[Self.stableIndex(appName, count: palette.count)]
-    }
-
-    /// A per-app colour. Hues are assigned in first-seen order on an evenly
-    /// spaced wheel derived from the theme's accent, so **any two open apps are
-    /// at least ~30° apart** (no more clusters of similar yellows). A second
-    /// tier (lighter/desaturated) covers the rare case of more than 12 apps.
-    func color(for appName: String) -> NSColor {
-        let base = (NSColor(theme.accent).usingColorSpace(.deviceRGB)) ?? .systemBlue
-        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
-        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
-        let hueSteps = 12
-        let index = colorIndex(for: appName)
-        let slot = index % hueSteps
-        let tier = (index / hueSteps) % 2
-        let shifted = (hue + CGFloat(slot) / CGFloat(hueSteps)).truncatingRemainder(dividingBy: 1)
-        let baseSaturation = min(1, max(0.55, saturation))
-        let baseBrightness = min(1, max(0.68, brightness))
-        // Tier 1 is pale/faded, clearly distinct from tier 0 at the same hue.
-        let saturationOut = tier == 0 ? baseSaturation : baseSaturation * 0.6
-        let brightnessOut = tier == 0 ? baseBrightness : min(1, baseBrightness * 1.2)
-        return NSColor(hue: shifted, saturation: saturationOut, brightness: brightnessOut, alpha: 1)
-    }
-
-    /// Stable per-app slot, handed out in first-seen order.
-    private func colorIndex(for appName: String) -> Int {
-        if let existing = appColorOrder[appName] { return existing }
-        let index = appColorOrder.count
-        appColorOrder[appName] = index
-        return index
-    }
-
-    private static func stableIndex(_ text: String, count: Int) -> Int {
-        var hash = 5381
-        for scalar in text.unicodeScalars {
-            hash = ((hash << 5) &+ hash) &+ Int(scalar.value)
-        }
-        return abs(hash) % max(1, count)
-    }
-
-    // MARK: - Mini-map
-
-    private func showMiniMapIfEnabled(motionFrom: [UUID: CGRect] = [:]) {
-        guard showMiniMap else { return }
-        let focusedID = mostRecentFocusedWindowID.flatMap { focusedSystemID in
-            windows.first(where: { $0.systemID == focusedSystemID })?.id
-        }
-        MiniMapController.shared.show(
-            windows: windows,
-            highlightedIDs: Set(focusedID.map { [$0] } ?? []),
-            motionFrom: motionFrom
-        )
-    }
-
-    private func showMiniMapIfEnabled(for target: WindowController.WindowInfo, frame: CGRect) {
-        guard showMiniMap else { return }
-        var mapWindows = windows
-        var highlightedID: UUID?
-        if let index = mapWindows.firstIndex(where: { $0.systemID == target.id }) {
-            highlightedID = mapWindows[index].id
-            mapWindows[index].x = frame.minX
-            mapWindows[index].y = frame.minY
-            mapWindows[index].width = frame.width
-            mapWindows[index].height = frame.height
-        } else if let index = matchingIndex(for: target) {
-            highlightedID = mapWindows[index].id
-            mapWindows[index].x = frame.minX
-            mapWindows[index].y = frame.minY
-            mapWindows[index].width = frame.width
-            mapWindows[index].height = frame.height
-        } else {
-            let mapped = WorkspaceWindow(title: target.title, appName: target.appName,
-                                         x: frame.minX, y: frame.minY,
-                                         width: frame.width, height: frame.height,
-                                         systemID: target.id)
-            highlightedID = mapped.id
-            mapWindows.append(mapped)
-        }
-        MiniMapController.shared.show(windows: mapWindows, highlightedIDs: Set(highlightedID.map { [$0] } ?? []))
-    }
 }
 
 private extension Double {
     func clamped(to range: ClosedRange<Double>) -> Double {
         min(max(self, range.lowerBound), range.upperBound)
     }
+
 }
