@@ -135,6 +135,7 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
             let previousOrigin = state.lastOrigin
             lock.unlock()
 
+            let interval = MakiSignpost.index.beginInterval(MakiSignpost.frameWrite)
             do {
                 switch request.work {
                 case let .frame(frame, order):
@@ -156,6 +157,7 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
             } catch {
                 MakiLog.index.error("frame write failed window=\(identity, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             }
+            MakiSignpost.index.endInterval(MakiSignpost.frameWrite, interval)
 
             if let completion = request.completion {
                 Task { @MainActor in completion() }

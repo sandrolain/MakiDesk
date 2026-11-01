@@ -218,6 +218,9 @@ actor TextRecognizer: TextRecognizing {
             request.recognitionLanguages = options.languages
         }
 
+        // Instruments sees the request itself, not just the total: the encode,
+        // the Vision run and the join are three different waits (R11).
+        let interval = MakiSignpost.ocr.beginInterval(MakiSignpost.recognition)
         do {
             let handler = VNImageRequestHandler(cgImage: prepared.image, options: [:])
             let cancellable = CancellableVisionRequest(request)
@@ -226,7 +229,9 @@ actor TextRecognizer: TextRecognizing {
             } onCancel: {
                 cancellable.cancel()
             }
+            MakiSignpost.ocr.endInterval(MakiSignpost.recognition, interval)
         } catch {
+            MakiSignpost.ocr.endInterval(MakiSignpost.recognition, interval)
             // A superseded request is cancelled inside Vision; that is not a
             // failure, and the raw error lets the caller retry once.
             try Task.checkCancellation()

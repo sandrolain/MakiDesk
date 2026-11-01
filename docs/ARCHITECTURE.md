@@ -66,6 +66,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
 | `SettingsView.swift` | Tabbed settings, permissions, diagnostics, reset. |
 | `SettingsKey.swift` | Every `UserDefaults` key, spelled once; a test fails on any literal written outside it. |
+| `MakiSignpost.swift` | The Instruments intervals: a frame write, a recognition request. Cheap when nobody is recording, no content in them. |
 | `FloatingPanel.swift` | The panel base class: a subclass names its style (utility, keyOverlay, passive, readOnly) instead of overriding the same three members. |
 | `HUDMessage.swift`, `HUDMessages.swift` | What a notice says, as a value; the capture family's sentences are written once and checked by a test. |
 | `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
