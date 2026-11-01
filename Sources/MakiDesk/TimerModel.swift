@@ -482,14 +482,6 @@ struct TimerProximity: Equatable {
 
 /// Limits and defaults for the countdown overlay (T61).
 enum TimerSettings {
-    static let overlayVisibleKey = SettingsKey.timerOverlayVisible.rawValue
-    static let overlayOpacityKey = SettingsKey.timerOverlayOpacity.rawValue
-    static let overlayPositionKey = SettingsKey.timerOverlayPosition.rawValue
-    static let overlayScreenKey = SettingsKey.timerOverlayScreen.rawValue
-
-    static let soundEnabledKey = SettingsKey.timerSoundEnabled.rawValue
-    static let soundNameKey = SettingsKey.timerSoundName.rawValue
-
     /// The system sounds offered in Settings. They are files in
     /// `/System/Library/Sounds`, so nothing new is installed or downloaded.
     static let soundNames = ["Glass", "Ping", "Pop", "Submarine",

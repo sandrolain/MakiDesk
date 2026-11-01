@@ -90,7 +90,7 @@ final class ScreenshotCaptureWatcher {
     /// The folder the library shows: the one chosen in Settings, else the system
     /// one, so the notice follows `com.apple.screencapture` too.
     private func folderToWatch() -> URL {
-        if let stored = UserDefaults.standard.string(forKey: ScreenshotLibraryModel.folderKey),
+        if let stored = Settings.string(.screenshotLibraryFolderPath),
            stored.isEmpty == false {
             return URL(fileURLWithPath: stored, isDirectory: true).standardizedFileURL
         }

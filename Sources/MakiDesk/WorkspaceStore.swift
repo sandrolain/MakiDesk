@@ -219,14 +219,14 @@ final class WorkspaceStore {
     var checklistScreen = Settings.value(.checklistScreen) ?? ChecklistSettings.defaultScreen
 
     /// Whether an annotated screenshot is also copied to the clipboard (T40).
-    var screenshotCopyToClipboard = UserDefaults.standard.object(forKey: SettingsKey.screenshotCopyToClipboard.rawValue) as? Bool ?? true
+    var screenshotCopyToClipboard = Settings.bool(.screenshotCopyToClipboard)
     /// Whether a capture macOS saved gets a notice with Shelf and Copy text
     /// (T48). Off by default: a banner for every screenshot is noise until the
     /// user asks for it.
-    var screenshotSavedNotice = UserDefaults.standard.object(forKey: SettingsKey.screenshotSavedNotice.rawValue) as? Bool ?? false
+    var screenshotSavedNotice = Settings.bool(.screenshotSavedNotice)
     /// Whether a screen recording also captures the system's own sound (T40).
     /// The microphone stays out: it needs a second permission and a mixdown.
-    var recordingIncludesAudio = UserDefaults.standard.object(forKey: SettingsKey.recordingIncludesAudio.rawValue) as? Bool ?? true
+    var recordingIncludesAudio = Settings.bool(.recordingIncludesAudio)
 
     /// The countdown card (T61): shown while a timer exists, unless turned off.
     var timerOverlayVisible = Settings.bool(.timerOverlayVisible)
@@ -1056,18 +1056,18 @@ final class WorkspaceStore {
 
     func updateScreenshotCopyToClipboard(_ value: Bool) {
         screenshotCopyToClipboard = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.screenshotCopyToClipboard.rawValue)
+        Settings.set(value, for: .screenshotCopyToClipboard)
     }
 
     func updateScreenshotSavedNotice(_ value: Bool) {
         screenshotSavedNotice = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.screenshotSavedNotice.rawValue)
+        Settings.set(value, for: .screenshotSavedNotice)
         ScreenshotCaptureWatcher.shared.applySettings()
     }
 
     func updateRecordingIncludesAudio(_ value: Bool) {
         recordingIncludesAudio = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.recordingIncludesAudio.rawValue)
+        Settings.set(value, for: .recordingIncludesAudio)
     }
 
     func updateTimerSoundEnabled(_ value: Bool) {

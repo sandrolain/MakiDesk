@@ -360,7 +360,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         self.theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
         self.editor = NotesEditorView(theme: self.theme)
         super.init(nibName: nil, bundle: nil)
-        let savedSize = UserDefaults.standard.double(forKey: SettingsKey.notesFontSize.rawValue)
+        let savedSize = Settings.double(.notesFontSize)
         if savedSize >= 10, savedSize <= 24 { editor.fontSize = CGFloat(savedSize) }
         store.onChange = { [weak self] in self?.refreshChrome() }
     }
@@ -1359,7 +1359,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private func changeFontSize(by delta: CGFloat) {
         let size = min(24, max(10, editor.fontSize + delta))
         editor.fontSize = size
-        UserDefaults.standard.set(Double(size), forKey: SettingsKey.notesFontSize.rawValue)
+        Settings.set(Double(size), for: .notesFontSize)
         highlighter?.update(theme: theme, baseAttributes: editor.baseAttributes)
     }
 
@@ -1387,7 +1387,6 @@ final class NotesSplitView: NSView {
     static let minimumSidebar: CGFloat = 190
     static let maximumSidebar: CGFloat = 360
     private static let defaultSidebar: CGFloat = 230
-    private static let defaultsKey = SettingsKey.notesSidebarWidth.rawValue
 
     var dividerColor: NSColor = .separatorColor {
         didSet { divider.lineColor = dividerColor }
@@ -1401,7 +1400,7 @@ final class NotesSplitView: NSView {
 
     init() {
         super.init(frame: .zero)
-        let saved = UserDefaults.standard.double(forKey: Self.defaultsKey)
+        let saved = Settings.double(.notesSidebarWidth)
         if saved >= Double(Self.minimumSidebar), saved <= Double(Self.maximumSidebar) {
             width = CGFloat(saved)
         }
@@ -1409,7 +1408,7 @@ final class NotesSplitView: NSView {
         divider.onDrag = { [weak self] delta in self?.drag(by: delta) }
         divider.onEnd = { [weak self] in
             guard let self else { return }
-            UserDefaults.standard.set(Double(self.width), forKey: Self.defaultsKey)
+            Settings.set(Double(self.width), for: .notesSidebarWidth)
         }
     }
 

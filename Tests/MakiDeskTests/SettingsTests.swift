@@ -112,6 +112,35 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(Settings.string(.timerSoundName, in: defaults), TimerSettings.defaultSound)
     }
 
+    // MARK: - Notes and screenshots
+
+    func testTheNotesDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+        XCTAssertEqual(Settings.double(.notesFontSize, in: defaults), 13, accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.notesSidebarWidth, in: defaults), 230, accuracy: 0.001)
+    }
+
+    func testTheScreenshotDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertTrue(Settings.bool(.screenshotCopyToClipboard, in: defaults))
+        XCTAssertFalse(Settings.bool(.screenshotSavedNotice, in: defaults))
+        XCTAssertTrue(Settings.bool(.recordingIncludesAudio, in: defaults))
+        XCTAssertFalse(Settings.bool(.screenshotLibraryShowsRecordings, in: defaults))
+        XCTAssertEqual(Settings.value(.screenshotLibrarySort, as: ScreenshotSortOrder.self,
+                                      in: defaults), .newestFirst)
+        XCTAssertEqual(Settings.value(.screenshotLibraryGrouping, as: ScreenshotGrouping.self,
+                                      in: defaults), .month)
+        XCTAssertEqual(Settings.double(.screenshotLibraryScale, in: defaults), 1, accuracy: 0.001)
+    }
+
+    /// An absent folder is "the system folder", not a value: registering one
+    /// would turn "never chosen" into "chosen empty".
+    func testTheLibraryFolderHasNoDefault() {
+        Settings.registerDefaults(in: defaults)
+        XCTAssertNil(defaults.object(forKey: SettingsKey.screenshotLibraryFolderPath.rawValue))
+    }
+
     /// The table is the list of keys whose reads have moved. Adding a domain
     /// means adding it here, which forces the question "are its reads using
     /// this, or still carrying their own fallback?".
@@ -123,6 +152,10 @@ final class SettingsTests: XCTestCase {
             .checklistScreen,
             .timerOverlayVisible, .timerOverlayOpacity, .timerOverlayPosition,
             .timerOverlayScreen, .timerSoundEnabled, .timerSoundName,
+            .notesFontSize, .notesSidebarWidth,
+            .screenshotCopyToClipboard, .screenshotSavedNotice, .recordingIncludesAudio,
+            .screenshotLibrarySort, .screenshotLibraryGrouping,
+            .screenshotLibraryScale, .screenshotLibraryShowsRecordings,
         ]
         XCTAssertEqual(Set(SettingsDefaults.table.keys), expected)
     }

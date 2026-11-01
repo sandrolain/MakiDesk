@@ -55,7 +55,9 @@ final class SettingsKeyTests: XCTestCase {
         XCTAssertEqual(HUDSettings.positionKey, SettingsKey.hudPosition.rawValue)
         XCTAssertEqual(HUDSettings.screenKey, SettingsKey.hudScreenLocation.rawValue)
         XCTAssertEqual(SettingsView.SettingsTab.defaultsKey, SettingsKey.settingsTab.rawValue)
-        XCTAssertEqual(ScreenshotLibraryModel.folderKey, SettingsKey.screenshotLibraryFolderPath.rawValue)
+        XCTAssertEqual(MeasurementSettings.unitKey, SettingsKey.measureUnit.rawValue)
+        XCTAssertEqual(ColorSamplerController.formatDefaultsKey,
+                       SettingsKey.colorPickerFormat.rawValue)
         XCTAssertEqual(ApplicationUsageStore.defaultsKey, SettingsKey.applicationLauncherUsage.rawValue)
     }
 

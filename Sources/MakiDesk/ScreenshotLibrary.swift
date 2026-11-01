@@ -88,11 +88,6 @@ final class ScreenshotLibraryModel {
     private var watcher: ScreenshotFolderWatcher?
     private var refreshWork: DispatchWorkItem?
 
-    /// `UserDefaults` key of the folder chosen in Settings. Public to the module
-    /// because the saved-screenshot notice reads the same key: one literal, one
-    /// owner (R13).
-    static let folderKey = SettingsKey.screenshotLibraryFolderPath.rawValue
-
     init(folderURL overrideFolderURL: URL? = nil,
          defaults: UserDefaults = .standard,
          systemFolder: @escaping () -> URL = { SystemScreenshotFolder.folderURL() },
@@ -101,13 +96,13 @@ final class ScreenshotLibraryModel {
         self.defaults = defaults
         self.systemFolder = systemFolder
         spotlight = index ?? ScreenshotSpotlightIndex()
-        sortOrder = ScreenshotSortOrder(rawValue: defaults.string(forKey: SettingsKey.screenshotLibrarySort.rawValue) ?? "") ?? .newestFirst
-        showsRecordings = defaults.object(forKey: SettingsKey.screenshotLibraryShowsRecordings.rawValue) as? Bool ?? false
-        grouping = ScreenshotGrouping(rawValue: defaults.string(forKey: SettingsKey.screenshotLibraryGrouping.rawValue) ?? "") ?? .month
-        thumbnailScale = min(max(defaults.object(forKey: SettingsKey.screenshotLibraryScale.rawValue) as? Double ?? 1, 0.75), 1.6)
+        sortOrder = Settings.value(.screenshotLibrarySort, in: defaults) ?? .newestFirst
+        showsRecordings = Settings.bool(.screenshotLibraryShowsRecordings, in: defaults)
+        grouping = Settings.value(.screenshotLibraryGrouping, in: defaults) ?? .month
+        thumbnailScale = min(max(Settings.double(.screenshotLibraryScale, in: defaults), 0.75), 1.6)
         if let overrideFolderURL {
             folderURL = overrideFolderURL.standardizedFileURL
-        } else if let path = defaults.string(forKey: Self.folderKey),
+        } else if let path = Settings.string(.screenshotLibraryFolderPath, in: defaults),
            FileManager.default.fileExists(atPath: path) {
             folderURL = URL(fileURLWithPath: path, isDirectory: true)
         } else {
@@ -237,24 +232,24 @@ final class ScreenshotLibraryModel {
 
     func setSortOrder(_ order: ScreenshotSortOrder) {
         sortOrder = order
-        defaults.set(order.rawValue, forKey: SettingsKey.screenshotLibrarySort.rawValue)
+        Settings.set(order.rawValue, for: .screenshotLibrarySort, in: defaults)
     }
 
     func setGrouping(_ value: ScreenshotGrouping) {
         grouping = value
-        defaults.set(value.rawValue, forKey: SettingsKey.screenshotLibraryGrouping.rawValue)
+        Settings.set(value.rawValue, for: .screenshotLibraryGrouping, in: defaults)
     }
 
     func setThumbnailScale(_ value: Double) {
         thumbnailScale = value
-        defaults.set(value, forKey: SettingsKey.screenshotLibraryScale.rawValue)
+        Settings.set(value, for: .screenshotLibraryScale, in: defaults)
     }
 
     /// Lists or hides screen recordings; persisted, off by default (T48).
     func setShowsRecordings(_ value: Bool) {
         guard showsRecordings != value else { return }
         showsRecordings = value
-        defaults.set(value, forKey: SettingsKey.screenshotLibraryShowsRecordings.rawValue)
+        Settings.set(value, for: .screenshotLibraryShowsRecordings, in: defaults)
         refresh()
     }
 
@@ -281,9 +276,9 @@ final class ScreenshotLibraryModel {
         // freezing today's path: a later change in System Settings must reach
         // the next launch too.
         if persist, folderURL != systemFolder().standardizedFileURL {
-            defaults.set(folderURL.path, forKey: Self.folderKey)
+            Settings.set(folderURL.path, for: .screenshotLibraryFolderPath, in: defaults)
         } else {
-            defaults.removeObject(forKey: Self.folderKey)
+            Settings.remove(.screenshotLibraryFolderPath, in: defaults)
         }
         clearSelection()
         message = nil

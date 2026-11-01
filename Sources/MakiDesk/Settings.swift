@@ -98,6 +98,20 @@ enum SettingsDefaults {
         .timerOverlayScreen: TimerSettings.defaultScreen.rawValue,
         .timerSoundEnabled: true,
         .timerSoundName: TimerSettings.defaultSound,
+
+        // Notes: the editor's own size and the split view's starting width.
+        .notesFontSize: 13.0,
+        .notesSidebarWidth: 230.0,
+
+        // Screenshots and recordings. The library folder has no default: an
+        // absent key means "the system folder", which is not a value.
+        .screenshotCopyToClipboard: true,
+        .screenshotSavedNotice: false,
+        .recordingIncludesAudio: true,
+        .screenshotLibrarySort: ScreenshotSortOrder.newestFirst.rawValue,
+        .screenshotLibraryGrouping: ScreenshotGrouping.month.rawValue,
+        .screenshotLibraryScale: 1.0,
+        .screenshotLibraryShowsRecordings: false,
         ]
     }
 }
