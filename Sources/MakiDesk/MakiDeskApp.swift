@@ -172,7 +172,8 @@ struct MakiDeskApp: App {
                 Divider()
                 menuButton("Dropzones…", icon: "bolt.square") {
                     // The Settings tab is persisted: select it before opening.
-                    UserDefaults.standard.set("dropzones", forKey: "settingsTab")
+                    UserDefaults.standard.set(SettingsView.SettingsTab.dropzones.rawValue,
+                                              forKey: SettingsView.SettingsTab.defaultsKey)
                     SettingsController.shared.show()
                 }
             } label: {

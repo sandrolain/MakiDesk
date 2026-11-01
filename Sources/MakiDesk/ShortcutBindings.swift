@@ -103,6 +103,24 @@ enum ShortcutEditResult: Equatable {
     }
 }
 
+/// What a load had to change so the file is self-consistent (Q01).
+///
+/// A file written by the app never holds two rows on the same combination, but
+/// the file can be edited by hand and an older override can collide with a
+/// newer default. The load resolves that once and reports it, instead of
+/// leaving a row silently mute.
+struct ShortcutLoadReport: Equatable, Sendable {
+    /// Rows that lost an explicit override to another row and now use their own
+    /// default.
+    var revertedToDefault: [String] = []
+    /// Rows left with no combination because their default was taken: the
+    /// catalog shows them as needing a new one.
+    var unregistered: Set<String> = []
+
+    var isEmpty: Bool { revertedToDefault.isEmpty && unregistered.isEmpty }
+    var changedCount: Int { revertedToDefault.count + unregistered.count }
+}
+
 /// The effective shortcut table: the defaults from `ShortcutDefinitions` plus
 /// the user's overrides (T53 phase 2). Pure and value-typed, so the recorder,
 /// the catalog, the menu and the tests all read the same thing.
@@ -245,5 +263,73 @@ struct ShortcutBindings: Equatable, Sendable {
             result[id] = ShortcutOverride(binding: normalized)
         }
         return result
+    }
+
+    // MARK: - Conflicts (Q01)
+
+    /// The table with the user's overrides applied and no two rows on the same
+    /// combination.
+    ///
+    /// `sanitized(_:)` only drops rows that cannot work one at a time; this adds
+    /// the rule that needs the whole table. Precedence: an explicit override
+    /// wins over a default; a row that loses falls back to its own default when
+    /// that is free, and otherwise keeps no combination and is reported, so the
+    /// catalog can say why. Rows are visited by id, so a hand-edited file always
+    /// resolves the same way.
+    static func resolved(_ overrides: [String: ShortcutOverride])
+        -> (bindings: ShortcutBindings, report: ShortcutLoadReport) {
+        let accepted = sanitized(overrides)
+
+        // 1. Claim combinations: explicit overrides first, then the defaults of
+        //    the rows that have none. Every default is unique, so a default can
+        //    only lose to an override.
+        var owner: [ShortcutBinding: String] = [:]
+        var granted: [String: ShortcutBinding] = [:]
+        for id in accepted.keys.sorted() {
+            guard let binding = accepted[id]?.binding?.normalized else { continue }
+            // The peek's hold key is registered outside the table, so a file
+            // must not take it, exactly as the recorder refuses it.
+            guard Self.reserved.contains(binding) == false else { continue }
+            if owner[binding] == nil {
+                owner[binding] = id
+                granted[id] = binding
+            }
+        }
+        for (id, binding) in defaultTable.sorted(by: { $0.key < $1.key })
+        where granted[id] == nil && accepted[id] == nil {
+            if owner[binding] == nil {
+                owner[binding] = id
+                granted[id] = binding
+            }
+        }
+
+        // 2. A row left without a combination tries its own default. A row the
+        //    user turned off owns nothing and claims nothing back.
+        var report = ShortcutLoadReport()
+        for (id, own) in defaultTable.sorted(by: { $0.key < $1.key }) where granted[id] == nil {
+            if accepted[id]?.isDisabled == true { continue }
+            if accepted[id] != nil, owner[own] == nil {
+                owner[own] = id
+                granted[id] = own
+                report.revertedToDefault.append(id)
+            } else {
+                report.unregistered.insert(id)
+            }
+        }
+
+        // 3. Back to the file's shape: a row equal to its default stores nothing,
+        //    and a row with no combination is stored as turned off, because the
+        //    file has no other way to say "no key".
+        var result: [String: ShortcutOverride] = [:]
+        for (id, override) in accepted where override.isDisabled {
+            result[id] = ShortcutOverride(disabled: true)
+        }
+        for (id, binding) in granted where binding != defaultTable[id] {
+            result[id] = ShortcutOverride(binding: binding)
+        }
+        for id in report.unregistered {
+            result[id] = ShortcutOverride(disabled: true)
+        }
+        return (ShortcutBindings(overrides: result), report)
     }
 }

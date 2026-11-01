@@ -88,7 +88,10 @@ final class ScreenshotLibraryModel {
     private var watcher: ScreenshotFolderWatcher?
     private var refreshWork: DispatchWorkItem?
 
-    private static let folderKey = "screenshotLibraryFolderPath"
+    /// `UserDefaults` key of the folder chosen in Settings. Public to the module
+    /// because the saved-screenshot notice reads the same key: one literal, one
+    /// owner (R13).
+    static let folderKey = "screenshotLibraryFolderPath"
 
     init(folderURL overrideFolderURL: URL? = nil,
          defaults: UserDefaults = .standard,

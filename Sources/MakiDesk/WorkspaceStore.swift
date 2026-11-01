@@ -117,6 +117,8 @@ final class WorkspaceStore {
     var shortcutBindings = ShortcutBindings.defaults
     /// What happened to `shortcuts.json` at launch, so the editor can say it.
     var shortcutFileState: ShortcutStore.State = .missing
+    /// Rows the launch had to resolve out of a hand-edited or older file (Q01).
+    var shortcutLoadReport = ShortcutLoadReport()
     var gap = (UserDefaults.standard.object(forKey: "windowGap") == nil
         ? 12
         : UserDefaults.standard.double(forKey: "windowGap")).clamped(to: 0...80)
@@ -592,6 +594,7 @@ final class WorkspaceStore {
         let snapshot = ShortcutStore().load()
         shortcutBindings = snapshot.bindings
         shortcutFileState = snapshot.state
+        shortcutLoadReport = snapshot.report
         if case let .futureVersion(version) = snapshot.state {
             makiLog.error("shortcuts: file from a newer version \(version, privacy: .public); defaults in use")
         }
@@ -695,6 +698,9 @@ final class WorkspaceStore {
         }
         shortcutBindings = updated
         shortcutFileState = .loaded
+        // An edit can never leave two rows on one combination: validation runs
+        // before the save, so there is nothing left to report (Q01).
+        shortcutLoadReport = ShortcutLoadReport()
         shortcutManager?.reload(updated)
         shortcutsRegistered = shortcutManager?.registeredCount ?? 0
         shortcutsBlocked = shortcutManager?.failedCount ?? 0
@@ -1222,6 +1228,7 @@ final class WorkspaceStore {
             _ = shortcutStore.remove()
             shortcutBindings = .defaults
             shortcutFileState = shortcutStore.load().state
+            shortcutLoadReport = ShortcutLoadReport()
             shortcutManager?.reload(.defaults)
             shortcutsRegistered = shortcutManager?.registeredCount ?? 0
             shortcutsBlocked = shortcutManager?.failedCount ?? 0

@@ -16,6 +16,8 @@ struct ShortcutItem: Identifiable {
     var isModified: Bool = false
     var isDisabled: Bool = false
     var isBlocked: Bool = false
+    /// The row lost its combination at load and needs a new one (Q01).
+    var isUnregistered: Bool = false
 
     var id: String { identifier ?? "\(title)|\(keys)" }
 }
@@ -36,25 +38,31 @@ enum ShortcutCatalog {
     /// table in force; only the in-panel rows are written here, because they
     /// are not Carbon hot keys (T53).
     static func sections(bindings: ShortcutBindings = .defaults,
-                         blocked: Set<String> = []) -> [ShortcutSection] {
+                         blocked: Set<String> = [],
+                         unregistered: Set<String> = []) -> [ShortcutSection] {
         var result: [ShortcutSection] = []
         for section in ShortcutDefinitions.sections {
             let items = section.definitions.map { definition -> ShortcutItem in
                 let global = definition.isGlobal
                 let disabled = global && bindings.isDisabled(definition.id)
                 let isBlocked = global && blocked.contains(definition.id)
+                let isUnregistered = global && unregistered.contains(definition.id)
                 var note = definition.note
                 if isBlocked { note = inUseNote(note) }
-                if disabled { note = offNote(note) }
+                if isUnregistered { note = noKeyNote(note) }
+                else if disabled { note = offNote(note) }
                 return ShortcutItem(
                     title: definition.title,
-                    keys: disabled ? "Off" : (bindings.display(for: definition.id) ?? definition.display),
+                    keys: isUnregistered ? "—"
+                        : disabled ? "Off"
+                        : (bindings.display(for: definition.id) ?? definition.display),
                     note: note,
                     identifier: definition.id,
                     isRemappable: global,
                     isModified: global && bindings.isModified(definition.id),
                     isDisabled: disabled,
-                    isBlocked: isBlocked
+                    isBlocked: isBlocked,
+                    isUnregistered: isUnregistered
                 )
             }
             result.append(ShortcutSection(title: section.title, scope: "Global",
@@ -67,6 +75,12 @@ enum ShortcutCatalog {
     private static func inUseNote(_ note: String?) -> String {
         let base = "In use by another app: use the menu instead."
         return note.map { "\(base) \($0)" } ?? base
+    }
+
+    static let noKeyBaseNote = "Another row had this combination, so this command has no key. Record a new one."
+
+    private static func noKeyNote(_ note: String?) -> String {
+        note.map { "\(noKeyBaseNote) \($0)" } ?? noKeyBaseNote
     }
 
     private static func offNote(_ note: String?) -> String {
@@ -205,7 +219,8 @@ struct ShortcutsView: View {
 
     private var catalogSections: [ShortcutSection] {
         ShortcutCatalog.sections(bindings: store.shortcutBindings,
-                                 blocked: store.blockedShortcutIDs)
+                                 blocked: store.blockedShortcutIDs,
+                                 unregistered: store.shortcutLoadReport.unregistered)
     }
 
     private var total: Int {
@@ -345,12 +360,27 @@ struct ShortcutsView: View {
     private var fileWarning: String? {
         switch store.shortcutFileState {
         case .missing, .loaded:
-            return nil
+            return conflictWarning
         case .corrupt:
             return "The shortcuts file could not be read; it was set aside and the defaults are in use."
         case let .futureVersion(version):
             return "The shortcuts file was written by a newer MakiDesk (version \(version)); it is read-only and the defaults are in use."
         }
+    }
+
+    /// Said once, next to the list, when the file held two rows on one
+    /// combination (Q01).
+    private var conflictWarning: String? {
+        let report = store.shortcutLoadReport
+        guard report.isEmpty == false else { return nil }
+        var parts = ["The shortcuts file put two commands on the same combination."]
+        if report.revertedToDefault.isEmpty == false {
+            parts.append("\(report.revertedToDefault.count) went back to the default.")
+        }
+        if report.unregistered.isEmpty == false {
+            parts.append("\(report.unregistered.count) have no key: record one.")
+        }
+        return parts.joined(separator: " ")
     }
 
     private func sectionView(_ section: ShortcutSection) -> some View {
@@ -431,7 +461,7 @@ struct ShortcutsView: View {
 
     private func keyButton(_ item: ShortcutItem) -> some View {
         let recording = recordingID != nil && recordingID == item.identifier
-        let tint = item.isBlocked ? Color.orange
+        let tint = item.isBlocked || item.isUnregistered ? Color.orange
             : item.isDisabled ? theme.subtext
             : recording ? theme.accent : theme.text
         return Button {

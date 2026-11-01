@@ -4,7 +4,11 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var store: WorkspaceStore
 
-    private enum SettingsTab: String, CaseIterable, Identifiable {
+    enum SettingsTab: String, CaseIterable, Identifiable {
+        /// The persisted selection. `MakiDeskApp` writes it before opening the
+        /// window and `@AppStorage` reads it here, so the literal lives once.
+        static let defaultsKey = "settingsTab"
+
         case general, windows, layouts, panels, notifications, groups, dropzones
 
         var id: String { rawValue }
@@ -94,7 +98,7 @@ struct SettingsView: View {
     /// bar did not, so the content keeps its old room at the smallest size.
     static let minimumSize = CGSize(width: 800, height: 580)
 
-    @AppStorage("settingsTab") private var settingsTab: SettingsTab = .general
+    @AppStorage(SettingsTab.defaultsKey) private var settingsTab: SettingsTab = .general
     @AppStorage(ColorSamplerController.formatDefaultsKey)
     private var colorFormat: ColorClipboardFormat = .hex
     @AppStorage(HUDSettings.positionKey) private var hudPosition: HUDPosition = .bottomCenter

@@ -271,4 +271,159 @@ final class ShortcutBindingsTests: XCTestCase {
         bindings.disable("app.settings")
         XCTAssertNil(ShortcutManager.display(for: .openSettings, bindings: bindings))
     }
+
+    // MARK: - Conflicts at load (Q01)
+
+    /// Every global row on a distinct combination, which is the property the
+    /// whole table depends on.
+    private func assertNoDuplicates(_ bindings: ShortcutBindings,
+                                    file: StaticString = #filePath, line: UInt = #line) {
+        var seen: [ShortcutBinding: String] = [:]
+        for definition in globalDefinitions {
+            guard let combination = bindings.binding(for: definition.id) else { continue }
+            if let other = seen[combination] {
+                XCTFail("\(definition.id) and \(other) share \(combination.display)",
+                        file: file, line: line)
+            }
+            seen[combination] = definition.id
+        }
+    }
+
+    func testACleanFileReportsNothing() {
+        let (bindings, report) = ShortcutBindings.resolved([
+            "window.top": ShortcutOverride(binding: binding(kVK_ANSI_X)),
+        ])
+        XCTAssertTrue(report.isEmpty)
+        XCTAssertEqual(bindings.binding(for: "window.top"), binding(kVK_ANSI_X))
+        assertNoDuplicates(bindings)
+    }
+
+    func testAnOverrideWinsOverAnotherRowsDefault() {
+        // window.top takes the left column's own combination.
+        guard let leftDefault = ShortcutBindings.defaultTable["window.left"] else {
+            return XCTFail("missing default")
+        }
+        let (bindings, report) = ShortcutBindings.resolved([
+            "window.top": ShortcutOverride(binding: leftDefault),
+        ])
+
+        XCTAssertEqual(bindings.binding(for: "window.top"), leftDefault)
+        XCTAssertNil(bindings.binding(for: "window.left"),
+                     "the row that lost has no key instead of a duplicate")
+        XCTAssertEqual(bindings.isDisabled("window.left"), true)
+        XCTAssertEqual(report.unregistered, ["window.left"])
+        XCTAssertTrue(report.revertedToDefault.isEmpty)
+        assertNoDuplicates(bindings)
+    }
+
+    func testTwoOverridesOnOneCombinationResolveByID() {
+        let contested = binding(kVK_ANSI_X)
+        let overrides: [String: ShortcutOverride] = [
+            "window.top": ShortcutOverride(binding: contested),
+            "window.bottom": ShortcutOverride(binding: contested),
+        ]
+
+        let (first, report) = ShortcutBindings.resolved(overrides)
+        XCTAssertEqual(first.binding(for: "window.bottom"), contested,
+                       "the earlier id keeps the combination")
+        XCTAssertEqual(first.binding(for: "window.top"),
+                       ShortcutBindings.defaultTable["window.top"],
+                       "the other row falls back to its own default")
+        XCTAssertEqual(report.revertedToDefault, ["window.top"])
+        XCTAssertTrue(report.unregistered.isEmpty)
+        assertNoDuplicates(first)
+
+        let (second, _) = ShortcutBindings.resolved(overrides)
+        XCTAssertEqual(first, second, "the same file always resolves the same way")
+    }
+
+    func testResolutionSettlesAfterOnePass() {
+        let contested = binding(kVK_ANSI_X)
+        let (once, _) = ShortcutBindings.resolved([
+            "window.top": ShortcutOverride(binding: contested),
+            "window.bottom": ShortcutOverride(binding: contested),
+        ])
+        let (twice, report) = ShortcutBindings.resolved(once.overrides)
+        XCTAssertEqual(once, twice, "the resolved table is a fixed point")
+        XCTAssertTrue(report.isEmpty, "a settled file has nothing left to report")
+    }
+
+    func testDisabledRowsOwnNothingAndKeepTheirCombinationFree() {
+        // A row the user turned off releases its default for another row.
+        guard let leftDefault = ShortcutBindings.defaultTable["window.left"] else {
+            return XCTFail("missing default")
+        }
+        let (bindings, report) = ShortcutBindings.resolved([
+            "window.left": ShortcutOverride(disabled: true),
+            "window.top": ShortcutOverride(binding: leftDefault),
+        ])
+
+        XCTAssertEqual(bindings.isDisabled("window.left"), true)
+        XCTAssertEqual(bindings.binding(for: "window.top"), leftDefault)
+        XCTAssertTrue(report.isEmpty, "turning a row off is not a conflict")
+        assertNoDuplicates(bindings)
+    }
+
+    func testTheReportNamesEveryRowItChanged() {
+        guard let leftDefault = ShortcutBindings.defaultTable["window.left"] else {
+            return XCTFail("missing default")
+        }
+        let contested = binding(kVK_ANSI_X)
+        let (bindings, report) = ShortcutBindings.resolved([
+            // Takes the left column's combination: left stays without a key.
+            "window.right": ShortcutOverride(binding: leftDefault),
+            // Contested with window.bottom: the earlier id keeps it.
+            "window.top": ShortcutOverride(binding: contested),
+            "window.bottom": ShortcutOverride(binding: contested),
+        ])
+
+        XCTAssertEqual(report.changedCount, 2)
+        XCTAssertEqual(report.unregistered, ["window.left"])
+        XCTAssertEqual(report.revertedToDefault, ["window.top"])
+
+        XCTAssertNil(bindings.binding(for: "window.left"))
+        XCTAssertEqual(bindings.binding(for: "window.right"), leftDefault)
+        XCTAssertEqual(bindings.binding(for: "window.bottom"), contested)
+        XCTAssertEqual(bindings.binding(for: "window.top"),
+                       ShortcutBindings.defaultTable["window.top"])
+        assertNoDuplicates(bindings)
+    }
+
+    func testTheStoreResolvesAHandEditedFile() throws {
+        let url = directory.appendingPathComponent("shortcuts.json")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Two rows on ⌃⌥X, the combination the file cannot keep for both.
+        let json = """
+        {"version":1,"bindings":{
+          "window.top":{"key":7,"modifiers":6144},
+          "window.bottom":{"key":7,"modifiers":6144}
+        }}
+        """
+        try Data(json.utf8).write(to: url)
+
+        let snapshot = ShortcutStore(fileURL: url).load()
+        XCTAssertEqual(snapshot.state, .loaded)
+        XCTAssertEqual(snapshot.report.changedCount, 1)
+        XCTAssertNotNil(snapshot.bindings.binding(for: "window.bottom"))
+        assertNoDuplicates(snapshot.bindings)
+    }
+
+    func testAFileCannotTakeThePeekHoldKey() {
+        let reserved = ShortcutBinding(keyCode: kVK_ANSI_H, modifiers: ShortcutDefinitions.ctrlOpt)
+        let (bindings, report) = ShortcutBindings.resolved([
+            "window.top": ShortcutOverride(binding: reserved),
+        ])
+        XCTAssertEqual(bindings.binding(for: "window.top"),
+                       ShortcutBindings.defaultTable["window.top"],
+                       "the row goes back to its default instead of stealing ⌃⌥H")
+        XCTAssertEqual(report.revertedToDefault, ["window.top"])
+    }
+
+    func testTheCatalogSaysWhichRowHasNoKey() {
+        let rows = ShortcutCatalog.sections(unregistered: ["window.left"]).flatMap(\.items)
+        let left = rows.first { $0.identifier == "window.left" }
+        XCTAssertEqual(left?.keys, "—")
+        XCTAssertEqual(left?.isUnregistered, true)
+        XCTAssertEqual(left?.note?.contains(ShortcutCatalog.noKeyBaseNote), true)
+    }
 }

@@ -21,6 +21,9 @@ struct ShortcutStore {
         var bindings: ShortcutBindings
         var version: Int
         var state: State
+        /// What the load had to resolve in the file (Q01); empty when it was
+        /// already consistent.
+        var report = ShortcutLoadReport()
 
         var canSave: Bool {
             if case .futureVersion = state { return false }
@@ -83,10 +86,15 @@ struct ShortcutStore {
             return Snapshot(bindings: .defaults, version: Self.currentVersion, state: .corrupt)
         }
 
-        let bindings = ShortcutBindings(overrides: ShortcutBindings.sanitized(payload.bindings ?? [:]))
+        let (bindings, report) = ShortcutBindings.resolved(payload.bindings ?? [:])
+        if report.isEmpty == false {
+            // Counts only: which command owns which combination is user data.
+            makiLog.notice("shortcuts: \(report.changedCount, privacy: .public) conflicting row(s) resolved on load")
+        }
         return Snapshot(bindings: bindings,
                         version: payload.version,
-                        state: .loaded)
+                        state: .loaded,
+                        report: report)
     }
 
     // MARK: - Writing
