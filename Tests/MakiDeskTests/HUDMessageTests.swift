@@ -67,18 +67,46 @@ final class HUDMessageTests: XCTestCase {
         XCTAssertEqual(HUDMessage.transferFinished(moved: true, count: 2).title, "Moved 2 items")
     }
 
-    /// The shelf is migrated (R04): a title spelled there again would be a
-    /// second source for a sentence the catalog already owns.
-    func testTheShelfSpellsNoNotice() throws {
-        let sources = URL(fileURLWithPath: #filePath)
+    /// The migrated areas spell no notice by hand (R04): a title written there
+    /// again would be a second source for a sentence the catalog owns. The list
+    /// grows as areas move.
+    func testTheMigratedFilesSpellNoNotice() throws {
+        let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/MakiDesk/ShelfController.swift")
-        let text = try String(contentsOf: sources, encoding: .utf8)
-        XCTAssertTrue(text.contains("HUDController.shared.show(HUDMessage."))
-        XCTAssertFalse(text.contains("HUDController.shared.show(\""),
-                       "ShelfController writes a notice by hand")
+            .appendingPathComponent("Sources/MakiDesk")
+        let migrated = ["ShelfController.swift", "WorkspaceStore.swift",
+                        "TextRecognitionController.swift", "ColorSampler.swift",
+                        "MeasureController.swift", "ScreenshotAnnotationController.swift",
+                        "ScreenshotCaptureWatcher.swift"]
+        for name in migrated {
+            let text = try String(contentsOf: root.appendingPathComponent(name), encoding: .utf8)
+            XCTAssertTrue(text.contains("HUDMessage."), name)
+            XCTAssertFalse(text.contains("HUDController.shared.show(\""),
+                           "\(name) writes a notice by hand")
+        }
+    }
+
+    func testTheWindowAndGroupNoticesAgree() {
+        XCTAssertEqual(HUDMessage.noWindow.title, "No window")
+        XCTAssertEqual(HUDMessage.nothingPutAway.title, "Nothing put away")
+        XCTAssertEqual(HUDMessage.everythingBack.title, "Everything back")
+        XCTAssertEqual(HUDMessage.windowNoLongerThere(title: "Notes").title,
+                       "Notes — no window left")
+        XCTAssertEqual(HUDMessage.peekReady(app: "Xcode", putAway: true).symbol, "eye.fill")
+        XCTAssertEqual(HUDMessage.peekReady(app: "Xcode", putAway: false).symbol,
+                       "exclamationmark.triangle.fill")
+    }
+
+    /// The catalog is where a half-translated sentence becomes visible: this
+    /// notice said "Non più aperta" in an English interface.
+    func testTheCatalogIsInOneLanguage() {
+        for message in HUDMessage.catalogue {
+            XCTAssertFalse(message.title.contains("Non più"), message.title)
+        }
+        XCTAssertEqual(HUDMessage.peekNoLongerOpen.title,
+                       "No longer open — ⌃⌥⌘P drops the designation")
     }
 
     func testAFailedRecognitionSaysWhetherTheDetectorStarted() {

@@ -85,9 +85,10 @@ final class HUDController {
 
     /// Shows a catalog notice (R04): the text, the symbol and the severity come
     /// from the message instead of being spelled at the call site.
-    func show(_ message: HUDMessage, actions: [HUDAction] = []) {
+    func show(_ message: HUDMessage, overrideDuration: TimeInterval? = nil,
+              actions: [HUDAction] = []) {
         show(message.title, symbol: message.symbol, detail: message.detail,
-             kind: message.kind, actions: actions)
+             kind: message.kind, overrideDuration: overrideDuration, actions: actions)
     }
 
     /// Starts (or updates) the one persistent progress notice. It does not

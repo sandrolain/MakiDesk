@@ -605,11 +605,8 @@ final class WorkspaceStore {
                 MakiLog.shortcuts.error("shortcuts: migration not saved (\(error.localizedDescription, privacy: .public))")
             }
             let changed = snapshot.report.changedCount
-            HUDController.shared.show(
-                "Shortcuts updated · version \(from) → \(ShortcutStore.currentVersion)",
-                symbol: "keyboard",
-                detail: changed == 0 ? nil : "\(changed) row(s) adjusted to the new table"
-            )
+            HUDController.shared.show(HUDMessage.shortcutsMigrated(
+                from: from, to: ShortcutStore.currentVersion, changed: changed))
         }
         let manager = ShortcutManager { [weak self] action in
             self?.applyShortcut(action)
@@ -658,8 +655,8 @@ final class WorkspaceStore {
             _ = applyShortcutBindings(previous)
             return .rejected(.unavailableBySystem)
         }
-        announceShortcutChange("Shortcut updated · \(definition.title)",
-                               detail: shortcutBindings.binding(for: id)?.display)
+        announceShortcutChange(HUDMessage.shortcutUpdated(
+            title: definition.title, keys: shortcutBindings.binding(for: id)?.display))
         return .applied
     }
 
@@ -674,7 +671,7 @@ final class WorkspaceStore {
         updated.disable(id)
         guard updated != shortcutBindings else { return .applied }
         guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
-        announceShortcutChange("Shortcut turned off · \(definition.title)", detail: nil)
+        announceShortcutChange(HUDMessage.shortcutTurnedOff(title: definition.title))
         return .applied
     }
 
@@ -687,8 +684,8 @@ final class WorkspaceStore {
         updated.restore(id)
         guard updated != shortcutBindings else { return .applied }
         guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
-        announceShortcutChange("Shortcut restored · \(definition.title)",
-                               detail: shortcutBindings.binding(for: id)?.display)
+        announceShortcutChange(HUDMessage.shortcutRestored(
+            title: definition.title, keys: shortcutBindings.binding(for: id)?.display))
         return .applied
     }
 
@@ -699,7 +696,7 @@ final class WorkspaceStore {
         var updated = shortcutBindings
         updated.restoreAll()
         guard applyShortcutBindings(updated) else { return .rejected(.notSaved) }
-        announceShortcutChange("Shortcuts restored", detail: nil)
+        announceShortcutChange(HUDMessage.shortcutsRestored)
         return .applied
     }
 
@@ -720,9 +717,11 @@ final class WorkspaceStore {
         return true
     }
 
-    private func announceShortcutChange(_ title: String, detail: String?) {
-        HUDController.shared.show(title, symbol: "keyboard", detail: detail)
-        status = detail.map { "\(title) · \($0)" } ?? title
+    private func announceShortcutChange(_ message: HUDMessage) {
+        HUDController.shared.show(message)
+        // The status line is the short log of the last action, not a notice:
+        // it takes the text but is not part of the catalog (R04).
+        status = message.detail.map { "\(message.title) · \($0)" } ?? message.title
     }
 
     func updateGap(_ value: Double) {
@@ -961,12 +960,10 @@ final class WorkspaceStore {
         if value, focusDimSource == .selection, veilSelection.isEmpty {
             // Nothing would stay sharp, so the veil cannot come up: say what
             // creates the set instead of leaving an effect that does nothing.
-            HUDController.shared.show("⌥-click windows in the switcher to keep them sharp",
-                                      symbol: "rectangle.dashed")
+            HUDController.shared.show(HUDMessage.switcherSnapHint)
             return
         }
-        HUDController.shared.show(value ? "Dimming everything but the focus" : "Focus dim off",
-                                  symbol: "circle.lefthalf.filled")
+        HUDController.shared.show(HUDMessage.focusDim(active: value))
     }
 
     func updateFocusDimOpacity(_ value: Double) {
@@ -1899,8 +1896,8 @@ final class WorkspaceStore {
             let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
             MakiLog.index.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
             status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
-            HUDController.shared.show("\(target.appName) keeps its own size\nasked \(asked) · got \(got)",
-                                      symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.windowKeepsItsSize(
+                app: target.appName, asked: asked, got: got))
             showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
             return
         }
@@ -2376,11 +2373,11 @@ final class WorkspaceStore {
     func toggleGroupMembership(slot: Int) {
         guard (1...9).contains(slot) else { return }
         guard accessibilityTrusted else {
-            HUDController.shared.show("Accessibility not granted", symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.accessibilityNotGranted)
             return
         }
         guard let front = WindowController.frontmostWindow() else {
-            HUDController.shared.show("No window", symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.noWindow)
             return
         }
         toggleMembership(ref: WindowRef(identity: identity(for: front)), in: slot)
@@ -2914,18 +2911,18 @@ final class WorkspaceStore {
     func putAwayFrontWindow() {
         if deferUntilFreshInventory({ [weak self] in guard let self else { return }; self.putAwayFrontWindow() }) { return }
         guard let current = scene else {
-            HUDController.shared.show("Nothing in use", symbol: "tray")
+            HUDController.shared.show(HUDMessage.nothingInUse)
             return
         }
         guard let front = WindowController.frontmostWindow() else {
-            HUDController.shared.show("No window", symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.noWindow)
             return
         }
         // Match by the stable system id first, then by the element itself: the
         // frontmost window's identity is the same one the scene recorded.
         let live = actionableWindows()
         guard let target = live.first(where: { $0.id == front.id || CFEqual($0.element, front.element) }) else {
-            HUDController.shared.show("No window", symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.noWindow)
             return
         }
         guard current.members.contains(target.id) else {
@@ -2938,7 +2935,7 @@ final class WorkspaceStore {
         rememberStepBack()
         leaveScene()
         guard !remaining.isEmpty else {
-            HUDController.shared.show("Nothing left in use", symbol: "tray")
+            HUDController.shared.show(HUDMessage.nothingLeftInUse)
             return
         }
         presentLive(ids: remaining, like: current, announce: true)
@@ -2949,12 +2946,12 @@ final class WorkspaceStore {
     /// that went wrong partway through.
     func showEverything(announce: Bool = true) {
         guard scene != nil else {
-            if announce { HUDController.shared.show("Nothing put away", symbol: "eye") }
+            if announce { HUDController.shared.show(HUDMessage.nothingPutAway) }
             return
         }
         rememberStepBack()
         leaveScene()
-        if announce { HUDController.shared.show("Everything back", symbol: "rectangle.on.rectangle") }
+        if announce { HUDController.shared.show(HUDMessage.everythingBack) }
     }
 
     /// One step back (T17): the apps and windows the last transition put away
@@ -2963,7 +2960,7 @@ final class WorkspaceStore {
     func undoScene(announce: Bool = true) {
         if deferUntilFreshInventory({ [weak self] in guard let self else { return }; self.undoScene(announce: announce) }) { return }
         guard let undo = sceneUndo else {
-            if announce { HUDController.shared.show("Nothing to undo", symbol: "arrow.uturn.backward") }
+            if announce { HUDController.shared.show(HUDMessage.nothingToUndo) }
             return
         }
         sceneUndo = nil
@@ -2976,7 +2973,7 @@ final class WorkspaceStore {
             rememberArrangement(frame, of: window)
         }
         if let previous = undo.scene { restore(previous, announce: announce) }
-        else if announce { HUDController.shared.show("Undone", symbol: "arrow.uturn.backward") }
+        else if announce { HUDController.shared.show(HUDMessage.undone) }
     }
 
     /// Notes one step back (T17) before a transition moves anything: the scene
@@ -3011,8 +3008,8 @@ final class WorkspaceStore {
         }
         guard !resolved.isEmpty else {
             if announce {
-                HUDController.shared.show("\(previous.title) — no window left",
-                                          symbol: "exclamationmark.triangle.fill")
+                HUDController.shared.show(
+                    HUDMessage.windowNoLongerThere(title: previous.title))
             }
             return
         }
@@ -3153,14 +3150,12 @@ final class WorkspaceStore {
         peekLastImage = nil            // never show the previous window's image
 
         guard let live = liveWindow(for: ref) else {
-            HUDController.shared.show("Peek · \(target.appName) — hold ⌃⌥H", symbol: "eye.fill")
+            HUDController.shared.show(HUDMessage.peekReady(app: target.appName, putAway: true))
             return
         }
         let putAway = putAwayForPeek(live)
         HUDController.shared.show(
-            "Peek · \(target.appName) — hold ⌃⌥H",
-            symbol: putAway ? "eye.fill" : "exclamationmark.triangle.fill"
-        )
+            HUDMessage.peekReady(app: target.appName, putAway: putAway))
     }
 
     /// Takes the window out of sight for the peek: the app is hidden when there
@@ -3197,7 +3192,7 @@ final class WorkspaceStore {
         peekLastImage = nil
         hidePeek()
         if announce {
-            HUDController.shared.show("Peek cleared", symbol: "eye.slash")
+            HUDController.shared.show(HUDMessage.peekCleared)
         }
     }
 
@@ -3205,8 +3200,7 @@ final class WorkspaceStore {
     /// moved, activated or written, and the overlay takes no focus.
     func showPeek() {
         guard let ref = peekRef else {
-            HUDController.shared.show("No window designated — ⌃⌥⌘P on the one to peek at",
-                                      symbol: "eye.slash")
+            HUDController.shared.show(HUDMessage.peekNotDesignated)
             return
         }
         guard peekHold.press() else { return }        // already showing (key repeat)
@@ -3214,8 +3208,7 @@ final class WorkspaceStore {
         let captureGeneration = peekCaptureGeneration
         guard WindowCapture.isAuthorized else {
             peekHold.cancel()
-            HUDController.shared.show("Peek needs Screen Recording",
-                                      symbol: "exclamationmark.triangle.fill")
+            HUDController.shared.show(HUDMessage.peekNeedsScreenRecording)
             return
         }
         armPeekWatchdog()
@@ -3224,7 +3217,7 @@ final class WorkspaceStore {
         let found = liveWindow(for: ref)
         if let found, isOnScreen(found) {
             // Nothing to peek at: the window is right there on screen.
-            HUDController.shared.show("\(found.appName) · already on screen", symbol: "eye")
+            HUDController.shared.show(HUDMessage.peekAlreadyOnScreen(app: found.appName))
             return
         }
         guard let found else {
@@ -3234,8 +3227,7 @@ final class WorkspaceStore {
                 PeekPanel.shared.show(image: image, appName: peekName ?? ref.appName,
                                       badge: "Non più aperta")
             }
-            HUDController.shared.show("Non più aperta — ⌃⌥⌘P drops the designation",
-                                      symbol: "eye.slash")
+            HUDController.shared.show(HUDMessage.peekNoLongerOpen)
             return
         }
         // The overlay appears at once with the app name; the image replaces the
@@ -3455,7 +3447,7 @@ final class WorkspaceStore {
         let set = selection.isEmpty ? arrangeableSet() : ArrangeableSet(windows: validatedSelection(selection))
         let candidates = set.windows
         guard !candidates.isEmpty else {
-            HUDController.shared.show("No windows in view to arrange", symbol: "rectangle.on.rectangle.slash")
+            HUDController.shared.show(HUDMessage.nothingToArrange)
             return
         }
         let requests = candidates.compactMap { window -> WindowCapture.Request? in
@@ -3514,8 +3506,9 @@ final class WorkspaceStore {
             MainActor.assumeIsolated { self?.clearPendingLayout() }
         }
         HUDController.shared.show(
-            "Suggested: \(advice.layout.label) · \(Self.layoutSummary(set))\n\(advice.reason)\nRun Auto again to apply",
-            symbol: "wand.and.stars",
+            HUDMessage.layoutSuggested(layout: advice.layout.label,
+                                       summary: Self.layoutSummary(set),
+                                       reason: advice.reason),
             overrideDuration: Self.layoutOfferSeconds
         )
     }
@@ -3550,8 +3543,9 @@ final class WorkspaceStore {
                        reason: "auto layout (\(advice.layout.label.lowercased()))")
         }
         raiseToFront(ordered)
-        HUDController.shared.show("\(advice.layout.label) · \(Self.layoutSummary(set))\n\(advice.reason)",
-                                  symbol: "wand.and.stars")
+        HUDController.shared.show(HUDMessage.layoutApplied(layout: advice.layout.label,
+                                                           summary: Self.layoutSummary(set),
+                                                           reason: advice.reason))
     }
 
     /// Heaviest first, stable on the window id so the same set and weights give
@@ -3600,8 +3594,7 @@ final class WorkspaceStore {
         let targets = set.windows
         guard targets.count >= 3 else {
             status = "Content layout needs at least 3 windows"
-            HUDController.shared.show("Content needs at least 3 windows",
-                                      symbol: "rectangle.3.group")
+            HUDController.shared.show(HUDMessage.contentNeedsThreeWindows)
             return
         }
         let area = WindowController.axVisibleFrame(for: NSScreen.main)
@@ -3628,8 +3621,8 @@ final class WorkspaceStore {
             }
             if !selection.isEmpty { self.raiseToFront(ordered) }
             self.status = "Content layout: \(ordered.count) windows"
-            HUDController.shared.show("Content · \(Self.layoutSummary(set))",
-                                      symbol: "rectangle.3.group")
+            HUDController.shared.show(HUDMessage.contentApplied(
+                summary: Self.layoutSummary(set)))
             Self.logContentWeights(ordered, weights: weights, scores: scores,
                                    requested: requests.count)
         }
@@ -3688,7 +3681,7 @@ final class WorkspaceStore {
         let set = selection.isEmpty ? arrangeableSet() : ArrangeableSet(windows: validatedSelection(selection))
         let targets = set.windows
         guard !targets.isEmpty else {
-            HUDController.shared.show("No windows in view to arrange", symbol: "rectangle.on.rectangle.slash")
+            HUDController.shared.show(HUDMessage.nothingToArrange)
             return
         }
         let frames = TilingEngine.frames(for: .grid, count: targets.count, in: area, gap: gap)
@@ -3699,7 +3692,7 @@ final class WorkspaceStore {
         }
         if !selection.isEmpty { raiseToFront(targets) }
         status = "Tiled \(min(targets.count, frames.count)) windows with \(Int(gap)) px gap"
-        HUDController.shared.show("Grid · \(Self.layoutSummary(set))", symbol: "square.grid.3x3.fill")
+        HUDController.shared.show(HUDMessage.gridApplied(summary: Self.layoutSummary(set)))
     }
 
     private func move(windowAt index: Int, to point: CGPoint) {

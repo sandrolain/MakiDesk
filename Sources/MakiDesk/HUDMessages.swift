@@ -279,6 +279,113 @@ extension HUDMessage {
         symbol: "tray.and.arrow.down.fill"
     )
 
+    // MARK: - Shortcuts
+
+    static func shortcutUpdated(title: String, keys: String?) -> HUDMessage {
+        HUDMessage(title: "Shortcut updated · \(title)", symbol: "keyboard", detail: keys)
+    }
+
+    static func shortcutTurnedOff(title: String) -> HUDMessage {
+        HUDMessage(title: "Shortcut turned off · \(title)", symbol: "keyboard")
+    }
+
+    static func shortcutRestored(title: String, keys: String?) -> HUDMessage {
+        HUDMessage(title: "Shortcut restored · \(title)", symbol: "keyboard", detail: keys)
+    }
+
+    static let shortcutsRestored = HUDMessage(title: "Shortcuts restored", symbol: "keyboard")
+
+    static func shortcutsMigrated(from: Int, to: Int, changed: Int) -> HUDMessage {
+        HUDMessage(title: "Shortcuts updated · version \(from) → \(to)",
+                   symbol: "keyboard",
+                   detail: changed == 0 ? nil : "\(changed) row(s) adjusted to the new table")
+    }
+
+    static let switcherSnapHint = HUDMessage(
+        title: "⌥-click windows in the switcher to keep them sharp",
+        symbol: "rectangle.dashed"
+    )
+
+    // MARK: - Focus and window state
+
+    static func focusDim(active: Bool) -> HUDMessage {
+        HUDMessage(title: active ? "Dimming everything but the focus" : "Focus dim off",
+                   symbol: "circle.lefthalf.filled")
+    }
+
+    static let accessibilityNotGranted = HUDMessage(
+        title: "Accessibility not granted", symbol: "exclamationmark.triangle.fill")
+
+    static let noWindow = HUDMessage(
+        title: "No window", symbol: "exclamationmark.triangle.fill")
+
+    static let nothingInUse = HUDMessage(title: "Nothing in use", symbol: "tray")
+    static let nothingLeftInUse = HUDMessage(title: "Nothing left in use", symbol: "tray")
+    static let nothingPutAway = HUDMessage(title: "Nothing put away", symbol: "eye")
+    static let everythingBack = HUDMessage(
+        title: "Everything back", symbol: "rectangle.on.rectangle")
+    static let nothingToUndo = HUDMessage(
+        title: "Nothing to undo", symbol: "arrow.uturn.backward")
+    static let undone = HUDMessage(title: "Undone", symbol: "arrow.uturn.backward")
+
+    static func windowNoLongerThere(title: String) -> HUDMessage {
+        HUDMessage(title: "\(title) — no window left", symbol: "exclamationmark.triangle.fill")
+    }
+
+    static func windowKeepsItsSize(app: String, asked: String, got: String) -> HUDMessage {
+        HUDMessage(title: "\(app) keeps its own size\nasked \(asked) · got \(got)",
+                   symbol: "exclamationmark.triangle.fill")
+    }
+
+    // MARK: - Peek
+
+    static func peekReady(app: String, putAway: Bool) -> HUDMessage {
+        HUDMessage(title: "Peek · \(app) — hold ⌃⌥H",
+                   symbol: putAway ? "eye.fill" : "exclamationmark.triangle.fill")
+    }
+
+    static let peekCleared = HUDMessage(title: "Peek cleared", symbol: "eye.slash")
+
+    static let peekNotDesignated = HUDMessage(
+        title: "No window designated — ⌃⌥⌘P on the one to peek at", symbol: "eye.slash")
+
+    static let peekNeedsScreenRecording = HUDMessage(
+        title: "Peek needs Screen Recording", symbol: "exclamationmark.triangle.fill")
+
+    static func peekAlreadyOnScreen(app: String) -> HUDMessage {
+        HUDMessage(title: "\(app) · already on screen", symbol: "eye")
+    }
+
+    static let peekNoLongerOpen = HUDMessage(
+        title: "No longer open — ⌃⌥⌘P drops the designation", symbol: "eye.slash")
+
+    // MARK: - Layouts
+
+    static let nothingToArrange = HUDMessage(
+        title: "No windows in view to arrange", symbol: "rectangle.on.rectangle.slash")
+
+    static func layoutSuggested(layout: String, summary: String, reason: String) -> HUDMessage {
+        HUDMessage(
+            title: "Suggested: \(layout) · \(summary)\n\(reason)\nRun Auto again to apply",
+            symbol: "wand.and.stars"
+        )
+    }
+
+    static func layoutApplied(layout: String, summary: String, reason: String) -> HUDMessage {
+        HUDMessage(title: "\(layout) · \(summary)\n\(reason)", symbol: "wand.and.stars")
+    }
+
+    static let contentNeedsThreeWindows = HUDMessage(
+        title: "Content needs at least 3 windows", symbol: "rectangle.3.group")
+
+    static func contentApplied(summary: String) -> HUDMessage {
+        HUDMessage(title: "Content · \(summary)", symbol: "rectangle.3.group")
+    }
+
+    static func gridApplied(summary: String) -> HUDMessage {
+        HUDMessage(title: "Grid · \(summary)", symbol: "square.grid.3x3.fill")
+    }
+
     /// Every member a test can walk: the ones with no parameters. The
     /// factories are checked through their own tests.
     static let catalogue: [HUDMessage] = [
@@ -290,5 +397,9 @@ extension HUDMessage {
         nothingRunnableInSelection, noTextInSelection, insertedInNotes,
         noDropzoneAccepts, dropzoneRejectsItems, dropzoneStripHint,
         outputOnClipboard, outputAddedToShelf,
+        shortcutsRestored, switcherSnapHint, accessibilityNotGranted, noWindow,
+        nothingInUse, nothingLeftInUse, nothingPutAway, everythingBack,
+        nothingToUndo, undone, peekCleared, peekNotDesignated,
+        peekNeedsScreenRecording, peekNoLongerOpen, nothingToArrange,
     ]
 }
