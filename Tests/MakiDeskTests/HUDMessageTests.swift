@@ -50,6 +50,37 @@ final class HUDMessageTests: XCTestCase {
         XCTAssertEqual(message.detail, "hello")
     }
 
+    func testTheDropzoneFamilyAgreesOnTheName() {
+        XCTAssertEqual(HUDMessage.dropzoneCancelled(name: "PDF").title, "PDF cancelled")
+        XCTAssertEqual(HUDMessage.dropzoneTimedOut(name: "PDF").title, "PDF timed out")
+        XCTAssertEqual(HUDMessage.dropzoneDone(name: "PDF").title, "PDF done")
+        XCTAssertEqual(HUDMessage.dropzoneFailed(name: "PDF", reason: "").title, "PDF failed")
+        XCTAssertEqual(HUDMessage.dropzoneFailed(name: "PDF", reason: "boom").title,
+                       "PDF failed: boom")
+    }
+
+    func testPluralWordingFollowsTheCount() {
+        XCTAssertEqual(HUDMessage.filesOnClipboard(count: 1).title, "1 file on the clipboard")
+        XCTAssertEqual(HUDMessage.filesOnClipboard(count: 3).title, "3 files on the clipboard")
+        XCTAssertEqual(HUDMessage.filesAddedToShelf(count: 1).title, "1 file added to the Shelf")
+        XCTAssertEqual(HUDMessage.transferFinished(moved: false, count: 2).title, "Copied 2 items")
+        XCTAssertEqual(HUDMessage.transferFinished(moved: true, count: 2).title, "Moved 2 items")
+    }
+
+    /// The shelf is migrated (R04): a title spelled there again would be a
+    /// second source for a sentence the catalog already owns.
+    func testTheShelfSpellsNoNotice() throws {
+        let sources = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MakiDesk/ShelfController.swift")
+        let text = try String(contentsOf: sources, encoding: .utf8)
+        XCTAssertTrue(text.contains("HUDController.shared.show(HUDMessage."))
+        XCTAssertFalse(text.contains("HUDController.shared.show(\""),
+                       "ShelfController writes a notice by hand")
+    }
+
     func testAFailedRecognitionSaysWhetherTheDetectorStarted() {
         XCTAssertEqual(HUDMessage.textFailed(reason: "x", detectorCouldNotStart: false).title,
                        "Text recognition failed")

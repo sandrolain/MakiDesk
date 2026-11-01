@@ -129,11 +129,166 @@ extension HUDMessage {
                    detail: name, kind: .info)
     }
 
+    // MARK: - Shelf
+
+    static let shelfFull = HUDMessage(
+        title: "Shelf limit reached (100 items)",
+        symbol: "exclamationmark.triangle.fill"
+    )
+
+    static let shelfTextTooLarge = HUDMessage(
+        title: "Text exceeds the shelf memory limit",
+        symbol: "exclamationmark.triangle.fill"
+    )
+
+    static let shelfImageTooLarge = HUDMessage(
+        title: "Image exceeds the shelf memory limit",
+        symbol: "exclamationmark.triangle.fill"
+    )
+
+    static let shelfImageNotPrepared = HUDMessage(
+        title: "An image could not be prepared for transfer",
+        symbol: "exclamationmark.triangle.fill"
+    )
+
+    static let nothingToPreview = HUDMessage(title: "Nothing to preview", symbol: "eye.slash")
+
+    static let shelfSomeFilesGone = HUDMessage(
+        title: "Some files are no longer available",
+        symbol: "exclamationmark.triangle"
+    )
+
+    /// The keyboard route to the shelf is only reachable once it is open.
+    static let shelfNotOpen = HUDMessage(
+        title: "Open the Shelf and select something first",
+        symbol: "tray"
+    )
+
+    static let shelfSelectSomething = HUDMessage(
+        title: "Select something in the Shelf first",
+        symbol: "cursorarrow"
+    )
+
+    static let nothingRunnableInSelection = HUDMessage(
+        title: "Nothing runnable in the selection",
+        symbol: "nosign"
+    )
+
+    static let noTextInSelection = HUDMessage(
+        title: "No text in the selection",
+        symbol: "note.text"
+    )
+
+    static let insertedInNotes = HUDMessage(title: "Inserted in Notes", symbol: "note.text")
+
+    // MARK: - Transfer
+
+    static func transferCancelled(copied: Int, of total: Int) -> HUDMessage {
+        HUDMessage(title: "Transfer cancelled after \(copied) of \(total) items",
+                   symbol: "xmark.circle")
+    }
+
+    static func transferFinished(moved: Bool, count: Int) -> HUDMessage {
+        HUDMessage(title: "\(moved ? "Moved" : "Copied") \(count) items", symbol: "folder")
+    }
+
+    static func filesNotReceived(reason: String) -> HUDMessage {
+        HUDMessage(title: "Could not receive the files: \(reason)",
+                   symbol: "exclamationmark.triangle")
+    }
+
+    // MARK: - Dropzones
+
+    static let noDropzoneAccepts = HUDMessage(
+        title: "No dropzone accepts these items",
+        symbol: "nosign"
+    )
+
+    static let dropzoneRejectsItems = HUDMessage(
+        title: "This dropzone does not accept these items",
+        symbol: "nosign"
+    )
+
+    static let dropzoneStripHint = HUDMessage(
+        title: "← → choose · ↩ run · Esc back",
+        symbol: "bolt.square"
+    )
+
+    static func dropzoneStripUnavailable(noneAccept: Bool) -> HUDMessage {
+        HUDMessage(title: noneAccept ? "No dropzone accepts these items"
+                                     : "Drop on a dropzone tile",
+                   symbol: "arrow.up.left")
+    }
+
+    static func dropzoneRejected(reason: String) -> HUDMessage {
+        HUDMessage(title: reason, symbol: "nosign")
+    }
+
+    static func dropzoneCancelled(name: String) -> HUDMessage {
+        HUDMessage(title: "\(name) cancelled", symbol: "xmark.circle")
+    }
+
+    static func dropzoneTimedOut(name: String) -> HUDMessage {
+        HUDMessage(title: "\(name) timed out", symbol: "clock.badge.exclamationmark")
+    }
+
+    static func dropzoneFailed(name: String, reason: String) -> HUDMessage {
+        HUDMessage(title: reason.isEmpty ? "\(name) failed" : "\(name) failed: \(reason)",
+                   symbol: "exclamationmark.triangle")
+    }
+
+    static func dropzoneDone(name: String) -> HUDMessage {
+        HUDMessage(title: "\(name) done", symbol: "checkmark.circle.fill")
+    }
+
+    static func dropzoneChangedDuringConfirmation(name: String) -> HUDMessage {
+        HUDMessage(title: "\(name) changed during confirmation; try again",
+                   symbol: "exclamationmark.triangle")
+    }
+
+    static func dropzoneUnavailable(name: String) -> HUDMessage {
+        HUDMessage(title: "\(name) is no longer available", symbol: "questionmark.circle")
+    }
+
+    static func dropzoneConfirmationNotSaved(name: String, reason: String) -> HUDMessage {
+        HUDMessage(title: "Could not save the confirmation for \(name): \(reason)",
+                   symbol: "externaldrive.badge.xmark")
+    }
+
+    // MARK: - Output
+
+    static func filesOnClipboard(count: Int) -> HUDMessage {
+        HUDMessage(title: count == 1 ? "1 file on the clipboard"
+                                     : "\(count) files on the clipboard",
+                   symbol: "doc.on.clipboard")
+    }
+
+    static let outputOnClipboard = HUDMessage(
+        title: "Output on the clipboard",
+        symbol: "doc.on.clipboard"
+    )
+
+    static func filesAddedToShelf(count: Int) -> HUDMessage {
+        HUDMessage(title: count == 1 ? "1 file added to the Shelf"
+                                     : "\(count) files added to the Shelf",
+                   symbol: "tray.and.arrow.down.fill")
+    }
+
+    static let outputAddedToShelf = HUDMessage(
+        title: "Output added to the Shelf",
+        symbol: "tray.and.arrow.down.fill"
+    )
+
     /// Every member a test can walk: the ones with no parameters. The
     /// factories are checked through their own tests.
     static let catalogue: [HUDMessage] = [
         selectionAlreadyOpen, screenRecordingRequired, noTextFound,
         colourPickerAlreadyOpen, noDisplayForMeasuring, measurementCopyFailed,
         areaCaptureFailed, noWindowToCapture, noDisplayToCapture,
+        shelfFull, shelfTextTooLarge, shelfImageTooLarge, shelfImageNotPrepared,
+        nothingToPreview, shelfSomeFilesGone, shelfNotOpen, shelfSelectSomething,
+        nothingRunnableInSelection, noTextInSelection, insertedInNotes,
+        noDropzoneAccepts, dropzoneRejectsItems, dropzoneStripHint,
+        outputOnClipboard, outputAddedToShelf,
     ]
 }
