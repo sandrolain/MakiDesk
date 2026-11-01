@@ -79,13 +79,7 @@ struct DropzoneStore {
     }
 
     /// `~/Library/Application Support/MakiDesk/dropzones.json`.
-    static var defaultFileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("MakiDesk", isDirectory: true)
-            .appendingPathComponent("dropzones.json")
-    }
+    static var defaultFileURL: URL { StoredJSONFile.defaultURL(named: "dropzones.json") }
 
     // MARK: - Reading
 
@@ -114,7 +108,7 @@ struct DropzoneStore {
         }
 
         guard let payload = try? Self.makeDecoder().decode(Payload.self, from: data) else {
-            backUpCorruptFile()
+            StoredJSONFile.quarantine(fileURL, label: "dropzones")
             MakiLog.store.error("dropzones: unreadable file set aside")
             return Snapshot(zones: [], version: Self.currentVersion, state: .corrupt)
         }
@@ -169,9 +163,7 @@ struct DropzoneStore {
             return .failure(.writeFailed("the configuration could not be encoded"))
         }
         do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try data.write(to: fileURL, options: .atomic)
+            try StoredJSONFile.write(data, to: fileURL)
             // The commands live here: keep the file private even under a
             // permissive umask.
             try? FileManager.default.setAttributes([.posixPermissions: Self.filePermissions],
@@ -232,14 +224,5 @@ struct DropzoneStore {
         return header.version
     }
 
-    private func backUpCorruptFile() {
-        let base = fileURL.appendingPathExtension("bak")
-        var backup = base
-        var suffix = 1
-        while FileManager.default.fileExists(atPath: backup.path) {
-            backup = base.deletingPathExtension().appendingPathExtension("bak-\(suffix)")
-            suffix += 1
-        }
-        try? FileManager.default.moveItem(at: fileURL, to: backup)
-    }
+
 }

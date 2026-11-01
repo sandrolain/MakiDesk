@@ -197,39 +197,26 @@ struct ChecklistFile {
     }
 
     /// `~/Library/Application Support/MakiDesk/checklist.json`.
-    static var defaultFileURL: URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("MakiDesk", isDirectory: true)
-            .appendingPathComponent("checklist.json")
-    }
+    static var defaultFileURL: URL { StoredJSONFile.defaultURL(named: "checklist.json") }
 
     /// The items written last, or an empty list when there is nothing to read.
     func load() -> [ChecklistItem] {
         guard let data = try? Data(contentsOf: fileURL) else { return [] }
         do {
-            let payload = try JSONDecoder().decode(Payload.self, from: data)
+            let payload = try StoredJSONFile.decoder().decode(Payload.self, from: data)
             // A filler item with no text is not a task.
             return payload.items.filter { $0.text.isEmpty == false }
         } catch {
-            backUpCorruptFile()
+            StoredJSONFile.quarantine(fileURL, label: "checklist")
             return []
         }
     }
 
     @discardableResult
     func save(_ items: [ChecklistItem]) -> Bool {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(Payload(items: items)) else { return false }
+        guard let data = try? StoredJSONFile.encoder().encode(Payload(items: items)) else { return false }
         do {
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: fileURL, options: .atomic)
+            try StoredJSONFile.write(data, to: fileURL)
             return true
         } catch {
             MakiLog.store.error("checklist: could not save -> \(error.localizedDescription, privacy: .public)")
@@ -237,23 +224,5 @@ struct ChecklistFile {
         }
     }
 
-    private func backUpURL() -> URL {
-        fileURL.appendingPathExtension("bak")
-    }
 
-    private func backUpCorruptFile() {
-        let base = backUpURL()
-        var backup = base
-        var suffix = 1
-        while FileManager.default.fileExists(atPath: backup.path) {
-            backup = base.deletingPathExtension().appendingPathExtension("bak-\(suffix)")
-            suffix += 1
-        }
-        do {
-            try FileManager.default.moveItem(at: fileURL, to: backup)
-            MakiLog.store.error("checklist: unreadable file set aside at \(backup.path, privacy: .public)")
-        } catch {
-            MakiLog.store.error("checklist: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
-        }
-    }
 }

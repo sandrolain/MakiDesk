@@ -46,13 +46,7 @@ struct GroupStore {
     }
 
     /// `~/Library/Application Support/MakiDesk/groups.json`.
-    static var defaultFileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("MakiDesk", isDirectory: true)
-            .appendingPathComponent("groups.json")
-    }
+    static var defaultFileURL: URL { StoredJSONFile.defaultURL(named: "groups.json") }
 
     /// The groups written last, or an empty collection when there is nothing to
     /// read. A corrupt file is renamed to `<name>.bak` first, so the user can
@@ -62,7 +56,7 @@ struct GroupStore {
         do {
             return try JSONDecoder().decode(Payload.self, from: data).groups
         } catch {
-            backUpCorruptFile()
+            StoredJSONFile.quarantine(fileURL, label: "groups")
             return []
         }
     }
@@ -72,13 +66,9 @@ struct GroupStore {
     @discardableResult
     func save(_ groups: [WindowGroup]) -> Bool {
         let payload = Payload(groups: groups)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(payload) else { return false }
+        guard let data = try? StoredJSONFile.encoder().encode(payload) else { return false }
         do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try data.write(to: fileURL, options: .atomic)
+            try StoredJSONFile.write(data, to: fileURL)
             return true
         } catch {
             MakiLog.store.error("groups: could not save -> \(error.localizedDescription, privacy: .public)")
@@ -86,25 +76,5 @@ struct GroupStore {
         }
     }
 
-    private func backUpURL() -> URL {
-        fileURL.appendingPathExtension("bak")
-    }
 
-    /// Moves an unreadable file out of the way without deleting earlier
-    /// recovery copies. If the move fails, the source remains untouched.
-    private func backUpCorruptFile() {
-        let base = backUpURL()
-        var backup = base
-        var suffix = 1
-        while FileManager.default.fileExists(atPath: backup.path) {
-            backup = base.deletingPathExtension().appendingPathExtension("bak-\(suffix)")
-            suffix += 1
-        }
-        do {
-            try FileManager.default.moveItem(at: fileURL, to: backup)
-            MakiLog.store.error("groups: unreadable file set aside at \(backup.path, privacy: .public)")
-        } catch {
-            MakiLog.store.error("groups: could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
-        }
-    }
 }

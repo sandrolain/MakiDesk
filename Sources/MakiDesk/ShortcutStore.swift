@@ -60,13 +60,7 @@ struct ShortcutStore {
     }
 
     /// `~/Library/Application Support/MakiDesk/shortcuts.json`.
-    static var defaultFileURL: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("MakiDesk", isDirectory: true)
-            .appendingPathComponent("shortcuts.json")
-    }
+    static var defaultFileURL: URL { StoredJSONFile.defaultURL(named: "shortcuts.json") }
 
     // MARK: - Reading
 
@@ -79,14 +73,14 @@ struct ShortcutStore {
             return Snapshot(bindings: .defaults, version: Self.currentVersion, state: .corrupt)
         }
 
-        if let header = try? Self.makeDecoder().decode(VersionHeader.self, from: data),
+        if let header = try? StoredJSONFile.decoder().decode(VersionHeader.self, from: data),
            header.version > Self.currentVersion {
             return Snapshot(bindings: .defaults, version: header.version,
                             state: .futureVersion(header.version))
         }
 
-        guard let payload = try? Self.makeDecoder().decode(Payload.self, from: data) else {
-            backUpCorruptFile()
+        guard let payload = try? StoredJSONFile.decoder().decode(Payload.self, from: data) else {
+            StoredJSONFile.quarantine(fileURL, label: "shortcuts")
             MakiLog.shortcuts.error("shortcuts: unreadable file set aside")
             return Snapshot(bindings: .defaults, version: Self.currentVersion, state: .corrupt)
         }
@@ -110,13 +104,11 @@ struct ShortcutStore {
             return .failure(.futureVersion(header))
         }
         let payload = Payload(bindings: ShortcutBindings.sanitized(bindings.overrides))
-        guard let data = try? Self.makeEncoder().encode(payload) else {
+        guard let data = try? StoredJSONFile.encoder().encode(payload) else {
             return .failure(.writeFailed("the shortcuts could not be encoded"))
         }
         do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try data.write(to: fileURL, options: .atomic)
+            try StoredJSONFile.write(data, to: fileURL)
             // Combinations are configuration: keep the file private even under a
             // permissive umask.
             try? FileManager.default.setAttributes([.posixPermissions: Self.filePermissions],
@@ -166,32 +158,15 @@ struct ShortcutStore {
 
     /// A fresh coder per call: the store is a value type and `JSONDecoder` is
     /// not documented as reentrant.
-    private static func makeDecoder() -> JSONDecoder {
-        JSONDecoder()
-    }
 
-    private static func makeEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return encoder
-    }
 
     private func currentVersionOnDisk() -> Int? {
         guard let data = try? Data(contentsOf: fileURL),
-              let header = try? Self.makeDecoder().decode(VersionHeader.self, from: data) else {
+              let header = try? StoredJSONFile.decoder().decode(VersionHeader.self, from: data) else {
             return nil
         }
         return header.version
     }
 
-    private func backUpCorruptFile() {
-        let base = fileURL.appendingPathExtension("bak")
-        var backup = base
-        var suffix = 1
-        while FileManager.default.fileExists(atPath: backup.path) {
-            backup = base.deletingPathExtension().appendingPathExtension("bak-\(suffix)")
-            suffix += 1
-        }
-        try? FileManager.default.moveItem(at: fileURL, to: backup)
-    }
+
 }
