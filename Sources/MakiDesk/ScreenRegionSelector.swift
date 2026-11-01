@@ -495,13 +495,19 @@ final class ScreenRegionSelector {
                 return
             }
             do {
+                // A fresh frame, taken now that the overlays are gone. The
+                // loupe's snapshot is a frame from *before* the drag: cropping
+                // that one handed back the marquee and the veil whenever the
+                // window server still listed an overlay, and the desktop as it
+                // was when the selector opened rather than when the user chose.
                 let source: CGImage
-                if let cached {
-                    source = cached
-                } else {
-                    // The overlays are closing; any the server still lists are excluded.
+                do {
                     source = try await ScreenRegionCapture.capture(display: display,
                                                                    excluding: excluded)
+                } catch {
+                    // The snapshot is worth more than nothing.
+                    guard let cached else { throw error }
+                    source = cached
                 }
                 let image = try ScreenRegionCapture.image(of: rect, in: display, from: source)
                 continuation.resume(returning: Selection(rect: rect, display: display,

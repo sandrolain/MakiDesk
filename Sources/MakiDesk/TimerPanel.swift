@@ -19,6 +19,9 @@ final class TimerController {
     private(set) var now = Date()
 
     private var ticker: Timer?
+    /// A menu from the menu bar is open right now (see `tick`).
+    private var menuIsOpen = false
+    private var menuObservers: [NSObjectProtocol] = []
     private var monitor: Any?
     private var proximity = TimerProximity()
     private var overlay: NSPanel?
@@ -41,6 +44,7 @@ final class TimerController {
     func start() {
         guard !started else { return }
         started = true
+        observeMenus()
         applySettings()
         restore()
     }
@@ -49,6 +53,33 @@ final class TimerController {
     func shutdown() {
         guard started else { return }
         store.flush(board.timers)
+        for observer in menuObservers { NotificationCenter.default.removeObserver(observer) }
+        menuObservers.removeAll()
+    }
+
+    /// The beat stops while a menu is open.
+    ///
+    /// Every tick writes observed state, and a menu that is rebuilt while it is
+    /// on screen closes whatever submenu the pointer is in — the same mechanism
+    /// that made the timer titles tick-free. A countdown is drawn from an
+    /// absolute deadline, so missing a beat costs nothing: the next one catches
+    /// up.
+    private func observeMenus() {
+        guard menuObservers.isEmpty else { return }
+        let centre = NotificationCenter.default
+        menuObservers = [
+            centre.addObserver(forName: NSMenu.didBeginTrackingNotification,
+                               object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.menuIsOpen = true }
+            },
+            centre.addObserver(forName: NSMenu.didEndTrackingNotification,
+                               object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.menuIsOpen = false
+                    self?.tick()
+                }
+            },
+        ]
     }
 
     // MARK: - Starting and changing
@@ -187,6 +218,9 @@ final class TimerController {
     }
 
     private func tick() {
+        // Updating a countdown behind an open menu rebuilds it, and a rebuilt
+        // menu loses the submenu it was showing.
+        guard menuIsOpen == false else { return }
         now = Date()
         let finished = board.expire(at: now)
         if finished.isEmpty == false { persist() }
