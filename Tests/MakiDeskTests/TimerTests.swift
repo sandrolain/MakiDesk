@@ -273,4 +273,90 @@ final class TimerTests: XCTestCase {
         XCTAssertEqual(TimerSettings.alpha(opacity: 0.1, reduceTransparency: false),
                        CGFloat(TimerSettings.opacityRange.lowerBound))
     }
+
+    // MARK: - What survives a quit
+
+    func testATimerStillRunningKeepsItsRemainingTimeAcrossALaunch() throws {
+        let timer = AppTimer(label: "Tea", origin: .countdown,
+                             deadline: now.addingTimeInterval(90))
+        let outcome = TimerRestore.resolve([timer], at: now.addingTimeInterval(30))
+        XCTAssertTrue(outcome.expired.isEmpty)
+        XCTAssertEqual(outcome.board.timers, [timer])
+        // The time the app was closed is already subtracted from the deadline.
+        XCTAssertEqual(try XCTUnwrap(outcome.board.timers.first).remaining(at: now.addingTimeInterval(30)),
+                       60, accuracy: 0.001)
+    }
+
+    func testATimerThatRanOutWhileClosedIsReportedOnceAndNotKept() {
+        let timer = AppTimer(label: "Tea", origin: .countdown,
+                             deadline: now.addingTimeInterval(60))
+        let outcome = TimerRestore.resolve([timer], at: now.addingTimeInterval(600))
+        XCTAssertEqual(outcome.expired, [timer])
+        XCTAssertTrue(outcome.board.isEmpty)
+    }
+
+    func testAPausedTimerComesBackWithTheSameRemainder() throws {
+        let timer = AppTimer(label: "Focus", origin: .countdown,
+                             deadline: nil, pausedRemaining: 120)
+        let outcome = TimerRestore.resolve([timer], at: now.addingTimeInterval(86_400))
+        XCTAssertEqual(outcome.board.timers, [timer])
+        XCTAssertEqual(try XCTUnwrap(outcome.board.timers.first)
+            .remaining(at: now.addingTimeInterval(86_400)), 120, accuracy: 0.001)
+    }
+
+    func testTheRestoredListRespectsTheLimitAndDropsWhatCannotBeCounted() {
+        let broken = AppTimer(label: "gone", origin: .countdown, deadline: nil)
+        let running = (0..<12).map { index in
+            AppTimer(label: "t\(index)", origin: .countdown,
+                     deadline: now.addingTimeInterval(Double(index + 1) * 60))
+        }
+        let outcome = TimerRestore.resolve([broken] + running, at: now)
+        XCTAssertEqual(outcome.board.timers.count, TimerBoard.maxTimers)
+        XCTAssertFalse(outcome.board.timers.contains(broken))
+    }
+
+    func testRestoringNeverDuplicatesATimerOrOverflowsTheCard() {
+        let timer = AppTimer(label: "Tea", origin: .countdown,
+                             deadline: now.addingTimeInterval(60))
+        var board = TimerBoard()
+        board.restore([timer])
+        board.restore([timer])
+        XCTAssertEqual(board.timers, [timer])
+
+        let extra = (0..<12).map { index in
+            AppTimer(label: "t\(index)", origin: .countdown,
+                     deadline: now.addingTimeInterval(Double(index + 2) * 60))
+        }
+        board.restore(extra)
+        XCTAssertEqual(board.timers.count, TimerBoard.maxTimers)
+    }
+
+    func testTimersSurviveTheJSONRoundTripWithTheirDeadlines() throws {
+        let due = now.addingTimeInterval(3600)
+        let running = AppTimer(label: "Stand up", origin: .clockTime,
+                               deadline: due, clockTarget: due)
+        let paused = AppTimer(label: "Focus", origin: .countdown,
+                              deadline: nil, pausedRemaining: 42)
+        let data = try JSONEncoder().encode([running, paused])
+        XCTAssertEqual(try JSONDecoder().decode([AppTimer].self, from: data),
+                       [running, paused])
+    }
+
+    func testTheTimerFileReadsBackAndAnEmptyBoardRemovesIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("makidesk-timers-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("timers.json")
+        let store = TimerStore(url: url)
+        let timer = AppTimer(label: "Tea", origin: .countdown,
+                             deadline: now.addingTimeInterval(60))
+
+        store.flush([timer])
+        XCTAssertEqual(TimerStore.read(at: url), [timer])
+
+        store.flush([])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(TimerStore.read(at: url).isEmpty)
+    }
 }

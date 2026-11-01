@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 
 enum NotesStoreError: LocalizedError {
     case externalFileUnavailable(String)
@@ -269,9 +270,17 @@ final class NotesStore {
             let raw = String(name.dropFirst("note-".count))
             guard let id = UUID(uuidString: raw) else { continue }
             let text: String
+            var bodyFailed = false
             if readBodies {
-                guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
-                text = contents
+                var encoding = String.Encoding.utf8.rawValue
+                if let contents = Self.readText(at: file, encoding: &encoding) {
+                    text = contents
+                } else {
+                    // A note is never dropped because its body cannot be read:
+                    // the row stays and says so, and the file is still on disk.
+                    text = ""
+                    bodyFailed = true
+                }
             } else {
                 text = ""
             }
@@ -279,8 +288,11 @@ final class NotesStore {
             let created = values?.creationDate ?? Date.distantPast
             let modified = values?.contentModificationDate ?? created
             let meta = metadata[id]
-            var note = Note(id: id, text: text, textLoaded: readBodies,
-                            titlePreview: readBodies ? nil : (meta?.title ?? readTitlePreview(at: file)),
+            var note = Note(id: id, text: text, textLoaded: readBodies && !bodyFailed,
+                            textLoadFailed: bodyFailed,
+                            titlePreview: bodyFailed || !readBodies
+                                ? (meta?.title ?? readTitlePreview(at: file))
+                                : nil,
                             externalURL: nil, externalBaseline: nil,
                             externalEncoding: String.Encoding.utf8.rawValue,
                             languageID: meta?.language ?? "plain", cursor: meta?.cursor ?? 0,
@@ -417,6 +429,7 @@ final class NotesStore {
         selectedTab = note.id
         pendingDrafts.insert(note.id)
         enqueueDraftSave(note.id)
+        makiLog.notice("notes: created draft id=\(note.id.uuidString, privacy: .public)")
         scheduleSession()
         onChange?()
         return note
@@ -694,6 +707,10 @@ final class NotesStore {
     /// `⌘S` on a note without a file: it becomes a real file (T20).
     func saveAs(_ id: UUID, to url: URL) throws {
         guard let index = noteIndex(id: id) else { return }
+        // An unloaded body is empty in memory: writing it would replace the
+        // file with nothing. The async path loads the text first; this one
+        // refuses instead.
+        guard notes[index].textLoaded else { throw CocoaError(.fileReadUnknown) }
         _ = associationRevision(for: id).advance()
         let text = notes[index].text
         try writeExternal(text, url, String.Encoding.utf8.rawValue)
@@ -803,6 +820,9 @@ final class NotesStore {
 
     func deleteNote(_ id: UUID) {
         guard let index = noteIndex(id: id) else { return }
+        // What the user last saw, captured before the model forgets it: the
+        // Trash copy is written from this and is never a debounce behind.
+        let snapshot = notes[index]
         _ = associationRevision(for: id).advance()
         externalAssociationRevisions[id] = nil
         draftWork[id]?.cancel()
@@ -826,11 +846,19 @@ final class NotesStore {
         // The draft goes to the Trash, not into thin air: a mistaken click
         // stays recoverable from the Finder.
         let draft = fileURL(for: id)
+        let directory = self.directory
         draftIOQueue.async {
+            do {
+                try Self.writeDraft(snapshot, to: directory)
+            } catch {
+                // The Trash copy is then the older one, but the note still goes.
+                makiLog.error("notes: could not refresh the draft before trashing it -> \(error.localizedDescription, privacy: .public)")
+            }
             if FileManager.default.fileExists(atPath: draft.path) {
                 try? FileManager.default.trashItem(at: draft, resultingItemURL: nil)
             }
         }
+        makiLog.notice("notes: deleted draft id=\(id.uuidString, privacy: .public)")
         scheduleSession()
         onChange?()
     }
@@ -865,6 +893,7 @@ final class NotesStore {
                 }
             }
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("session.json"))
+            makiLog.notice("notes: factory reset removed every draft in \(directory.lastPathComponent, privacy: .public)")
             if let completion {
                 Task { @MainActor in completion() }
             }
@@ -961,8 +990,12 @@ final class NotesStore {
             let result = Result { try Self.writeDraft(note, to: directory) }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                guard self.draftRevision[id, default: 0] == revision,
-                      self.note(id: id) != nil else { return }
+                guard self.note(id: id) != nil else {
+                    // The note was deleted while this write was in flight.
+                    self.pendingDrafts.remove(id)
+                    return
+                }
+                guard self.draftRevision[id, default: 0] == revision else { return }
                 switch result {
                 case .success:
                     self.pendingDrafts.remove(id)
@@ -1000,9 +1033,45 @@ final class NotesStore {
     }
 
     nonisolated private static func writeDraft(_ note: Note, to directory: URL) throws {
+        try writeDurably(Data(note.text.utf8), to: directory
+            .appendingPathComponent("note-\(note.id.uuidString.lowercased()).txt"))
+    }
+
+    /// Replaces `url` with `data` so that losing power cannot leave a half
+    /// written file, or a renamed one whose bytes never reached the disk: the
+    /// bytes are flushed before the rename, and the rename is flushed as the
+    /// directory entry it is. `Data.write(options: .atomic)` only promises the
+    /// rename, which protects from a crash but not from the power going away.
+    nonisolated private static func writeDurably(_ data: Data, to url: URL) throws {
+        let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("note-\(note.id.uuidString.lowercased()).txt")
-        try note.text.write(to: url, atomically: true, encoding: .utf8)
+        let temporary = directory
+            .appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+        guard FileManager.default.createFile(atPath: temporary.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let handle = try FileHandle(forWritingTo: temporary)
+        do {
+            try handle.write(contentsOf: data)
+            try handle.synchronize()
+            try handle.close()
+        } catch {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
+        }
+        guard rename(temporary.path, url.path) == 0 else {
+            let code = errno
+            try? FileManager.default.removeItem(at: temporary)
+            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+        }
+        // The rename is a directory entry: syncing it is what makes the new
+        // name survive a power cut together with its bytes.
+        let descriptor = open(directory.path, O_RDONLY)
+        if descriptor >= 0 {
+            fsync(descriptor)
+            close(descriptor)
+        }
     }
 
     /// Flushes only when the notes were actually used in this run, so quitting
@@ -1138,14 +1207,14 @@ final class NotesStore {
 
     nonisolated private static func writeSessionSnapshot(_ session: Session, to directory: URL) throws {
         let data = try JSONEncoder().encode(session)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: directory.appendingPathComponent("session.json"), options: .atomic)
+        try writeDurably(data, to: directory.appendingPathComponent("session.json"))
     }
 
     private func reportPersistenceFailure() {
         let message = "Could not save notes. Changes remain in memory and will retry automatically."
         if persistenceError != message {
             persistenceError = message
+            makiLog.error("notes: could not write the drafts or the session")
             onChange?()
         }
         schedulePersistenceRetry()

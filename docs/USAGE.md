@@ -358,6 +358,12 @@ even when you never save it to a file.
   it stays anchored on the next launch.
 - **External files** opened as drafts survive a restart; if the file moves or
   disappears, the draft stays and is marked *Not available* / *file missing*.
+- **Nothing is saved by asking.** A draft is written a fraction of a second
+  after you stop typing, again when the panel loses focus or closes, and each
+  write is flushed to the disk before it replaces the old copy: a crash or a
+  sudden power cut costs at most the last keystroke. Closing a note writes its
+  latest text to the Trash first, and a note whose file cannot be read stays in
+  the list marked *Could not load note* instead of vanishing.
 - Notes and drafts live in `~/Library/Application Support/MakiDesk/Note/`.
   The factory reset has a **Notes** tick that removes them.
 
@@ -424,9 +430,13 @@ named after what it is (`25m`, `8:30`).
 - The count is read from the deadline, not from a count of ticks: sleeping,
   changing the hour or the time zone cannot make it drift, and a timer whose
   time passed while the Mac slept is over when it wakes.
-- Timers live for the session only — nothing is written to disk and nothing
-  survives a restart, because a timer that runs out while MakiDesk is closed
-  could not announce itself.
+- Timers survive a quit and a crash. They are kept in
+  `~/Library/Application Support/MakiDesk/timers.json` as absolute deadlines: a
+  running one carries on at the next launch with what is actually left — the
+  time MakiDesk was closed is already subtracted — a paused one comes back
+  paused with the same remainder, and one that ran out while the app was closed
+  is announced once, with the moment it was due, so it is never silently lost.
+  Deleting the last timer removes the file.
 
 ## Application launcher
 
@@ -938,9 +948,10 @@ instead of leaving a hole. Note and Safari are retried specially.
 window between Spaces. MakiDesk only moves windows on the current desktop.
 
 **Where is my data?** Notes in `~/Library/Application Support/MakiDesk/Note/`;
-groups in `groups.json` and remapped shortcuts in `shortcuts.json` in the same
-Support folder; clipboard and shelf are memory/temporary. The reset sheet can
-remove them.
+groups in `groups.json`, remapped shortcuts in `shortcuts.json` and the timers
+in `timers.json` in the same Support folder; clipboard and shelf are
+memory/temporary. The reset sheet can remove notes and groups; a timer goes
+when you delete it.
 
 **Uninstall.** Quit MakiDesk, drag it to the Trash, then remove
 `~/Library/Application Support/MakiDesk/` if you do not want the data. Revoke

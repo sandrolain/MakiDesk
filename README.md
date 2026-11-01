@@ -86,9 +86,12 @@ out of screenshots; solid with Reduce Transparency.
 `⌃⌥⇧T` starts one: `25m`, `1h 30m`, or `8:30` for the next half past eight —
 a colon is a time of day, so `1:30` is half past one at night — with an optional
 label to tell them apart. Several run at once, nearest first, in a small card
-that fades as the pointer comes near and returns when it leaves. The notice at the end stays until you click it away, offers **5 more minutes**,
-and a system sound rings — both chosen in Settings; the count is read from the
-deadline, so sleeping cannot make it drift.
+that fades as the pointer comes near and returns when it leaves. A timer is a
+deadline, so it is kept across launches: on the next start it has what is
+really left, and one that ran out while the app was closed says so instead of
+disappearing. The notice at the end stays until you click it away, offers **5
+more minutes**, and a system sound rings — both chosen in Settings; the count is
+read from the deadline, so sleeping cannot make it drift.
 
 ### Clipboard history, kept private
 

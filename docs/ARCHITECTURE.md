@@ -299,12 +299,17 @@ the same thing once started — and `TimerText` owns the formats and the parser
 (`25m`, `1h 30m`, `8:30` as a time of day). The 1 Hz timer exists only while
 something is running; every remaining time is read from the deadline, so a
 sleep or a clock change cannot make it drift, and expiry is decided against the
-wall clock. `TimerProximity` is the pure hysteresis behind the card stepping
-aside: hidden within 70 pt of the pointer, back only beyond 140 pt and after
-0.4 s, so a pointer resting on the boundary cannot make it flicker. A global
-`mouseMoved` monitor covers the moving pointer while the card is on screen, and
-the same 1 Hz beat samples `NSEvent.mouseLocation` as the fallback; both stop
-with the last timer.
+wall clock. `TimerStore` writes the same structs to `timers.json` from a serial
+queue on every change and again on termination, and `TimerRestore` is the pure
+rule a launch applies to them: a running timer carries on with what its deadline
+leaves (the time the app was closed is part of the subtraction), a paused one
+comes back paused, and one whose deadline passed while the app was closed is
+reported once instead of being dropped. `TimerProximity` is the pure hysteresis
+behind the card stepping aside: hidden within 70 pt of the pointer, back only
+beyond 140 pt and after 0.4 s, so a pointer resting on the boundary cannot make
+it flicker. A global `mouseMoved` monitor covers the moving pointer while the
+card is on screen, and the same 1 Hz beat samples `NSEvent.mouseLocation` as the
+fallback; both stop with the last timer.
 
 `ChecklistController` (T59) owns one small card: a borderless, non-activating
 panel at the floating level, in every space, sized to its content and placed in
@@ -345,8 +350,8 @@ in `NotesGrammarQueries.swift` to avoid resource-bundle packaging.
 grid, spiral, treemap), the advisor and weights, group/scene logic, window
 identity, content scores, the palette geometry, notes persistence and external
 drafts, grammar compilation, clipboard history, shelf shake and shelf item
-behaviour, focus-border placement, and the shortcut catalogue. At the time of
-writing: **235 tests**.
+behaviour, focus-border placement, timers (formats, deadlines, the launch
+restore rule) and the shortcut catalogue. At the time of writing: **801 tests**.
 
 ## Design notes
 
@@ -355,6 +360,11 @@ writing: **235 tests**.
 - Notes panes use TextKit 1 deliberately: the line-number ruler reads the layout
   manager, and a whole-document parse with a 120 ms debounce is enough for a
   scratchpad.
+- A note draft is replaced by writing a temporary file, flushing it, renaming it
+  over the old one and flushing the directory entry. The cycle runs on the
+  persistence queue behind the 400 ms debounce, so durability does not touch the
+  main thread; the panel flushes again when it loses key focus, which is what
+  makes autosave have no explicit save step.
 - The app never stores window thumbnails or clipboard text on disk.
 
 ## Known constraints

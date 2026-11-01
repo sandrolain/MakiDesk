@@ -313,6 +313,53 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.filtered("  ").count, 2)
     }
 
+    /// A body that cannot be read is a broken file, not a deleted note: the row
+    /// stays, the status says so, and the next session write keeps its metadata.
+    func testANoteWhoseBodyCannotBeReadIsKept() throws {
+        let directory = try makeDirectory()
+        let id = UUID()
+        // A directory at the draft's path cannot be read as text at all.
+        try FileManager.default.createDirectory(
+            at: directory.appendingPathComponent("note-\(id.uuidString.lowercased()).txt"),
+            withIntermediateDirectories: false
+        )
+
+        let store = NotesStore(directory: directory)
+        store.loadIfNeeded()
+
+        XCTAssertEqual(store.noteCount, 1)
+        let note = try XCTUnwrap(store.note(id: id))
+        XCTAssertFalse(note.textLoaded)
+        XCTAssertTrue(note.textLoadFailed)
+        XCTAssertTrue(note.text.isEmpty)
+
+        store.flush()
+        let reopened = NotesStore(directory: directory)
+        reopened.loadIfNeeded()
+        XCTAssertEqual(reopened.noteCount, 1)
+        XCTAssertTrue(reopened.note(id: id)?.textLoadFailed == true)
+    }
+
+    /// An unloaded body is empty in memory: saving it as a file would replace
+    /// the real text with nothing. The synchronous Save As refuses.
+    func testSaveAsBeforeTheBodyIsLoadedRefusesInsteadOfWritingEmptyText() async throws {
+        let directory = try makeDirectory()
+        let writer = NotesStore(directory: directory)
+        let note = writer.newNote()
+        writer.updateText("precious text", for: note.id)
+        writer.flush()
+
+        let reader = NotesStore(directory: directory)
+        let restored = expectation(description: "metadata restored")
+        reader.loadIfNeededAsync { restored.fulfill() }
+        await fulfillment(of: [restored], timeout: 3)
+        XCTAssertEqual(reader.note(id: note.id)?.textLoaded, false)
+
+        let target = directory.appendingPathComponent("copy.txt")
+        XCTAssertThrowsError(try reader.saveAs(note.id, to: target))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+    }
+
     func testFactoryResetDeletesEveryNote() async throws {
         let dir = try makeDirectory()
         let store = NotesStore(directory: dir)

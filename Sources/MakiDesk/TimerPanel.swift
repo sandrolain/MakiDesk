@@ -25,6 +25,7 @@ final class TimerController {
     private var layoutWork: DispatchWorkItem?
     private var revealWork: DispatchWorkItem?
     private var started = false
+    private let store = TimerStore()
 
     private init() {}
 
@@ -41,6 +42,13 @@ final class TimerController {
         guard !started else { return }
         started = true
         applySettings()
+        restore()
+    }
+
+    /// Termination fence: the timers reach the disk before the process leaves.
+    func shutdown() {
+        guard started else { return }
+        store.flush(board.timers)
     }
 
     // MARK: - Starting and changing
@@ -109,6 +117,55 @@ final class TimerController {
         now = Date()
         ensureTicking()
         refreshOverlay()
+        persist()
+    }
+
+    // MARK: - What survives a quit
+
+    private func restore() {
+        store.load { [weak self] timers in
+            Task { @MainActor [weak self] in self?.applyRestored(timers) }
+        }
+    }
+
+    /// The file is applied once. A running timer keeps counting from its
+    /// absolute deadline, so the time MakiDesk was closed is already accounted
+    /// for; a timer the user has just started is never duplicated.
+    private func applyRestored(_ timers: [AppTimer]) {
+        guard started else { return }
+        let outcome = TimerRestore.resolve(timers, at: Date())
+        guard outcome.board.isEmpty == false || outcome.expired.isEmpty == false else { return }
+        board.restore(outcome.board.timers)
+        now = Date()
+        for timer in outcome.expired { announceExpiredWhileClosed(timer) }
+        persist()
+        ensureTicking()
+        refreshOverlay()
+    }
+
+    private func persist() {
+        guard started else { return }
+        store.save(board.timers)
+    }
+
+    /// A timer that ran out while the app was closed is not silently gone: it
+    /// says so once, with the moment it was due, and keeps the usual action.
+    private func announceExpiredWhileClosed(_ timer: AppTimer) {
+        if WorkspaceStore.shared.timerSoundEnabled {
+            TimerChime.shared.play(WorkspaceStore.shared.timerSoundName)
+        }
+        let when = timer.deadline.map { TimerText.clockDay($0, now: Date()) }
+        HUDController.shared.show(
+            "Time's up · \(timer.label)",
+            symbol: "timer",
+            detail: when.map { "It ran out while MakiDesk was closed (\($0))." }
+                ?? "It ran out while MakiDesk was closed.",
+            kind: .warning,
+            sticky: true,
+            actions: [HUDAction(title: "5 more minutes") { [weak self] in
+                _ = self?.startCountdown(300, label: timer.label)
+            }]
+        )
     }
 
     // MARK: - The beat
@@ -134,6 +191,7 @@ final class TimerController {
     private func tick() {
         now = Date()
         let finished = board.expire(at: now)
+        if finished.isEmpty == false { persist() }
         for timer in finished { announce(timer) }
 
         guard board.isEmpty == false else {

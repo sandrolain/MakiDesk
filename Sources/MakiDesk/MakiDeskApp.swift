@@ -463,6 +463,7 @@ final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             NotesStore.shared.flushIfNeeded(cleanClose: true)
+            TimerController.shared.shutdown()
             ChecklistStore.shared.flushBlocking()
             ShelfController.shared.shutdown()
             ScreenshotLibraryController.shared.shutdown()

@@ -6,8 +6,8 @@ import Foundation
 /// A countdown and an "until 8:30" timer are the same thing once started: a
 /// wall-clock deadline. The origin is kept only so the list can say which one
 /// it was and so a paused clock timer can still be named after its hour.
-struct AppTimer: Identifiable, Equatable, Sendable {
-    enum Origin: String, Sendable {
+struct AppTimer: Identifiable, Equatable, Sendable, Codable {
+    enum Origin: String, Sendable, Codable {
         case countdown
         case clockTime
     }
@@ -216,6 +216,10 @@ enum TimerText {
 struct TimerBoard: Equatable, Sendable {
     private(set) var timers: [AppTimer] = []
 
+    init(timers: [AppTimer] = []) {
+        self.timers = timers
+    }
+
     /// Past this the overlay and the menu stop being readable at a glance.
     static let maxTimers = 8
 
@@ -293,6 +297,16 @@ struct TimerBoard: Equatable, Sendable {
         timers.removeAll()
     }
 
+    /// Puts back what a previous run left, without exceeding the limit and
+    /// without duplicating a timer the user has just started again.
+    mutating func restore(_ restored: [AppTimer]) {
+        for timer in restored {
+            guard timers.count < Self.maxTimers else { return }
+            guard timers.contains(where: { $0.id == timer.id }) == false else { continue }
+            timers.append(timer)
+        }
+    }
+
     /// Takes the timers that ran out and says which they were, so the caller
     /// can announce each one exactly once.
     mutating func expire(at now: Date) -> [AppTimer] {
@@ -300,6 +314,114 @@ struct TimerBoard: Equatable, Sendable {
         guard due.isEmpty == false else { return [] }
         timers.removeAll { $0.isDue(at: now) }
         return due
+    }
+}
+
+// MARK: - Persistence
+
+/// Timers outlive the process: the file holds the same absolute deadlines the
+/// board works with, so a launch only reads the clock again instead of adding
+/// up the time the app was closed (T61).
+struct TimerStore: Sendable {
+    let url: URL
+
+    private static let queue = DispatchQueue(label: "com.makidesk.timers-file", qos: .utility)
+
+    init(url: URL = Self.defaultURL) {
+        self.url = url
+    }
+
+    /// `~/Library/Application Support/MakiDesk/timers.json`.
+    static var defaultURL: URL {
+        let base = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("Library/Application Support", isDirectory: true)
+        return base.appendingPathComponent("MakiDesk", isDirectory: true)
+            .appendingPathComponent("timers.json")
+    }
+
+    /// Read off the main thread: opening the app must not wait for the disk.
+    func load(completion: @escaping @Sendable ([AppTimer]) -> Void) {
+        let url = self.url
+        Self.queue.async {
+            completion(Self.read(at: url))
+        }
+    }
+
+    nonisolated static func read(at url: URL) -> [AppTimer] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        do {
+            return try JSONDecoder().decode([AppTimer].self, from: data)
+        } catch {
+            // Never overwrite a file we could not understand: it stays next to
+            // the new one as `.bak`.
+            makiLog.error("timers: unreadable file -> \(error.localizedDescription, privacy: .public)")
+            let backup = url.appendingPathExtension("bak")
+            try? FileManager.default.removeItem(at: backup)
+            try? FileManager.default.moveItem(at: url, to: backup)
+            return []
+        }
+    }
+
+    /// Called on every change; the write is small and serialised.
+    func save(_ timers: [AppTimer]) {
+        let url = self.url
+        Self.queue.async { Self.write(timers, to: url) }
+    }
+
+    /// The termination fence: what the user was looking at reaches the disk
+    /// before the process goes away.
+    func flush(_ timers: [AppTimer]) {
+        let url = self.url
+        Self.queue.sync { Self.write(timers, to: url) }
+    }
+
+    nonisolated private static func write(_ timers: [AppTimer], to url: URL) {
+        do {
+            if timers.isEmpty {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+                return
+            }
+            let data = try JSONEncoder().encode(timers)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            makiLog.error("timers: could not save -> \(error.localizedDescription, privacy: .public)")
+        }
+    }
+}
+
+/// What a launch does with the timers it finds.
+///
+/// A **running** timer is a deadline: when it is still ahead the timer carries
+/// on with what is left after the time the app was closed, and when it passed
+/// meanwhile it is over and is reported once. A **paused** timer does not age:
+/// it comes back with the same remainder.
+enum TimerRestore {
+    struct Outcome: Equatable {
+        var board: TimerBoard
+        var expired: [AppTimer]
+    }
+
+    static func resolve(_ timers: [AppTimer], at now: Date) -> Outcome {
+        var kept: [AppTimer] = []
+        var expired: [AppTimer] = []
+        for timer in timers {
+            if timer.isPaused {
+                kept.append(timer)
+            } else if let deadline = timer.deadline {
+                if deadline > now { kept.append(timer) } else { expired.append(timer) }
+            }
+            // Neither running nor paused: there is nothing to count.
+        }
+        // A hand-edited file must not put more on the card or on the notices
+        // than the board accepts.
+        return Outcome(board: TimerBoard(timers: Array(kept.prefix(TimerBoard.maxTimers))),
+                       expired: Array(expired.prefix(TimerBoard.maxTimers)))
     }
 }
 

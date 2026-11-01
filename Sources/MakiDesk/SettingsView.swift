@@ -665,7 +665,7 @@ struct SettingsView: View {
                         }
                         .disabled(!store.timerSoundEnabled)
                     }
-                    caption("⌃⌥⇧T or the Timers menu starts one: a length with a unit (25m, 1h 30m, 40s), a bare number of minutes (25) or a time of day with a colon (8:30, meaning the next half past eight). The card sits in the chosen corner and steps aside as the pointer comes near, coming back once it moves away; it stays above the other apps and is left out of screenshots. Several timers run at once, nearest first, each with an optional label. Timers live for the session only — nothing is written to disk and nothing survives a restart — and a finished one posts a notice until you dismiss it, with a system sound when the option above is on. The sound follows the Mac's volume and mute.")
+                    caption("⌃⌥⇧T or the Timers menu starts one: a length with a unit (25m, 1h 30m, 40s), a bare number of minutes (25) or a time of day with a colon (8:30, meaning the next half past eight). The card sits in the chosen corner and steps aside as the pointer comes near, coming back once it moves away; it stays above the other apps and is left out of screenshots. Several timers run at once, nearest first, each with an optional label. Timers survive a quit and a crash: a running one keeps its absolute deadline, so the time the app was closed is already counted, a paused one comes back paused, and one that ran out while the app was closed is announced at the next launch instead of being lost. A finished one posts a notice until you dismiss it, with a system sound when the option above is on. The sound follows the Mac's volume and mute.")
                 }
             }
             if panelsPage == .switcher {

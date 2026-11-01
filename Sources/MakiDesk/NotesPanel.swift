@@ -211,6 +211,15 @@ final class NotesController: NSObject, NSWindowDelegate {
         store.updateWindowFrame(window.frame)
     }
 
+    /// Autosave has no dialog and no "save" step: the moment the panel stops
+    /// being the key window — another app, closing the lid, hiding the panel —
+    /// the pending drafts and the session go to disk. The write is asynchronous
+    /// so focus is returned at once.
+    func windowDidResignKey(_ notification: Notification) {
+        guard window?.isVisible == true else { return }
+        store.flushAsync()
+    }
+
     func windowDidEndLiveResize(_ notification: Notification) {
         guard let window else { return }
         if let side = store.anchor {

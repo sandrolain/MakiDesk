@@ -80,7 +80,7 @@ All paths are under your user account:
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings) | Until reset |
-| Timers | RAM | Until MakiDesk quits |
+| Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
 | Shelf | RAM + a temporary staging folder | Until the shelf closes |
 | Peek designation | RAM | Until the app quits |
@@ -93,7 +93,8 @@ All paths are under your user account:
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
 can remove groups, notes, clipboard history and dropzones; settings always
-reset.
+reset. The timers file holds only a label, where the timer came from and its
+deadline (or, while paused, the time left).
 
 ## Clipboard
 
