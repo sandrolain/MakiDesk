@@ -150,4 +150,35 @@ final class ShortcutDefinitionsTests: XCTestCase {
         XCTAssertTrue(gestures.contains { $0.display == "hold ⌃⌥H" })
         XCTAssertTrue(gestures.contains { $0.display == "⇧ + drag" })
     }
+
+    // MARK: - In-panel keys (S03)
+
+    /// The in-panel rows are prose no compiler checks; the vocabulary is what
+    /// makes them testable. Every panel that takes the keyboard must give it
+    /// back.
+    func testEveryPanelCanBeDismissed() {
+        let local = ShortcutCatalog.sections().filter { $0.scope != "Global" }
+        XCTAssertEqual(local.count, 5, "the five local sections")
+        for section in local {
+            XCTAssertTrue(section.items.contains { $0.localKey == .cancel },
+                          "\(section.title) has no Esc row")
+        }
+    }
+
+    func testALocalKeyRowShowsItsSharedCombination() {
+        for section in ShortcutCatalog.sections() {
+            for item in section.items {
+                guard let key = item.localKey else { continue }
+                XCTAssertEqual(item.keys, key.keys, "\(section.title): \(item.title)")
+            }
+        }
+    }
+
+    func testTheLocalVocabularyUsesACombinationOnce() {
+        let keys = LocalKey.allCases.map(\.keys)
+        XCTAssertEqual(Set(keys).count, keys.count)
+        XCTAssertEqual(LocalKey.accept.keys, "↩")
+        XCTAssertEqual(LocalKey.cancel.keys, "Esc")
+        XCTAssertEqual(LocalKey.acceptNew.keys, "⌘↩")
+    }
 }

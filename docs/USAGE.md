@@ -911,6 +911,139 @@ app. The palette's own keys are listed in the same window (arrows, `↑`/`↓` i
 the Applications shelf, `↩`, Space, `Esc`, `⌘1…9`, `⌥1…9`, `⌥Q`, `⌥⇧Q`, `⌥M`,
 `⌫`).
 
+### Every key
+
+The table below is generated from the app's own table, with
+`task docs:shortcuts`; a test fails when it falls behind.
+
+<!-- shortcuts:begin -->
+
+**Window**
+
+| Command | Keys | Where |
+|---|---|---|
+| Left column | `⌃⌥←` | Window |
+| Right column | `⌃⌥→` | Window |
+| Top row | `⌃⌥↑` | Window |
+| Bottom row | `⌃⌥↓` | Window |
+| Top-left quarter | `⌃⌥U` | Window |
+| Top-right quarter | `⌃⌥I` | Window |
+| Bottom-left quarter | `⌃⌥J` | Window |
+| Bottom-right quarter | `⌃⌥K` | Window |
+| Center / full / golden — cycle | `⌃⌥↩` | Window |
+| Center | `⌃⌥C` | Window |
+| Golden ratio (φ) | `⌃⌥P` | Window |
+| Toggle full screen | `⌃⌥F` | Window |
+| Minimize | `⌃⌥M` | Window |
+| Snap while dragging | ⌥ + drag | Gesture |
+
+**Layouts**
+
+| Command | Keys | Where |
+|---|---|---|
+| Grid — every window in view | `⌃⌥G` | Window |
+| Golden spiral — every window in view | `⌃⌥S` | Window |
+| Suggested layout | `⌃⌥A` | Window |
+| Content-weighted — areas follow the content | `⌃⌥W` | Window |
+
+**Panels**
+
+| Command | Keys | Where |
+|---|---|---|
+| Window switcher | `⌥⇥` | Panel |
+| Window switcher — backwards | `⌥⇧⇥` | Panel |
+| Search windows and applications | `⌥Space` | Panel |
+| Notes | `⌥N` | Panel |
+| Clipboard history | `⌥V` | Panel |
+| Shelf | `⌃⌥D` | Window |
+| Checklist | `⌃⌥L` | Window |
+
+**Focus**
+
+| Command | Keys | Where |
+|---|---|---|
+| Send the front window away | `⌃⌥⌘V` | Desktop |
+| Everything back | `⌃⌥⌘A` | Desktop |
+| Undo one step | `⌃⌥⌘Z` | Desktop |
+
+**Groups**
+
+| Command | Keys | Where |
+|---|---|---|
+| Recall group 1 | `⌃⌥1` | Window |
+| Add / remove the front window from group 1 | `⌃⌥⌘1` | Desktop |
+| Recall group 2 | `⌃⌥2` | Window |
+| Add / remove the front window from group 2 | `⌃⌥⌘2` | Desktop |
+| Recall group 3 | `⌃⌥3` | Window |
+| Add / remove the front window from group 3 | `⌃⌥⌘3` | Desktop |
+| Recall group 4 | `⌃⌥4` | Window |
+| Add / remove the front window from group 4 | `⌃⌥⌘4` | Desktop |
+| Recall group 5 | `⌃⌥6` | Window |
+| Add / remove the front window from group 5 | `⌃⌥⌘6` | Desktop |
+| Recall group 6 | `⌃⌥5` | Window |
+| Add / remove the front window from group 6 | `⌃⌥⌘5` | Desktop |
+| Recall group 7 | `⌃⌥=` | Window |
+| Add / remove the front window from group 7 | `⌃⌥⌘=` | Desktop |
+| Recall group 8 | `⌃⌥9` | Window |
+| Add / remove the front window from group 8 | `⌃⌥⌘9` | Desktop |
+| Recall group 9 | `⌃⌥7` | Window |
+| Add / remove the front window from group 9 | `⌃⌥⌘7` | Desktop |
+
+**Timers**
+
+| Command | Keys | Where |
+|---|---|---|
+| New timer… | `⌃⌥T` | Window |
+
+**Peek**
+
+| Command | Keys | Where |
+|---|---|---|
+| Designate / undesignate the front window | `⌃⌥⌘P` | Desktop |
+| Peek at it while held | hold ⌃⌥H | Gesture |
+
+**Text & colour**
+
+| Command | Keys | Where |
+|---|---|---|
+| Recognize text from a selected area | `⌃⌥⇧O` | Screen |
+| Pick a colour from the screen | `⌃⌥⇧E` | Screen |
+
+**Screenshots**
+
+| Command | Keys | Where |
+|---|---|---|
+| Annotate a screenshot | `⌃⌥⇧S` | Screen |
+| Annotate a window | `⌃⌥⇧W` | Screen |
+| Annotate the whole display | `⌃⌥⇧C` | Screen |
+| Record an area | `⌃⌥⇧R` | Screen |
+
+**Measure**
+
+| Command | Keys | Where |
+|---|---|---|
+| Measure an area | `⌃⌥⇧M` | Screen |
+| Keep a square | ⇧ + drag | Gesture |
+| Measure from the centre | ⌥ + drag | Gesture |
+| Snap to windows and displays | auto | Gesture |
+
+**App**
+
+| Command | Keys | Where |
+|---|---|---|
+| Settings… | `⌃⌥,` | Window |
+| Keyboard Shortcuts… | `⌃⌥/` | Window |
+| Screenshots | `⌃⌥Y` | Window |
+| Run a command… | `⌃⌥R` | Window |
+| Show / hide the focus border | `⌃⌥⌘B` | Desktop |
+| Dim everything but the focused window | `⌃⌥⌘D` | Desktop |
+| Focus the selected windows | `⌃⌥⌘F` | Desktop |
+| Leave the group in use | `⌃⌥⌘L` | Desktop |
+| Clear the peek designation | `⌃⌥⌘H` | Desktop |
+| Apply the suggested layout | `⌃⌥⌘↩` | Desktop |
+
+<!-- shortcuts:end -->
+
 ### Changing a shortcut
 
 Click the key next to a global command (or its `⋯` menu ▸ **Record new

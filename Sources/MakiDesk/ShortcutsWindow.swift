@@ -20,6 +20,8 @@ struct ShortcutItem: Identifiable {
     var isUnregistered: Bool = false
     /// The prefix family of a global row, shown while recording (S01).
     var family: ShortcutFamily? = nil
+    /// The shared verb this row uses, when it uses one (S03).
+    var localKey: LocalKey? = nil
 
     var id: String { identifier ?? "\(title)|\(keys)" }
 }
@@ -94,18 +96,22 @@ enum ShortcutCatalog {
     private static let localSections: [ShortcutSection] = [
         ShortcutSection(title: "Window switcher and search", scope: "Palette open", items: [
             .init(title: "Move the highlight", keys: "↑ ↓ ← →"),
-            .init(title: "Open the highlighted window", keys: "↩",
-                  note: "Releasing ⌥ opens it too. With a group selected in the column, Return recalls it (⌘↩ while searching)."),
+            .init(title: "Open the highlighted window", keys: LocalKey.accept.keys,
+                  note: "Releasing ⌥ opens it too. With a group selected in the column, Return recalls it (⌘↩ while searching).",
+                  localKey: .accept),
             .init(title: "Turn the switcher into a search", keys: "Space"),
             .init(title: "Step into / out of the applications shelf", keys: "↑ ↓",
                   note: "While searching: ↑ from the first window row enters the shelf, ↓ returns to the windows; ←/→ choose an application."),
             .init(title: "Launch the highlighted application", keys: "↩",
                   note: "While the applications shelf has the highlight."),
-            .init(title: "Close the palette", keys: "Esc",
-                  note: "In the group column, Esc leaves the group first."),
-            .init(title: "Pick a group from the column", keys: "⌘1…9"),
-            .init(title: "Add / remove the highlighted card", keys: "⌥1…9",
-                  note: "Builds the group being edited, while browsing."),
+            .init(title: "Close the palette", keys: LocalKey.cancel.keys,
+                  note: "In the group column, Esc leaves the group first.",
+                  localKey: .cancel),
+            .init(title: "Pick a group from the column", keys: LocalKey.chooseSlot.keys,
+                  localKey: .chooseSlot),
+            .init(title: "Add / remove the highlighted card", keys: LocalKey.toggleSlot.keys,
+                  note: "Builds the group being edited, while browsing.",
+                  localKey: .toggleSlot),
             .init(title: "Close the highlighted window", keys: "⌥Q"),
             .init(title: "Quit the highlighted app", keys: "⌥⇧Q"),
             .init(title: "Minimize the highlighted window", keys: "⌥M"),
@@ -122,24 +128,26 @@ enum ShortcutCatalog {
             .init(title: "Open a file as a note", keys: "⌘O"),
             .init(title: "Switch to note 1…9", keys: "⌘1…9"),
             .init(title: "Larger / smaller text", keys: "⌘+ / ⌘−"),
-            .init(title: "Close the panel", keys: "Esc"),
+            .init(title: "Close the panel", keys: LocalKey.cancel.keys, localKey: .cancel),
         ], note: "⌥N opens the panel from anywhere."),
 
         ShortcutSection(title: "Clipboard", scope: "Panel focused", items: [
             .init(title: "Move the selection", keys: "↑ ↓",
                   note: "Page ↑/↓, Home and End work too."),
-            .init(title: "Paste the selected text", keys: "↩"),
+            .init(title: "Paste the selected text", keys: LocalKey.accept.keys, localKey: .accept),
             .init(title: "Paste a row", keys: "Click"),
-            .init(title: "Close the panel", keys: "Esc"),
+            .init(title: "Close the panel", keys: LocalKey.cancel.keys, localKey: .cancel),
         ], note: "⌥V opens it from anywhere; nothing is written to disk."),
 
         ShortcutSection(title: "Shelf", scope: "Shelf open", items: [
-            .init(title: "Quick Look the selected item", keys: "Space"),
-            .init(title: "Remove the selected items", keys: "⌫"),
-            .init(title: "Close the shelf", keys: "Esc",
-                  note: "The shelf empties when it closes."),
-            .init(title: "Select every item", keys: "⌘A",
-                  note: "Then drag any row to take them all, or use “Drag all out”."),
+            .init(title: "Quick Look the selected item", keys: LocalKey.preview.keys, localKey: .preview),
+            .init(title: "Remove the selected items", keys: LocalKey.remove.keys, localKey: .remove),
+            .init(title: "Close the shelf", keys: LocalKey.cancel.keys,
+                  note: "The shelf empties when it closes.",
+                  localKey: .cancel),
+            .init(title: "Select every item", keys: LocalKey.selectAll.keys,
+                  note: "Then drag any row to take them all, or use “Drag all out”.",
+                  localKey: .selectAll),
         ], note: "⌃⌥D opens it from anywhere; shaking during a drag does too."),
 
         ShortcutSection(title: "Dropzones", scope: "Shelf open", items: [
@@ -147,9 +155,13 @@ enum ShortcutCatalog {
                   note: "The menu bar has the same zones under Dropzones; each one runs on the selected items."),
             .init(title: "Choose between dropzone tiles", keys: "← →",
                   note: "The highlighted tile is the one Return runs."),
-            .init(title: "Run the highlighted dropzone", keys: "↩",
-                  note: "Same confirmation and payload as dropping on the tile."),
+            .init(title: "Run the highlighted dropzone", keys: LocalKey.accept.keys,
+                  note: "Same confirmation and payload as dropping on the tile.",
+                  localKey: .accept),
             .init(title: "Back to the shelf list", keys: "↑"),
+            .init(title: "Leave the strip", keys: LocalKey.cancel.keys,
+                  note: "The shelf stays open; Esc from the list closes it.",
+                  localKey: .cancel),
         ], note: "Or drag items onto a tile while the strip is visible."),
     ]
 }

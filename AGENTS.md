@@ -101,7 +101,7 @@ swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 git diff --check
 ```
 
-`task build`, `task release` and `task test` wrap the corresponding commands. Run SwiftPM operations sequentially against a shared build directory. In restricted environments, use writable module/cache paths and `--disable-automatic-resolution` when dependencies are already available. The analysis document records the local workaround for nested SwiftPM sandbox failures; do not confuse that build workaround with app permissions or change the app's security configuration.
+`task build`, `task release` and `task test` wrap the corresponding commands; `task docs:shortcuts` regenerates the shortcut block in `docs/USAGE.md`, which `swift test` checks for drift. Run SwiftPM operations sequentially against a shared build directory. In restricted environments, use writable module/cache paths and `--disable-automatic-resolution` when dependencies are already available. The analysis document records the local workaround for nested SwiftPM sandbox failures; do not confuse that build workaround with app permissions or change the app's security configuration.
 
 - Add/run tests when requested by the user or included in the agreed verification scope. For regressions, prefer injected providers and deterministic pure tests over sleeps or the real desktop. Cover stale callbacks, rapid reopen, initial empty state, unavailable AX targets, duplicate IDs and Unicode where relevant.
 - Do not weaken assertions or silently skip tests to get a green suite. Report environment-dependent skips separately. A successful build or unit suite does not prove GUI latency, focus restoration or multi-monitor correctness.

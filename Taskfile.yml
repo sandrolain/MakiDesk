@@ -26,6 +26,11 @@ tasks:
     cmds:
       - swift test
 
+  docs:shortcuts:
+    desc: Rewrite the generated shortcut block in docs/USAGE.md
+    cmds:
+      - swift run MakiDesk --dump-shortcuts docs/USAGE.md
+
   release:
     desc: Compile optimized release target
     cmds:

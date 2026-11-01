@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-@main
 struct MakiDeskApp: App {
     /// The migration from the app's previous name runs before the store reads
     /// its settings and its groups file.

@@ -51,6 +51,7 @@ possible, use the menu-bar icon or `⌘Q` from its panels.
 | `task build` | Debug build. |
 | `task run` | `swift run` (not the app bundle). |
 | `task test` | `swift test`. |
+| `task docs:shortcuts` | Rewrite the generated shortcut block in `docs/USAGE.md` from `ShortcutDefinitions`. A test fails when it falls behind. |
 | `task release` | Optimized release build. |
 | `task bundle` | Copy the release binary, Info.plist, icon, licence and notices into `dist/MakiDesk.app`. |
 | `task cert` | Create the local `MakiDesk Local Signing` identity once (stable TCC identity). |
