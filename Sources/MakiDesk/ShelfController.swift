@@ -1094,13 +1094,20 @@ final class ShelfController: NSObject, NSWindowDelegate,
     /// Shelf files are references to the user's own items, so a destination may
     /// move them: Finder then removes the original on the same volume. Text,
     /// links and images have no source file to move, so they stay copy-only.
+    ///
+    /// A **staged** file is the exception on the file side too: it is a copy the
+    /// shelf produced — a screenshot it rendered — living in its own temporary
+    /// folder. Offering `.move` for it let the destination take the file away
+    /// and the shelf drop the entry, so a move that failed left the image
+    /// nowhere (reported 1 November 2026). It is copy-only, as the staging
+    /// comment already promised.
     static func dragOperations(for items: [ShelfItem]) -> NSDragOperation {
         guard items.isEmpty == false else { return .copy }
-        let allFiles = items.allSatisfy { item in
-            if case .file = item.content { return true }
-            return false
+        let movable = items.allSatisfy { item in
+            guard case let .file(_, staged) = item.content else { return false }
+            return staged == false
         }
-        return allFiles ? [.copy, .move] : .copy
+        return movable ? [.copy, .move] : .copy
     }
 
     func draggingSession(_ session: NSDraggingSession,
