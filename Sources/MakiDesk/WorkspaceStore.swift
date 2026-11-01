@@ -1522,7 +1522,7 @@ final class WorkspaceStore {
             switch outcome {
             case .frame(let logical):
                 applyFrame(logical.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
-                           reason: label(for: action), animate: false)
+                           reason: CommandRouter.label(for: action), animate: false)
             case .minimize:
                 setMinimized(true, target: target)
             case .screenBoundary(let direction, let fallback):
@@ -1534,7 +1534,7 @@ final class WorkspaceStore {
                                animate: false)
                 } else if let fallback {
                     applyFrame(fallback.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
-                               reason: label(for: action), animate: false, retryOnMismatch: false)
+                               reason: CommandRouter.label(for: action), animate: false, retryOnMismatch: false)
                 } else {
                     setMinimized(true, target: target)
                 }
@@ -1542,10 +1542,9 @@ final class WorkspaceStore {
             return
         }
 
-        let key = "\(target.appName)|\(target.title)"
-        guard let logical = logicalFrame(for: action, area: area, current: current, key: key) else { return }
+        guard let logical = CommandRouter.logicalFrame(for: action, area: area, current: current) else { return }
         applyFrame(logical.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
-                   reason: label(for: action))
+                   reason: CommandRouter.label(for: action))
     }
 
     private enum LadderOutcome {
@@ -1564,7 +1563,7 @@ final class WorkspaceStore {
         area: CGRect,
         current: CGRect
     ) -> LadderOutcome? {
-        guard let (axis, direction) = ladderAxisAndDirection(for: action) else { return nil }
+        guard let (axis, direction) = CommandRouter.axisAndDirection(for: action) else { return nil }
         let orthogonal = orthogonalRange(of: current, axis: axis)
         let states = TilingEngine.ladderRects(area: area, axis: axis, orthogonal: orthogonal)
         let slot = TilingEngine.slot(of: current, area: area, axis: axis, states: states)
@@ -1661,78 +1660,6 @@ final class WorkspaceStore {
         }
     }
 
-    private func ladderAxisAndDirection(for action: WindowController.ShortcutAction) -> (TilingEngine.Axis, Int)? {
-        switch action {
-        case .leftHalf: return (.horizontal, -1)
-        case .rightHalf: return (.horizontal, 1)
-        case .topHalf: return (.vertical, -1)
-        case .bottomHalf: return (.vertical, 1)
-        default: return nil
-        }
-    }
-
-    private func logicalFrame(
-        for action: WindowController.ShortcutAction,
-        area: CGRect,
-        current: CGRect,
-        key: String
-    ) -> CGRect? {
-        switch action {
-        case .leftHalf, .rightHalf, .topHalf, .bottomHalf:
-            return nil
-        case .topLeft:
-            return TilingEngine.regionRect(area: area, relative: CGRect(x: 0, y: 0, width: 0.5, height: 0.5))
-        case .topRight:
-            return TilingEngine.regionRect(area: area, relative: CGRect(x: 0.5, y: 0, width: 0.5, height: 0.5))
-        case .bottomLeft:
-            return TilingEngine.regionRect(area: area, relative: CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5))
-        case .bottomRight:
-            return TilingEngine.regionRect(area: area, relative: CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5))
-        case .centerCycle:
-            return centerCycleFrame(area: area, current: current, key: key)
-        case .center:
-            let width = min(current.width, area.width)
-            let height = min(current.height, area.height)
-            return CGRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
-        case .phi:
-            return goldenFrame(area: area)
-        case .toggleFullScreen, .minimize, .switchWindows, .switchWindowsBack, .searchWindows,
-             .assignToGroup, .recallGroup, .peekDesignate,
-             .putAwayFront, .showEverything, .undoStep,
-             .gridLayout, .spiralLayout, .suggestLayout, .contentLayout,
-             .toggleNotes, .clipboardHistory, .toggleShelf, .recognizeText, .sampleColor,
-             .measureArea, .openSettings, .openKeyboardShortcuts, .openScreenshots,
-             .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
-             .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
-             .newTimer, .captureScreenshot, .captureWindow, .captureScreen,
-             .recordArea, .runCommand:
-            return nil
-        }
-    }
-
-    private func goldenFrame(area: CGRect) -> CGRect {
-        let width = min(area.width, area.height * TilingEngine.phi)
-        let height = min(area.height, area.width / TilingEngine.phi)
-        return CGRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
-    }
-
-    /// Ctrl-Opt-Return: two states only — full screen ↔ golden-centred.
-    private func centerCycleFrame(area: CGRect, current: CGRect, key: String) -> CGRect {
-        if framesMatch(current, area) { return cycleGoldenFrame(area: area) }
-        return area
-    }
-
-    /// Golden-ratio reduction of the full-screen size, centred (0.618 × 0.618).
-    private func cycleGoldenFrame(area: CGRect) -> CGRect {
-        let width = area.width / TilingEngine.phi
-        let height = area.height / TilingEngine.phi
-        return CGRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
-    }
-
-    private func framesMatch(_ a: CGRect, _ b: CGRect) -> Bool {
-        abs(a.minX - b.minX) < 12 && abs(a.minY - b.minY) < 12
-            && abs(a.width - b.width) < 12 && abs(a.height - b.height) < 12
-    }
 
     /// Focuses the next window behind `target` in the stacking order.
     private func focusNextStack(after target: WindowController.WindowInfo) {
@@ -2050,59 +1977,6 @@ final class WorkspaceStore {
             if let element = elements[window.id], CFEqual(element, target.element) { return index }
         }
         return windows.firstIndex { $0.appName == target.appName && $0.title == target.title }
-    }
-
-    private func label(for action: WindowController.ShortcutAction) -> String {
-        switch action {
-        case .leftHalf: return "left column"
-        case .rightHalf: return "right column"
-        case .topHalf: return "top row"
-        case .bottomHalf: return "bottom row"
-        case .topLeft: return "top-left quarter"
-        case .topRight: return "top-right quarter"
-        case .bottomLeft: return "bottom-left quarter"
-        case .bottomRight: return "bottom-right quarter"
-        case .centerCycle: return "center cycle"
-        case .center: return "centered"
-        case .phi: return "golden ratio"
-        case .toggleFullScreen: return "full screen"
-        case .minimize: return "minimized"
-        case .switchWindows: return "switch"
-        case .switchWindowsBack: return "switch"
-        case .searchWindows: return "search"
-        case .assignToGroup, .recallGroup: return "group"
-        case .toggleNotes: return "notes"
-        case .clipboardHistory: return "clipboard"
-        case .toggleShelf: return "shelf"
-        case .recognizeText: return "text"
-        case .sampleColor: return "colour"
-        case .measureArea: return "measure"
-        case .openSettings: return "settings"
-        case .openKeyboardShortcuts: return "shortcuts"
-        case .openScreenshots: return "screenshots"
-        case .toggleFocusBorder: return "focus border"
-        case .toggleFocusDim: return "focus dim"
-        case .toggleChecklist: return "checklist"
-        case .newTimer: return "timer"
-        case .captureScreenshot: return "screenshot"
-        case .captureWindow: return "window"
-        case .captureScreen: return "screen"
-        case .recordArea: return "recording"
-        case .runCommand: return "command"
-        case .toggleMiniMap: return "mini map"
-        case .focusSelection: return "focus selection"
-        case .leaveGroup: return "left group"
-        case .clearPeek: return "peek cleared"
-        case .applySuggestedLayout: return "suggested layout"
-        case .peekDesignate: return "peek"
-        case .putAwayFront: return "sent away"
-        case .showEverything: return "everything back"
-        case .undoStep: return "undone"
-        case .gridLayout: return "grid layout"
-        case .spiralLayout: return "golden spiral"
-        case .suggestLayout: return "suggested layout"
-        case .contentLayout: return "content layout"
-        }
     }
 
     // MARK: - Discovery
