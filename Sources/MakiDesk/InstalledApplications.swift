@@ -25,7 +25,7 @@ struct InstalledApplication: Identifiable, Hashable, Sendable {
     }
 }
 
-/// How often and how recently an application was opened from the launcher
+/// How often and how recently an application was opened from the shelf
 /// (T37). A value type, so ranking can be tested with a fixed table.
 struct ApplicationUsage: Codable, Equatable, Sendable {
     var count: Int
@@ -59,7 +59,7 @@ enum ApplicationSearch {
         .map(\.0)
     }
 
-    /// Results for the application launcher (T37): the palette's ranking, with
+    /// Results for the applications shelf (T37/R12): the palette's ranking, with
     /// use taken into account.
     ///
     /// An empty query is still useful: recently used applications come first,

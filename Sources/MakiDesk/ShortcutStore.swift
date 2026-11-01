@@ -24,6 +24,9 @@ struct ShortcutStore {
         /// What the load had to resolve in the file (Q01); empty when it was
         /// already consistent.
         var report = ShortcutLoadReport()
+        /// The version the file was written by, when it predates the table in
+        /// force (S05): the caller writes the migrated file once.
+        var migratedFrom: Int?
 
         var canSave: Bool {
             if case .futureVersion = state { return false }
@@ -45,7 +48,9 @@ struct ShortcutStore {
         }
     }
 
-    static let currentVersion = 1
+    /// Version 2 is the four-family table (S01): the same file format, a
+    /// different default table, so an older file is re-resolved once.
+    static let currentVersion = 2
     static let filePermissions: NSNumber = 0o600
 
     let fileURL: URL
@@ -94,7 +99,8 @@ struct ShortcutStore {
         return Snapshot(bindings: bindings,
                         version: payload.version,
                         state: .loaded,
-                        report: report)
+                        report: report,
+                        migratedFrom: payload.version < Self.currentVersion ? payload.version : nil)
     }
 
     // MARK: - Writing

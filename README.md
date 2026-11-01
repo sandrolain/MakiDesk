@@ -59,8 +59,8 @@ switcher uses the same two keys.
 
 Keep up to nine sets of windows. `⌃⌥1…9` brings a group back where you left it
 and puts the rest away; `⌃⌥⌘1…9` adds or removes the front window. Focus sends a
-single window away (`⌃⌥⇧V`), brings everything back (`⌃⌥⇧A`) and undoes one step
-(`⌃⌥Z`). Peek (`⌃⌥⌘P`, hold `⌃⌥H`) keeps one designated window one key away.
+single window away (`⌃⌥⌘V`), brings everything back (`⌃⌥⌘A`) and undoes one step
+(`⌃⌥⌘Z`). Peek (`⌃⌥⌘P`, hold `⌃⌥H`) keeps one designated window one key away.
 The switcher's groups column can be hidden in Settings ▸ Panels, with its card
 badges and its notices, for a palette as wide as the windows alone.
 
@@ -83,7 +83,7 @@ out of screenshots; solid with Reduce Transparency.
 
 ### A timer that gets out of the way
 
-`⌃⌥⇧T` starts one: `25m`, `1h 30m`, or `8:30` for the next half past eight —
+`⌃⌥T` starts one: `25m`, `1h 30m`, or `8:30` for the next half past eight —
 a colon is a time of day, so `1:30` is half past one at night — with an optional
 label to tell them apart. Several run at once, nearest first, in a small card
 that fades as the pointer comes near and returns when it leaves. A timer is a
@@ -102,7 +102,7 @@ secure input is active.
 
 ### Text from the screen
 
-Press `⌃⌥O` and drag over any text on screen: the words go to the clipboard,
+Press `⌃⌥⇧O` and drag over any text on screen: the words go to the clipboard,
 the in-memory clipboard history, or both, with a short preview that can send
 them to a note or the shelf. The menu reads the window under the pointer, the
 frontmost window or the whole screen instead; a shelf image or a screenshot in
@@ -113,14 +113,14 @@ disk and nothing is uploaded.
 
 ### Colour from the screen
 
-Press `⌃⌥E`, move the loupe and click: the colour under the point is on the
+Press `⌃⌥⇧E`, move the loupe and click: the colour under the point is on the
 clipboard, as hex by default or as RGB, HSL or NSColor from Settings ▸ Panels.
 The loupe shows a colour square and its hex value; values are converted to
 sRGB, so they match other colour tools.
 
 ### Measure anything on screen
 
-Press `⌃⌥R` and drag: live width, height, ΔX/ΔY, diagonal, angle and area,
+Press `⌃⌥⇧M` and drag: live width, height, ΔX/ΔY, diagonal, angle and area,
 snapped to real window and display edges and centres, with a dashed magnetic
 guide before the drag, locked on press, and on the snapped side while dragging.
 Release to pin
@@ -181,13 +181,13 @@ you want it; the menu bar pauses and stops, and the movie lands on the shelf.
 
 ### Applications, one keystroke away
 
-`⌃⌥Space` opens the fast application launcher: type a name, Return opens it or
-brings it forward, `⌘Return` asks for a new instance. Recent applications come
-first; no window thumbnails, no Accessibility permission needed.
+`⌥Space` also opens applications: the shelf under the field starts on the ones
+used most recently, Return opens or brings one forward, `⌘Return` asks for a new
+instance. No Accessibility permission needed.
 
 ### Commands, typed
 
-`⌃Space` opens a field for the menu in words: `tile left`, `layout grid`,
+`⌃⌥R` opens a field for the menu in words: `tile left`, `layout grid`,
 `group 3`, `timer 25m`, `screenshot`. The list filters as you type, Tab completes
 the phrase, Return runs it; a wrong argument says what it expected instead of
 running something else. Every row is an action MakiDesk already has.
@@ -247,7 +247,7 @@ Taskfile commands and the signing notes.
 | `⌥⇥` | window switcher |
 | `⌥Space` | search windows and applications |
 | `⌃⌥W` | content-weighted layout |
-| `⌃⌥O` | text from a selected area |
+| `⌃⌥⇧O` | text from a selected area |
 | `⌥N` | notes |
 | `⌥V` | clipboard history |
 | `⌃⌥D` | shelf |
@@ -255,8 +255,8 @@ Taskfile commands and the signing notes.
 
 Every command, including the panels' own keys, is in the **Keyboard Shortcuts**
 window (menu bar or Settings ▸ General) and in the [usage guide](docs/USAGE.md#keyboard-shortcuts).
-The two families are written down: `⌥` opens a panel, `⌃⌥` acts on windows and
-the desktop, and `⇧` marks an alternate action. Click a key there to record a
+The four prefixes are written down: `⌥` the panels opened all day, `⌃⌥` the
+window and the layouts, `⌃⌥⇧` the screen, `⌃⌥⌘` the desktop. Click a key there to record a
 new combination, turn a command off or restore the defaults; the choice is
 saved in `shortcuts.json` and survives a restart.
 

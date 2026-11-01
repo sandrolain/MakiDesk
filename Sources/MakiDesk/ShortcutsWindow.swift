@@ -18,6 +18,8 @@ struct ShortcutItem: Identifiable {
     var isBlocked: Bool = false
     /// The row lost its combination at load and needs a new one (Q01).
     var isUnregistered: Bool = false
+    /// The prefix family of a global row, shown while recording (S01).
+    var family: ShortcutFamily? = nil
 
     var id: String { identifier ?? "\(title)|\(keys)" }
 }
@@ -62,7 +64,8 @@ enum ShortcutCatalog {
                     isModified: global && bindings.isModified(definition.id),
                     isDisabled: disabled,
                     isBlocked: isBlocked,
-                    isUnregistered: isUnregistered
+                    isUnregistered: isUnregistered,
+                    family: definition.family
                 )
             }
             result.append(ShortcutSection(title: section.title, scope: "Global",
@@ -296,7 +299,7 @@ struct ShortcutsView: View {
                     .font(.caption)
                     .foregroundStyle(theme.subtext)
             }
-            Text("⌥ opens a panel · ⌃⌥ acts on windows and the desktop · click a key to change it")
+            Text("⌥ the everyday panels · ⌃⌥ the window · ⌃⌥⇧ the screen · ⌃⌥⌘ the desktop · click a key to change it")
                 .font(.caption)
                 .foregroundStyle(theme.subtext)
 
@@ -428,7 +431,13 @@ struct ShortcutsView: View {
                 Text(item.title)
                     .font(.system(size: 12.5))
                     .foregroundStyle(theme.text)
-                if let note = item.note {
+                if recordingID == item.identifier, let family = item.family {
+                    // The family is a convention: say which one this row
+                    // belongs to while the keys are being recorded (S02).
+                    Text(family.label)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(theme.accent)
+                } else if let note = item.note {
                     Text(note)
                         .font(.system(size: 10.5))
                         .foregroundStyle(theme.subtext)
@@ -560,10 +569,17 @@ struct ShortcutsView: View {
         }
         let binding = ShortcutBinding(keyCode: Int(event.keyCode), modifiers: modifiers)
         let result = store.setShortcut(binding, for: id)
-        if result.error == nil {
-            stopRecording()
-        } else {
+        guard result.error == nil else {
             apply(result)
+            return
+        }
+        stopRecording()
+        message = nil
+        // The family is a convention, not a constraint: warn and keep it (S02).
+        if let expected = ShortcutDefinitions.definition(id: id)?.family,
+           let recorded = binding.normalized.family,
+           recorded != expected {
+            message = "Recorded outside \(expected.label): the key works, it just breaks the pattern."
         }
     }
 

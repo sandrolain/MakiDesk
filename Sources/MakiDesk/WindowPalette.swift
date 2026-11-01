@@ -520,11 +520,18 @@ final class PaletteModel {
         }
     }
 
-    /// Applications matching the shared query, capped for the shelf. Search mode
+    /// Recent use, read when the palette opens: the shelf then opens on the
+    /// applications actually opened instead of an alphabetical list (R12).
+    var applicationUsage: [String: ApplicationUsage] = [:]
+
+    /// Applications the shelf shows, capped for it: recent use first on an
+    /// empty field, the usual ranking once something is typed. Search mode
     /// only: browse mode keeps the panel focused on windows.
     var matchingApplications: [InstalledApplication] {
         guard mode == .search else { return [] }
-        return ApplicationSearch.matches(applications, query: query)
+        return ApplicationSearch.launcherResults(applications, query: query,
+                                                 usage: applicationUsage,
+                                                 limit: ApplicationSearch.defaultLimit)
     }
 }
 
@@ -1152,12 +1159,13 @@ final class WindowPalette {
         case 36, 76:                                       // Return / Enter
             // A selected group means "lay it out" while browsing; while
             // searching ↩ opens the highlighted result and ⌘↩ still recalls the
-            // group being edited.
+            // group being edited. On an application row ⌘↩ asks for a new
+            // instance, which is what the retired launcher used to do (R12).
             if let slot = model.selectedGroupSlot,
                model.mode == .browse || event.modifierFlags.contains(.command) {
                 recallGroupFromColumn(slot)
             } else {
-                activateSelection()
+                activateSelection(newInstance: event.modifierFlags.contains(.command))
             }
             return true
         case 51:                                           // Delete: reset the selected group
@@ -1390,6 +1398,9 @@ final class WindowPalette {
     /// Starts (or joins) the application scan. The first search of a session
     /// pays for it; later searches reuse the inventory for a couple of minutes.
     private func loadApplications() {
+        // Read here, never polled: the shelf's order changes only when an
+        // application is opened (R12).
+        model.applicationUsage = ApplicationUsageStore.shared.usage
         if model.applications.isEmpty { model.isLoadingApplications = true }
         ApplicationCatalog.shared.loadIfNeeded { [weak self] applications in
             guard let self else { return }
@@ -1453,15 +1464,19 @@ final class WindowPalette {
         }
     }
 
-    private func launchApplication(_ id: String) {
+    private func launchApplication(_ id: String, newInstance: Bool = false) {
         guard let application = model.matchingApplications.first(where: { $0.id == id }) else { return }
         hide()
-        ApplicationCatalog.shared.launch(application) { error in
+        ApplicationCatalog.shared.launch(application, newInstance: newInstance) { [weak self] error in
             if let error {
                 HUDController.shared.show("Could not open \(application.name)",
                                           symbol: "exclamationmark.triangle.fill")
                 makiLog.error("application launch failed: \(error.localizedDescription, privacy: .private)")
             } else {
+                // The shelf opens on the applications opened most recently, so
+                // an opening is what keeps it current (R12).
+                ApplicationUsageStore.shared.record(application)
+                self?.model.applicationUsage = ApplicationUsageStore.shared.usage
                 WorkspaceStore.shared.status = "\(application.name) · launched"
             }
         }
@@ -1568,10 +1583,10 @@ final class WindowPalette {
         refreshLayout()
     }
 
-    private func activateSelection() {
+    private func activateSelection(newInstance: Bool = false) {
         if model.mode == .search, let selection = model.appSelection,
            selection < model.matchingApplications.count {
-            launchApplication(model.matchingApplications[selection].id)
+            launchApplication(model.matchingApplications[selection].id, newInstance: newInstance)
             return
         }
         let list = model.filtered
@@ -1909,7 +1924,7 @@ struct PaletteView: View {
                 if model.isLoadingApplications {
                     ProgressView().controlSize(.mini)
                 } else if model.appSelection != nil {
-                    Text("⏎ launch")
+                    Text("⏎ launch · ⌘⏎ new")
                         .font(.system(size: 9.5 * scale, weight: .semibold).monospaced())
                 }
             }
@@ -1960,7 +1975,7 @@ struct PaletteView: View {
 
     private var emptyApplicationMessage: String {
         if model.isLoadingApplications { return "Looking for installed applications…" }
-        if model.query.isEmpty { return "Type to search the applications installed on this Mac" }
+        if model.query.isEmpty { return "No applications found in /Applications or ~/Applications" }
         return "No installed application matches"
     }
 

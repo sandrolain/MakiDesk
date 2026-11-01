@@ -48,15 +48,15 @@ final class ShortcutDefinitionsTests: XCTestCase {
         let assign = ShortcutDefinitions.all.first { $0.action == .assignToGroup(1) }
         XCTAssertEqual(assign?.display, "⌃⌥⌘1")
 
-        // Panels use ⌥; actions use ⌃⌥. Only the ⇧ alternate may repeat a
-        // letter between the two families (⇧V sends the front window away).
+        // Panels use ⌥; actions use ⌃⌥. A letter may repeat between families,
+        // because the prefix says where: ⌃⌥⌘V sends the front window away.
         let panelKeys = ShortcutDefinitions.all
             .filter { $0.section == "Panels" }
             .map { $0.display }
         XCTAssertTrue(panelKeys.contains("⌥N"))
         XCTAssertTrue(panelKeys.contains("⌥V"))
         let putAway = ShortcutDefinitions.all.first { $0.action == .putAwayFront }
-        XCTAssertEqual(putAway?.display, "⌃⌥⇧V")
+        XCTAssertEqual(putAway?.display, "⌃⌥⌘V")
     }
 
     func testDisplayStrings() {
@@ -70,7 +70,55 @@ final class ShortcutDefinitionsTests: XCTestCase {
     func testSettingsAndShortcutsHaveTheirOwnKeys() {
         XCTAssertEqual(ShortcutManager.display(for: .openSettings), "⌃⌥,")
         XCTAssertEqual(ShortcutManager.display(for: .openKeyboardShortcuts), "⌃⌥/")
-        XCTAssertEqual(ShortcutManager.display(for: .measureArea), "⌃⌥R")
+        XCTAssertEqual(ShortcutManager.display(for: .measureArea), "⌃⌥⇧M")
+    }
+
+    // MARK: - Families (S01)
+
+    func testEveryGlobalRowBelongsToAFamily() {
+        for definition in globalDefinitions {
+            guard let family = definition.family else {
+                return XCTFail("\(definition.id) is outside the four families")
+            }
+            XCTAssertTrue(definition.display.hasPrefix(family.display), definition.id)
+        }
+    }
+
+    /// `⌥` is the five panels opened all day and nothing else: the price of a
+    /// new `⌥`+letter is a character taken from the keyboard (S01).
+    func testOptionIsOnlyTheEverydayPanels() {
+        let ids = ShortcutDefinitions.all
+            .filter { $0.family == .panel }
+            .map(\.id)
+            .sorted()
+        XCTAssertEqual(ids, ["panel.clipboard", "panel.notes", "panel.search",
+                             "panel.switcher", "panel.switcherBack"])
+    }
+
+    func testShiftMeansTheScreenAndCommandTheDesktop() {
+        func display(_ action: WindowController.ShortcutAction) -> String? {
+            ShortcutDefinitions.all.first { $0.action == action }?.display
+        }
+        XCTAssertEqual(display(.captureScreenshot), "⌃⌥⇧S")
+        XCTAssertEqual(display(.recognizeText), "⌃⌥⇧O")
+        XCTAssertEqual(display(.sampleColor), "⌃⌥⇧E")
+        XCTAssertEqual(display(.measureArea), "⌃⌥⇧M")
+
+        XCTAssertEqual(display(.putAwayFront), "⌃⌥⌘V")
+        XCTAssertEqual(display(.showEverything), "⌃⌥⌘A")
+        XCTAssertEqual(display(.undoStep), "⌃⌥⌘Z")
+        XCTAssertEqual(display(.focusSelection), "⌃⌥⌘F")
+        XCTAssertEqual(display(.applySuggestedLayout), "⌃⌥⌘↩")
+    }
+
+    /// The command box moved off ⌃Space, which macOS gives to the input source:
+    /// no row may use ⌃ alone any more.
+    func testNoRowUsesControlWithoutOption() {
+        for definition in globalDefinitions {
+            XCTAssertNotEqual(definition.modifiers, controlKey, definition.id)
+        }
+        XCTAssertEqual(ShortcutManager.display(for: .runCommand), "⌃⌥R")
+        XCTAssertEqual(ShortcutManager.display(for: .newTimer), "⌃⌥T")
     }
 
     func testCatalogIsGeneratedFromTheTable() {

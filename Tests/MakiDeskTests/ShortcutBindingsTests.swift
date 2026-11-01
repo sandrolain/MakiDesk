@@ -426,4 +426,81 @@ final class ShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(left?.isUnregistered, true)
         XCTAssertEqual(left?.note?.contains(ShortcutCatalog.noKeyBaseNote), true)
     }
+
+    // MARK: - Migration (S05)
+
+    func testAnOlderFileIsMigratedOnce() throws {
+        let url = directory.appendingPathComponent("shortcuts.json")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(#"{"version":1,"bindings":{"window.top":{"key":7,"modifiers":6144}}}"#.utf8)
+            .write(to: url)
+
+        let store = ShortcutStore(fileURL: url)
+        let snapshot = store.load()
+        XCTAssertEqual(snapshot.state, .loaded)
+        XCTAssertEqual(snapshot.migratedFrom, 1)
+        XCTAssertEqual(snapshot.version, 1)
+        XCTAssertEqual(snapshot.bindings.binding(for: "window.top"), binding(kVK_ANSI_X),
+                       "the override survives the new table")
+
+        // What a launch does: write the resolved table once.
+        if case let .failure(error) = store.save(snapshot.bindings) {
+            return XCTFail("migration save failed: \(error)")
+        }
+        let migrated = store.load()
+        XCTAssertNil(migrated.migratedFrom, "the rewritten file is current")
+        XCTAssertEqual(migrated.version, ShortcutStore.currentVersion)
+        XCTAssertEqual(migrated.bindings, snapshot.bindings)
+    }
+
+    func testACurrentFileIsNotMigrated() throws {
+        let store = ShortcutStore(fileURL: directory.appendingPathComponent("shortcuts.json"))
+        var bindings = ShortcutBindings.defaults
+        bindings.set(binding(kVK_ANSI_X), for: "window.top")
+        guard case .success = store.save(bindings) else { return XCTFail("save failed") }
+
+        let snapshot = store.load()
+        XCTAssertNil(snapshot.migratedFrom)
+        XCTAssertEqual(snapshot.version, ShortcutStore.currentVersion)
+    }
+
+    // MARK: - Families and system combinations (S01/S02)
+    func testTheFamilyComesFromThePrefix() {
+        XCTAssertEqual(ShortcutFamily.family(of: optionKey), .panel)
+        XCTAssertEqual(ShortcutFamily.family(of: optionKey | shiftKey), .panel)
+        XCTAssertEqual(ShortcutFamily.family(of: ShortcutDefinitions.ctrlOpt), .general)
+        XCTAssertEqual(ShortcutFamily.family(of: ShortcutDefinitions.ctrlOptShift), .screen)
+        XCTAssertEqual(ShortcutFamily.family(of: ShortcutDefinitions.ctrlOptCmd), .desktop)
+        XCTAssertNil(ShortcutFamily.family(of: cmdKey))
+        XCTAssertNil(ShortcutFamily.family(of: ShortcutDefinitions.ctrlOptShift | cmdKey))
+    }
+
+    func testStockMacOSCombinationsAreRefusedWithAReason() {
+        let bindings = ShortcutBindings.defaults
+        let tab = ShortcutBinding(keyCode: kVK_Tab, modifiers: cmdKey)
+        guard case let .systemCombination(reason)? =
+                bindings.validationError(for: tab, for: "window.left") else {
+            return XCTFail("⌘⇥ must be refused with a reason")
+        }
+        XCTAssertTrue(reason.contains("⌘⇥"))
+
+        let inputSource = ShortcutBinding(keyCode: kVK_Space, modifiers: controlKey)
+        guard case .systemCombination? =
+                bindings.validationError(for: inputSource, for: "window.left") else {
+            return XCTFail("⌃Space must be refused with a reason")
+        }
+    }
+
+    func testNoDefaultCombinationIsAStockMacOSOne() {
+        for definition in ShortcutDefinitions.global {
+            guard let binding = ShortcutBindings.defaultTable[definition.id] else { continue }
+            XCTAssertNil(ShortcutBindings.systemCombinations[binding], definition.id)
+        }
+    }
+
+    func testARecordedBindingKnowsItsFamily() {
+        XCTAssertEqual(binding(kVK_ANSI_X).family, .general)
+        XCTAssertEqual(binding(kVK_ANSI_X, ShortcutDefinitions.ctrlOptShift).family, .screen)
+        XCTAssertEqual(binding(kVK_ANSI_X, optionKey).family, .panel)
+    }
 }

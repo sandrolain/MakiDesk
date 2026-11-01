@@ -16,7 +16,7 @@ through Accessibility.
 - [Notes](#notes)
 - [Checklist](#checklist)
 - [Timers](#timers)
-- [Application launcher](#application-launcher)
+- [Opening applications](#opening-applications)
 - [Command box](#command-box)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
@@ -130,7 +130,7 @@ Where the border marks the window, the focus dim takes the rest of the screen
 away: a dark veil covers everything stacked **below** the focused window, which
 itself and everything above it stay clear. Off by default.
 
-- `⌃⌥⇧D` toggles it; the **Window** menu has the same switch. **Settings ▸
+- `⌃⌥⌘D` toggles it; the **Window** menu has the same switch. **Settings ▸
   Windows ▸ Focus dim** sets opacity (10–80%), fade, colour, what stays sharp
   (the focused window, the whole app, or a set of **selected windows**), whether
   every display is lit or only the active one, whether clicking the desktop dims
@@ -293,9 +293,9 @@ Focus keeps only the windows in use and puts the rest away:
 
 | Action | Shortcut |
 |---|---|
-| Send the front window away | `⌃⌥⇧V` |
-| Everything back | `⌃⌥⇧A` |
-| Undo one step | `⌃⌥Z` |
+| Send the front window away | `⌃⌥⌘V` |
+| Everything back | `⌃⌥⌘A` |
+| Undo one step | `⌃⌥⌘Z` |
 
 **Focus Selected Windows** is in the menu: it uses the windows last selected in
 the switcher. What leaves the screen is per window and always reversible; the
@@ -397,7 +397,7 @@ use it.
 
 ## Timers
 
-`⌃⌥⇧T` or the **Timers** menu starts a countdown. The menu has 1, 5, 10 and 25
+`⌃⌥T` or the **Timers** menu starts a countdown. The menu has 1, 5, 10 and 25
 minutes one click away; the field takes anything else:
 
 | Input | Means |
@@ -438,29 +438,29 @@ named after what it is (`25m`, `8:30`).
   is announced once, with the moment it was due, so it is never silently lost.
   Deleting the last timer removes the file.
 
-## Application launcher
+## Opening applications
 
-`⌃⌥Space` (or **Open an Application…** in the menu) is the fast app launcher: a
-field, the installed applications, and nothing else. It is not the window
-switcher — there are no thumbnails, and every key belongs to opening an app.
+The applications are in the **search palette** (`⌥Space`), in the shelf under
+the field. There is no separate launcher window: the switcher already knows the
+installed applications, and one panel with one key is easier to remember.
 
-- The field starts on the applications opened most recently from here, then the
-  rest of the installed ones in alphabetical order.
+- The shelf starts on an empty field and shows the applications opened most
+  recently from here, then the rest of the installed ones in alphabetical order.
 - Typing matches the **name first** (exact, then prefix, then a word), then the
   executable and the bundle id; recent use breaks ties inside a match of the same
   quality, so it never lifts a worse match over a better one.
-- `↑`/`↓` choose, **Return** opens (or brings an already running app forward),
-  **`⌘`Return** asks for a **new instance**, `Esc` closes. A click on a row opens
-  it without another key.
+- `↑`/`↓` walk the shelf and the window grid as one column, **Return** opens (or
+  brings an already running app forward), **`⌘`Return** asks for a **new
+  instance**, `Esc` closes. A click on a row opens it without another key.
 - The scan covers `/Applications`, `/System/Applications` and `~/Applications`
   and runs off the main thread; no Accessibility or Screen Recording is needed.
 - Applications that only allow one instance ignore `⌘`Return and simply come to
-  the front. What the launcher remembers is only the order of that empty field:
-  one entry per app, the 80 most recent.
+  the front. What is remembered is only the order of that empty field: one entry
+  per app, the 80 most recent.
 
 ## Command box
 
-`⌃Space` (or **Run a Command…** in the menu) opens a field where a command is
+`⌃⌥R` (or **Run a Command…** in the menu) opens a field where a command is
 written in words. It is the menu and the shortcuts, typed:
 
 | What you type | What it does |
@@ -488,9 +488,8 @@ written in words. It is the menu and the shortcuts, typed:
   the keys back and only then runs, so `tile right` moves the window the
   shortcut would have moved. That is also why nothing happens while the field is
   still open.
-- macOS also gives `⌃Space` to the input source: if that takes the combination,
-  the keyboard-shortcut window (or Settings ▸ General) shows it as blocked and
-  **Keyboard Shortcuts…** records another one for the command box.
+- The box used to be on `⌃Space`, which macOS gives to the input source when
+  more than one language is enabled; it moved to `⌃⌥R` so it cannot be taken.
 
 ## Clipboard history
 
@@ -724,7 +723,7 @@ a red record dot while it runs. The same key stops it.
 
 ## Text from the screen
 
-Press `⌃⌥O` and drag over the text you want. MakiDesk recognizes it locally with
+Press `⌃⌥⇧O` and drag over the text you want. MakiDesk recognizes it locally with
 Vision, copies the result to the clipboard and shows a short preview. `Esc`, or
 a click without dragging, cancels without copying anything.
 
@@ -766,7 +765,7 @@ a click without dragging, cancels without copying anything.
 
 ## Colour picker
 
-Press `⌃⌥E`, move the loupe over the point you want and click. The loupe shows
+Press `⌃⌥⇧E`, move the loupe over the point you want and click. The loupe shows
 a square with the colour under the pointer and its hex value; the click copies
 that colour in the chosen format and the notice shows hex, RGB and alpha.
 Point mode is a click, not a selection: dragging only moves the loupe, and a
@@ -784,7 +783,7 @@ rectangle is never drawn.
 
 ## Measure
 
-Press `⌃⌥R` and drag over anything on screen. While you drag, the overlay shows
+Press `⌃⌥⇧M` and drag over anything on screen. While you drag, the overlay shows
 width × height, ΔX/ΔY, the diagonal, its angle and the area; releasing pins the
 measurement in place with a small badge that copies the values or dismisses it.
 
@@ -882,24 +881,30 @@ dropzones should go too; settings always reset.
 ## Keyboard shortcuts
 
 The full list is in the **Keyboard Shortcuts…** window (menu or Settings ▸
-General), searchable by name or key, with the current theme. Two modifier
-families keep it predictable: **`⌥` opens a panel** (`⌥⇥`, `⌥Space`, `⌥N`,
-`⌥V`) and **`⌃⌥` acts on windows and the desktop** (`⌃⌥←`, `⌃⌥G`, `⌃⌥⇧V`,
-`⌃⌥1…9`); `⇧` marks an alternate action. The main global keys:
+General), searchable by name or key, with the current theme. Four prefixes say
+where a key acts: **`⌥`** the five panels opened all day (`⌥⇥`, `⌥Space`, `⌥N`,
+`⌥V`), **`⌃⌥`** the window and the layouts (`⌃⌥←`, `⌃⌥G`), **`⌃⌥⇧`** the screen
+(`⌃⌥⇧S`, `⌃⌥⇧O`, `⌃⌥⇧M`), **`⌃⌥⌘`** the desktop (`⌃⌥⌘V`, `⌃⌥⌘A`, `⌃⌥⌘Z`). The
+same letter may appear under two prefixes, because the prefix says where. The
+main global keys:
 
 | Area | Shortcuts |
 |---|---|
 | Window | `⌃⌥← → ↑ ↓`, `⌃⌥U I J K`, `⌃⌥↩`, `⌃⌥C`, `⌃⌥P`, `⌃⌥F`, `⌃⌥M` |
 | Layouts | `⌃⌥G`, `⌃⌥S`, `⌃⌥A`, `⌃⌥W` |
 | Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
-| Focus dim | `⌃⌥⇧D` |
-| Timers | `⌃⌥⇧T` |
+| Timers | `⌃⌥T` |
 | Screenshots | `⌃⌥⇧S`, `⌃⌥⇧W`, `⌃⌥⇧C`, `⌃⌥⇧R` |
-| Application launcher | `⌃⌥Space` |
-| Command box | `⌃Space` |
+| Text from the screen | `⌃⌥⇧O` |
+| Colour picker | `⌃⌥⇧E` |
+| Measure | `⌃⌥⇧M` |
+| Command box | `⌃⌥R` |
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
-| Focus | `⌃⌥⇧V`, `⌃⌥⇧A`, `⌃⌥Z` |
-| Peek | `⌃⌥⌘P`, hold `⌃⌥H` |
+| Focus | `⌃⌥⌘V`, `⌃⌥⌘A`, `⌃⌥⌘Z` |
+| Focus dim, focus border | `⌃⌥⌘D`, `⌃⌥⌘B` |
+| Peek | `⌃⌥⌘P`, hold `⌃⌥H`, clear `⌃⌥⌘H` |
+
+The mini-map has no global key: it is in the menu and in Settings ▸ Panels.
 
 Pressing `⌥⇥` / `⌥Space` shows the switcher even if MakiDesk is not the active
 app. The palette's own keys are listed in the same window (arrows, `↑`/`↓` into

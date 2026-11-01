@@ -1,10 +1,10 @@
 import XCTest
 @testable import MakiDesk
 
-/// T37: the launcher's ordering and its small use table are decisions, so they
-/// are checked without a panel or a real Applications folder.
+/// T37/R12: the applications shelf's ordering and its small use table are
+/// decisions, so they are checked without a panel or a real Applications folder.
 @MainActor
-final class ApplicationLauncherTests: XCTestCase {
+final class ApplicationShelfTests: XCTestCase {
     private func app(_ name: String, executable: String? = nil,
                      bundle: String? = nil) -> InstalledApplication {
         InstalledApplication(

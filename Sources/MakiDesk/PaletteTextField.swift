@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// It reports the keys a list needs while the field keeps the keyboard: the
 /// arrows, Tab, Return, Escape. Return says whether Command was held, which is
-/// how the application launcher tells "open" from "open another instance".
+/// how the applications shelf tells "open" from "open another instance".
 struct PaletteTextField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String

@@ -21,6 +21,9 @@ struct ShortcutBinding: Codable, Hashable, Sendable {
         ShortcutDisplay.string(keyCode: keyCode, modifiers: normalized.modifiers)
     }
 
+    /// The family of the prefix, used by the recorder to warn (S02).
+    var family: ShortcutFamily? { ShortcutFamily.family(of: normalized.modifiers) }
+
     /// A global hot key needs ⌃ or ⌥: ⌘ alone would take a standard shortcut
     /// from the front app, and ⇧ alone would take ordinary typing.
     var hasGlobalModifier: Bool {
@@ -72,6 +75,8 @@ enum ShortcutValidationError: Equatable {
     case needsGlobalModifier
     case reserved(String)
     case conflict(String)
+    /// A combination macOS keeps for itself (S02).
+    case systemCombination(String)
     case unavailableBySystem
     case notSaved
 
@@ -85,6 +90,8 @@ enum ShortcutValidationError: Equatable {
             return reason
         case let .conflict(title):
             return "Already used by “\(title)”. The previous shortcut is still in use."
+        case let .systemCombination(reason):
+            return reason
         case .unavailableBySystem:
             return "Another app already owns this combination. The previous shortcut is still in use."
         case .notSaved:
@@ -151,6 +158,26 @@ struct ShortcutBindings: Equatable, Sendable {
 
     static let reservedReason = "⌃⌥H is held for the peek: press and hold it to look at the designated window."
 
+    /// Combinations macOS keeps for itself (S02). The recorder refuses them
+    /// with a reason instead of letting `RegisterEventHotKey` fail and leaving
+    /// the row looking merely "blocked".
+    ///
+    /// Two of them are only taken when more than one input source is enabled,
+    /// so this is a recording rule, not a load rule: a file that already holds
+    /// one is left alone, because it may work on a Mac with a single source.
+    static let systemCombinations: [ShortcutBinding: String] = [
+        ShortcutBinding(keyCode: kVK_Tab, modifiers: cmdKey):
+            "⌘⇥ switches apps: use another combination.",
+        ShortcutBinding(keyCode: kVK_Escape, modifiers: optionKey | cmdKey):
+            "⌥⌘Esc is Force Quit: use another combination.",
+        ShortcutBinding(keyCode: kVK_UpArrow, modifiers: controlKey):
+            "⌃↑ is Mission Control: use another combination.",
+        ShortcutBinding(keyCode: kVK_Space, modifiers: controlKey):
+            "⌃Space switches the input source when more than one is enabled: use another combination.",
+        ShortcutBinding(keyCode: kVK_Space, modifiers: ShortcutDefinitions.ctrlOpt):
+            "⌃⌥Space switches the input source when more than one is enabled: use another combination.",
+    ]
+
     // MARK: - Reading
 
     func binding(for id: String) -> ShortcutBinding? {
@@ -201,6 +228,7 @@ struct ShortcutBindings: Equatable, Sendable {
     func validationError(for binding: ShortcutBinding, for id: String) -> ShortcutValidationError? {
         let wanted = binding.normalized
         guard wanted.keyCode > 0 else { return .noKey }
+        if let reason = Self.systemCombinations[wanted] { return .systemCombination(reason) }
         guard wanted.hasGlobalModifier else { return .needsGlobalModifier }
         if Self.reserved.contains(wanted) { return .reserved(Self.reservedReason) }
         if let other = conflict(for: wanted, excluding: id) { return .conflict(other.title) }

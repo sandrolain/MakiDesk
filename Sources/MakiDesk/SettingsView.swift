@@ -669,7 +669,7 @@ struct SettingsView: View {
                         }
                         .disabled(!store.timerSoundEnabled)
                     }
-                    caption("⌃⌥⇧T or the Timers menu starts one: a length with a unit (25m, 1h 30m, 40s), a bare number of minutes (25) or a time of day with a colon (8:30, meaning the next half past eight). The card sits in the chosen corner and steps aside as the pointer comes near, coming back once it moves away; it stays above the other apps and is left out of screenshots. Several timers run at once, nearest first, each with an optional label. Timers survive a quit and a crash: a running one keeps its absolute deadline, so the time the app was closed is already counted, a paused one comes back paused, and one that ran out while the app was closed is announced at the next launch instead of being lost. A finished one posts a notice until you dismiss it, with a system sound when the option above is on. The sound follows the Mac's volume and mute.")
+                    caption("⌃⌥T or the Timers menu starts one: a length with a unit (25m, 1h 30m, 40s), a bare number of minutes (25) or a time of day with a colon (8:30, meaning the next half past eight). The card sits in the chosen corner and steps aside as the pointer comes near, coming back once it moves away; it stays above the other apps and is left out of screenshots. Several timers run at once, nearest first, each with an optional label. Timers survive a quit and a crash: a running one keeps its absolute deadline, so the time the app was closed is already counted, a paused one comes back paused, and one that ran out while the app was closed is announced at the next launch instead of being lost. A finished one posts a notice until you dismiss it, with a system sound when the option above is on. The sound follows the Mac's volume and mute.")
                 }
             }
             if panelsPage == .switcher {
@@ -789,13 +789,13 @@ struct SettingsView: View {
                             Text(reveal.title).tag(reveal)
                         }
                     }
-                    caption("⌃⌥O selects an area of the screen and sends the text to the clipboard, to the in-memory clipboard history, or both; Esc cancels. The history disappears when MakiDesk quits, so “History only” keeps no copy after the app closes. Vision runs on this Mac and detects the language automatically; the models (about 100 MB) stay in memory after the first use. Nothing is uploaded or written to disk.")
+                    caption("⌃⌥⇧O selects an area of the screen and sends the text to the clipboard, to the in-memory clipboard history, or both; Esc cancels. The history disappears when MakiDesk quits, so “History only” keeps no copy after the app closes. Vision runs on this Mac and detects the language automatically; the models (about 100 MB) stay in memory after the first use. Nothing is uploaded or written to disk.")
                 }
                 SettingsSection("Colour picker") {
                     Picker("Copy as", selection: $colorFormat) {
                         ForEach(ColorClipboardFormat.allCases) { Text($0.title).tag($0) }
                     }
-                    caption("⌃⌥E opens a loupe and copies the colour under the click; Esc cancels. Values are converted to sRGB. The clipboard history keeps a copy when it is on.")
+                    caption("⌃⌥⇧E opens a loupe and copies the colour under the click; Esc cancels. Values are converted to sRGB. The clipboard history keeps a copy when it is on.")
                 }
                 SettingsSection("Measure") {
                     Picker("Units", selection: Binding(
@@ -804,7 +804,7 @@ struct SettingsView: View {
                     )) {
                         ForEach(MeasurementUnit.allCases) { Text($0.title).tag($0) }
                     }
-                    caption("⌃⌥R drags a measurement over any app: ⇧ keeps a square, ⌥ measures from the centre, and values snap within 6 pt to windows and displays. Measurements stay until their ✕ or Clear Measurements. Millimetres and inches are estimated from the display's reported physical size.")
+                    caption("⌃⌥⇧M drags a measurement over any app: ⇧ keeps a square, ⌥ measures from the centre, and values snap within 6 pt to windows and displays. Measurements stay until their ✕ or Clear Measurements. Millimetres and inches are estimated from the display's reported physical size.")
                 }
             }
         }

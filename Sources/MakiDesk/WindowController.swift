@@ -69,7 +69,6 @@ enum WindowController {
         /// Open the command box (T38).
         case runCommand
         /// Open the fast application launcher (T37).
-        case appLauncher
         /// Act on the current selection, group or pending advice.
         case focusSelection
         case leaveGroup

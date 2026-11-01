@@ -598,6 +598,20 @@ final class WorkspaceStore {
         if case let .futureVersion(version) = snapshot.state {
             makiLog.error("shortcuts: file from a newer version \(version, privacy: .public); defaults in use")
         }
+        if let from = snapshot.migratedFrom {
+            // A file from the older table: the new defaults are in force, the
+            // user's overrides were re-resolved, and the file is rewritten once
+            // so the notice is not repeated at every launch (S05).
+            if case let .failure(error) = ShortcutStore().save(snapshot.bindings) {
+                makiLog.error("shortcuts: migration not saved (\(error.localizedDescription, privacy: .public))")
+            }
+            let changed = snapshot.report.changedCount
+            HUDController.shared.show(
+                "Shortcuts updated · version \(from) → \(ShortcutStore.currentVersion)",
+                symbol: "keyboard",
+                detail: changed == 0 ? nil : "\(changed) row(s) adjusted to the new table"
+            )
+        }
         let manager = ShortcutManager { [weak self] action in
             self?.applyShortcut(action)
         }
@@ -1323,9 +1337,6 @@ final class WorkspaceStore {
         case .runCommand:
             CommandBoxController.shared.show()
             return
-        case .appLauncher:
-            ApplicationLauncherController.shared.show()
-            return
         case .toggleFocusBorder:
             updateFocusBorderEnabled(!focusBorderEnabled)
             return
@@ -1654,7 +1665,7 @@ final class WorkspaceStore {
              .toggleFocusBorder, .toggleMiniMap, .focusSelection, .leaveGroup,
              .clearPeek, .applySuggestedLayout, .toggleFocusDim, .toggleChecklist,
              .newTimer, .captureScreenshot, .captureWindow, .captureScreen,
-             .recordArea, .runCommand, .appLauncher:
+             .recordArea, .runCommand:
             return nil
         }
     }
@@ -2038,7 +2049,6 @@ final class WorkspaceStore {
         case .captureScreen: return "screen"
         case .recordArea: return "recording"
         case .runCommand: return "command"
-        case .appLauncher: return "launcher"
         case .toggleMiniMap: return "mini map"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"

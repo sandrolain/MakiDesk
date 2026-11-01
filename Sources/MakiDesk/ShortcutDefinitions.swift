@@ -23,6 +23,57 @@ struct ShortcutDefinition: Identifiable {
     }
 
     var isGlobal: Bool { action != nil && keyCode != nil }
+
+    /// The prefix family the row belongs to (S01). Derived from the modifiers,
+    /// so the table and the family can never disagree.
+    var family: ShortcutFamily? { ShortcutFamily.family(of: modifiers) }
+}
+
+/// The four prefixes of the table (S01).
+///
+/// `⇧` means the screen and `⌘` the desktop, so the same letter may appear
+/// twice with different meaning; `⌥` is the five panels opened all day and
+/// `⌃⌥` everything else. The rule is a convention, not a constraint: the
+/// recorder warns when a combination leaves its family and still registers it.
+enum ShortcutFamily: String, CaseIterable, Sendable {
+    case panel
+    case general
+    case screen
+    case desktop
+
+    /// What the prefix means, in one word.
+    var name: String {
+        switch self {
+        case .panel: return "Panel"
+        case .general: return "Window"
+        case .screen: return "Screen"
+        case .desktop: return "Desktop"
+        }
+    }
+
+    var display: String {
+        switch self {
+        case .panel: return "⌥"
+        case .general: return "⌃⌥"
+        case .screen: return "⌃⌥⇧"
+        case .desktop: return "⌃⌥⌘"
+        }
+    }
+
+    /// "⌃⌥⇧ · Screen", as the recorder and the catalog show it.
+    var label: String { "\(display) · \(name)" }
+
+    /// The family a modifier mask belongs to, or `nil` when it is none of the
+    /// four (a stock macOS combination, for instance).
+    static func family(of modifiers: Int) -> ShortcutFamily? {
+        let mask = modifiers & (controlKey | optionKey | shiftKey | cmdKey)
+        guard mask & optionKey != 0 else { return nil }
+        guard mask & controlKey != 0 else { return .panel }
+        if mask & shiftKey != 0, mask & cmdKey != 0 { return nil }
+        if mask & shiftKey != 0 { return .screen }
+        if mask & cmdKey != 0 { return .desktop }
+        return .general
+    }
 }
 
 struct ShortcutSectionDefinition {
@@ -100,7 +151,7 @@ enum ShortcutDefinitions {
     static let sections: [ShortcutSectionDefinition] = [
         ShortcutSectionDefinition(title: "Window", note: "The menu also has the selected-window layouts.", definitions: window),
         ShortcutSectionDefinition(title: "Layouts", note: nil, definitions: layouts),
-        ShortcutSectionDefinition(title: "Panels", note: "⌥ opens a panel; ⌃⌥ acts on windows and the desktop.", definitions: panels),
+        ShortcutSectionDefinition(title: "Panels", note: "⌥ opens the everyday panels; ⌃⌥ acts on the window and the layouts.", definitions: panels),
         ShortcutSectionDefinition(title: "Focus", note: "What leaves the screen is per window, and undoable.", definitions: focus),
         ShortcutSectionDefinition(title: "Groups", note: "⇧ recalls a group; ⌘ adds or removes the front window.", definitions: groups),
         ShortcutSectionDefinition(title: "Timers", note: "A length with a unit, or a time of day with a colon.", definitions: timers),
@@ -190,10 +241,11 @@ enum ShortcutDefinitions {
 
     private static let focus: [ShortcutDefinition] = [
         def("focus.putAway", "Send the front window away", section: "Focus", key: kVK_ANSI_V,
-            modifiers: ctrlOptShift, action: .putAwayFront),
+            modifiers: ctrlOptCmd, action: .putAwayFront),
         def("focus.everythingBack", "Everything back", section: "Focus", key: kVK_ANSI_A,
-            modifiers: ctrlOptShift, action: .showEverything),
-        def("focus.undo", "Undo one step", section: "Focus", key: kVK_ANSI_Z, action: .undoStep),
+            modifiers: ctrlOptCmd, action: .showEverything),
+        def("focus.undo", "Undo one step", section: "Focus", key: kVK_ANSI_Z,
+            modifiers: ctrlOptCmd, action: .undoStep),
     ]
 
     private static let groups: [ShortcutDefinition] = (1...9).flatMap { slot -> [ShortcutDefinition] in
@@ -208,7 +260,7 @@ enum ShortcutDefinitions {
 
     private static let timers: [ShortcutDefinition] = [
         def("timer.new", "New timer…", section: "Timers", key: kVK_ANSI_T,
-            modifiers: ctrlOptShift, action: .newTimer,
+            action: .newTimer,
             note: "25m, 1h 30m or 8:30 for the next half past eight; Ret starts, Esc closes."),
     ]
 
@@ -221,10 +273,10 @@ enum ShortcutDefinitions {
 
     private static let capture: [ShortcutDefinition] = [
         def("capture.recognizeText", "Recognize text from a selected area", section: "Text & colour",
-            key: kVK_ANSI_O, action: .recognizeText,
+            key: kVK_ANSI_O, modifiers: ctrlOptShift, action: .recognizeText,
             note: "Esc cancels. The text goes to the clipboard; recognition runs locally."),
         def("capture.colour", "Pick a colour from the screen", section: "Text & colour",
-            key: kVK_ANSI_E, action: .sampleColor,
+            key: kVK_ANSI_E, modifiers: ctrlOptShift, action: .sampleColor,
             note: "Click a point to copy its colour in the format chosen in Settings ▸ Panels; Esc cancels."),
     ]
 
@@ -244,7 +296,8 @@ enum ShortcutDefinitions {
     ]
 
     private static let measure: [ShortcutDefinition] = [
-        def("measure.area", "Measure an area", section: "Measure", key: kVK_ANSI_R, action: .measureArea,
+        def("measure.area", "Measure an area", section: "Measure", key: kVK_ANSI_M,
+            modifiers: ctrlOptShift, action: .measureArea,
             note: "Drag over any app; Esc cancels. The pinned badge copies the values."),
         info("measure.square", "Keep a square", section: "Measure", keys: "⇧ + drag"),
         info("measure.centre", "Measure from the centre", section: "Measure", keys: "⌥ + drag"),
@@ -256,26 +309,21 @@ enum ShortcutDefinitions {
         def("app.settings", "Settings…", section: "App", key: kVK_ANSI_Comma, action: .openSettings),
         def("app.shortcuts", "Keyboard Shortcuts…", section: "App", key: kVK_ANSI_Slash, action: .openKeyboardShortcuts),
         def("app.screenshots", "Screenshots", section: "App", key: kVK_ANSI_Y, action: .openScreenshots),
-        def("app.command", "Run a command…", section: "App", key: kVK_Space,
-            modifiers: controlKey, action: .runCommand,
-            note: "Type it in words: tile left, layout grid, group 3, timer 25m. Tab completes, esc closes. macOS also gives ⌃Space to the input source: if that takes it, record another combination in the Keyboard Shortcuts window."),
-        def("app.launcher", "Open an application…", section: "App", key: kVK_Space,
-            modifiers: ctrlOpt, action: .appLauncher,
-            note: "Type a name; Ret opens it, ⌘Ret opens a new instance. The applications opened most recently come first."),
+        def("app.command", "Run a command…", section: "App", key: kVK_ANSI_R,
+            modifiers: ctrlOpt, action: .runCommand,
+            note: "Type it in words: tile left, layout grid, group 3, timer 25m. Tab completes, esc closes."),
         def("app.focusBorder", "Show / hide the focus border", section: "App", key: kVK_ANSI_B,
-            modifiers: ctrlOptShift, action: .toggleFocusBorder),
+            modifiers: ctrlOptCmd, action: .toggleFocusBorder),
         def("app.focusDim", "Dim everything but the focused window", section: "App", key: kVK_ANSI_D,
-            modifiers: ctrlOptShift, action: .toggleFocusDim,
+            modifiers: ctrlOptCmd, action: .toggleFocusDim,
             note: "The veil sits below the focused window; menu bar, Dock and MakiDesk's panels stay above it."),
         def("app.focusSelection", "Focus the selected windows", section: "App", key: kVK_ANSI_F,
-            modifiers: ctrlOptShift, action: .focusSelection),
+            modifiers: ctrlOptCmd, action: .focusSelection),
         def("app.leaveGroup", "Leave the group in use", section: "App", key: kVK_ANSI_L,
-            modifiers: ctrlOptShift, action: .leaveGroup),
+            modifiers: ctrlOptCmd, action: .leaveGroup),
         def("app.clearPeek", "Clear the peek designation", section: "App", key: kVK_ANSI_H,
-            modifiers: ctrlOptShift, action: .clearPeek),
+            modifiers: ctrlOptCmd, action: .clearPeek),
         def("app.applyAdvice", "Apply the suggested layout", section: "App", key: kVK_Return,
-            modifiers: ctrlOptShift, action: .applySuggestedLayout),
-        def("app.miniMap", "Show / hide the mini map", section: "App", key: kVK_ANSI_M,
-            modifiers: ctrlOptShift, action: .toggleMiniMap),
+            modifiers: ctrlOptCmd, action: .applySuggestedLayout),
     ]
 }
