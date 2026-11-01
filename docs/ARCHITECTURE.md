@@ -53,7 +53,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `TimerModel.swift`, `TimerPanel.swift` | Timers: deadlines, text formats and parser, proximity rule; the countdown card and the input field. |
 | `ShortcutManager.swift` | Carbon global hot keys (no Input Monitoring). |
 | `NotesStore.swift` | Notes, drafts, session, external-file baselines, Trash. |
-| `NotesPanel.swift` | Notes window, sidebar, toolbar, tabs-free navigation, anchoring. |
+| `NotesMarkdownTable.swift` | One Markdown table renderer: the formatter and the rewrite serializer both use it, so they cannot disagree on widths again. |
+| `NotesStore.swift` | Notes window, sidebar, toolbar, tabs-free navigation, anchoring. |
 | `NotesEditor.swift` | TextKit 1 text view and line-number ruler. |
 | `NotesSyntax.swift`, `NotesGrammarQueries.swift` | Syntax configuration, captures, colours, highlighter. |
 | `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text history, pasteboard poll, picker. |

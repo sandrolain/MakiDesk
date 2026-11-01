@@ -213,50 +213,12 @@ enum NotesMarkdownFormat {
             }
             rows.append(values)
         }
-        guard rows.isEmpty == false else { return nil }
-        let columns = max(rows.map(\.count).max() ?? 0, alignments.count)
-        guard columns > 0 else { return nil }
-        var widths = Array(repeating: 3, count: columns)
-        for row in rows {
-            for (column, cell) in row.enumerated() where column < columns {
-                widths[column] = max(widths[column], (cell as NSString).length)
-            }
+        guard let rendered = NotesMarkdownTable.render(rows: rows, alignments: alignments) else {
+            return nil
         }
-        func padded(_ cell: String, _ width: Int) -> String {
-            let value = cell as NSString
-            let short = max(0, width - value.length)
-            return cell + String(repeating: " ", count: short)
-        }
-        func separator(_ column: Int) -> String {
-            var marker = String(repeating: "-", count: widths[column])
-            let alignment = column < alignments.count ? alignments[column] : "---"
-            let left = alignment.hasPrefix(":")
-            let right = alignment.hasSuffix(":")
-            if left && right {
-                marker = ":" + String(repeating: "-", count: max(1, widths[column] - 2)) + ":"
-            } else if right {
-                marker = String(repeating: "-", count: max(2, widths[column] - 1)) + ":"
-            } else if left {
-                marker = ":" + String(repeating: "-", count: max(2, widths[column] - 1))
-            }
-            return padded(marker, widths[column])
-        }
-        func row(_ cells: [String]) -> String {
-            var line = "|"
-            for column in 0..<columns {
-                let cell = column < cells.count ? cells[column] : ""
-                line += " " + padded(cell, widths[column]) + " |"
-            }
-            return line
-        }
-        var output = row(rows[0]) + "\n"
-        var header = "|"
-        for column in 0..<columns {
-            header += " " + separator(column) + " |"
-        }
-        output += header + "\n"
-        for cells in rows.dropFirst() { output += row(cells) + "\n" }
-        if endsWithNewline == false, output.hasSuffix("\n") { output.removeLast() }
+        // The renderer stops at the last cell; the block keeps the newline the
+        // user's table ended with.
+        let output = endsWithNewline ? rendered + "\n" : rendered
         return blockChange(range: block, replacement: output)
     }
 

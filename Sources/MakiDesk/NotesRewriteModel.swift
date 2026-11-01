@@ -113,32 +113,9 @@ enum NotesMarkdownSerializer {
 
     /// One aligned GFM table; `rows[0]` is the header.
     static func table(_ rows: [[String]]) -> String? {
-        guard rows.isEmpty == false else { return nil }
-        let columns = rows.map(\.count).max() ?? 0
-        guard columns > 0 else { return nil }
-        var widths = Array(repeating: 3, count: columns)
-        for row in rows {
-            for (column, cell) in row.enumerated() where column < columns {
-                widths[column] = max(widths[column], clean(cell).count)
-            }
-        }
-        func line(_ cells: [String]) -> String {
-            var output = "|"
-            for column in 0..<columns {
-                let cell = column < cells.count ? clean(cells[column]) : ""
-                output += " " + cell + String(repeating: " ",
-                                              count: max(0, widths[column] - cell.count)) + " |"
-            }
-            return output
-        }
-        var output = line(rows[0]) + "\n"
-        output += "|"
-        for column in 0..<columns {
-            output += " " + String(repeating: "-", count: widths[column]) + " |"
-        }
-        output += "\n"
-        for row in rows.dropFirst() { output += line(row) + "\n" }
-        return output.trimmingCharacters(in: .newlines)
+        // A model keeps a leading list marker or a stray pipe in a cell: the
+        // renderer owns the shape, so the text is cleaned before it gets there.
+        NotesMarkdownTable.render(rows: rows.map { $0.map(clean) })
     }
 
     private static func sectionBody(_ section: NotesRewriteDraft.Section,
