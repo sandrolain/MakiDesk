@@ -132,6 +132,40 @@ enum SettingsDefaults {
         .paletteScreenLocation: PaletteScreenLocation.focusedWindow.rawValue,
         .showGroupsInPalette: true,
         .showEmptyGroupsInPalette: true,
+
+        // Focus border and dim (T36/T62). The dim is opt-in: it changes the
+        // whole screen.
+        .focusBorderEnabled: true,
+        .focusBorderWidth: FocusBorder.defaultWidth,
+        .focusDimEnabled: false,
+        .focusDimOpacity: FocusDim.defaultOpacity,
+        .focusDimFade: FocusDim.defaultFade,
+        .focusDimColour: FocusDim.Colour.black.rawValue,
+        .focusDimSource: FocusDim.Source.window.rawValue,
+        .focusDimDisplayMode: FocusDim.DisplayMode.independent.rawValue,
+        .focusDimDesktopDims: false,
+        .focusDimStopsOnAppChange: false,
+
+        // Text recognition (T41/T54).
+        .ocrFastRecognition: false,
+        .ocrLanguageCorrection: true,
+        .ocrOutputDestination: TextRecognitionOutput.pasteboardAndHistory.rawValue,
+        .ocrRevealHistory: OCRRevealHistory.never.rawValue,
+
+        // Shelf, drag and layouts.
+        .shelfShakeEnabled: true,
+        .shelfShakeSensitivity: ShelfShakeSensitivity.medium.rawValue,
+        .dragEnabled: true,
+        .dragActivator: DragActivator.fallback.rawValue,
+        .layoutAsksFirst: true,
+        .announceGroupChanges: true,
+
+        // Window gap and the two pickers. Three keys stay out on purpose:
+        // `setupCompleted` and `idlePerformanceDiagnostics` are flags whose
+        // absence is the answer, and `shelfExcludedApps` is a list.
+        .windowGap: 12.0,
+        .measureUnit: MeasurementUnit.points.rawValue,
+        .colorPickerFormat: ColorClipboardFormat.hex.rawValue,
         ]
     }
 }

@@ -204,11 +204,11 @@ enum MeasurementSettings {
     nonisolated static let unitKey = SettingsKey.measureUnit.rawValue
 
     nonisolated static func unit(defaults: UserDefaults = .standard) -> MeasurementUnit {
-        defaults.string(forKey: unitKey).flatMap(MeasurementUnit.init(rawValue:)) ?? .points
+        Settings.value(.measureUnit, in: defaults) ?? .points
     }
 
     static func setUnit(_ unit: MeasurementUnit) {
-        UserDefaults.standard.set(unit.rawValue, forKey: unitKey)
+        Settings.set(unit.rawValue, for: .measureUnit)
         NotificationCenter.default.post(name: .makiDeskMeasureUnitChanged, object: nil)
     }
 }

@@ -356,7 +356,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     init(store: NotesStore) {
         self.store = store
-        let themeID = UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha"
+        let themeID = Settings.string(.themeID) ?? ""
         self.theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
         self.editor = NotesEditorView(theme: self.theme)
         super.init(nibName: nil, bundle: nil)
@@ -663,7 +663,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     // MARK: - Theme
 
     func applyTheme() {
-        let themeID = UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha"
+        let themeID = Settings.string(.themeID) ?? ""
         theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
         let background = theme.background
         let sidebarColor = background.blended(withFraction: 0.05,

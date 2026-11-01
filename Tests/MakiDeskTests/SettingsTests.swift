@@ -46,8 +46,9 @@ final class SettingsTests: XCTestCase {
     /// absent, so the code that asks whether it was ever set keeps working.
     func testRegisteringDoesNotInventKeysOutsideTheTable() {
         Settings.registerDefaults(in: defaults)
-        XCTAssertNil(defaults.object(forKey: SettingsKey.windowGap.rawValue))
-        XCTAssertNil(defaults.object(forKey: SettingsKey.focusDimEnabled.rawValue))
+        XCTAssertNil(defaults.object(forKey: SettingsKey.setupCompleted.rawValue))
+        XCTAssertNil(defaults.object(forKey: SettingsKey.idlePerformanceDiagnostics.rawValue))
+        XCTAssertNil(defaults.object(forKey: SettingsKey.shelfExcludedApps.rawValue))
     }
 
     /// Every default has to parse as the type its readers ask for, or the read
@@ -181,6 +182,72 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(PaletteTheme.normalized(id), id)
     }
 
+    // MARK: - Focus border and dim
+
+    func testTheFocusDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertTrue(Settings.bool(.focusBorderEnabled, in: defaults))
+        XCTAssertEqual(Settings.double(.focusBorderWidth, in: defaults),
+                       FocusBorder.defaultWidth, accuracy: 0.001)
+        XCTAssertFalse(Settings.bool(.focusDimEnabled, in: defaults),
+                       "the dim is opt-in: it changes the whole screen")
+        XCTAssertEqual(Settings.double(.focusDimOpacity, in: defaults),
+                       FocusDim.defaultOpacity, accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.focusDimFade, in: defaults),
+                       FocusDim.defaultFade, accuracy: 0.001)
+        XCTAssertFalse(Settings.bool(.focusDimDesktopDims, in: defaults))
+        XCTAssertFalse(Settings.bool(.focusDimStopsOnAppChange, in: defaults))
+    }
+
+    func testTheFocusEnumsParseFromTheirDefaults() {
+        Settings.registerDefaults(in: defaults)
+        XCTAssertEqual(Settings.value(.focusDimColour, as: FocusDim.Colour.self, in: defaults),
+                       .black)
+        XCTAssertEqual(Settings.value(.focusDimSource, as: FocusDim.Source.self, in: defaults),
+                       .window)
+        XCTAssertEqual(Settings.value(.focusDimDisplayMode,
+                                      as: FocusDim.DisplayMode.self, in: defaults),
+                       .independent)
+    }
+
+    // MARK: - Recognition, shelf, drag and pickers
+
+    func testTheRecognitionDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertFalse(Settings.bool(.ocrFastRecognition, in: defaults))
+        XCTAssertTrue(Settings.bool(.ocrLanguageCorrection, in: defaults))
+        XCTAssertEqual(Settings.value(.ocrOutputDestination,
+                                      as: TextRecognitionOutput.self, in: defaults),
+                       .pasteboardAndHistory)
+        XCTAssertEqual(Settings.value(.ocrRevealHistory, as: OCRRevealHistory.self, in: defaults),
+                       .never)
+    }
+
+    func testTheShelfAndDragDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertTrue(Settings.bool(.shelfShakeEnabled, in: defaults))
+        XCTAssertEqual(Settings.value(.shelfShakeSensitivity,
+                                      as: ShelfShakeSensitivity.self, in: defaults), .medium)
+        XCTAssertTrue(Settings.bool(.dragEnabled, in: defaults))
+        XCTAssertEqual(Settings.value(.dragActivator, as: DragActivator.self, in: defaults),
+                       .fallback)
+    }
+
+    func testTheWindowAndPickerDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(Settings.double(.windowGap, in: defaults), 12, accuracy: 0.001)
+        XCTAssertTrue(Settings.bool(.layoutAsksFirst, in: defaults))
+        XCTAssertTrue(Settings.bool(.announceGroupChanges, in: defaults))
+        XCTAssertEqual(Settings.value(.measureUnit, as: MeasurementUnit.self, in: defaults),
+                       .points)
+        XCTAssertEqual(Settings.value(.colorPickerFormat, as: ColorClipboardFormat.self,
+                                      in: defaults), .hex)
+    }
+
     /// The table is the list of keys whose reads have moved. Adding a domain
     /// means adding it here, which forces the question "are its reads using
     /// this, or still carrying their own fallback?".
@@ -202,6 +269,15 @@ final class SettingsTests: XCTestCase {
             .paletteMaxCardWidth, .paletteColumns, .paletteCardSizeFollowsCount,
             .paletteOpacity, .paletteTintedCards, .paletteFullScreen,
             .paletteScreenLocation, .showGroupsInPalette, .showEmptyGroupsInPalette,
+            .focusBorderEnabled, .focusBorderWidth,
+            .focusDimEnabled, .focusDimOpacity, .focusDimFade, .focusDimColour,
+            .focusDimSource, .focusDimDisplayMode, .focusDimDesktopDims,
+            .focusDimStopsOnAppChange,
+            .ocrFastRecognition, .ocrLanguageCorrection,
+            .ocrOutputDestination, .ocrRevealHistory,
+            .shelfShakeEnabled, .shelfShakeSensitivity,
+            .dragEnabled, .dragActivator, .layoutAsksFirst, .announceGroupChanges,
+            .windowGap, .measureUnit, .colorPickerFormat,
         ]
         XCTAssertEqual(Set(SettingsDefaults.table.keys), expected)
     }

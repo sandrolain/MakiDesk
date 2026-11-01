@@ -118,22 +118,18 @@ final class WorkspaceStore {
     var shortcutFileState: ShortcutStore.State = .missing
     /// Rows the launch had to resolve out of a hand-edited or older file (Q01).
     var shortcutLoadReport = ShortcutLoadReport()
-    var gap = (UserDefaults.standard.object(forKey: SettingsKey.windowGap.rawValue) == nil
-        ? 12
-        : UserDefaults.standard.double(forKey: SettingsKey.windowGap.rawValue)).clamped(to: 0...80)
+    var gap = Settings.double(.windowGap).clamped(to: 0...80)
     var showMiniMap = Settings.bool(.showMiniMap)
     var showPreview = Settings.bool(.showPreview)
     /// OCR quality and correction (T41). Languages stay automatic.
-    var ocrFastRecognition = UserDefaults.standard.object(forKey: SettingsKey.ocrFastRecognition.rawValue) as? Bool ?? false
-    var ocrLanguageCorrection = UserDefaults.standard.object(forKey: SettingsKey.ocrLanguageCorrection.rawValue) as? Bool ?? true
+    var ocrFastRecognition = Settings.bool(.ocrFastRecognition)
+    var ocrLanguageCorrection = Settings.bool(.ocrLanguageCorrection)
     /// Where the recognized text goes (T54); unknown or missing values keep the
     /// previous behaviour.
-    var ocrOutput = TextRecognitionOutput(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.ocrOutputDestination.rawValue) ?? ""
-    ) ?? .pasteboardAndHistory
-    var ocrRevealHistory = OCRRevealHistory(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.ocrRevealHistory.rawValue) ?? ""
-    ) ?? .never
+    var ocrOutput = Settings.value(.ocrOutputDestination,
+                                   as: TextRecognitionOutput.self) ?? .pasteboardAndHistory
+    var ocrRevealHistory = Settings.value(.ocrRevealHistory,
+                                          as: OCRRevealHistory.self) ?? .never
     var textRecognitionOptions: TextRecognitionOptions {
         TextRecognitionOptions(quality: ocrFastRecognition ? .fast : .accurate,
                                usesLanguageCorrection: ocrLanguageCorrection,
@@ -165,12 +161,12 @@ final class WorkspaceStore {
     /// Whether the column leaves out groups with no members (T55).
     var showEmptyGroupsInPalette = Settings.bool(.showEmptyGroupsInPalette)
     /// Whether group changes are announced in the HUD (T55). Outcomes still are.
-    var announceGroupChanges = UserDefaults.standard.object(forKey: SettingsKey.announceGroupChanges.rawValue) as? Bool ?? true
-    var dragActivator = DragActivator(rawValue: UserDefaults.standard.string(forKey: SettingsKey.dragActivator.rawValue) ?? "") ?? .fallback
-    var dragEnabled = UserDefaults.standard.object(forKey: SettingsKey.dragEnabled.rawValue) as? Bool ?? true
+    var announceGroupChanges = Settings.bool(.announceGroupChanges)
+    var dragActivator = Settings.value(.dragActivator, as: DragActivator.self) ?? .fallback
+    var dragEnabled = Settings.bool(.dragEnabled)
     /// Whether the intelligent layout offers what it suggests — with the reason —
     /// instead of applying it straight away (T18).
-    var layoutAsksFirst = UserDefaults.standard.object(forKey: SettingsKey.layoutAsksFirst.rawValue) as? Bool ?? true
+    var layoutAsksFirst = Settings.bool(.layoutAsksFirst)
     /// Per-kind priors for the content-weighted layout (T30), 0.5 … 2.0.
     var layoutPriors: [WindowKind: Double] = WorkspaceStore.loadLayoutPriors()
 
@@ -179,33 +175,22 @@ final class WorkspaceStore {
     var animationDuration = min(max(Settings.double(.animationDuration), 0.08), 0.6)
 
     /// The coloured outline around the focused window (T36).
-    var focusBorderEnabled = UserDefaults.standard.object(forKey: SettingsKey.focusBorderEnabled.rawValue) as? Bool ?? true
-    var focusBorderWidth = FocusBorder.clampedWidth(
-        UserDefaults.standard.object(forKey: SettingsKey.focusBorderWidth.rawValue) as? Double ?? FocusBorder.defaultWidth
-    )
+    var focusBorderEnabled = Settings.bool(.focusBorderEnabled)
+    var focusBorderWidth = FocusBorder.clampedWidth(Settings.double(.focusBorderWidth))
 
     /// Dim everything outside the focused window (T62). Off by default: it
     /// changes the whole screen, so it is opt-in.
-    var focusDimEnabled = UserDefaults.standard.object(forKey: SettingsKey.focusDimEnabled.rawValue) as? Bool ?? false
-    var focusDimOpacity = FocusDim.clampedOpacity(
-        UserDefaults.standard.object(forKey: SettingsKey.focusDimOpacity.rawValue) as? Double ?? FocusDim.defaultOpacity
-    )
-    var focusDimFade = FocusDim.clampedFade(
-        UserDefaults.standard.object(forKey: SettingsKey.focusDimFade.rawValue) as? Double ?? FocusDim.defaultFade
-    )
-    var focusDimColour = FocusDim.Colour(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.focusDimColour.rawValue) ?? ""
-    ) ?? .black
-    var focusDimSource = FocusDim.Source(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.focusDimSource.rawValue) ?? ""
-    ) ?? .window
-    var focusDimDisplayMode = FocusDim.DisplayMode(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.focusDimDisplayMode.rawValue) ?? ""
-    ) ?? .independent
+    var focusDimEnabled = Settings.bool(.focusDimEnabled)
+    var focusDimOpacity = FocusDim.clampedOpacity(Settings.double(.focusDimOpacity))
+    var focusDimFade = FocusDim.clampedFade(Settings.double(.focusDimFade))
+    var focusDimColour = Settings.value(.focusDimColour, as: FocusDim.Colour.self) ?? .black
+    var focusDimSource = Settings.value(.focusDimSource, as: FocusDim.Source.self) ?? .window
+    var focusDimDisplayMode = Settings.value(.focusDimDisplayMode,
+                                             as: FocusDim.DisplayMode.self) ?? .independent
     /// Whether clicking the desktop dims everything instead of lifting the veil.
-    var focusDimDesktopDims = UserDefaults.standard.object(forKey: SettingsKey.focusDimDesktopDims.rawValue) as? Bool ?? false
+    var focusDimDesktopDims = Settings.bool(.focusDimDesktopDims)
     /// Whether switching to another app ends the effect.
-    var focusDimStopsOnAppChange = UserDefaults.standard.object(forKey: SettingsKey.focusDimStopsOnAppChange.rawValue) as? Bool ?? false
+    var focusDimStopsOnAppChange = Settings.bool(.focusDimStopsOnAppChange)
 
     /// The checklist card (T59). Shown only when the user asked for it, and
     /// its items are user data: a factory reset leaves them alone.
@@ -240,11 +225,9 @@ final class WorkspaceStore {
     }
 
     /// Shake-to-open settings for the shelf (T31).
-    var shelfShakeEnabled = UserDefaults.standard.object(forKey: SettingsKey.shelfShakeEnabled.rawValue) as? Bool ?? true
-    var shelfShakeSensitivity: ShelfShakeSensitivity = {
-        let raw = UserDefaults.standard.string(forKey: SettingsKey.shelfShakeSensitivity.rawValue) ?? ""
-        return ShelfShakeSensitivity(rawValue: raw) ?? .medium
-    }()
+    var shelfShakeEnabled = Settings.bool(.shelfShakeEnabled)
+    var shelfShakeSensitivity = Settings.value(.shelfShakeSensitivity,
+                                                as: ShelfShakeSensitivity.self) ?? .medium
     var shelfExcludedApps: [String] = UserDefaults.standard.stringArray(forKey: SettingsKey.shelfExcludedApps.rawValue) ?? []
     var macOSTilingEnabled = MacOSTiling.optionDragEnabled
     var setupCompleted = UserDefaults.standard.bool(forKey: SettingsKey.setupCompleted.rawValue)
@@ -732,7 +715,7 @@ final class WorkspaceStore {
 
     func updateGap(_ value: Double) {
         gap = value.clamped(to: 0...80)
-        UserDefaults.standard.set(gap, forKey: SettingsKey.windowGap.rawValue)
+        Settings.set(gap, for: .windowGap)
         // The checklist sits on the same margin as the windows.
         ChecklistController.shared.applySettings()
     }
@@ -750,22 +733,22 @@ final class WorkspaceStore {
 
     func updateOCRFastRecognition(_ value: Bool) {
         ocrFastRecognition = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.ocrFastRecognition.rawValue)
+        Settings.set(value, for: .ocrFastRecognition)
     }
 
     func updateOCRLanguageCorrection(_ value: Bool) {
         ocrLanguageCorrection = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.ocrLanguageCorrection.rawValue)
+        Settings.set(value, for: .ocrLanguageCorrection)
     }
 
     func updateOCROutput(_ value: TextRecognitionOutput) {
         ocrOutput = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.ocrOutputDestination.rawValue)
+        Settings.set(value.rawValue, for: .ocrOutputDestination)
     }
 
     func updateOCRRevealHistory(_ value: OCRRevealHistory) {
         ocrRevealHistory = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.ocrRevealHistory.rawValue)
+        Settings.set(value.rawValue, for: .ocrRevealHistory)
     }
 
     func updateMiniMapPosition(_ value: PalettePosition) {
@@ -854,22 +837,22 @@ final class WorkspaceStore {
     /// (T55).
     func updateGroupAnnouncements(_ value: Bool) {
         announceGroupChanges = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.announceGroupChanges.rawValue)
+        Settings.set(value, for: .announceGroupChanges)
     }
 
     func updateDragActivator(_ value: DragActivator) {
         dragActivator = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.dragActivator.rawValue)
+        Settings.set(value.rawValue, for: .dragActivator)
     }
 
     func updateDragEnabled(_ value: Bool) {
         dragEnabled = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.dragEnabled.rawValue)
+        Settings.set(value, for: .dragEnabled)
     }
 
     func updateLayoutAsksFirst(_ value: Bool) {
         layoutAsksFirst = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.layoutAsksFirst.rawValue)
+        Settings.set(value, for: .layoutAsksFirst)
     }
 
     private static func loadLayoutPriors() -> [WindowKind: Double] {
@@ -901,14 +884,14 @@ final class WorkspaceStore {
 
     func updateFocusBorderEnabled(_ value: Bool) {
         focusBorderEnabled = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.focusBorderEnabled.rawValue)
+        Settings.set(value, for: .focusBorderEnabled)
         WindowOutlineController.shared.applySettings()
     }
 
     func updateFocusBorderWidth(_ value: Double) {
         let clamped = FocusBorder.clampedWidth(value)
         focusBorderWidth = clamped
-        UserDefaults.standard.set(clamped, forKey: SettingsKey.focusBorderWidth.rawValue)
+        Settings.set(clamped, for: .focusBorderWidth)
         WindowOutlineController.shared.applySettings()
     }
 
@@ -916,7 +899,7 @@ final class WorkspaceStore {
     /// which must not post notices.
     func updateFocusDimEnabled(_ value: Bool, announce: Bool = true) {
         focusDimEnabled = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.focusDimEnabled.rawValue)
+        Settings.set(value, for: .focusDimEnabled)
         FocusDimController.shared.applySettings()
         guard announce else { return }
         if value, focusDimSource == .selection, veilSelection.isEmpty {
@@ -933,20 +916,20 @@ final class WorkspaceStore {
     func updateFocusDimOpacity(_ value: Double) {
         let clamped = FocusDim.clampedOpacity(value)
         focusDimOpacity = clamped
-        UserDefaults.standard.set(clamped, forKey: SettingsKey.focusDimOpacity.rawValue)
+        Settings.set(clamped, for: .focusDimOpacity)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimFade(_ value: Double) {
         let clamped = FocusDim.clampedFade(value)
         focusDimFade = clamped
-        UserDefaults.standard.set(clamped, forKey: SettingsKey.focusDimFade.rawValue)
+        Settings.set(clamped, for: .focusDimFade)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimColour(_ value: FocusDim.Colour) {
         focusDimColour = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.focusDimColour.rawValue)
+        Settings.set(value.rawValue, for: .focusDimColour)
         FocusDimController.shared.applySettings()
     }
 
@@ -973,25 +956,25 @@ final class WorkspaceStore {
 
     func updateFocusDimSource(_ value: FocusDim.Source) {
         focusDimSource = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.focusDimSource.rawValue)
+        Settings.set(value.rawValue, for: .focusDimSource)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimDisplayMode(_ value: FocusDim.DisplayMode) {
         focusDimDisplayMode = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.focusDimDisplayMode.rawValue)
+        Settings.set(value.rawValue, for: .focusDimDisplayMode)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimDesktopDims(_ value: Bool) {
         focusDimDesktopDims = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.focusDimDesktopDims.rawValue)
+        Settings.set(value, for: .focusDimDesktopDims)
         FocusDimController.shared.applySettings()
     }
 
     func updateFocusDimStopsOnAppChange(_ value: Bool) {
         focusDimStopsOnAppChange = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.focusDimStopsOnAppChange.rawValue)
+        Settings.set(value, for: .focusDimStopsOnAppChange)
     }
 
     func updateChecklistVisible(_ value: Bool) {
@@ -1080,12 +1063,12 @@ final class WorkspaceStore {
 
     func updateShelfShakeEnabled(_ value: Bool) {
         shelfShakeEnabled = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.shelfShakeEnabled.rawValue)
+        Settings.set(value, for: .shelfShakeEnabled)
     }
 
     func updateShelfShakeSensitivity(_ value: ShelfShakeSensitivity) {
         shelfShakeSensitivity = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.shelfShakeSensitivity.rawValue)
+        Settings.set(value.rawValue, for: .shelfShakeSensitivity)
     }
 
     /// Comma- or newline-separated bundle identifiers.

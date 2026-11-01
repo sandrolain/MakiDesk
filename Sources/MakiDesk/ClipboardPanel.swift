@@ -76,7 +76,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.model.theme = PaletteTheme.named(
-                    UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha")
+                    Settings.string(.themeID) ?? "")
             }
         }
     }
@@ -101,7 +101,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         focusReturn.capture()
         previousApp = NSWorkspace.shared.frontmostApplication
         notesWasKey = NotesController.shared.isKey
-        model.theme = PaletteTheme.named(UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha")
+        model.theme = PaletteTheme.named(Settings.string(.themeID) ?? "")
         model.animationsEnabled = WorkspaceStore.shared.effectiveAnimationsEnabled
         model.animationDuration = WorkspaceStore.shared.animationDuration
         model.reload(from: history)

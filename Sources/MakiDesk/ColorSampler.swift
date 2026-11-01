@@ -347,8 +347,7 @@ final class ColorSamplerController {
     }
 
     nonisolated static func storedFormat(defaults: UserDefaults = .standard) -> ColorClipboardFormat {
-        defaults.string(forKey: formatDefaultsKey)
-            .flatMap(ColorClipboardFormat.init(rawValue:)) ?? .hex
+        Settings.value(.colorPickerFormat, in: defaults) ?? .hex
     }
 
     private func copy(_ text: String) -> Bool {
