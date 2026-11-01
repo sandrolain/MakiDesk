@@ -408,13 +408,9 @@ final class TimerChime {
 }
 
 /// A card that may sit anywhere on any display and never takes a click.
-private final class TimerOverlayPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
+/// The countdown card: read-only, placed in a corner by the controller.
+private final class TimerOverlayPanel: FloatingPanel {
+    override class var style: Style { .passive }
 }
 
 /// The countdown card: one line per timer, the nearest first.
@@ -562,19 +558,9 @@ final class TimerInputController {
     }
 }
 
-private final class TimerInputPanel: NSPanel {
-    var onCancel: (() -> Void)?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
-
-    override func cancelOperation(_ sender: Any?) {
-        onCancel?()
-    }
+/// The field a length is typed into.
+private final class TimerInputPanel: FloatingPanel {
+    override class var style: Style { .keyOverlay }
 }
 
 private struct TimerInputView: View {

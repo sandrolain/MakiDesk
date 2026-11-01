@@ -633,7 +633,7 @@ final class ScreenRegionSelector {
 
 /// A borderless panel that can take the keyboard for `Esc` without becoming the
 /// main window.
-private final class ScreenRegionOverlayWindow: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+/// The area selector: it takes the keyboard and spans every display.
+private final class ScreenRegionOverlayWindow: FloatingPanel {
+    override class var style: Style { .keyOverlay }
 }

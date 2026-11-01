@@ -89,9 +89,8 @@ final class PeekPanel {
 
 /// A borderless panel that can never become key or main: showing it takes
 /// nothing away from the app in use.
-private final class PeekPanelWindow: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
+private final class PeekPanelWindow: FloatingPanel {
+    override class var style: Style { .readOnly }
 }
 
 private struct PeekView: View {

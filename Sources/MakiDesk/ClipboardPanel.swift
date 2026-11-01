@@ -268,9 +268,8 @@ final class ClipboardController: NSObject, NSWindowDelegate {
     }
 }
 
-final class ClipboardPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
+final class ClipboardPanel: FloatingPanel {
+    override class var style: Style { .utility }
 }
 
 // MARK: - View

@@ -4,7 +4,8 @@ import SwiftUI
 /// One pinned measurement: a click-through panel that draws the rectangle and
 /// its dimension labels. It never takes a click from the app underneath (T39).
 @MainActor
-final class MeasureOverlayWindow: NSPanel {
+final class MeasureOverlayWindow: FloatingPanel {
+    override class var style: Style { .readOnly }
     private let measureView: MeasureOverlayView
 
     init(measurement: ScreenMeasurement, displayFrame: CGRect, unit: MeasurementUnit) {
@@ -47,9 +48,6 @@ final class MeasureOverlayWindow: NSPanel {
         measureView.setAccessibilityLabel("Measurement")
         measureView.setAccessibilityValue(measurement.lines(unit).joined(separator: ", "))
     }
-
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
 
     func update(unit: MeasurementUnit) {
         measureView.unit = unit
@@ -155,7 +153,8 @@ private final class MeasureOverlayView: NSView {
 /// The pinned readout: three monospaced lines with Copy and Close. Small and
 /// non-activating, so it never takes the focus from what is being measured.
 @MainActor
-final class MeasureBadgeWindow: NSPanel {
+final class MeasureBadgeWindow: FloatingPanel {
+    override class var style: Style { .readOnly }
     private var measurement: ScreenMeasurement
     private var unit: MeasurementUnit
     private let onCopy: () -> Void
@@ -182,9 +181,6 @@ final class MeasureBadgeWindow: NSPanel {
                               .stationary, .ignoresCycle]
         render(visibleFrame)
     }
-
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
 
     func update(unit: MeasurementUnit, visibleFrame: CGRect) {
         self.unit = unit

@@ -68,15 +68,9 @@ final class NotesRewritePanelController {
     }
 }
 
-private final class RewritePanel: NSPanel {
-    var onEscape: (() -> Void)?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func cancelOperation(_ sender: Any?) {
-        onEscape?()
-    }
+/// The rewrite prompt: a card the user types in, closed with Esc.
+private final class RewritePanel: FloatingPanel {
+    override class var style: Style { .utility }
 }
 
 private struct NotesRewriteView: View {

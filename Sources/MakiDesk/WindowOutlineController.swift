@@ -567,13 +567,8 @@ final class WindowOutlineController {
 
 /// A panel that may sit off-screen or under the menu bar; a plain `NSPanel`
 /// clamps its frame and would leave a border detached from a window at an edge.
-private final class OutlinePanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
+private final class OutlinePanel: FloatingPanel {
+    override class var style: Style { .passive }
 }
 
 /// The stroke itself. The view stays transparent, so only the ring takes

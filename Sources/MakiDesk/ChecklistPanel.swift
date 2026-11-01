@@ -315,15 +315,10 @@ final class ChecklistController: NSObject, NSWindowDelegate {
 
 /// A panel that may sit anywhere on any display; a plain `NSPanel` clamps its
 /// frame to the screen with a margin and would drift away from the corner.
-private final class ChecklistPanel: NSPanel {
-    /// Typing the first item needs a key window; it becomes key without
-    /// activating the app, and the controller activates only when a field asks.
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
+/// Typing the first item needs a key window; it becomes key without activating
+/// the app, and the controller activates only when a field asks.
+private final class ChecklistPanel: FloatingPanel {
+    override class var style: Style { .keyOverlay }
 }
 
 /// The first click on a box must tick it, not just wake the panel: the card is

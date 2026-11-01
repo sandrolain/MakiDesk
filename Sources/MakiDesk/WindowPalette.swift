@@ -1695,8 +1695,8 @@ final class WindowPalette {
     }
 }
 
-final class PalettePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+final class PalettePanel: FloatingPanel {
+    override class var style: Style { .utility }
 }
 
 struct PaletteView: View {

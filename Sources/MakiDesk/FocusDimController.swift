@@ -698,11 +698,7 @@ final class FocusDimController {
 
 /// A veil panel may cover a whole display, including the menu-bar strip; a
 /// plain `NSPanel` clamps its frame and would leave an undimmed edge.
-private final class DimPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
+/// The veil. It never takes the keyboard and is placed by its controller.
+private final class DimPanel: FloatingPanel {
+    override class var style: Style { .passive }
 }

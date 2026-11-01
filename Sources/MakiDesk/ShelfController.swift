@@ -2179,8 +2179,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 }
 
-final class ShelfPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
+final class ShelfPanel: FloatingPanel {
+    override class var style: Style { .utility }
 }
 
 /// The only surface that moves the panel: the header. The footer must never

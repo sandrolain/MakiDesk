@@ -283,13 +283,12 @@ final class ScreenshotAnnotationController {
     }
 }
 
-private final class ScreenshotEditorPanel: NSPanel {
+private final class ScreenshotEditorPanel: FloatingPanel {
+    override class var style: Style { .keyOverlay }
+
     /// ⌘Z. Handled by the window rather than by a SwiftUI keyboard shortcut:
     /// the panel is borderless, and a key equivalent is surer here.
     var onUndo: (() -> Void)?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -299,10 +298,6 @@ private final class ScreenshotEditorPanel: NSPanel {
             return
         }
         super.keyDown(with: event)
-    }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
     }
 }
 

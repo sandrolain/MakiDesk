@@ -180,13 +180,8 @@ final class CommandBoxController {
     }
 }
 
-private final class CommandBoxPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
-    }
+private final class CommandBoxPanel: FloatingPanel {
+    override class var style: Style { .keyOverlay }
 }
 
 /// The card: the field, the suggestions, and what the keys do.
