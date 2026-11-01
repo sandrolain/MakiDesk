@@ -332,14 +332,7 @@ struct TimerStore: Sendable {
     }
 
     /// `~/Library/Application Support/MakiDesk/timers.json`.
-    static var defaultURL: URL {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("Library/Application Support", isDirectory: true)
-        return base.appendingPathComponent("MakiDesk", isDirectory: true)
-            .appendingPathComponent("timers.json")
-    }
+    static var defaultURL: URL { StoredJSONFile.defaultURL(named: "timers.json") }
 
     /// Read off the main thread: opening the app must not wait for the disk.
     func load(completion: @escaping @Sendable ([AppTimer]) -> Void) {
@@ -352,14 +345,14 @@ struct TimerStore: Sendable {
     nonisolated static func read(at url: URL) -> [AppTimer] {
         guard let data = try? Data(contentsOf: url) else { return [] }
         do {
-            return try JSONDecoder().decode([AppTimer].self, from: data)
+            return try StoredJSONFile.decoder().decode([AppTimer].self, from: data)
         } catch {
-            // Never overwrite a file we could not understand: it stays next to
-            // the new one as `.bak`.
+            // Never overwrite a file we could not understand (R07). The shared
+            // quarantine keeps every earlier recovery copy: this used to delete
+            // the previous `.bak` first, so a second bad file destroyed the
+            // first one — the copy the user would have recovered from.
             MakiLog.store.error("timers: unreadable file -> \(error.localizedDescription, privacy: .public)")
-            let backup = url.appendingPathExtension("bak")
-            try? FileManager.default.removeItem(at: backup)
-            try? FileManager.default.moveItem(at: url, to: backup)
+            StoredJSONFile.quarantine(url, label: "timers")
             return []
         }
     }
@@ -385,10 +378,8 @@ struct TimerStore: Sendable {
                 }
                 return
             }
-            let data = try JSONEncoder().encode(timers)
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
+            let data = try StoredJSONFile.encoder().encode(timers)
+            try StoredJSONFile.write(data, to: url)
         } catch {
             MakiLog.store.error("timers: could not save -> \(error.localizedDescription, privacy: .public)")
         }
