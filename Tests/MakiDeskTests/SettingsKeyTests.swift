@@ -49,11 +49,9 @@ final class SettingsKeyTests: XCTestCase {
         }
     }
 
-    /// The constants the UI reads (`HUDSettings.positionKey`, …) must point at
-    /// the registry, not carry a copy of the string.
+    /// The constants still in use must point at the registry, not carry a copy
+    /// of the string.
     func testTheNamedConstantsComeFromTheRegistry() {
-        XCTAssertEqual(HUDSettings.positionKey, SettingsKey.hudPosition.rawValue)
-        XCTAssertEqual(HUDSettings.screenKey, SettingsKey.hudScreenLocation.rawValue)
         XCTAssertEqual(SettingsView.SettingsTab.defaultsKey, SettingsKey.settingsTab.rawValue)
         XCTAssertEqual(MeasurementSettings.unitKey, SettingsKey.measureUnit.rawValue)
         XCTAssertEqual(ColorSamplerController.formatDefaultsKey,

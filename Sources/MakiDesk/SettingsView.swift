@@ -101,14 +101,40 @@ struct SettingsView: View {
     @AppStorage(SettingsTab.defaultsKey) private var settingsTab: SettingsTab = .general
     @AppStorage(ColorSamplerController.formatDefaultsKey)
     private var colorFormat: ColorClipboardFormat = .hex
-    @AppStorage(HUDSettings.positionKey) private var hudPosition: HUDPosition = .bottomCenter
-    @AppStorage(HUDSettings.screenKey) private var hudScreen: PaletteScreenLocation = .focusedWindow
-    @AppStorage(HUDSettings.baseDurationKey) private var hudBaseDuration = HUDSettings.defaultBaseDuration
-    @AppStorage(HUDSettings.historyEnabledKey) private var hudHistoryEnabled = true
-    @AppStorage(HUDSettings.voiceOverKey) private var hudVoiceOver = true
-    @AppStorage(HUDSettings.compactKey) private var hudCompact = false
-    @AppStorage(HUDSettings.textSizeKey) private var hudTextSize = Double(HUDSettings.defaultTextSize)
-    @AppStorage(HUDSettings.errorsStickyKey) private var hudKeepErrors = false
+    // The notice settings go through the store like every other preference:
+    // `@AppStorage` carried its own copy of each default, which is exactly the
+    // duplication the settings table exists to end (R02).
+    private var hudPosition: Binding<HUDPosition> {
+        Binding(get: { store.hudPosition }, set: { store.updateHUDPosition($0) })
+    }
+
+    private var hudScreen: Binding<PaletteScreenLocation> {
+        Binding(get: { store.hudScreen }, set: { store.updateHUDScreen($0) })
+    }
+
+    private var hudBaseDuration: Binding<Double> {
+        Binding(get: { store.hudBaseDuration }, set: { store.updateHUDBaseDuration($0) })
+    }
+
+    private var hudTextSize: Binding<Double> {
+        Binding(get: { store.hudTextSize }, set: { store.updateHUDTextSize($0) })
+    }
+
+    private var hudHistoryEnabled: Binding<Bool> {
+        Binding(get: { store.hudHistoryEnabled }, set: { store.updateHUDHistoryEnabled($0) })
+    }
+
+    private var hudVoiceOver: Binding<Bool> {
+        Binding(get: { store.hudVoiceOver }, set: { store.updateHUDVoiceOver($0) })
+    }
+
+    private var hudCompact: Binding<Bool> {
+        Binding(get: { store.hudCompact }, set: { store.updateHUDCompact($0) })
+    }
+
+    private var hudKeepErrors: Binding<Bool> {
+        Binding(get: { store.hudKeepErrors }, set: { store.updateHUDKeepErrors($0) })
+    }
     /// The highlight slides between sidebar rows (T58). Respects the app's
     /// animations switch and macOS Reduce Motion through the store.
     @Namespace private var sidebarSelection
@@ -832,12 +858,12 @@ struct SettingsView: View {
             pageTabs(NotificationsPage.allCases, selection: $notificationsPage) { $0.title }
             if notificationsPage == .placement {
                 SettingsSection("Position") {
-                    Picker("Placement", selection: $hudPosition) {
+                    Picker("Placement", selection: hudPosition) {
                         ForEach(HUDPosition.allCases) { position in
                             Text(position.label).tag(position)
                         }
                     }
-                    Picker("Show on", selection: $hudScreen) {
+                    Picker("Show on", selection: hudScreen) {
                         ForEach(PaletteScreenLocation.allCases) { location in
                             Text(location.label).tag(location)
                         }
@@ -845,14 +871,14 @@ struct SettingsView: View {
                     caption("Notices follow the focus or the pointer and stay inside the display's visible frame, including displays with a negative origin. The fallback is the main display.")
                 }
                 SettingsSection("Duration") {
-                    SliderRow(title: "Base duration", value: $hudBaseDuration,
+                    SliderRow(title: "Base duration", value: hudBaseDuration,
                               range: 1...5, step: 0.2, unit: " s", decimals: 1)
                     caption("Confirmations, information and successes stay for the base duration, warnings about half as long again, errors twice as long with a 3 s floor. Up to two notices are visible; the rest wait in a queue. Progress notices stay until the work ends.")
                 }
             }
             if notificationsPage == .behaviour {
                 SettingsSection("Sticky notices") {
-                    Toggle("Keep errors until I dismiss them", isOn: $hudKeepErrors)
+                    Toggle("Keep errors until I dismiss them", isOn: hudKeepErrors)
                     HStack {
                         Text(HUDController.shared.hasNotices
                              ? "Click a notice on screen to take it away."
@@ -870,7 +896,7 @@ struct SettingsView: View {
             }
             if notificationsPage == .appearance {
                 SettingsSection("Appearance") {
-                    SliderRow(title: "Text size", value: $hudTextSize,
+                    SliderRow(title: "Text size", value: hudTextSize,
                               range: 12...20, step: 1, unit: " pt", decimals: 0)
                     Text("Preview")
                         .font(.system(size: 12, weight: .medium))
@@ -887,14 +913,14 @@ struct SettingsView: View {
                             .controlSize(.small)
                         }
                     }
-                    Toggle("Compact notices (title only)", isOn: $hudCompact)
-                    Toggle("Announce with VoiceOver", isOn: $hudVoiceOver)
+                    Toggle("Compact notices (title only)", isOn: hudCompact)
+                    Toggle("Announce with VoiceOver", isOn: hudVoiceOver)
                     caption("The state tints the icon and border: grey for information, accent for a confirmation, green for success, orange for a warning, red for an error. Each Preview button shows its state in the current placement, size and theme; the error one follows the sticky option above. The icon, padding and corners grow with the text. Notices are excluded from screenshots and recordings, and with Reduce Motion on they appear without the short fade.")
                 }
             }
             if notificationsPage == .history {
                 SettingsSection("History") {
-                    Toggle("Keep a history (in memory)", isOn: $hudHistoryEnabled)
+                    Toggle("Keep a history (in memory)", isOn: hudHistoryEnabled)
                     HStack {
                         Text("The last 50 notices, newest first.")
                             .font(.caption)

@@ -103,17 +103,6 @@ struct HUDAction: Identifiable {
 /// Notices, screen and timing preferences. Defaults reproduce the pre-T52
 /// behaviour: bottom centre, 1.4 s, history on (memory only), VoiceOver on.
 enum HUDSettings {
-    static let positionKey = SettingsKey.hudPosition.rawValue
-    static let screenKey = SettingsKey.hudScreenLocation.rawValue
-    static let baseDurationKey = SettingsKey.hudBaseDuration.rawValue
-    static let historyEnabledKey = SettingsKey.hudHistoryEnabled.rawValue
-    static let voiceOverKey = SettingsKey.hudVoiceOver.rawValue
-    static let compactKey = SettingsKey.hudCompact.rawValue
-    static let textSizeKey = SettingsKey.hudTextSize.rawValue
-    /// Keep errors on screen until the user dismisses them (T60). Off by
-    /// default, so the behaviour of every existing notice is unchanged.
-    static let errorsStickyKey = SettingsKey.hudKeepErrors.rawValue
-
     static let defaultBaseDuration: TimeInterval = 1.4
     static let defaultTextSize: CGFloat = 14
 

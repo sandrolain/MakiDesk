@@ -61,7 +61,7 @@ final class HUDStickyTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         Settings.registerDefaults(in: defaults)
         XCTAssertFalse(HUDSettings.errorsSticky(defaults: defaults))
-        defaults.set(true, forKey: HUDSettings.errorsStickyKey)
+        Settings.set(true, for: .hudKeepErrors, in: defaults)
         XCTAssertTrue(HUDSettings.errorsSticky(defaults: defaults))
     }
 

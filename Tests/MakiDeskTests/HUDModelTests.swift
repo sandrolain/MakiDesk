@@ -149,13 +149,13 @@ final class HUDModelTests: XCTestCase {
         XCTAssertFalse(HUDSettings.compact(defaults: defaults))
         XCTAssertEqual(HUDSettings.textSize(defaults: defaults), 14, accuracy: 0.001)
 
-        defaults.set("topRight", forKey: HUDSettings.positionKey)
-        defaults.set("mouse", forKey: HUDSettings.screenKey)
-        defaults.set(3.0, forKey: HUDSettings.baseDurationKey)
-        defaults.set(false, forKey: HUDSettings.historyEnabledKey)
-        defaults.set(false, forKey: HUDSettings.voiceOverKey)
-        defaults.set(true, forKey: HUDSettings.compactKey)
-        defaults.set(18.0, forKey: HUDSettings.textSizeKey)
+        Settings.set(HUDPosition.topRight.rawValue, for: .hudPosition, in: defaults)
+        Settings.set(PaletteScreenLocation.mouse.rawValue, for: .hudScreenLocation, in: defaults)
+        Settings.set(3.0, for: .hudBaseDuration, in: defaults)
+        Settings.set(false, for: .hudHistoryEnabled, in: defaults)
+        Settings.set(false, for: .hudVoiceOver, in: defaults)
+        Settings.set(true, for: .hudCompact, in: defaults)
+        Settings.set(18.0, for: .hudTextSize, in: defaults)
         XCTAssertEqual(HUDSettings.position(defaults: defaults), .topRight)
         XCTAssertEqual(HUDSettings.screenLocation(defaults: defaults), .mouse)
         XCTAssertEqual(HUDSettings.baseDuration(defaults: defaults), 3.0, accuracy: 0.001)
@@ -164,9 +164,9 @@ final class HUDModelTests: XCTestCase {
         XCTAssertTrue(HUDSettings.compact(defaults: defaults))
         XCTAssertEqual(HUDSettings.textSize(defaults: defaults), 18, accuracy: 0.001)
 
-        defaults.set(40.0, forKey: HUDSettings.textSizeKey)
+        Settings.set(40.0, for: .hudTextSize, in: defaults)
         XCTAssertEqual(HUDSettings.textSize(defaults: defaults), 22, accuracy: 0.001)
-        defaults.set(5.0, forKey: HUDSettings.textSizeKey)
+        Settings.set(5.0, for: .hudTextSize, in: defaults)
         XCTAssertEqual(HUDSettings.textSize(defaults: defaults), 11, accuracy: 0.001)
     }
 
@@ -174,8 +174,8 @@ final class HUDModelTests: XCTestCase {
         let suite = "MakiDeskHUD-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set("somewhere", forKey: HUDSettings.positionKey)
-        defaults.set("somewhere", forKey: HUDSettings.screenKey)
+        Settings.set("somewhere", for: .hudPosition, in: defaults)
+        Settings.set("somewhere", for: .hudScreenLocation, in: defaults)
         XCTAssertEqual(HUDSettings.position(defaults: defaults), .bottomCenter)
         XCTAssertEqual(HUDSettings.screenLocation(defaults: defaults), .focusedWindow)
     }

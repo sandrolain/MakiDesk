@@ -192,6 +192,18 @@ final class WorkspaceStore {
     /// Whether switching to another app ends the effect.
     var focusDimStopsOnAppChange = Settings.bool(.focusDimStopsOnAppChange)
 
+    /// Notices (T52/T60): where they sit, how long they stay and how they are
+    /// announced. `HUDController` reads the same keys through `HUDSettings`.
+    var hudPosition = Settings.value(.hudPosition, as: HUDPosition.self) ?? .bottomCenter
+    var hudScreen = Settings.value(.hudScreenLocation,
+                                   as: PaletteScreenLocation.self) ?? .focusedWindow
+    var hudBaseDuration = max(0.1, Settings.double(.hudBaseDuration))
+    var hudHistoryEnabled = Settings.bool(.hudHistoryEnabled)
+    var hudVoiceOver = Settings.bool(.hudVoiceOver)
+    var hudCompact = Settings.bool(.hudCompact)
+    var hudTextSize = min(22, max(11, Settings.double(.hudTextSize)))
+    var hudKeepErrors = Settings.bool(.hudKeepErrors)
+
     /// The checklist card (T59). Shown only when the user asked for it, and
     /// its items are user data: a factory reset leaves them alone.
     var checklistVisible = Settings.bool(.checklistVisible)
@@ -718,6 +730,50 @@ final class WorkspaceStore {
         Settings.set(gap, for: .windowGap)
         // The checklist sits on the same margin as the windows.
         ChecklistController.shared.applySettings()
+    }
+
+    // MARK: - Notices (T52/T60)
+
+    func updateHUDPosition(_ value: HUDPosition) {
+        hudPosition = value
+        Settings.set(value.rawValue, for: .hudPosition)
+    }
+
+    func updateHUDScreen(_ value: PaletteScreenLocation) {
+        hudScreen = value
+        Settings.set(value.rawValue, for: .hudScreenLocation)
+    }
+
+    func updateHUDBaseDuration(_ value: Double) {
+        // The slider offers 1…5 s; a shorter value would make the queue turn
+        // over before it can be read.
+        hudBaseDuration = min(max(value, 1), 5)
+        Settings.set(hudBaseDuration, for: .hudBaseDuration)
+    }
+
+    func updateHUDTextSize(_ value: Double) {
+        hudTextSize = min(max(value, 11), 22)
+        Settings.set(hudTextSize, for: .hudTextSize)
+    }
+
+    func updateHUDHistoryEnabled(_ value: Bool) {
+        hudHistoryEnabled = value
+        Settings.set(value, for: .hudHistoryEnabled)
+    }
+
+    func updateHUDVoiceOver(_ value: Bool) {
+        hudVoiceOver = value
+        Settings.set(value, for: .hudVoiceOver)
+    }
+
+    func updateHUDCompact(_ value: Bool) {
+        hudCompact = value
+        Settings.set(value, for: .hudCompact)
+    }
+
+    func updateHUDKeepErrors(_ value: Bool) {
+        hudKeepErrors = value
+        Settings.set(value, for: .hudKeepErrors)
     }
 
     func updateMiniMapVisibility(_ value: Bool) {
