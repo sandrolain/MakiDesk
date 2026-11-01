@@ -46,8 +46,8 @@ final class SettingsTests: XCTestCase {
     /// absent, so the code that asks whether it was ever set keeps working.
     func testRegisteringDoesNotInventKeysOutsideTheTable() {
         Settings.registerDefaults(in: defaults)
-        XCTAssertNil(defaults.object(forKey: SettingsKey.themeID.rawValue))
         XCTAssertNil(defaults.object(forKey: SettingsKey.windowGap.rawValue))
+        XCTAssertNil(defaults.object(forKey: SettingsKey.focusDimEnabled.rawValue))
     }
 
     /// Every default has to parse as the type its readers ask for, or the read
@@ -141,6 +141,46 @@ final class SettingsTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: SettingsKey.screenshotLibraryFolderPath.rawValue))
     }
 
+    // MARK: - Appearance and palette
+
+    func testTheAppearanceDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(Settings.string(.themeID, in: defaults), "mocha")
+        XCTAssertTrue(Settings.bool(.animationsEnabled, in: defaults))
+        XCTAssertEqual(Settings.double(.animationDuration, in: defaults), 0.22, accuracy: 0.001)
+        XCTAssertTrue(Settings.bool(.showMiniMap, in: defaults))
+        XCTAssertTrue(Settings.bool(.showPreview, in: defaults))
+        XCTAssertEqual(Settings.value(.miniMapPosition, as: PalettePosition.self, in: defaults),
+                       .topRight)
+        XCTAssertEqual(Settings.double(.overlayScale, in: defaults), 1.0, accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.overlayOpacity, in: defaults), 0.94, accuracy: 0.001)
+    }
+
+    func testThePaletteDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(Settings.double(.paletteMaxCardWidth, in: defaults), 250, accuracy: 0.001)
+        XCTAssertEqual(Settings.int(.paletteColumns, in: defaults), 0,
+                       "0 means auto")
+        XCTAssertFalse(Settings.bool(.paletteCardSizeFollowsCount, in: defaults))
+        XCTAssertEqual(Settings.double(.paletteOpacity, in: defaults), 0.9, accuracy: 0.001)
+        XCTAssertTrue(Settings.bool(.paletteTintedCards, in: defaults))
+        XCTAssertFalse(Settings.bool(.paletteFullScreen, in: defaults))
+        XCTAssertEqual(Settings.value(.paletteScreenLocation, as: PaletteScreenLocation.self,
+                                      in: defaults), .focusedWindow)
+        XCTAssertTrue(Settings.bool(.showGroupsInPalette, in: defaults))
+        XCTAssertTrue(Settings.bool(.showEmptyGroupsInPalette, in: defaults))
+    }
+
+    /// The theme id is normalised, so a default that is not a theme would be
+    /// silently replaced and the settings window would show the first one.
+    func testTheThemeDefaultIsATealTheme() {
+        Settings.registerDefaults(in: defaults)
+        let id = Settings.string(.themeID, in: defaults) ?? ""
+        XCTAssertEqual(PaletteTheme.normalized(id), id)
+    }
+
     /// The table is the list of keys whose reads have moved. Adding a domain
     /// means adding it here, which forces the question "are its reads using
     /// this, or still carrying their own fallback?".
@@ -156,6 +196,12 @@ final class SettingsTests: XCTestCase {
             .screenshotCopyToClipboard, .screenshotSavedNotice, .recordingIncludesAudio,
             .screenshotLibrarySort, .screenshotLibraryGrouping,
             .screenshotLibraryScale, .screenshotLibraryShowsRecordings,
+            .themeID, .animationsEnabled, .animationDuration,
+            .showMiniMap, .showPreview, .miniMapPosition,
+            .overlayScale, .overlayOpacity,
+            .paletteMaxCardWidth, .paletteColumns, .paletteCardSizeFollowsCount,
+            .paletteOpacity, .paletteTintedCards, .paletteFullScreen,
+            .paletteScreenLocation, .showGroupsInPalette, .showEmptyGroupsInPalette,
         ]
         XCTAssertEqual(Set(SettingsDefaults.table.keys), expected)
     }

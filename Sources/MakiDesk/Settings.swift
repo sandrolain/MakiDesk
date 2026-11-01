@@ -112,6 +112,26 @@ enum SettingsDefaults {
         .screenshotLibraryGrouping: ScreenshotGrouping.month.rawValue,
         .screenshotLibraryScale: 1.0,
         .screenshotLibraryShowsRecordings: false,
+
+        // Appearance and palette. `normalized` and the clamps that follow these
+        // reads handle a value that no longer parses; they are not defaults.
+        .themeID: "mocha",
+        .animationsEnabled: true,
+        .animationDuration: 0.22,
+        .showMiniMap: true,
+        .showPreview: true,
+        .miniMapPosition: PalettePosition.topRight.rawValue,
+        .overlayScale: 1.0,
+        .overlayOpacity: 0.94,
+        .paletteMaxCardWidth: 250.0,
+        .paletteColumns: 0,
+        .paletteCardSizeFollowsCount: false,
+        .paletteOpacity: 0.9,
+        .paletteTintedCards: true,
+        .paletteFullScreen: false,
+        .paletteScreenLocation: PaletteScreenLocation.focusedWindow.rawValue,
+        .showGroupsInPalette: true,
+        .showEmptyGroupsInPalette: true,
         ]
     }
 }

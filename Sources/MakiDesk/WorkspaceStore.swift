@@ -121,8 +121,8 @@ final class WorkspaceStore {
     var gap = (UserDefaults.standard.object(forKey: SettingsKey.windowGap.rawValue) == nil
         ? 12
         : UserDefaults.standard.double(forKey: SettingsKey.windowGap.rawValue)).clamped(to: 0...80)
-    var showMiniMap = UserDefaults.standard.object(forKey: SettingsKey.showMiniMap.rawValue) as? Bool ?? true
-    var showPreview = UserDefaults.standard.object(forKey: SettingsKey.showPreview.rawValue) as? Bool ?? true
+    var showMiniMap = Settings.bool(.showMiniMap)
+    var showPreview = Settings.bool(.showPreview)
     /// OCR quality and correction (T41). Languages stay automatic.
     var ocrFastRecognition = UserDefaults.standard.object(forKey: SettingsKey.ocrFastRecognition.rawValue) as? Bool ?? false
     var ocrLanguageCorrection = UserDefaults.standard.object(forKey: SettingsKey.ocrLanguageCorrection.rawValue) as? Bool ?? true
@@ -139,32 +139,31 @@ final class WorkspaceStore {
                                usesLanguageCorrection: ocrLanguageCorrection,
                                languages: [])
     }
-    var miniMapPosition = PalettePosition(rawValue: UserDefaults.standard.string(forKey: SettingsKey.miniMapPosition.rawValue) ?? "") ?? .topRight
-    var themeID = PaletteTheme.normalized(UserDefaults.standard.string(forKey: SettingsKey.themeID.rawValue) ?? "mocha")
-    var overlayScale = UserDefaults.standard.object(forKey: SettingsKey.overlayScale.rawValue) as? Double ?? 1.0
-    var overlayOpacity = UserDefaults.standard.object(forKey: SettingsKey.overlayOpacity.rawValue) as? Double ?? 0.94
+    var miniMapPosition = Settings.value(.miniMapPosition, as: PalettePosition.self) ?? .topRight
+    var themeID = PaletteTheme.normalized(Settings.string(.themeID) ?? "")
+    var overlayScale = Settings.double(.overlayScale)
+    var overlayOpacity = Settings.double(.overlayOpacity)
     /// The largest a palette card may get, in points (the user's size setting).
-    var paletteMaxCardWidth = UserDefaults.standard.object(forKey: SettingsKey.paletteMaxCardWidth.rawValue) as? Double ?? 250
+    var paletteMaxCardWidth = Settings.double(.paletteMaxCardWidth)
     /// Grid columns for the palette: 0 means "auto" (2–4 by window count), a
     /// positive value pins the count (T15).
-    var paletteColumns = UserDefaults.standard.object(forKey: SettingsKey.paletteColumns.rawValue) as? Int ?? 0
+    var paletteColumns = Settings.int(.paletteColumns)
     /// Whether the card size follows the number of windows in the session
     /// (T57). Off by default: the card is bounded by Max size alone.
-    var paletteCardSizeFollowsCount = UserDefaults.standard.object(forKey: SettingsKey.paletteCardSizeFollowsCount.rawValue) as? Bool ?? false
-    var paletteOpacity = UserDefaults.standard.object(forKey: SettingsKey.paletteOpacity.rawValue) as? Double ?? 0.9
+    var paletteCardSizeFollowsCount = Settings.bool(.paletteCardSizeFollowsCount)
+    var paletteOpacity = Settings.double(.paletteOpacity)
     /// Whether the palette cards are tinted with the per-app colour (T12).
-    var paletteTintedCards = UserDefaults.standard.object(forKey: SettingsKey.paletteTintedCards.rawValue) as? Bool ?? true
+    var paletteTintedCards = Settings.bool(.paletteTintedCards)
     /// Whether the palette opens full screen (T13).
-    var paletteFullScreen = UserDefaults.standard.object(forKey: SettingsKey.paletteFullScreen.rawValue) as? Bool ?? false
-    var paletteScreenLocation = PaletteScreenLocation(
-        rawValue: UserDefaults.standard.string(forKey: SettingsKey.paletteScreenLocation.rawValue) ?? ""
-    ) ?? .focusedWindow
+    var paletteFullScreen = Settings.bool(.paletteFullScreen)
+    var paletteScreenLocation = Settings.value(.paletteScreenLocation,
+                                                as: PaletteScreenLocation.self) ?? .focusedWindow
     /// Whether the palette shows the groups column and the card badges (T55).
     /// Hiding it is a view choice: the groups, their shortcuts and the menu
     /// keep working.
-    var showGroupsInPalette = UserDefaults.standard.object(forKey: SettingsKey.showGroupsInPalette.rawValue) as? Bool ?? true
+    var showGroupsInPalette = Settings.bool(.showGroupsInPalette)
     /// Whether the column leaves out groups with no members (T55).
-    var showEmptyGroupsInPalette = UserDefaults.standard.object(forKey: SettingsKey.showEmptyGroupsInPalette.rawValue) as? Bool ?? true
+    var showEmptyGroupsInPalette = Settings.bool(.showEmptyGroupsInPalette)
     /// Whether group changes are announced in the HUD (T55). Outcomes still are.
     var announceGroupChanges = UserDefaults.standard.object(forKey: SettingsKey.announceGroupChanges.rawValue) as? Bool ?? true
     var dragActivator = DragActivator(rawValue: UserDefaults.standard.string(forKey: SettingsKey.dragActivator.rawValue) ?? "") ?? .fallback
@@ -176,10 +175,8 @@ final class WorkspaceStore {
     var layoutPriors: [WindowKind: Double] = WorkspaceStore.loadLayoutPriors()
 
     /// Motion for lists and panels (T33). macOS Reduce Motion always wins.
-    var animationsEnabled = UserDefaults.standard.object(forKey: SettingsKey.animationsEnabled.rawValue) as? Bool ?? true
-    var animationDuration = min(max(
-        UserDefaults.standard.object(forKey: SettingsKey.animationDuration.rawValue) as? Double ?? 0.22,
-        0.08), 0.6)
+    var animationsEnabled = Settings.bool(.animationsEnabled)
+    var animationDuration = min(max(Settings.double(.animationDuration), 0.08), 0.6)
 
     /// The coloured outline around the focused window (T36).
     var focusBorderEnabled = UserDefaults.standard.object(forKey: SettingsKey.focusBorderEnabled.rawValue) as? Bool ?? true
@@ -742,12 +739,12 @@ final class WorkspaceStore {
 
     func updateMiniMapVisibility(_ value: Bool) {
         showMiniMap = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.showMiniMap.rawValue)
+        Settings.set(value, for: .showMiniMap)
     }
 
     func updateShowPreview(_ value: Bool) {
         showPreview = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.showPreview.rawValue)
+        Settings.set(value, for: .showPreview)
         if value { maybePromptForScreenRecording() }
     }
 
@@ -773,83 +770,83 @@ final class WorkspaceStore {
 
     func updateMiniMapPosition(_ value: PalettePosition) {
         miniMapPosition = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.miniMapPosition.rawValue)
+        Settings.set(value.rawValue, for: .miniMapPosition)
     }
 
     func updateTheme(_ value: String) {
         themeID = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.themeID.rawValue)
+        Settings.set(value, for: .themeID)
         NotificationCenter.default.post(name: .makiDeskThemeChanged, object: nil)
     }
 
     func updateOverlayScale(_ value: Double) {
         overlayScale = value.clamped(to: 0.7...1.6)
-        UserDefaults.standard.set(overlayScale, forKey: SettingsKey.overlayScale.rawValue)
+        Settings.set(overlayScale, for: .overlayScale)
     }
 
     func updateOverlayOpacity(_ value: Double) {
         overlayOpacity = value.clamped(to: 0.4...1.0)
-        UserDefaults.standard.set(overlayOpacity, forKey: SettingsKey.overlayOpacity.rawValue)
+        Settings.set(overlayOpacity, for: .overlayOpacity)
     }
 
     /// Sets the largest a palette card may get (points). If the chosen number of
     /// columns would overflow the screen, cards shrink below this to fit (T15).
     func updatePaletteMaxCardWidth(_ value: Double) {
         paletteMaxCardWidth = value.clamped(to: 160...480)
-        UserDefaults.standard.set(paletteMaxCardWidth, forKey: SettingsKey.paletteMaxCardWidth.rawValue)
+        Settings.set(paletteMaxCardWidth, for: .paletteMaxCardWidth)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Pins the palette grid columns; 0 restores the automatic count (T15).
     func updatePaletteColumns(_ value: Int) {
         paletteColumns = max(0, min(8, value))
-        UserDefaults.standard.set(paletteColumns, forKey: SettingsKey.paletteColumns.rawValue)
+        Settings.set(paletteColumns, for: .paletteColumns)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Lets the card size follow the number of windows (T57).
     func updatePaletteCardSizeFollowsCount(_ value: Bool) {
         paletteCardSizeFollowsCount = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.paletteCardSizeFollowsCount.rawValue)
+        Settings.set(value, for: .paletteCardSizeFollowsCount)
         WindowPalette.shared.applySettings(from: self)
     }
 
     func updatePaletteOpacity(_ value: Double) {
         paletteOpacity = value.clamped(to: 0.5...1.0)
-        UserDefaults.standard.set(paletteOpacity, forKey: SettingsKey.paletteOpacity.rawValue)
+        Settings.set(paletteOpacity, for: .paletteOpacity)
     }
 
     /// Tints the palette cards with the per-app colour, or leaves them neutral.
     func updatePaletteTintedCards(_ value: Bool) {
         paletteTintedCards = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.paletteTintedCards.rawValue)
+        Settings.set(value, for: .paletteTintedCards)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Opens the window switcher full screen (T13), or in the compact panel.
     func updatePaletteFullScreen(_ value: Bool) {
         paletteFullScreen = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.paletteFullScreen.rawValue)
+        Settings.set(value, for: .paletteFullScreen)
         WindowPalette.shared.applySettings(from: self)
     }
 
     func updatePaletteScreenLocation(_ value: PaletteScreenLocation) {
         paletteScreenLocation = value
-        UserDefaults.standard.set(value.rawValue, forKey: SettingsKey.paletteScreenLocation.rawValue)
+        Settings.set(value.rawValue, for: .paletteScreenLocation)
         // Placement is chosen at the next opening, so an open session stays put.
     }
 
     /// Shows or hides the groups column and the card badges (T55).
     func updatePaletteGroupsVisibility(_ value: Bool) {
         showGroupsInPalette = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.showGroupsInPalette.rawValue)
+        Settings.set(value, for: .showGroupsInPalette)
         WindowPalette.shared.applySettings(from: self)
     }
 
     /// Whether the groups column lists groups with no members (T55).
     func updatePaletteEmptyGroups(_ value: Bool) {
         showEmptyGroupsInPalette = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.showEmptyGroupsInPalette.rawValue)
+        Settings.set(value, for: .showEmptyGroupsInPalette)
         WindowPalette.shared.applySettings(from: self)
     }
 
@@ -893,13 +890,13 @@ final class WorkspaceStore {
 
     func updateAnimationsEnabled(_ value: Bool) {
         animationsEnabled = value
-        UserDefaults.standard.set(value, forKey: SettingsKey.animationsEnabled.rawValue)
+        Settings.set(value, for: .animationsEnabled)
     }
 
     func updateAnimationDuration(_ value: Double) {
         let clamped = min(max(value, 0.08), 0.6)
         animationDuration = clamped
-        UserDefaults.standard.set(clamped, forKey: SettingsKey.animationDuration.rawValue)
+        Settings.set(clamped, for: .animationDuration)
     }
 
     func updateFocusBorderEnabled(_ value: Bool) {
