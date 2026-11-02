@@ -60,6 +60,9 @@ identity asks again. A Developer ID-signed public release behaves best here.
   models stay resident in memory after the first use.
 - **Text on the pasteboard**, only through the clipboard-history poll, and only
   while secure input is off and the copy is not marked concealed/transient.
+- **A copied image**, only when you ask for its text: the bytes are read from
+  the pasteboard, downscaled in memory and passed to Vision. That action does not
+  write the image to disk or add it to the clipboard history.
 - Files and URLs **only when you drop them on the shelf or open them in Notes**.
   The app keeps references to those files, not copies (the exception is a file
   promise from another app, which must be materialized in a temporary folder).

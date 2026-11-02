@@ -143,6 +143,8 @@ final class CommandBoxController {
             }
         case .dismissNotices:
             HUDController.shared.hide()
+        case .recognizeCopiedImage:
+            TextRecognitionController.shared.recognizeCopiedImage()
         }
     }
 

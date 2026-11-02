@@ -741,6 +741,10 @@ a click without dragging, cancels without copying anything.
 - A picture you already have needs no capture and no permission: **Recognize
   Text** is in a shelf row's context menu for an image (or an image file) and in
   the screenshot library's toolbar for the selected screenshot.
+- **An image on the clipboard** needs no capture either: **Recognize Text from
+  the Copied Image** in the same menu reads it directly, downscales it if it is
+  larger than 4000 px on one side, and sends it to Vision. A copy that the app
+  marked private (`org.nspasteboard.ConcealedType`) is refused instead of read.
 - The notice that reports the result also offers **Send to Note**, **Send to
   Shelf** and, when the text was not copied, **Copy** — so the text can go
   straight where it is needed.

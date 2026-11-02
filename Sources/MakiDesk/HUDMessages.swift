@@ -51,6 +51,16 @@ extension HUDMessage {
         symbol: "text.magnifyingglass"
     )
 
+    static let noImageOnClipboard = HUDMessage(
+        title: "No image on the clipboard",
+        symbol: "photo.on.rectangle.angled"
+    )
+
+    static let clipboardImageConcealed = HUDMessage(
+        title: "The copied image is marked private",
+        symbol: "lock"
+    )
+
     /// The detector itself can fail to load (Vision/E5RT), which is a different
     /// problem from a failed read and says so.
     static func textFailed(reason: String, detectorCouldNotStart: Bool) -> HUDMessage {
@@ -510,6 +520,7 @@ extension HUDMessage {
     /// factories are checked through their own tests.
     static let catalogue: [HUDMessage] = [
         selectionAlreadyOpen, screenRecordingRequired, noTextFound,
+        noImageOnClipboard, clipboardImageConcealed,
         colourPickerAlreadyOpen, noDisplayForMeasuring, measurementCopyFailed,
         areaCaptureFailed, noWindowToCapture, noDisplayToCapture,
         shelfFull, shelfTextTooLarge, shelfImageTooLarge, shelfImageNotPrepared,

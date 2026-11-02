@@ -370,6 +370,10 @@ struct MakiDeskApp: App {
                            icon: "rectangle.dashed") {
                     TextRecognitionController.shared.recognize(.wholeScreen)
                 }
+                menuButton("Recognize Text from the Copied Image",
+                           icon: "photo.on.rectangle.angled") {
+                    TextRecognitionController.shared.recognizeCopiedImage()
+                }
                 menuButton("Recognize Text from a Screenshot…", icon: "photo") {
                     ScreenshotLibraryController.shared.show()
                 }

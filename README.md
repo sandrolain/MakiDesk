@@ -107,11 +107,11 @@ secure input is active.
 Press `⌃⌥⇧O` and drag over any text on screen: the words go to the clipboard,
 the in-memory clipboard history, or both, with a short preview that can send
 them to a note or the shelf. The menu reads the window under the pointer, the
-frontmost window or the whole screen instead; a shelf image or a screenshot in
-the library needs no capture and no permission at all. Settings can keep the
-text off the system pasteboard (“history only”) and open the history when
-appropriate. Recognition runs locally with Vision; the picture is not written to
-disk and nothing is uploaded.
+frontmost window or the whole screen instead; a shelf image, a screenshot in the
+library or an image already on the clipboard needs no capture and no permission
+at all. Settings can keep the text off the system pasteboard (“history only”)
+and open the history when appropriate. Recognition runs locally with Vision;
+the picture is not written to disk and nothing is uploaded.
 
 ### Colour from the screen
 

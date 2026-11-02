@@ -294,10 +294,12 @@ the real one only exists on a system that reports the model available.
 
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost
-window and the whole screen — and from an image the caller already has. One
-pipeline: take or receive a picture, recognize once, deliver once, with the
-generation checked at publication. `TextRecognitionController.windowUnderPointer`
-is the pure rule for the window source and is tested without a desktop.
+window and the whole screen — and from an image the caller already has (shelf,
+screenshot library) or copied on the clipboard (`ClipboardImageSource`, decoded
+off the main actor and downscaled before Vision). One pipeline: take or receive
+a picture, recognize once, deliver once, with the generation checked at
+publication. `TextRecognitionController.windowUnderPointer` is the pure rule for
+the window source and is tested without a desktop.
 
 `HUDController` keeps what is on screen in two lanes (`HUDStack`): sticky
 notices the user must dismiss, and transients that expire. The budgets are

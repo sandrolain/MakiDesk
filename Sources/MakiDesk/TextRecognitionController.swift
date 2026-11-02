@@ -183,6 +183,39 @@ final class TextRecognitionController {
         start(capture: capture, image: nil, options: options, output: output, reveal: reveal)
     }
 
+    /// An image the user copied, read as text without capturing the screen: no
+    /// Screen Recording permission and nothing written to disk (U2).
+    func recognizeCopiedImage() {
+        switch ClipboardImageSource.payload(from: .general) {
+        case let .success(payload):
+            decodeAndRecognize(payload)
+        case .failure(.concealed):
+            HUDController.shared.show(HUDMessage.clipboardImageConcealed)
+        case .failure(.noImage):
+            HUDController.shared.show(HUDMessage.noImageOnClipboard)
+        }
+    }
+
+    /// Decoding a pasted photo is CPU work: it happens off the main actor, and
+    /// the existing pipeline takes over once the picture exists.
+    private func decodeAndRecognize(_ payload: ClipboardImageSource.Payload) {
+        guard isSelecting == false else {
+            feedback(.busy)
+            return
+        }
+        Task { [weak self] in
+            let decoded = await Task.detached(priority: .userInitiated) {
+                ClipboardImageSource.decode(payload)
+            }.value
+            guard let self else { return }
+            guard let decoded else {
+                HUDController.shared.show(HUDMessage.noImageOnClipboard)
+                return
+            }
+            self.recognize(image: decoded.image)
+        }
+    }
+
     func recognizeImage(_ image: CGImage,
                         options: TextRecognitionOptions = .standard,
                         output: TextRecognitionOutput = .pasteboardAndHistory,
