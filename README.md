@@ -219,7 +219,9 @@ above the threshold for the whole window is named once, with what else is busy,
 **Activity Monitor** and **Snooze 1 hour**. Root daemons the app cannot read are
 reported honestly as *System processes*. The watch stops completely when it is
 off, and an optional system notification respects Focus; the in-app notice needs
-no permission.
+no permission. **Ports…** in the same menu lists the TCP sockets in `LISTEN` and
+the process holding each one; Terminate asks first and sends `SIGTERM`, never
+`sudo`.
 
 ### Small details, native feel
 

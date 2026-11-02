@@ -27,6 +27,7 @@ through Accessibility.
 - [Colour picker](#colour-picker)
 - [Measure](#measure)
 - [Disk and CPU](#disk-and-cpu)
+- [Ports](#ports)
 - [Notifications](#notifications)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -872,6 +873,20 @@ The free space on the start-up disk sits beside the menu-bar icon, and the
 - Nothing is polled while CPU alerts are off. Waking from sleep forgets the
   baselines, so a slept-through gap is never reported as sustained load, and no
   process name or path is written to a log.
+
+## Ports
+
+**System ▸ Ports…** (or the `ports` command) lists the TCP sockets in `LISTEN`,
+with the port, the process and its pid, and the addresses. It reads `lsof` when
+the window opens and on **Refresh**; nothing polls while it is closed.
+
+- Type in the field to filter by port, process, pid or address.
+- **Terminate** asks first, naming the process, pid and port; it then sends
+  `SIGTERM` (never `SIGKILL`, never `sudo`). A process of another user is
+  reported as a permission error. A process that ignores `SIGTERM` stays in the
+  list after the refresh.
+- lsof normally sees the ports of the current user; system daemons it cannot
+  inspect are simply absent.
 
 ## Notifications
 

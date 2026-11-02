@@ -30,6 +30,19 @@ extension HUDMessage {
         HUDMessage(title: "\(result) copied", symbol: "equal.circle")
     }
 
+    // MARK: - Ports
+
+    static func portTerminated(name: String, pid: Int32) -> HUDMessage {
+        HUDMessage(title: "SIGTERM sent to \(name)", symbol: "xmark.circle",
+                   detail: "pid \(pid)")
+    }
+
+    static func portTerminateFailed(reason: String) -> HUDMessage {
+        HUDMessage(title: "Could not terminate the process",
+                   symbol: "exclamationmark.triangle.fill",
+                   detail: reason)
+    }
+
     // MARK: - Text recognition
 
     static func textCopied(size: String, preview: String,

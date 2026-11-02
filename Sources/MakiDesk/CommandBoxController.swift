@@ -145,6 +145,8 @@ final class CommandBoxController {
             HUDController.shared.hide()
         case .recognizeCopiedImage:
             TextRecognitionController.shared.recognizeCopiedImage()
+        case .openPorts:
+            PortsWindowController.shared.show()
         }
     }
 

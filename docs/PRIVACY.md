@@ -65,6 +65,9 @@ identity asks again. A Developer ID-signed public release behaves best here.
   budget, and are dropped when images are turned off or the app quits. When you
   ask for its text, the same bytes are downscaled in memory for Vision. Neither
   path writes the image to disk.
+- **Listening TCP ports and process names**, only when the Ports window is opened
+  or refreshed: read locally with `lsof`, kept in memory for the list, and never
+  logged or sent anywhere. Terminate sends `SIGTERM` to the chosen process.
 - Files and URLs **only when you drop them on the shelf or open them in Notes**.
   The app keeps references to those files, not copies (the exception is a file
   promise from another app, which must be materialized in a temporary folder).

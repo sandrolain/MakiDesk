@@ -38,6 +38,7 @@ enum CommandAction: Equatable {
     case timer
     case dismissNotices
     case recognizeCopiedImage
+    case openPorts
 }
 
 /// Parsing and suggestions, kept pure: typing a command and choosing from the
@@ -88,6 +89,7 @@ enum CommandCatalog {
         entry("ocr", "Read text from a selected area", .shortcut(.recognizeText)),
         entry("text from clipboard", "Read text from the image on the clipboard",
               .recognizeCopiedImage),
+        entry("ports", "See the listening TCP ports and who holds them", .openPorts),
         entry("measure", "Measure an area of the screen", .shortcut(.measureArea)),
         entry("colour", "Pick a colour from the screen", .shortcut(.sampleColor)),
         // Presentation

@@ -56,6 +56,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `SystemMetrics.swift` | Disk space (Finder parity, `statfs` fallback), machine CPU ticks and the `libproc` process snapshot; decimal formatting. |
 | `SystemAlertPolicy.swift` | Pure sustained-load rule: duration, hysteresis, cooldown, snooze, and when load is attributed to unreadable system processes. |
 | `SystemMonitor.swift` | Owner of the disk and CPU timers, the menu-bar figure, the System menu values and the notices; one utility queue, main-actor publishing. |
+| `ListeningPorts.swift` | Pure `lsof -Fpcn` parser, injectable reader, list model; reads on open/refresh, never polls. |
+| `PortsWindow.swift` | Ports window: filter, addresses, confirmed `SIGTERM` termination. |
 | `SystemNotifier.swift` | Opt-in `UNUserNotificationCenter` copy of a notice; permission asked only when the option is switched on. |
 | `ShortcutManager.swift` | Carbon global hot keys (no Input Monitoring). |
 | `NotesStore.swift` | Notes, drafts, session, external-file baselines, Trash. |
@@ -369,6 +371,13 @@ value types cross to the main actor. A lifecycle counter and a CPU-timer
 generation make late results unpublishable after a restart or a wake; waking
 also drops the tick and per-process baselines and resets the policy, so a
 slept-through gap cannot look like sustained load.
+
+`ListeningPortsReader` runs `/usr/sbin/lsof -nP -iTCP -sTCP:LISTEN -Fpcn` with a
+fixed argv, no shell and a three-second ceiling; stdout is drained on its own
+queue so a long list cannot fill the pipe. `ListeningPortsParser` turns the
+records into values (pid, port, process, deduplicated addresses) and is tested
+without a process. The window reads on open and on Refresh only; termination is
+a confirmed `SIGTERM`, never `SIGKILL` and never `sudo`.
 
 `SystemAlertPolicy` turns two samples into at most one notice. A process is
 sustained when it has been at or above the threshold for the window (10 minutes

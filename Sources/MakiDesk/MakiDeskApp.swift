@@ -445,6 +445,8 @@ struct MakiDeskApp: App {
                     Button("Turn On CPU Alerts") { system.updateCPUAlertsEnabled(true) }
                 }
                 Divider()
+                Button("Ports…") { PortsWindowController.shared.show() }
+                Divider()
                 Button("MakiDesk Settings…") { openSystemSettingsTab() }
             } label: {
                 Label("System", systemImage: "gauge")
