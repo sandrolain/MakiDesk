@@ -43,6 +43,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `LayoutAdvisor.swift` | Pure advisor: window kinds, content measure, priors, suggested preset, reasons. |
 | `WindowPalette.swift` | `⌥⇥` / `⌥Space` switcher and search, preview cards, applications shelf, groups column, layout buttons. |
 | `InstalledApplications.swift` | Installed `.app` inventory and pure matching for the palette shelf; own worker queue, small in-memory cache. |
+| `PaletteMath.swift` | Expression parser for the search field: arithmetic, percentages and the closed unit table; pure, locale-aware separators, no I/O. |
 | `WindowDrag.swift`, `DragActivator.swift`, `MacOSTiling.swift` | ⌥-drag snapping, live activator, macOS tiling detection. |
 | `GroupStore.swift`, `WindowGroup.swift`, `GroupRenamePrompt.swift` | Groups: members, names, arrangement, persistence. |
 | `WindowScene.swift`, `WorkspaceStore` (focus) | Scene/focus state, send-away and undo. |

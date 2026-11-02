@@ -24,6 +24,12 @@ extension HUDMessage {
         detail: "Grant it in Settings ▸ General, then try again."
     )
 
+    // MARK: - Calculation
+
+    static func calculationCopied(_ result: String) -> HUDMessage {
+        HUDMessage(title: "\(result) copied", symbol: "equal.circle")
+    }
+
     // MARK: - Text recognition
 
     static func textCopied(size: String, preview: String,

@@ -510,6 +510,11 @@ final class PaletteModel {
     /// The highlighted row in the applications shelf; nil means the window grid
     /// owns the selection. The two selections are never active at once.
     var appSelection: Int?
+    /// The calculation chip is selected (U1). Exclusive with `appSelection`;
+    /// the chip is the first item of the same shelf.
+    var calculationSelected = false
+    /// The expression under the field, when the query is one.
+    var calculation: PaletteCalculation?
     var isLoadingApplications = false
 
     var filtered: [ActionableWindow] {
@@ -620,7 +625,11 @@ final class WindowPalette {
         let previousID = model.selection < model.filtered.count ? model.filtered[model.selection].id : nil
         // Opening under a still cursor must not move the selection (T28).
         hoverAnchor = NSEvent.mouseLocation
-        if !wasVisible || previousMode != mode { model.appSelection = nil }
+        if !wasVisible || previousMode != mode {
+            model.appSelection = nil
+            model.calculationSelected = false
+            model.calculation = nil
+        }
 
         // Cycling with ⌥Tab re-enters `show` on every key press. Only a new open
         // or mode change requests a refresh; the latest published snapshot is
@@ -759,6 +768,8 @@ final class WindowPalette {
                 onToggleVeilWindow: { [weak self] id in self?.toggleVeilWindow(id) },
                 onHoverCard: { [weak self] index in self?.pointerHovered(index) },
                 onHoverApplication: { [weak self] index in self?.pointerHoveredApplication(index) },
+                onActivateCalculation: { [weak self] in self?.copySelectedCalculation() },
+                onHoverCalculation: { [weak self] in self?.pointerHoveredCalculation() },
                 onLaunchApplication: { [weak self] id in self?.launchApplication(id) },
                 onApplicationIconNeeded: { [weak self] id in self?.loadApplicationIcon(id) },
                 onQueryChange: { [weak self] in self?.queryChanged() },
@@ -790,6 +801,8 @@ final class WindowPalette {
         stopRefreshTimer()
         model.query = ""
         model.appSelection = nil
+        model.calculationSelected = false
+        model.calculation = nil
         model.isLoadingApplications = false
         // The inventory is small value data and stays in the catalog, but the
         // icons are NSImages: drop them at this lifetime boundary.
@@ -833,6 +846,8 @@ final class WindowPalette {
         model.query = ""
         model.selection = 0
         model.appSelection = nil
+        model.calculationSelected = false
+        model.calculation = nil
         model.focusToken += 1
         loadApplications()
         if let store, let panel { updateLayout(in: panel, store: store, rescan: false) }
@@ -988,14 +1003,47 @@ final class WindowPalette {
     /// How often the thumbnails are re-captured while the palette is open.
     private static let refreshInterval: TimeInterval = 2
 
+    /// The calculation chip is the first item of the shelf, before the
+    /// applications; nil means the window grid owns the selection (U1).
+    private var shelfCalculationIsPresent: Bool {
+        model.mode == .search && model.calculation != nil
+    }
+
+    private var shelfItemCount: Int {
+        (shelfCalculationIsPresent ? 1 : 0) + model.matchingApplications.count
+    }
+
+    private var shelfPosition: Int? {
+        if model.calculationSelected, shelfCalculationIsPresent { return 0 }
+        guard let selection = model.appSelection else { return nil }
+        return selection + (shelfCalculationIsPresent ? 1 : 0)
+    }
+
+    private func setShelfPosition(_ position: Int?) {
+        guard let position else {
+            model.calculationSelected = false
+            model.appSelection = nil
+            return
+        }
+        if shelfCalculationIsPresent, position == 0 {
+            model.calculationSelected = true
+            model.appSelection = nil
+            return
+        }
+        model.calculationSelected = false
+        let offset = shelfCalculationIsPresent ? 1 : 0
+        model.appSelection = max(0, position - offset)
+    }
+
     private func move(_ delta: Int) {
-        if model.mode == .search, let selection = model.appSelection {
-            let applications = model.matchingApplications
-            guard !applications.isEmpty else {
-                model.appSelection = nil
+        if model.mode == .search, shelfPosition != nil {
+            let count = shelfItemCount
+            guard count > 0 else {
+                setShelfPosition(nil)
                 return
             }
-            model.appSelection = (selection + delta + applications.count) % applications.count
+            let current = shelfPosition ?? 0
+            setShelfPosition((current + delta + count) % count)
             MiniMapController.shared.hide()
             return
         }
@@ -1033,14 +1081,14 @@ final class WindowPalette {
     }
 
     private func moveSearchGrid(_ dx: Int, _ dy: Int) {
-        let applications = model.matchingApplications
-        if let selection = model.appSelection {
-            if dx != 0, !applications.isEmpty {
-                model.appSelection = min(max(selection + dx, 0), applications.count - 1)
+        let shelfCount = shelfItemCount
+        if let position = shelfPosition {
+            if dx != 0, shelfCount > 0 {
+                setShelfPosition(min(max(position + dx, 0), shelfCount - 1))
                 hoverAnchor = NSEvent.mouseLocation
                 MiniMapController.shared.hide()
             } else if dy > 0, !model.filtered.isEmpty {
-                model.appSelection = nil
+                setShelfPosition(nil)
                 model.selection = min(model.selection, model.filtered.count - 1)
                 hoverAnchor = NSEvent.mouseLocation
                 highlightSelection()
@@ -1051,17 +1099,19 @@ final class WindowPalette {
         let count = model.filtered.count
         let columns = max(1, model.columns)
         guard count > 0 else {
-            if !applications.isEmpty {
-                model.appSelection = 0
+            if shelfCount > 0 {
+                // The calculation chip, when present, is the first item: with
+                // no windows a Down reaches it, and Return copies the result.
+                setShelfPosition(0)
                 MiniMapController.shared.hide()
             }
             return
         }
 
-        // The applications shelf is above the grid: Up from the first row
-        // enters it, and the selection keeps its column when it comes back.
-        if dy < 0, model.selection < columns, !applications.isEmpty {
-            model.appSelection = 0
+        // The shelf is above the grid: Up from the first row enters it, and the
+        // selection keeps its column when it comes back.
+        if dy < 0, model.selection < columns, shelfCount > 0 {
+            setShelfPosition(0)
             hoverAnchor = NSEvent.mouseLocation
             MiniMapController.shared.hide()
             return
@@ -1085,10 +1135,22 @@ final class WindowPalette {
         let now = NSEvent.mouseLocation
         let moved = Self.pointerMoved(from: hoverAnchor, to: now)
         hoverAnchor = now
-        guard moved, index != model.selection || model.appSelection != nil else { return }
-        model.appSelection = nil
+        guard moved, index != model.selection || model.appSelection != nil
+                || model.calculationSelected else { return }
+        setShelfPosition(nil)
         model.selection = index
         highlightSelection()
+    }
+
+    /// The pointer asks for the calculation chip, under the same real-movement
+    /// rule as the cards (U1).
+    private func pointerHoveredCalculation() {
+        let now = NSEvent.mouseLocation
+        let moved = Self.pointerMoved(from: hoverAnchor, to: now)
+        hoverAnchor = now
+        guard moved, model.calculationSelected == false else { return }
+        setShelfPosition(0)
+        MiniMapController.shared.hide()
     }
 
     /// The pointer asks for an application chip, under the same real-movement
@@ -1097,7 +1159,8 @@ final class WindowPalette {
         let now = NSEvent.mouseLocation
         let moved = Self.pointerMoved(from: hoverAnchor, to: now)
         hoverAnchor = now
-        guard moved, index != model.appSelection else { return }
+        guard moved, index != model.appSelection || model.calculationSelected else { return }
+        model.calculationSelected = false
         model.appSelection = index
         MiniMapController.shared.hide()
     }
@@ -1439,8 +1502,10 @@ final class WindowPalette {
     private func reconcileApplicationSelection() {
         guard model.mode == .search else {
             model.appSelection = nil
+            model.calculationSelected = false
             return
         }
+        if model.calculation == nil { model.calculationSelected = false }
         let applications = model.matchingApplications
         if applications.isEmpty {
             model.appSelection = nil
@@ -1448,7 +1513,7 @@ final class WindowPalette {
         }
         if let selection = model.appSelection {
             model.appSelection = min(max(0, selection), applications.count - 1)
-        } else if model.filtered.isEmpty {
+        } else if model.filtered.isEmpty, model.calculationSelected == false {
             model.appSelection = 0
         }
     }
@@ -1468,14 +1533,32 @@ final class WindowPalette {
     }
 
     /// The field changed: re-rank the applications and keep one selection
-    /// meaningful. Windows stay the primary choice unless none matches.
+    /// meaningful. Windows stay the primary choice unless none matches, and a
+    /// query that is an expression starts on its result (U1).
     private func queryChanged() {
         model.selection = 0
+        updateCalculation()
         reconcileApplicationSelection()
-        if model.appSelection == nil {
+        if model.appSelection == nil, model.calculationSelected == false {
             highlightSelection()
         } else {
             MiniMapController.shared.hide()
+        }
+    }
+
+    /// Parses the field once per change, not per frame. The chip takes the
+    /// selection only when nothing else can: an empty window list and no
+    /// application match, which is exactly the "type 12*3, press Return" case.
+    private func updateCalculation() {
+        let calculation = model.mode == .search ? PaletteMath.evaluate(model.query) : nil
+        model.calculation = calculation
+        guard calculation != nil else {
+            model.calculationSelected = false
+            return
+        }
+        if model.filtered.isEmpty, model.matchingApplications.isEmpty {
+            model.calculationSelected = true
+            model.appSelection = nil
         }
     }
 
@@ -1599,6 +1682,11 @@ final class WindowPalette {
     }
 
     private func activateSelection(newInstance: Bool = false) {
+        if model.mode == .search, model.calculationSelected,
+           let calculation = model.calculation {
+            copyCalculation(calculation)
+            return
+        }
         if model.mode == .search, let selection = model.appSelection,
            selection < model.matchingApplications.count {
             launchApplication(model.matchingApplications[selection].id, newInstance: newInstance)
@@ -1607,6 +1695,27 @@ final class WindowPalette {
         let list = model.filtered
         guard model.selection < list.count else { hide(); return }
         activate(list[model.selection].id)
+    }
+
+    /// Copies the result of the selected calculation chip, if any (U1).
+    private func copySelectedCalculation() {
+        guard model.calculationSelected, let calculation = model.calculation else { return }
+        copyCalculation(calculation)
+    }
+
+    /// Copies the result, records it in the in-memory history and closes the
+    /// palette; the HUD says what went to the clipboard (U1).
+    private func copyCalculation(_ calculation: PaletteCalculation) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        guard pasteboard.setString(calculation.text, forType: .string) else {
+            HUDController.shared.show(HUDMessage.clipboardWriteFailed)
+            return
+        }
+        ClipboardHistory.shared.insert(calculation.text)
+        ClipboardHistory.shared.markPasteboardSeen()
+        HUDController.shared.show(HUDMessage.calculationCopied(calculation.text))
+        hide()
     }
 
     private func orderedForSession(_ incoming: [ActionableWindow]) -> [ActionableWindow] {
@@ -1717,6 +1826,10 @@ struct PaletteView: View {
     let onHoverCard: (Int) -> Void
     /// The pointer moved over an application in the search shelf.
     let onHoverApplication: (Int) -> Void
+    /// Copies the calculation result under the field (U1).
+    let onActivateCalculation: () -> Void
+    /// The pointer moved over the calculation chip.
+    let onHoverCalculation: () -> Void
     /// Launch the application with this bundle path.
     let onLaunchApplication: (String) -> Void
     /// Load the icon for an application chip when it first scrolls into view.
@@ -1924,10 +2037,12 @@ struct PaletteView: View {
     /// does not jump while the results change; browse mode has no shelf.
     private var applicationShelf: some View {
         let applications = model.matchingApplications
+        let onlyCalculation = model.calculation != nil && applications.isEmpty
         return VStack(alignment: .leading, spacing: 6 * scale) {
             HStack(spacing: 6) {
-                Image(systemName: "square.grid.2x2").font(.system(size: 10 * scale))
-                Text("APPLICATIONS")
+                Image(systemName: onlyCalculation ? "equal.circle" : "square.grid.2x2")
+                    .font(.system(size: 10 * scale))
+                Text(onlyCalculation ? "CALCULATION" : "APPLICATIONS")
                     .font(.system(size: 10 * scale, weight: .bold))
                     .tracking(0.6)
                 if !applications.isEmpty {
@@ -1936,7 +2051,10 @@ struct PaletteView: View {
                         .foregroundStyle(model.theme.subtext.opacity(0.8))
                 }
                 Spacer()
-                if model.isLoadingApplications {
+                if model.calculationSelected {
+                    Text("⏎ copy")
+                        .font(.system(size: 9.5 * scale, weight: .semibold).monospaced())
+                } else if model.isLoadingApplications && model.calculation == nil {
                     ProgressView().controlSize(.mini)
                 } else if model.appSelection != nil {
                     Text("⏎ launch · ⌘⏎ new")
@@ -1946,7 +2064,7 @@ struct PaletteView: View {
             .foregroundStyle(model.theme.subtext)
             .padding(.horizontal, model.metrics.padding)
 
-            if applications.isEmpty {
+            if applications.isEmpty, model.calculation == nil {
                 Text(emptyApplicationMessage)
                     .font(.system(size: 11 * scale))
                     .foregroundStyle(model.theme.subtext)
@@ -1955,6 +2073,21 @@ struct PaletteView: View {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 8 * scale) {
+                            if let calculation = model.calculation {
+                                Button {
+                                    onActivateCalculation()
+                                } label: {
+                                    calculationTile(calculation, selected: model.calculationSelected)
+                                }
+                                .buttonStyle(.plain)
+                                .id(Self.calculationChipID)
+                                .onHover { inside in
+                                    if inside { onHoverCalculation() }
+                                }
+                                .onContinuousHover { phase in
+                                    if case .active = phase { onHoverCalculation() }
+                                }
+                            }
                             ForEach(Array(applications.enumerated()), id: \.element.id) { index, application in
                                 Button {
                                     onLaunchApplication(application.id)
@@ -1979,6 +2112,10 @@ struct PaletteView: View {
                         guard let selection, selection < applications.count else { return }
                         proxy.scrollTo(applications[selection].id, anchor: .center)
                     }
+                    .onChange(of: model.calculationSelected) { _, selected in
+                        guard selected else { return }
+                        proxy.scrollTo(Self.calculationChipID, anchor: .leading)
+                    }
                 }
             }
         }
@@ -1986,6 +2123,37 @@ struct PaletteView: View {
         .frame(height: PaletteLayoutEngine.applicationShelfHeight(for: model.metrics.layout),
                alignment: .top)
         .clipped()
+    }
+
+    private static let calculationChipID = "palette.calculation"
+
+    private func calculationTile(_ calculation: PaletteCalculation,
+                                 selected: Bool) -> some View {
+        HStack(spacing: 8 * scale) {
+            Image(systemName: "equal.circle")
+                .font(.system(size: 22 * scale))
+                .frame(width: 28 * scale, height: 28 * scale)
+                .foregroundStyle(selected ? model.theme.accent : model.theme.subtext)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(calculation.text)
+                    .font(.system(size: 13 * scale, weight: .semibold).monospacedDigit())
+                    .lineLimit(1)
+                    .foregroundStyle(model.theme.text)
+                Text("⏎ copy")
+                    .font(.system(size: 9.5 * scale, weight: .semibold).monospaced())
+                    .foregroundStyle(model.theme.subtext)
+            }
+            .frame(maxWidth: 190 * scale, alignment: .leading)
+        }
+        .padding(.horizontal, 9 * scale)
+        .padding(.vertical, 6 * scale)
+        .background(RoundedRectangle(cornerRadius: 9 * scale)
+            .fill(selected ? model.theme.surfaceSelected : model.theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 9 * scale)
+            .stroke(selected ? model.theme.accent : model.theme.border,
+                    lineWidth: selected ? 2 : 1))
+        .contentShape(Rectangle())
+        .help("Calculation — ⏎ copies the result")
     }
 
     private var emptyApplicationMessage: String {
@@ -2289,6 +2457,10 @@ struct PaletteView: View {
     }
 
     private func activateSelection() {
+        if let calculation = model.calculation, model.calculationSelected {
+            onActivateCalculation()
+            return
+        }
         if let selection = model.appSelection,
            selection < model.matchingApplications.count {
             onLaunchApplication(model.matchingApplications[selection].id)

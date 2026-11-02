@@ -48,7 +48,9 @@ editable in Settings.
 ### A switcher you will actually use
 
 `⌥⇥` opens live previews of every window; `⌥Space` adds a search field that
-filters windows and the applications installed on the Mac. Releasing
+filters windows and the applications installed on the Mac. The same field
+calculates and converts units (`12 * 3`, `15% of 80`, `12 cm in in`,
+`30 °C in °F`): Return copies the result. Releasing
 Option or pressing Return opens the highlighted window; in the Applications
 shelf Return launches the app. Pick windows for a layout, recall a saved group
 from the side column, or close/quit/minimize the highlighted window without

@@ -234,6 +234,12 @@ still caps how large a card may get.
   `↓` returns to the windows. When no window matches, the first application is
   selected already, so `↩` launches it. The inventory is read locally, kept in
   memory and refreshed after a couple of minutes; nothing about it is stored.
+- **The field also calculates.** An expression shows a `= …` chip before the
+  applications: `12 * 3`, `15% of 80`, `12 cm in in`, `30 °C in °F`, `2 GB in
+  MB`. `↑` from the windows reaches it (and it is selected already when nothing
+  else matches), then `↩` copies the result, unit included. A `%` after a number
+  is a percentage; `mod` is the remainder. Currency conversion is deliberately
+  absent: exchange rates need the network, and MakiDesk does not use one.
 - **⌘1…9** picks a group from the column; clicking a group does the same and
   ticks its members. **⌥1…9** adds or removes the highlighted card from the
   group being edited. With a group selected, **Return** recalls it (`⌘↩` while
