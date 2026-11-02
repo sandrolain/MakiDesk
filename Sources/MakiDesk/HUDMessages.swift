@@ -195,7 +195,13 @@ extension HUDMessage {
         symbol: "note.text"
     )
 
-    static let insertedInNotes = HUDMessage(title: "Inserted in Notes", symbol: "note.text")
+    static let insertedInNotes = HUDMessage(title: "Sent to a new note", symbol: "note.text")
+
+    static let noteInsertionFailed = HUDMessage(
+        title: "Could not add the text",
+        symbol: "exclamationmark.triangle.fill",
+        detail: "The note could not be loaded."
+    )
 
     // MARK: - Transfer
 
@@ -526,6 +532,7 @@ extension HUDMessage {
         shelfFull, shelfTextTooLarge, shelfImageTooLarge, shelfImageNotPrepared,
         nothingToPreview, shelfSomeFilesGone, shelfNotOpen, shelfSelectSomething,
         nothingRunnableInSelection, noTextInSelection, insertedInNotes,
+        noteInsertionFailed,
         noDropzoneAccepts, dropzoneRejectsItems, dropzoneStripHint,
         outputOnClipboard, outputAddedToShelf,
         shortcutsRestored, switcherSnapHint, accessibilityNotGranted, noWindow,

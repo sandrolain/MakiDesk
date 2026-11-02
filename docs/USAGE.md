@@ -365,6 +365,11 @@ even when you never save it to a file.
   it stays anchored on the next launch.
 - **External files** opened as drafts survive a restart; if the file moves or
   disappears, the draft stays and is marked *Not available* / *file missing*.
+- **Text sent to Notes** from OCR or the shelf arrives as a **new note** and
+  opens the panel; the note you were editing is left untouched, and empty text
+  creates nothing. The clipboard panel's paste fallback still goes at the
+  cursor, and a note restored at launch waits for its body instead of being
+  overwritten.
 - **Nothing is saved by asking.** A draft is written a fraction of a second
   after you stop typing, again when the panel loses focus or closes, and each
   write is flushed to the disk before it replaces the old copy: a crash or a
@@ -537,7 +542,7 @@ it too (Settings ▸ Panels). It holds files, folders, links, text and images:
 - **Save…** and the context menu copy or move everything to a folder. Text
   becomes a `.txt`, an image a `.png`, a link a `.webloc`; files keep their
   names, with a numeric suffix if needed.
-- **To Notes** inserts the selected text into the open note at the cursor.
+- **New Note** sends the selected text to a new note, leaving the open one as it is.
 - A file that moved or disappeared while on the shelf shows **Not available**
   and is skipped when you drag.
 - The shelf is temporary: closing it (Esc, ×, `⌃⌥D`) empties it and removes the
@@ -745,7 +750,7 @@ a click without dragging, cancels without copying anything.
   the Copied Image** in the same menu reads it directly, downscales it if it is
   larger than 4000 px on one side, and sends it to Vision. A copy that the app
   marked private (`org.nspasteboard.ConcealedType`) is refused instead of read.
-- The notice that reports the result also offers **Send to Note**, **Send to
+- The notice that reports the result also offers **New Note**, **Send to
   Shelf** and, when the text was not copied, **Copy** — so the text can go
   straight where it is needed.
 - A **Reading text…** notice stays on screen while Vision works — a large area

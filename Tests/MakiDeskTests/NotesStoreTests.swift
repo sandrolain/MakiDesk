@@ -33,6 +33,36 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.previousRunWasClean)
     }
 
+    func testAddNoteCreatesANewNoteAndLeavesTheOpenOneAlone() throws {
+        let directory = try makeDirectory()
+        let store = NotesStore(directory: directory)
+        store.loadIfNeeded()
+        let existing = store.newNote()
+        store.updateText("existing body", for: existing.id)
+
+        let added = try XCTUnwrap(store.addNote(text: "  sent body  "))
+        XCTAssertNotEqual(added.id, existing.id)
+        XCTAssertEqual(added.text, "sent body")
+        XCTAssertEqual(added.title, "sent body")
+        XCTAssertEqual(store.selectedTab, added.id)
+        XCTAssertTrue(store.openTabs.contains(added.id))
+        XCTAssertEqual(store.note(id: existing.id)?.text, "existing body")
+
+        store.flush(cleanClose: true)
+        let reopened = NotesStore(directory: directory)
+        reopened.loadIfNeeded()
+        XCTAssertEqual(reopened.note(id: added.id)?.text, "sent body")
+        XCTAssertEqual(reopened.note(id: existing.id)?.text, "existing body")
+    }
+
+    func testAddNoteRejectsEmptyText() throws {
+        let directory = try makeDirectory()
+        let store = NotesStore(directory: directory)
+        store.loadIfNeeded()
+        XCTAssertNil(store.addNote(text: " \n\t "))
+        XCTAssertEqual(store.noteCount, 0)
+    }
+
     func testAsyncFlushCannotMarkANewerEditAsSaved() async throws {
         let directory = try makeDirectory()
         let store = NotesStore(directory: directory)

@@ -13,6 +13,8 @@ final class NotesController: NSObject, NSWindowDelegate {
     private var isApplyingFrame = false
     private var themeObserver: NSObjectProtocol?
     private var pendingInsertions: [String] = []
+    /// Texts that must become new notes when the store has finished loading.
+    private var pendingNewNotes: [String] = []
     private let focusReturn = PanelFocusReturn()
 
     private override init() {
@@ -45,10 +47,18 @@ final class NotesController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         store.loadIfNeededAsync { [weak self] in
             guard let self, let window = self.window, let content = self.content else { return }
-            if self.store.notes.isEmpty { self.store.newNote() }
-            if self.store.selectedTab == nil || self.store.note(id: self.store.selectedTab!) == nil,
-               let first = self.store.notes.first {
-                self.store.openNote(id: first.id)
+            let newTexts = self.pendingNewNotes
+            self.pendingNewNotes.removeAll()
+            if newTexts.isEmpty == false {
+                // Shelf and OCR send text as a new note: the open draft is left
+                // exactly as it was.
+                for text in newTexts { _ = self.store.addNote(text: text) }
+            } else {
+                if self.store.notes.isEmpty { self.store.newNote() }
+                if self.store.selectedTab == nil || self.store.note(id: self.store.selectedTab!) == nil,
+                   let first = self.store.notes.first {
+                    self.store.openNote(id: first.id)
+                }
             }
             content.reloadEverything()
             self.applyMovability(to: window)
@@ -74,9 +84,18 @@ final class NotesController: NSObject, NSWindowDelegate {
         restoreFocus?()
     }
 
-    /// Inserts text at the cursor of the open note (used from the shelf, T31).
+    /// Inserts text at the cursor of the open note: the clipboard panel's
+    /// fallback when a paste could not reach the editor (T21). Shelf and OCR
+    /// send text with `addNote(text:)` instead.
     func insertText(_ text: String) {
         pendingInsertions.append(text)
+        show()
+    }
+
+    /// Sends text to Notes as a **new note**: the note being edited is never
+    /// touched. Used by the shelf and by the OCR notice (T31, T41).
+    func addNote(text: String) {
+        pendingNewNotes.append(text)
         show()
     }
 
@@ -275,6 +294,44 @@ enum MarkdownCommand: Int {
 
 // MARK: - Panel content
 
+/// Pending "send to note" texts (U-bug).
+///
+/// A note restored at launch has metadata but no body until it is opened. Text
+/// sent to it must wait for the body: writing into the placeholder editor would
+/// publish an empty note over the draft. The target is kept with each entry, so
+/// a note switch while the body loads cannot redirect the text.
+struct NotesInsertionQueue {
+    private(set) var pending: [(noteID: UUID, text: String)] = []
+
+    mutating func enqueue(_ text: String, for noteID: UUID) {
+        pending.append((noteID: noteID, text: text))
+    }
+
+    mutating func take(for noteID: UUID) -> [String] {
+        let texts = pending.filter { $0.noteID == noteID }.map(\.text)
+        pending.removeAll { $0.noteID == noteID }
+        return texts
+    }
+
+    mutating func discard(for noteID: UUID) {
+        pending.removeAll { $0.noteID == noteID }
+    }
+
+    func hasPending(for noteID: UUID) -> Bool {
+        pending.contains { $0.noteID == noteID }
+    }
+}
+
+/// The one condition that says whether the editor may receive text right now.
+/// Pure, so the case that caused the overwrite — a note whose body has not been
+/// loaded yet — is a test rather than a comment.
+enum NotesInsertionPolicy {
+    static func canInsert(noteLoaded: Bool, loadFailed: Bool, isCurrent: Bool,
+                          editorVisible: Bool, writingToolsActive: Bool) -> Bool {
+        noteLoaded && !loadFailed && isCurrent && editorVisible && !writingToolsActive
+    }
+}
+
 @MainActor
 final class NotesViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private let store: NotesStore
@@ -321,6 +378,9 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private var searchRevision: UInt64 = 0
     private let searchQueue = DispatchQueue(label: "com.makidesk.notes-search", qos: .userInitiated)
     private var isRefreshing = false
+    /// Texts sent to this note while its body was still loading: they wait for
+    /// the body instead of being written into the placeholder editor.
+    private var pendingInsertions = NotesInsertionQueue()
 
     init(store: NotesStore) {
         self.store = store
@@ -345,7 +405,8 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         filtered = store.notes
 
         editor.onTextChange = { [weak self] text in
-            guard let self, let id = self.currentID else { return }
+            guard let self, let id = self.currentID,
+                  let note = self.store.note(id: id), note.textLoaded else { return }
             // Writing Tools shows a preview of the rewrite: it reaches the
             // store once, when the session ends (T64).
             guard self.writingToolsActive == false else { return }
@@ -372,6 +433,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             self.editor.applyBaseStyles()
             self.highlighter?.apply()
             self.updatePosition()
+            self.flushPendingInsertions(for: id)
         }
         editor.onSelectionChange = { [weak self] range in
             guard let self, let id = self.currentID else { return }
@@ -672,8 +734,36 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     }
 
     func insertTextAtCursor(_ text: String) {
-        guard currentID != nil else { return }
+        guard let id = store.selectedTab, let note = store.note(id: id) else { return }
+        // A note restored without its body is shown as an empty editor while the
+        // draft loads. Inserting here would publish that empty editor over the
+        // draft and overwrite the file (U-bug): wait for the body instead.
+        guard NotesInsertionPolicy.canInsert(noteLoaded: note.textLoaded,
+                                             loadFailed: note.textLoadFailed,
+                                             isCurrent: currentID == id,
+                                             editorVisible: editor.isHidden == false,
+                                             writingToolsActive: writingToolsActive) else {
+            pendingInsertions.enqueue(text, for: id)
+            return
+        }
         editor.textView.insertText(text, replacementRange: editor.textView.selectedRange())
+        editor.focus()
+    }
+
+    /// Applies the texts that arrived while their note was still loading. The
+    /// target id is part of every entry, so a note switch cannot redirect them.
+    private func flushPendingInsertions(for id: UUID) {
+        guard let note = store.note(id: id),
+              NotesInsertionPolicy.canInsert(noteLoaded: note.textLoaded,
+                                             loadFailed: note.textLoadFailed,
+                                             isCurrent: currentID == id,
+                                             editorVisible: editor.isHidden == false,
+                                             writingToolsActive: writingToolsActive) else { return }
+        let texts = pendingInsertions.take(for: id)
+        guard texts.isEmpty == false else { return }
+        for text in texts {
+            editor.textView.insertText(text, replacementRange: editor.textView.selectedRange())
+        }
         editor.focus()
     }
 
@@ -696,10 +786,16 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             editor.isHidden = true
             emptyLabel.stringValue = note.textLoadFailed ? "Could not load note" : "Loading note…"
             emptyLabel.isHidden = false
-            if !note.textLoadFailed {
+            if note.textLoadFailed {
+                // The text sent here has nowhere to go: say so once instead of
+                // keeping it queued forever.
+                if pendingInsertions.hasPending(for: id) {
+                    pendingInsertions.discard(for: id)
+                    HUDController.shared.show(HUDMessage.noteInsertionFailed)
+                }
+            } else {
                 store.loadTextAsync(for: id) { [weak self] in
-                    guard let self, self.store.selectedTab == id,
-                          self.store.note(id: id)?.textLoaded == true else { return }
+                    guard let self, self.store.selectedTab == id else { return }
                     self.reloadEverything()
                 }
             }
@@ -719,6 +815,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         editor.setText(current.text, cursor: current.cursor)
         installHighlighter(for: current)
         updateStatus()
+        flushPendingInsertions(for: id)
     }
 
     private func installHighlighter(for note: Note) {

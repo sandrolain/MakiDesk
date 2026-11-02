@@ -142,7 +142,7 @@ estimated millimetres or inches are in Settings.
 Shake while dragging (or press `⌃⌥D`) to catch files, folders, links, text and
 images. File promises from Photos, Safari and Mail work. Quick Look with Space,
 drag everything out or one row, copy or move it to a folder, or send the selected
-text straight to the open note. The shelf is temporary by design: it empties
+text straight to a new note. The shelf is temporary by design: it empties
 when it closes and never keeps your files anywhere else.
 
 **Dropzones** (Settings ▸ Dropzones, or the **Dropzones** menu) go one step

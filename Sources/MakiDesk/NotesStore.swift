@@ -435,6 +435,19 @@ final class NotesStore {
         return note
     }
 
+    /// Creates a new note with `text` and selects it. Text sent from the shelf
+    /// or OCR is always a new note, never an edit of the one the user has open.
+    /// Empty text creates nothing.
+    @discardableResult
+    func addNote(text: String) -> Note? {
+        let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.isEmpty == false else { return nil }
+        loadIfNeeded()
+        let note = newNote()
+        updateText(cleaned, for: note.id)
+        return self.note(id: note.id)
+    }
+
     func openNote(id: UUID) {
         loadIfNeeded()
         guard notes.contains(where: { $0.id == id }) else { return }

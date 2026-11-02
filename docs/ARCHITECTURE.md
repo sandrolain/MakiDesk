@@ -274,6 +274,13 @@ with tests) so an example is never rewritten, and the session's begin/end
 suspends the syntax highlighter (`NotesHighlighter.setSuspended`) and the
 automatic draft write, which then runs once for the whole rewrite.
 
+`NotesStore` restores a note's metadata first and loads its body on demand, so an
+unopened note has an empty placeholder editor for a moment. Text sent from the
+shelf or OCR therefore becomes a **new note** (`NotesStore.addNote`): the draft
+the user has open is never mutated. The clipboard panel's paste fallback still
+inserts at the cursor through `NotesInsertionPolicy` / `NotesInsertionQueue`, so a
+note whose body is still loading cannot publish its placeholder over the draft.
+
 `NotesMarkdownFormat` (T65) turns the editor's formatting commands into values —
 the range to replace, the replacement and where the selection goes — on UTF-16
 ranges, so emoji never split a marker. The editor applies the result through

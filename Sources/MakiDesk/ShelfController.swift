@@ -488,10 +488,10 @@ final class ShelfController: NSObject, NSWindowDelegate,
         save.target = self
         save.action = #selector(saveClicked)
         save.toolTip = "Copy or move everything to a folder"
-        let notes = ShelfTextButton(title: "To Notes")
+        let notes = ShelfTextButton(title: "New Note")
         notes.target = self
-        notes.action = #selector(insertInNotes)
-        notes.toolTip = "Insert the selected text in the open note"
+        notes.action = #selector(sendToNewNote)
+        notes.toolTip = "Send the selected text to a new note"
         let hint = NSTextField(labelWithString: "Space · ⌫ · ⌘D")
         hint.font = .systemFont(ofSize: 9)
         hint.alignment = .right
@@ -1151,7 +1151,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
         menu.addItem(preview)
 
         if selected.contains(where: { $0.text != nil }) {
-            let notes = NSMenuItem(title: "Insert in Notes", action: #selector(insertInNotes), keyEquivalent: "")
+            let notes = NSMenuItem(title: "Send to a New Note", action: #selector(sendToNewNote), keyEquivalent: "")
             notes.target = self
             menu.addItem(notes)
         }
@@ -1365,14 +1365,14 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
     // MARK: - Text to Notes
 
-    @objc private func insertInNotes() {
+    @objc private func sendToNewNote() {
         let selected = selectedItems.isEmpty ? items : selectedItems
         let texts = selected.compactMap(\.text)
         guard texts.isEmpty == false else {
             HUDController.shared.show(HUDMessage.noTextInSelection)
             return
         }
-        NotesController.shared.insertText(texts.joined(separator: "\n\n"))
+        NotesController.shared.addNote(text: texts.joined(separator: "\n\n"))
         HUDController.shared.show(HUDMessage.insertedInNotes)
     }
 
