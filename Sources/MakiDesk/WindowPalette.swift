@@ -2457,7 +2457,7 @@ struct PaletteView: View {
     }
 
     private func activateSelection() {
-        if let calculation = model.calculation, model.calculationSelected {
+        if model.calculation != nil, model.calculationSelected {
             onActivateCalculation()
             return
         }
