@@ -9,7 +9,7 @@ struct SettingsView: View {
         /// window and `@AppStorage` reads it here, so the literal lives once.
         static let defaultsKey = SettingsKey.settingsTab.rawValue
 
-        case general, windows, layouts, panels, notifications, groups, dropzones
+        case general, windows, layouts, panels, notifications, groups, system, dropzones
 
         var id: String { rawValue }
 
@@ -21,6 +21,7 @@ struct SettingsView: View {
             case .panels: return "Panels"
             case .notifications: return "Notifications"
             case .groups: return "Groups"
+            case .system: return "System"
             case .dropzones: return "Dropzones"
             }
         }
@@ -34,6 +35,7 @@ struct SettingsView: View {
             case .panels: return "rectangle.on.rectangle"
             case .notifications: return "bell"
             case .groups: return "square.grid.2x2"
+            case .system: return "gauge"
             case .dropzones: return "bolt.square"
             }
         }
@@ -134,6 +136,49 @@ struct SettingsView: View {
 
     private var hudKeepErrors: Binding<Bool> {
         Binding(get: { store.hudKeepErrors }, set: { store.updateHUDKeepErrors($0) })
+    }
+
+    @State private var system = SystemMonitor.shared
+
+    private var systemDiskMode: Binding<DiskMenuBarMode> {
+        Binding(get: { system.diskMenuBarMode }, set: { system.updateDiskMenuBarMode($0) })
+    }
+
+    private var systemDiskFormat: Binding<DiskSpaceFormat> {
+        Binding(get: { system.diskFormat }, set: { system.updateDiskFormat($0) })
+    }
+
+    private var systemDiskThreshold: Binding<Double> {
+        Binding(get: { system.diskWarningThresholdGB },
+                set: { system.updateDiskWarningThresholdGB($0) })
+    }
+
+    private var systemCPUEnabled: Binding<Bool> {
+        Binding(get: { system.cpuAlertsEnabled }, set: { system.updateCPUAlertsEnabled($0) })
+    }
+
+    private var systemCPUThreshold: Binding<Double> {
+        Binding(get: { system.cpuThresholdPercent },
+                set: { system.updateCPUThresholdPercent($0) })
+    }
+
+    private var systemCPUDuration: Binding<Double> {
+        Binding(get: { system.cpuSustainedMinutes },
+                set: { system.updateCPUSustainedMinutes($0) })
+    }
+
+    private var systemNotifications: Binding<Bool> {
+        Binding(get: { system.systemNotificationsEnabled },
+                set: { system.updateSystemNotifications($0) })
+    }
+
+    /// The label's own figure, independent of whether the warning policy
+    /// currently shows it: the preview explains the format, and "Hidden" is
+    /// only the explicit choice.
+    private var systemDiskPreview: String {
+        if system.diskMenuBarMode == .never { return "Hidden" }
+        guard let space = system.diskSpace else { return "Reading…" }
+        return DiskSpaceText.menuBar(space, format: system.diskFormat)
     }
     /// The highlight slides between sidebar rows (T58). Respects the app's
     /// animations switch and macOS Reduce Motion through the store.
@@ -301,6 +346,7 @@ struct SettingsView: View {
                     case .panels: panelsTab
                     case .notifications: notificationsTab
                     case .groups: groupsTab
+                    case .system: systemTab
                     case .dropzones: EmptyView()
                     }
                 }
@@ -935,6 +981,55 @@ struct SettingsView: View {
             }
         }
         .animation(selectionAnimation, value: notificationsPage)
+    }
+
+
+    // MARK: - System
+
+    @ViewBuilder
+    private var systemTab: some View {
+        SettingsSection("Menu bar") {
+            Picker("Show free space", selection: systemDiskMode) {
+                ForEach(DiskMenuBarMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            Picker("Format", selection: systemDiskFormat) {
+                ForEach(DiskSpaceFormat.allCases) { format in
+                    Text(format.label).tag(format)
+                }
+            }
+            SliderRow(title: "Warn below", value: systemDiskThreshold,
+                      range: 0...100, step: 5, unit: " GB", decimals: 0)
+            HStack(spacing: 10) {
+                Text("Preview")
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                Text(systemDiskPreview)
+                    .font(.system(size: 12, weight: .medium))
+                    .monospacedDigit()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(theme.surfaceSelected))
+            }
+            caption("The figure includes the space macOS can purge, so it matches Finder and Storage settings; the System menu also shows the strict count. It is read once a minute, and the label holds still while the menu is open, so the menu cannot close under the pointer. At 0 GB the warning is off. When free space falls below the threshold the label turns orange and one warning a day offers Storage settings.")
+        }
+        SettingsSection("CPU alerts") {
+            Toggle("Warn about a process stuck at high CPU", isOn: systemCPUEnabled)
+            SliderRow(title: "Threshold", value: systemCPUThreshold,
+                      range: 50...800, step: 10, unit: "% of a core", decimals: 0)
+            SliderRow(title: "Sustained for", value: systemCPUDuration,
+                      range: 1...60, step: 1, unit: " min", decimals: 0)
+            Toggle("Also send a system notification", isOn: systemNotifications)
+                .disabled(!SystemNotifier.isAvailable)
+            HStack(spacing: 10) {
+                Text(system.cpuMenuLine)
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                Button("Activity Monitor") { system.openActivityMonitor() }
+            }
+            caption("A process is reported once it stays over the threshold for the whole window, with three samples in a row to arm the rule and two quiet samples to reset it. One process is named at a time, at most once every 30 minutes per episode; a second hot process waits five minutes, and a notice offers Snooze 1 hour. Root-owned daemons cannot be sampled from a user app: when the machine total is high and no readable process explains it, the notice says “System processes” and points to Activity Monitor. No process name, path or command line is written to a log or sent anywhere. System notifications are optional and respect Focus; the in-app notice needs no permission.")
+        }
     }
 
 

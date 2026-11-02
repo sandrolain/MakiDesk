@@ -11,6 +11,7 @@ titles, previews, notes, clipboard contents, recognized text or files anywhere.
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
 - [Window previews](#window-previews)
+- [System monitor](#system-monitor)
 - [Logs and diagnostics](#logs-and-diagnostics)
 - [Revoking and removing](#revoking-and-removing)
 
@@ -28,6 +29,11 @@ for two macOS TCC permissions:
 Both are granted by you in **System Settings ▸ Privacy & Security** and can be
 revoked there at any time. The app does not request Input Monitoring, Full Disk
 Access, Contacts, Calendar, Microphone, Camera or Automation.
+
+The optional **system notification** copy of a CPU notice is not a TCC
+permission: macOS asks once, when you switch the option on in Settings ▸ System,
+and the app posts nothing to Notification Center until you allow it. The in-app
+notice needs no permission at all.
 
 TCC attaches the grant to the app's code identity. With a stable bundle id and
 signing identity the grant survives updates; an ad-hoc build or a changed
@@ -68,6 +74,16 @@ identity asks again. A Developer ID-signed public release behaves best here.
   `Info.plist` names, the executable name, the bundle id and the bundle path,
   plus the icon the system returns for the path. The list stays in memory and is
   not written to disk or uploaded.
+- **Disk capacity** of the start-up volume, read once a minute and when you ask
+  for a refresh: total space, free space and the purgeable allowance macOS
+  reports. No file names, folder contents or other volumes are read.
+- **Running processes**, only while CPU alerts are on: every 15 seconds, the
+  process id, start time, executable path and name, and cumulative CPU time of
+  the processes your user may inspect, plus the machine's own CPU counters.
+  The busiest names are what the System menu and a notice show; the readings
+  live in memory. Root-owned daemons cannot be read and are covered only by the
+  machine's total, which is why an unexplained load is reported as *System
+  processes*.
 
 ## What is stored
 
@@ -80,7 +96,7 @@ All paths are under your user account:
 | Dropzone runs | `~/Library/Caches/MakiDesk/DropzoneRuns/<run>/` | Removed when the run ends unless kept or revealed |
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
-| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings) | Until reset |
+| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
 | Shelf | RAM + a temporary staging folder | Until the shelf closes |
@@ -151,6 +167,22 @@ cards, the overlay and the content score. They stay in memory, are never
 uploaded, and are not part of the notes/groups data. Without Screen Recording
 the switcher falls back to app icons and the content-weighted layout uses the
 per-kind weights only.
+
+## System monitor
+
+The menu-bar space figure and the CPU watch are local readings. The volume is
+the start-up disk; other disks are not scanned. The process table is read with
+`libproc` for the processes your user can inspect, and the machine total comes
+from the kernel's CPU counters. Neither the process table nor the disk figures
+are written to disk, and no process name, executable path or command line is
+logged or sent anywhere.
+
+**Settings ▸ System** keeps the disk label mode and format, the warning level,
+the last day a disk warning was shown (so reopening the app does not repeat it),
+whether CPU alerts are on, the threshold and window, and whether the optional
+system notification is on. The date of the last warning and the preference
+values are the only state that survives a restart; process readings and the
+sustained-load episodes do not.
 
 ## Logs and diagnostics
 

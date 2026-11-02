@@ -26,7 +26,8 @@ never draws a separate desktop or mirrors their content as a workspace.
   the window switcher, notes, clipboard, shelf, shortcuts reference, HUD,
   overlay and peek. Settings is the SwiftUI scene.
 - There is one process. State lives in `WorkspaceStore` (windows, groups,
-  scenes, settings), `NotesStore`, `ClipboardHistory` and `ShelfController`.
+  scenes, settings), `NotesStore`, `ClipboardHistory`, `ShelfController` and
+  `SystemMonitor` (disk space and CPU readings).
 
 ## Modules
 
@@ -51,6 +52,10 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `CornerPlacement.swift` | Pure corner rule shared by the mini map and the timer card: keep the corner, step aside for the checklist, stay on the display. |
 | `ChecklistModel.swift`, `ChecklistPanel.swift` | Checklist card: items, rules and persistence; the always-on panel. |
 | `TimerModel.swift`, `TimerPanel.swift` | Timers: deadlines, text formats and parser, proximity rule; the countdown card and the input field. |
+| `SystemMetrics.swift` | Disk space (Finder parity, `statfs` fallback), machine CPU ticks and the `libproc` process snapshot; decimal formatting. |
+| `SystemAlertPolicy.swift` | Pure sustained-load rule: duration, hysteresis, cooldown, snooze, and when load is attributed to unreadable system processes. |
+| `SystemMonitor.swift` | Owner of the disk and CPU timers, the menu-bar figure, the System menu values and the notices; one utility queue, main-actor publishing. |
+| `SystemNotifier.swift` | Opt-in `UNUserNotificationCenter` copy of a notice; permission asked only when the option is switched on. |
 | `ShortcutManager.swift` | Carbon global hot keys (no Input Monitoring). |
 | `NotesStore.swift` | Notes, drafts, session, external-file baselines, Trash. |
 | `Confirmation.swift` | The modals as values: one wording, one presenter; no file builds an `NSAlert` by hand. |
@@ -333,6 +338,39 @@ only when the add field is clicked, and `PanelFocusReturn` gives them back on
 hide or on `Esc`. The card is SwiftUI in an `NSHostingView` and the controller
 re-measures it after each change, so the list grows and shrinks with its
 content.
+
+## System monitor
+
+`SystemMonitor` is separate from `WorkspaceStore`: it changes on its own clock
+and the menu-bar label must not be rebuilt under an open menu. One utility
+queue reads the start-up volume once a minute (`URLResourceValues` first, which
+supplies the purgeable allowance Finder counts, then `statfs`) and, while CPU
+alerts are on, samples every 15 seconds: cumulative `host_statistics` ticks for
+the machine and `proc_listpids`/`proc_pid_rusage`/`proc_pid_bsdinfo` for each
+process. A full scan of a few hundred processes measured about 0.15 ms. Only
+value types cross to the main actor. A lifecycle counter and a CPU-timer
+generation make late results unpublishable after a restart or a wake; waking
+also drops the tick and per-process baselines and resets the policy, so a
+slept-through gap cannot look like sustained load.
+
+`SystemAlertPolicy` turns two samples into at most one notice. A process is
+sustained when it has been at or above the threshold for the window (10 minutes
+by default) with at least three consecutive samples; two quiet samples reset
+the episode; one notice per process per cooldown (30 minutes), five minutes
+between different processes; a snooze keeps the episode alive. Per-process
+percentages are shares of one core; the machine figure comes from the tick
+delta. Root-owned processes answer `EPERM` to `proc_pid_rusage` and are never
+named: when the machine total is high and the readable processes explain less
+than half of it, the notice is attributed to "System processes". The policy is
+pure and tested at arbitrary clock speeds without a real process.
+
+The menu-bar label keeps the last disk figure while
+`NSMenu.didBeginTrackingNotification` holds; the newest value is flushed on
+`didEndTracking`, because replacing the label's view under an open menu closes
+it. Notices go through `HUDController`; the optional second copy is posted by
+`SystemNotifier`, whose `UNUserNotificationCenter` is created only for a bundled
+app so `swift run` and the test runner never touch it. No process name, path or
+command line is logged.
 
 ## Permissions
 

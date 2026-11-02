@@ -166,6 +166,17 @@ enum SettingsDefaults {
         .windowGap: 12.0,
         .measureUnit: MeasurementUnit.points.rawValue,
         .colorPickerFormat: ColorClipboardFormat.hex.rawValue,
+
+        // System monitor: the free space beside the icon and the CPU watch.
+        // The date of the last disk warning has no default: never warned is
+        // the answer, and a zero date would mean 1970.
+        .systemDiskMenuBarMode: DiskMenuBarMode.always.rawValue,
+        .systemDiskFormat: DiskSpaceFormat.size.rawValue,
+        .systemDiskWarningThresholdGB: 10.0,
+        .systemCPUAlertsEnabled: true,
+        .systemCPUThresholdPercent: 100.0,
+        .systemCPUSustainedMinutes: 10.0,
+        .systemCPUNotifySystem: false,
         ]
     }
 }

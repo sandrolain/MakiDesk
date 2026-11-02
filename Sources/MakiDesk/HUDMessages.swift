@@ -440,6 +440,66 @@ extension HUDMessage {
         HUDMessage(title: "Could not open \(name)", symbol: "exclamationmark.triangle.fill")
     }
 
+    // MARK: - System monitor
+
+    static func diskSpaceLow(free: String, total: String, percent: String) -> HUDMessage {
+        HUDMessage(
+            title: "Low disk space · \(free) free",
+            symbol: "externaldrive.badge.exclamationmark",
+            detail: "The start-up disk has \(free) free of \(total) (\(percent)). Storage settings can free more.",
+            kind: .warning
+        )
+    }
+
+    static func processHighCPU(name: String, percent: String, cores: String,
+                               sustained: String, top: [ProcessReading]) -> HUDMessage {
+        HUDMessage(
+            title: "\(name) is using \(percent) CPU",
+            symbol: "gauge.with.dots.needle.67percent",
+            detail: detailLine("Sustained for \(sustained) (\(cores)).", top: top),
+            kind: .warning
+        )
+    }
+
+    static func systemHighCPU(percent: String, sustained: String,
+                              top: [ProcessReading]) -> HUDMessage {
+        HUDMessage(
+            title: "System processes are using \(percent) CPU",
+            symbol: "gauge.with.dots.needle.67percent",
+            detail: detailLine("Sustained for \(sustained) with no single app to blame.", top: top),
+            kind: .warning
+        )
+    }
+
+    static func cpuAlertSnoozed(name: String) -> HUDMessage {
+        HUDMessage(title: "CPU alerts for \(name) snoozed for an hour", symbol: "bell.slash")
+    }
+
+    static let systemNotificationsDenied = HUDMessage(
+        title: "System notifications are off for MakiDesk",
+        symbol: "bell.slash",
+        detail: "Allow them in System Settings ▸ Notifications, or keep the in-app notice.",
+        kind: .warning
+    )
+
+    static let systemNotificationsUnavailable = HUDMessage(
+        title: "System notifications need the app bundle",
+        symbol: "bell.slash",
+        detail: "Run MakiDesk as an app to use Notification Center; the in-app notice works everywhere.",
+        kind: .warning
+    )
+
+    /// The line under a CPU notice: how long, and what else is busy. The
+    /// process in the title is left out by the caller, so it is not repeated.
+    private static func detailLine(_ sentence: String, top: [ProcessReading]) -> String {
+        let others = top
+            .filter { $0.cpuPercent >= 20 }
+            .prefix(2)
+            .map { "\($0.name) \($0.percentText)" }
+        guard others.isEmpty == false else { return sentence }
+        return "\(sentence) Also busy: \(others.joined(separator: " · "))."
+    }
+
     /// Every member a test can walk: the ones with no parameters. The
     /// factories are checked through their own tests.
     static let catalogue: [HUDMessage] = [
@@ -457,5 +517,6 @@ extension HUDMessage {
         peekNeedsScreenRecording, peekNoLongerOpen, nothingToArrange,
         clipboardSecureInput, clipboardWriteFailed, clipboardNeedsAccessibility,
         readingText, receivingFiles, transferringItems,
+        systemNotificationsDenied, systemNotificationsUnavailable,
     ]
 }

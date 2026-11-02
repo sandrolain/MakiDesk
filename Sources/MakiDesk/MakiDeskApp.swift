@@ -12,6 +12,8 @@ struct MakiDeskApp: App {
         return WorkspaceStore.shared
     }()
 
+    @State private var system = SystemMonitor.shared
+
     @NSApplicationDelegateAdaptor(MakiDeskAppDelegate.self) private var appDelegate
 
     init() {
@@ -22,6 +24,7 @@ struct MakiDeskApp: App {
         ClipboardHistory.shared.start()
         ShelfController.shared.start()
         IdlePerformanceMetrics.shared.start()
+        SystemMonitor.shared.start()
     }
 
     /// A menu item whose shortcut text sits after the title. The menu has no
@@ -67,6 +70,10 @@ struct MakiDeskApp: App {
     var body: some Scene {
         MenuBarExtra {
             Text(store.status)
+                .font(.caption)
+            Text(system.diskMenuLine)
+                .font(.caption)
+            Text(system.cpuMenuLine)
                 .font(.caption)
             Divider()
 
@@ -399,6 +406,39 @@ struct MakiDeskApp: App {
                 Label("Measure", systemImage: "ruler")
             }
 
+            Menu {
+                Text(system.diskMenuLine)
+                if let detail = system.diskDetailLine {
+                    Text(detail)
+                }
+                Button(system.diskMenuBarMode == .never
+                       ? "Show Free Space in Menu Bar"
+                       : "Hide Free Space from Menu Bar") {
+                    system.updateDiskMenuBarMode(system.diskMenuBarMode == .never
+                                                 ? .always : .never)
+                }
+                Button("Refresh Disk Now") { system.refreshDiskNow() }
+                Button("Open Storage Settings…") { system.openStorageSettings() }
+                Divider()
+                if system.cpuAlertsEnabled {
+                    Text(system.cpuMenuLine)
+                    ForEach(Array(system.topProcesses.prefix(3))) { process in
+                        Text("\(process.name) · \(process.percentText)")
+                    }
+                    if system.topProcesses.isEmpty {
+                        Text("No process above \(Int(system.cpuThresholdPercent))% right now")
+                    }
+                    Button("Open Activity Monitor…") { system.openActivityMonitor() }
+                } else {
+                    Text("CPU alerts are off")
+                    Button("Turn On CPU Alerts") { system.updateCPUAlertsEnabled(true) }
+                }
+                Divider()
+                Button("MakiDesk Settings…") { openSystemSettingsTab() }
+            } label: {
+                Label("System", systemImage: "gauge")
+            }
+
             Divider()
 
             menuButton("Keyboard Shortcuts…",
@@ -431,11 +471,25 @@ struct MakiDeskApp: App {
                 Image(systemName: recording.phase == .paused ? "pause.circle" : "record.circle")
                     .accessibilityLabel("MakiDesk — recording")
             } else {
-                Image(nsImage: MenuBarIcon.image())
-                    .accessibilityLabel("MakiDesk")
-                    .onAppear(perform: openSetupOnFirstRun)
+                HStack(spacing: 4) {
+                    Image(nsImage: MenuBarIcon.image())
+                    if let disk = system.menuBarDiskText {
+                        Text(disk)
+                            .monospacedDigit()
+                            .foregroundStyle(system.isDiskLow ? Color.orange : Color.primary)
+                    }
+                }
+                .accessibilityLabel(system.menuBarAccessibilityLabel)
+                .onAppear(perform: openSetupOnFirstRun)
             }
         }
+    }
+
+    /// Opens Settings on the System page from the menu's deep link.
+    private func openSystemSettingsTab() {
+        UserDefaults.standard.set(SettingsView.SettingsTab.system.rawValue,
+                                  forKey: SettingsView.SettingsTab.defaultsKey)
+        SettingsController.shared.show()
     }
 
     /// The first launch opens Settings, where the permissions are explained.

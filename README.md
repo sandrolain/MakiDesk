@@ -205,12 +205,25 @@ and the text size in Settings ▸ Notifications, and open **Notification
 History…** for the last 50 messages (memory only). Notices never end up in
 screenshots or recordings.
 
+### Free space, and a process that will not cool down
+
+The free space on the start-up disk sits beside the menu-bar icon — the same
+figure Finder shows, purgeable space included — and turns orange below the
+warning level you set, with one notice a day offering Storage settings. The
+**System** menu adds the strict count and the CPU watch: a process that stays
+above the threshold for the whole window is named once, with what else is busy,
+**Activity Monitor** and **Snooze 1 hour**. Root daemons the app cannot read are
+reported honestly as *System processes*. The watch stops completely when it is
+off, and an optional system notification respects Focus; the in-app notice needs
+no permission.
+
 ### Small details, native feel
 
 A theme that covers the panels, the Settings window, the overlay and the text
 caret, configurable animations, a focus border, a searchable Keyboard Shortcuts window,
 and Settings with a sidebar — General, Windows, Layouts, Panels, Notifications,
-Groups and Dropzones — whose longer pages split into a strip of sub-sections. Utility windows open on the display where the focused
+Groups, System and Dropzones — whose longer pages split into a strip of
+sub-sections. Utility windows open on the display where the focused
 window is, and recenter when they were last used on another one.
 
 <p align="center">

@@ -75,6 +75,26 @@ final class SettingsTests: XCTestCase {
         }
     }
 
+    func testTheSystemDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(Settings.value(.systemDiskMenuBarMode, as: DiskMenuBarMode.self,
+                                      in: defaults), .always)
+        XCTAssertEqual(Settings.value(.systemDiskFormat, as: DiskSpaceFormat.self,
+                                      in: defaults), .size)
+        XCTAssertEqual(Settings.double(.systemDiskWarningThresholdGB, in: defaults), 10,
+                       accuracy: 0.001)
+        XCTAssertTrue(Settings.bool(.systemCPUAlertsEnabled, in: defaults))
+        XCTAssertEqual(Settings.double(.systemCPUThresholdPercent, in: defaults), 100,
+                       accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.systemCPUSustainedMinutes, in: defaults), 10,
+                       accuracy: 0.001)
+        XCTAssertFalse(Settings.bool(.systemCPUNotifySystem, in: defaults))
+        // Never warned is the answer, not a date.
+        XCTAssertEqual(Settings.double(.systemDiskWarningDate, in: defaults), 0,
+                       accuracy: 0.001)
+    }
+
     func testRemovingAKeyReturnsToTheDefault() {
         Settings.registerDefaults(in: defaults)
         Settings.set(false, for: .hudVoiceOver, in: defaults)
@@ -278,6 +298,9 @@ final class SettingsTests: XCTestCase {
             .shelfShakeEnabled, .shelfShakeSensitivity,
             .dragEnabled, .dragActivator, .layoutAsksFirst, .announceGroupChanges,
             .windowGap, .measureUnit, .colorPickerFormat,
+            .systemDiskMenuBarMode, .systemDiskFormat, .systemDiskWarningThresholdGB,
+            .systemCPUAlertsEnabled, .systemCPUThresholdPercent,
+            .systemCPUSustainedMinutes, .systemCPUNotifySystem,
         ]
         XCTAssertEqual(Set(SettingsDefaults.table.keys), expected)
     }

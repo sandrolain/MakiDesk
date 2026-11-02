@@ -1281,6 +1281,8 @@ final class WorkspaceStore {
         updateTimerSoundName(TimerSettings.defaultSound)
         updateScreenshotCopyToClipboard(true)
         updateScreenshotSavedNotice(false)
+        // The menu-bar figure and the CPU watch are settings too.
+        SystemMonitor.shared.resetToDefaults()
         // A remapped shortcut is settings too: put the table back and drop the
         // file. A file from a newer version stays untouched (T53).
         let shortcutStore = ShortcutStore()

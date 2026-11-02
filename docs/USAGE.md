@@ -26,6 +26,7 @@ through Accessibility.
 - [Text from the screen](#text-from-the-screen)
 - [Colour picker](#colour-picker)
 - [Measure](#measure)
+- [Disk and CPU](#disk-and-cpu)
 - [Notifications](#notifications)
 - [Settings](#settings)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -810,6 +811,45 @@ measurement in place with a small badge that copies the values or dismisses it.
 - `Esc` cancels while dragging. The badge's **Copy** button puts the values on
   the clipboard (the clipboard history keeps them when it is on).
 
+## Disk and CPU
+
+The free space on the start-up disk sits beside the menu-bar icon, and the
+**System** menu reports the same figures next to the CPU watch.
+
+- The figure is what Finder calls available: the free blocks plus the space
+  macOS can purge. The **System** menu repeats it with the total and the share,
+  and adds the strict count when the purgeable allowance is worth naming. Units
+  are decimal, so the number matches Finder and Storage settings.
+- **Settings ▸ System ▸ Menu bar** chooses *Always*, *Only below the warning
+  level* or *Never*, a size or percentage format, and the warning level (10 GB
+  by default; 0 turns the warning off). Below it the label turns orange and one
+  notice a day offers Storage settings.
+- The space is read once a minute on a worker, and the label keeps its last
+  value while a menu is open, so the menu cannot close under the pointer. A
+  mount, an unmount, waking from sleep or **System ▸ Refresh Disk Now** reads it
+  immediately.
+- **CPU alerts** watch the processes MakiDesk can inspect, every 15 seconds, and
+  report one that stays above the threshold (100% of a core by default) for the
+  whole window (10 minutes). Three samples in a row arm the rule and two quiet
+  samples reset it, so a single dip does not restart the window. The notice
+  names the process and its share, shows what else is busy, and offers
+  **Activity Monitor** and **Snooze 1 hour**.
+- One process is named at a time, at most once every 30 minutes per episode; a
+  different hot process waits five minutes. A process that restarts, even with
+  the same PID, starts a new episode.
+- Root-owned daemons cannot be read from a user app. When the machine total is
+  high and the readable processes do not explain it, the notice says **System
+  processes** rather than naming the wrong one.
+- **Settings ▸ System ▸ CPU alerts** sets the threshold (50–800% of a core), the
+  window (1–60 minutes) and whether a second copy also goes to Notification
+  Center. That copy is opt-in: macOS asks for permission when you switch it on,
+  and the in-app notice works without it. The **System** menu shows the current
+  total and the three busiest processes, and turns the watch back on if it is
+  off.
+- Nothing is polled while CPU alerts are off. Waking from sleep forgets the
+  baselines, so a slept-through gap is never reported as sustained load, and no
+  process name or path is written to a log.
+
 ## Notifications
 
 MakiDesk reports results with a small notice. Each one carries a state that
@@ -866,6 +906,9 @@ first one.
   notice for screenshots macOS saves, and text recognition quality and
   correction.
 - **Groups** — rename, empty and inspect the nine groups.
+- **System** — the free space beside the icon (when to show it, its format, the
+  warning level) and the CPU watch (on or off, the threshold and window, the
+  optional system-notification copy).
 - **Dropzones** — the commands run by dropping on the shelf strip: accepted
   kinds, command and placeholders, runtime, feedback, and *Test*.
 
