@@ -1320,12 +1320,8 @@ final class ShelfController: NSObject, NSWindowDelegate,
                     HUDController.shared.show(HUDMessage.transferCancelled(copied: results.count,
                                                                        of: requests.count))
                 } else if let first = results.first(where: { $0.error != nil })?.error {
-                    let alert = NSAlert()
-                    alert.messageText = "Some items could not be transferred"
-                    alert.informativeText = first
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "OK")
-                    alert.runModal()
+                    Confirmation.statement(title: "Some items could not be transferred",
+                                           message: first).ask()
                 } else {
                     HUDController.shared.show(HUDMessage.transferFinished(moved: mode != .copy,
                                                                       count: results.count))
@@ -2015,36 +2011,11 @@ final class ShelfController: NSObject, NSWindowDelegate,
     }
 
     private func confirmDropzoneOverwrite(_ zone: DropzoneConfig, path: String) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Replace an existing file?"
-        alert.informativeText = """
-        “\(zone.name)” may replace:
-
-        \(path)
-
-        Continue?
-        """
-        alert.addButton(withTitle: "Run Anyway")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
+        Confirmation.dropzoneOverwrite(zone: zone.name, path: path).ask()
     }
 
     private func confirmDropzoneRun(_ zone: DropzoneConfig) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Run “\(zone.name)”?"
-        alert.informativeText = """
-        This dropzone runs:
-        \(zone.command.line)
-
-        Only run commands you trust.
-        """
-        alert.addButton(withTitle: "Run")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
+        Confirmation.dropzoneRun(zone: zone.name, command: zone.command.line).ask()
     }
 
     private func report(_ outcome: DropzoneCoordinator.Outcome, zone: DropzoneConfig) {

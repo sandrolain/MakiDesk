@@ -1092,13 +1092,8 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         // Only a draft that would be lost needs a question: a clean file is
         // not touched, so closing its note is immediate.
         if let url = note.externalURL, note.isDirty || (note.textLoaded && note.externalBaseline == nil) {
-            let alert = NSAlert()
-            alert.messageText = "Close “\(note.title)”?"
-            alert.informativeText = "The note is a draft of \(url.lastPathComponent). The file is not deleted; the draft and its link to the file are removed."
-            alert.addButton(withTitle: "Close Note")
-            alert.addButton(withTitle: "Cancel")
-            alert.alertStyle = .warning
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            guard Confirmation.closeNote(title: note.title,
+                                         file: url.lastPathComponent).ask() else { return }
         }
         store.deleteNote(id)
         refreshChrome()
@@ -1280,16 +1275,8 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     }
 
     private func presentRewriteNote(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = "Notes rewriting"
-        alert.informativeText = message
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        if let window = view.window {
-            alert.beginSheetModal(for: window)
-        } else {
-            alert.runModal()
-        }
+        Confirmation.statement(title: "Notes rewriting", message: message)
+            .tell(asSheetFor: view.window)
     }
 
     private func applyMarkdown(_ command: MarkdownCommand) {
@@ -1332,15 +1319,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     }
 
     private func present(error: Error, title: String) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = error.localizedDescription
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        if let window = view.window {
-            alert.beginSheetModal(for: window)
-        } else {
-            alert.runModal()
-        }
+        Confirmation.statement(title: title, message: error.localizedDescription)
+            .tell(asSheetFor: view.window)
     }
 }

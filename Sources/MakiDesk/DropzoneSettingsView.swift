@@ -475,31 +475,11 @@ struct DropzoneSettingsView: View {
     }
 
     private func confirmOverwrite(_ zone: DropzoneConfig, path: String) -> Bool {
-        NSApp.activate()
-        let alert = NSAlert()
-        alert.messageText = "Replace an existing file?"
-        alert.informativeText = """
-        “\(zone.name)” may replace:
-
-        \(path)
-
-        Continue?
-        """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Run Anyway")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
+        Confirmation.dropzoneOverwrite(zone: zone.name, path: path).ask()
     }
 
     private func confirmRun(_ zone: DropzoneConfig) -> Bool {
-        NSApp.activate()
-        let alert = NSAlert()
-        alert.messageText = "Run “\(zone.name)”?"
-        alert.informativeText = "This command is new or changed. It will run:\n\n\(zone.command.line)\n\nOnly continue if you wrote it or trust where it came from."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Run")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
+        Confirmation.dropzoneRun(zone: zone.name, command: zone.command.line).ask()
     }
 
     private func makeResult(zone: DropzoneConfig, outcome: DropzoneCoordinator.Outcome) -> DropzoneTestResult {

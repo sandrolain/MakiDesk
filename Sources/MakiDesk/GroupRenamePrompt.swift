@@ -7,11 +7,7 @@ import AppKit
 @MainActor
 enum GroupRenamePrompt {
     static func present(slot: Int, store: WorkspaceStore) {
-        let alert = NSAlert()
-        alert.messageText = "Rename \(store.groupName(slot))"
-        alert.informativeText = "Leave the field empty to go back to “Group \(slot)”."
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        let alert = Confirmation.rename(slot: slot, current: store.groupName(slot)).makeAlert()
 
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.stringValue = store.groups[slot]?.name ?? ""
