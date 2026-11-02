@@ -2,7 +2,8 @@ import AppKit
 import CoreGraphics
 import ImageIO
 
-/// Reads an image that is already on the clipboard for text recognition (U2).
+/// Reads an image that is already on the clipboard for text recognition (U2)
+/// and for the clipboard history (U3).
 ///
 /// The pasteboard belongs to AppKit, so reading the bytes happens on the main
 /// actor; decoding and downscaling are pure CoreGraphics work and run on a
@@ -18,10 +19,11 @@ enum ClipboardImageSource {
         case concealed
     }
 
-    /// The bytes, handed to the worker. `Data` is Sendable; the pasteboard is
-    /// not captured.
+    /// The bytes and their pasteboard type, handed to the worker. `Data` and
+    /// the type are Sendable; the pasteboard is not captured.
     struct Payload: Sendable, Equatable {
         let data: Data
+        let type: NSPasteboard.PasteboardType
     }
 
     /// `CGImage` is immutable once created; the box exists only so the decoded
@@ -46,7 +48,7 @@ enum ClipboardImageSource {
         if hasConcealedType(pasteboard) { return .failure(.concealed) }
         for type in imageTypes {
             if let data = pasteboard.data(forType: type), data.isEmpty == false {
-                return .success(Payload(data: data))
+                return .success(Payload(data: data, type: type))
             }
         }
         return .failure(.noImage)

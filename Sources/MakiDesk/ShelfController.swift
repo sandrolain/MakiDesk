@@ -351,10 +351,11 @@ final class ShelfController: NSObject, NSWindowDelegate,
             .representation(using: .png, properties: [:]) else { return nil }
         makeStaging()
         guard let staging else { return nil }
-        var url = staging.appendingPathComponent(name)
+        let filename = ShelfFileName.withPNGExtension(name)
+        var url = staging.appendingPathComponent(filename)
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {
-            let base = (name as NSString).deletingPathExtension
+            let base = (filename as NSString).deletingPathExtension
             url = staging.appendingPathComponent("\(base)-\(counter).png")
             counter += 1
         }

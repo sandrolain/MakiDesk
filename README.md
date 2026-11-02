@@ -97,10 +97,12 @@ read from the deadline, so sleeping cannot make it drift.
 
 ### Clipboard history, kept private
 
-Text only, in memory, never on disk. `⌥V` opens the list; Return or a click
-pastes into the app you were using. At most 50 distinct texts, no duplicates,
-and password fields/secure input are skipped. The panel will not even open while
-secure input is active.
+Text and images, in memory, never on disk. `⌥V` opens the list; Return or a
+click pastes into the app you were using. At most 50 entries (pinned items can
+exceed the limit), no duplicates, a bounded image budget, and password
+fields/secure input are skipped. Pin an entry
+to keep it across *Clear*; pins are in memory too. The panel will not even open
+while secure input is active.
 
 ### Text from the screen
 

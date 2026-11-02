@@ -23,6 +23,8 @@ enum SettingsKey: String, CaseIterable, Sendable {
     case checklistScreen = "checklistScreen"
     case checklistVisible = "checklistVisible"
     case checklistWidth = "checklistWidth"
+    case clipboardImageBudgetMB = "clipboardImageBudgetMB"
+    case clipboardKeepsImages = "clipboardKeepsImages"
     case colorPickerFormat = "colorPickerFormat"
     case dragActivator = "dragActivator"
     case dragEnabled = "dragEnabled"

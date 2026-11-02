@@ -505,22 +505,30 @@ written in words. It is the menu and the shortcuts, typed:
 
 ## Clipboard history
 
-`⌥V` opens a list of the last texts you copied. It is **in memory only** and
+`⌥V` opens the last **texts and images** you copied. It is **in memory only** and
 disappears when MakiDesk quits.
 
 - Up/Down, Page Up/Down and Home/End move the selection; `↩` or a click pastes
-  the selected text into the app you were using. `Esc` closes.
-- **To Shelf** sends the selected text to the shelf (also in the row's context
-  menu); **Clear** empties the history.
+  the selected item into the app you were using. `Esc` closes.
+- **To Shelf** sends the selected item to the shelf (also in the row's context
+  menu); an image is decoded from its stored bytes.
 - A row shows a small preview of what it holds: a **colour swatch** when the
-  text is a colour (`#RRGGBB`, `rgb()`, `hsl()`…), an image **thumbnail** when it
-  is a local path or `file://` URL to an image, the text icon otherwise. Remote
-  links are not fetched.
-- The history keeps at most 50 distinct texts, newest first, and skips the
+  text is a colour (`#RRGGBB`, `rgb()`, `hsl()`…), a **thumbnail** for a stored
+  image or for a local path/`file://` URL, the text icon otherwise. Remote links
+  are not fetched.
+- **Images** are kept as their original bytes plus a 96 px thumbnail. The
+  budget is **16, 32 or 64 MB** (default 32); when it is exceeded the oldest
+  unpinned images go first, and an image that cannot fit is reported instead of
+  being kept.
+- **Pin** an entry from its context menu: it survives *Clear*, the image budget
+  and the 50-item limit. *Clear* removes only the unpinned entries; **Clear
+  All…** removes everything after a confirmation. Pins are in memory too, so
+  they disappear when MakiDesk quits.
+- The history keeps at most 50 distinct entries, newest first, and skips the
   copy's private/concealed types. **Secure input** (password fields) is never
   recorded, and the panel does not open while secure input is active.
 - Pasting into another app uses Accessibility and a synthetic `⌘V`. Without the
-  permission the text is still put on the clipboard and a HUD tells you.
+  permission the item is still put on the clipboard and a HUD tells you.
 
 ## Shelf
 

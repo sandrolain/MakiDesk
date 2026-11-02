@@ -103,6 +103,10 @@ enum SettingsDefaults {
         .notesFontSize: 13.0,
         .notesSidebarWidth: 230.0,
 
+        // Clipboard history (U3): images on, 32 MB of stored image data.
+        .clipboardKeepsImages: true,
+        .clipboardImageBudgetMB: 32,
+
         // Screenshots and recordings. The library folder has no default: an
         // absent key means "the system folder", which is not a value.
         .screenshotCopyToClipboard: true,

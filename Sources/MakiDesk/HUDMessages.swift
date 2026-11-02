@@ -440,8 +440,14 @@ extension HUDMessage {
     static let clipboardWriteFailed = HUDMessage(
         title: "Could not write to the clipboard", symbol: "exclamationmark.triangle.fill")
 
+    static let clipboardImageBudgetFull = HUDMessage(
+        title: "Clipboard image not kept",
+        symbol: "exclamationmark.triangle.fill",
+        detail: "The image is larger than the budget, or pinned images fill it."
+    )
+
     static let clipboardNeedsAccessibility = HUDMessage(
-        title: "Accessibility not granted · the text is on the clipboard",
+        title: "Accessibility not granted · the item is on the clipboard",
         symbol: "exclamationmark.triangle.fill")
 
     static func timerFinished(label: String, ranOutWhileClosed: String?) -> HUDMessage {
@@ -540,6 +546,7 @@ extension HUDMessage {
         nothingToUndo, undone, peekCleared, peekNotDesignated,
         peekNeedsScreenRecording, peekNoLongerOpen, nothingToArrange,
         clipboardSecureInput, clipboardWriteFailed, clipboardNeedsAccessibility,
+        clipboardImageBudgetFull,
         readingText, receivingFiles, transferringItems,
         systemNotificationsDenied, systemNotificationsUnavailable,
     ]

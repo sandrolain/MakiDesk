@@ -18,6 +18,14 @@ final class ShelfItemTests: XCTestCase {
         XCTAssertEqual(item.fileURL, URL(string: "https://www.example.com/a/b"))
     }
 
+    func testStagedImageNamesAlwaysEndInPNG() {
+        XCTAssertEqual(ShelfFileName.withPNGExtension("Clipboard image"), "Clipboard image.png")
+        XCTAssertEqual(ShelfFileName.withPNGExtension("Screenshot 2026"), "Screenshot 2026.png")
+        XCTAssertEqual(ShelfFileName.withPNGExtension("shot.png"), "shot.png")
+        XCTAssertEqual(ShelfFileName.withPNGExtension("shot.tiff"), "shot.png")
+        XCTAssertEqual(ShelfFileName.withPNGExtension("  "), "Image.png")
+    }
+
     func testAFileThatDisappearsBecomesUnavailable() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("shelf-item-\(UUID().uuidString).txt")

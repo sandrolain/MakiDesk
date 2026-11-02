@@ -2,6 +2,20 @@ import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 
+/// The staged image is always a PNG, so its name must carry that extension even
+/// when the caller passes a human label such as "Clipboard image".
+enum ShelfFileName {
+    static func withPNGExtension(_ name: String) -> String {
+        let file = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard file.isEmpty == false else { return "Image.png" }
+        let path = file as NSString
+        let ext = path.pathExtension
+        if ext.lowercased() == "png" { return file }
+        if ext.isEmpty { return file + ".png" }
+        return path.deletingPathExtension + ".png"
+    }
+}
+
 /// Image data is prepared after admission to the shelf. The pasteboard callback
 /// uses this bounded strong cache so normal eviction and memory pressure do not
 /// trigger a second synchronous image encode.

@@ -130,6 +130,9 @@ final class WorkspaceStore {
                                    as: TextRecognitionOutput.self) ?? .pasteboardAndHistory
     var ocrRevealHistory = Settings.value(.ocrRevealHistory,
                                           as: OCRRevealHistory.self) ?? .never
+    /// Clipboard history images (U3): kept or text only, and the budget in MB.
+    var clipboardKeepsImages = Settings.bool(.clipboardKeepsImages)
+    var clipboardImageBudgetMB = min(max(Settings.int(.clipboardImageBudgetMB), 16), 64)
     var textRecognitionOptions: TextRecognitionOptions {
         TextRecognitionOptions(quality: ocrFastRecognition ? .fast : .accurate,
                                usesLanguageCorrection: ocrLanguageCorrection,
@@ -812,6 +815,20 @@ final class WorkspaceStore {
         Settings.set(value.rawValue, for: .ocrRevealHistory)
     }
 
+    func updateClipboardKeepsImages(_ value: Bool) {
+        clipboardKeepsImages = value
+        Settings.set(value, for: .clipboardKeepsImages)
+        ClipboardHistory.shared.configure(keepsImages: value,
+                                          budgetMB: clipboardImageBudgetMB)
+    }
+
+    func updateClipboardImageBudgetMB(_ value: Int) {
+        clipboardImageBudgetMB = min(max(value, 16), 64)
+        Settings.set(clipboardImageBudgetMB, for: .clipboardImageBudgetMB)
+        ClipboardHistory.shared.configure(keepsImages: clipboardKeepsImages,
+                                          budgetMB: clipboardImageBudgetMB)
+    }
+
     func updateMiniMapPosition(_ value: PalettePosition) {
         miniMapPosition = value
         Settings.set(value.rawValue, for: .miniMapPosition)
@@ -1211,7 +1228,7 @@ final class WorkspaceStore {
             MainActor.assumeIsolated { NotesStore.shared.deleteAllNotes() }
         }
         if scope.contains(.clipboard) {
-            MainActor.assumeIsolated { ClipboardHistory.shared.clear() }
+            MainActor.assumeIsolated { ClipboardHistory.shared.clear(includingPins: true) }
         }
         if scope.contains(.dropzones) {
             let removed = DropzoneStore().remove()

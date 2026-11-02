@@ -848,6 +848,22 @@ struct SettingsView: View {
                 SettingsSection("Notes rewriting") {
                     caption("Apple Intelligence on this Mac: \(NotesIntelligence.availability().summary) The notes editor's Format menu offers Improve wording, Format as Markdown and Summarize. The on-device model only writes a proposal — nothing leaves the Mac and nothing is logged — and it appears in a preview with Apply, Copy and Cancel before it touches the note. Apply is a single edit, one ⌘Z away.")
                 }
+                SettingsSection("Clipboard history") {
+                    Toggle("Keep copied images", isOn: Binding(
+                        get: { store.clipboardKeepsImages },
+                        set: { store.updateClipboardKeepsImages($0) }
+                    ))
+                    Picker("Image budget", selection: Binding(
+                        get: { store.clipboardImageBudgetMB },
+                        set: { store.updateClipboardImageBudgetMB($0) }
+                    )) {
+                        Text("16 MB").tag(16)
+                        Text("32 MB").tag(32)
+                        Text("64 MB").tag(64)
+                    }
+                    .disabled(!store.clipboardKeepsImages)
+                    caption("The history keeps text and images in memory only. An image is stored as its original bytes plus a 96 px thumbnail, and the oldest unpinned images are evicted to stay within the budget. Pinned entries survive Clear; pins are in memory too and disappear when MakiDesk quits. Nothing is written to disk.")
+                }
                 SettingsSection("Text recognition") {
                     Toggle("Fast recognition (less accurate)", isOn: Binding(
                         get: { store.ocrFastRecognition },

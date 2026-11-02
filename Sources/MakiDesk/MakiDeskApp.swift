@@ -22,6 +22,13 @@ struct MakiDeskApp: App {
         WorkspaceStore.shared.start()
         WindowDrag.shared.start()
         ClipboardHistory.shared.start()
+        ClipboardHistory.shared.configure(
+            keepsImages: WorkspaceStore.shared.clipboardKeepsImages,
+            budgetMB: WorkspaceStore.shared.clipboardImageBudgetMB
+        )
+        // Wires the rejection notice before the first copy, not only when the
+        // panel is opened for the first time.
+        _ = ClipboardController.shared
         ShelfController.shared.start()
         IdlePerformanceMetrics.shared.start()
         SystemMonitor.shared.start()

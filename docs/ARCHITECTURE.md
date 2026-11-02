@@ -66,7 +66,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `NotesStore.swift` | Notes window, sidebar, toolbar, tabs-free navigation, anchoring. |
 | `NotesEditor.swift` | TextKit 1 text view and line-number ruler. |
 | `NotesSyntax.swift`, `NotesGrammarQueries.swift` | Syntax configuration, captures, colours, highlighter. |
-| `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text history, pasteboard poll, picker. |
+| `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text and image history, pasteboard poll, image budget and pins, picker. |
 | `ShelfController.swift`, `ShelfShake.swift` | Drag shelf, file promises, Quick Look, drag out, shake detector. |
 | `ScreenshotLibrary.swift` | Screenshot inventory, Quick Look, native file drags, configurable grid, sorting, date groups and file operations. |
 | `MarkupModel.swift` | Pure screenshot markup: arrow, rectangle, pen, highlighter, text label and pixel mosaic, rendered into pixels for both the preview and the saved file. |
@@ -299,6 +299,13 @@ closing the panel ends the session. Apply reaches the editor as one undoable
 edit. The engine is a protocol, so the state machine is tested with a fake and
 the real one only exists on a system that reports the model available.
 
+`ClipboardHistory` polls `changeCount` and stores text entries directly. An image
+is read as bytes on the main actor, then decoded, thumbnailed and hashed on a
+worker; the generation and `changeCount` are checked at publication, so a copy
+that arrives during the decode wins. The budget counts the original bytes plus
+the thumbnail; pins are exempt from eviction and from *Clear*, and the list and
+the pins stay in memory.
+
 `TextRecognitionController` (T41) reads text with Vision from four sources —
 the selected area (shared selector), the window under the pointer, the frontmost
 window and the whole screen — and from an image the caller already has (shelf,
@@ -424,7 +431,7 @@ restore rule) and the shortcut catalogue. At the time of writing: **801 tests**.
   persistence queue behind the 400 ms debounce, so durability does not touch the
   main thread; the panel flushes again when it loses key focus, which is what
   makes autosave have no explicit save step.
-- The app never stores window thumbnails or clipboard text on disk.
+- The app never stores window thumbnails or clipboard content on disk.
 
 ## Known constraints
 

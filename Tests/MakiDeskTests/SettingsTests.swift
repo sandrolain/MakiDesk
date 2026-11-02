@@ -280,6 +280,7 @@ final class SettingsTests: XCTestCase {
             .timerOverlayVisible, .timerOverlayOpacity, .timerOverlayPosition,
             .timerOverlayScreen, .timerSoundEnabled, .timerSoundName,
             .notesFontSize, .notesSidebarWidth,
+            .clipboardKeepsImages, .clipboardImageBudgetMB,
             .screenshotCopyToClipboard, .screenshotSavedNotice, .recordingIncludesAudio,
             .screenshotLibrarySort, .screenshotLibraryGrouping,
             .screenshotLibraryScale, .screenshotLibraryShowsRecordings,

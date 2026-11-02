@@ -19,6 +19,10 @@ final class ClipboardModel {
         entries.indices.contains(selection) ? entries[selection] : nil
     }
 
+    var pinnedCount: Int {
+        entries.reduce(0) { $0 + ($1.isPinned ? 1 : 0) }
+    }
+
     func reload(from history: ClipboardHistory) {
         let selectedID = selectedEntry?.id
         entries = history.entries
@@ -70,6 +74,9 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         history.onChange = { [weak self] in
             guard let self, self.isVisible else { return }
             self.model.reload(from: self.history)
+        }
+        history.onImageRejected = {
+            HUDController.shared.show(HUDMessage.clipboardImageBudgetFull)
         }
         NotificationCenter.default.addObserver(
             forName: .makiDeskThemeChanged, object: nil, queue: .main
@@ -131,10 +138,15 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         let hosting = NSHostingView(rootView: ClipboardView(
             model: model,
             onPick: { [weak self] entry in self?.paste(entry) },
-            onClear: { ClipboardHistory.shared.clear() },
+            onClear: { includingPins in
+                ClipboardHistory.shared.clear(includingPins: includingPins)
+            },
             onShelf: { [weak self] entry in
                 self?.hide(restoringFocus: false)
-                ShelfController.shared.add(text: entry.text)
+                self?.addToShelf(entry)
+            },
+            onTogglePin: { entry in
+                ClipboardHistory.shared.togglePin(entry.id)
             }
         ))
         hosting.frame = NSRect(origin: .zero, size: Self.size)
@@ -177,8 +189,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         hide(restoringFocus: targetIsUs)
 
         let pasteboard = NSPasteboard.general
-        let item = NSPasteboardItem()
-        guard item.setString(entry.text, forType: .string), pasteboard.writeObjects([item]) else {
+        guard ClipboardPasteboardWriter.write(entry, to: pasteboard) else {
             HUDController.shared.show(HUDMessage.clipboardWriteFailed)
             return
         }
@@ -204,9 +215,31 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             guard NSApp.isActive else { return }
             let handled = NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
-            if handled == false, pasteIntoNotes, NotesController.shared.isVisible, NSApp.isActive {
+            if handled == false, pasteIntoNotes, entry.image == nil,
+               NotesController.shared.isVisible, NSApp.isActive {
                 NotesController.shared.insertText(entry.text)
             }
+        }
+    }
+
+    /// Text goes straight to the shelf. An image is decoded off the main thread
+    /// and then added, so a large paste does not stall the panel's dismissal.
+    private func addToShelf(_ entry: ClipboardEntry) {
+        guard let image = entry.image else {
+            ShelfController.shared.add(text: entry.text)
+            return
+        }
+        Task {
+            let decoded = await Task.detached(priority: .userInitiated) {
+                ClipboardImageSource.decode(
+                    ClipboardImageSource.Payload(data: image.data, type: image.type)
+                )
+            }.value
+            guard let decoded else {
+                HUDController.shared.show(HUDMessage.shelfImageNotPrepared)
+                return
+            }
+            _ = ShelfController.shared.add(image: decoded.image, name: "Clipboard image")
         }
     }
 
@@ -277,8 +310,10 @@ final class ClipboardPanel: FloatingPanel {
 struct ClipboardView: View {
     @Bindable var model: ClipboardModel
     let onPick: (ClipboardEntry) -> Void
-    let onClear: () -> Void
+    let onClear: (Bool) -> Void
     let onShelf: (ClipboardEntry) -> Void
+    let onTogglePin: (ClipboardEntry) -> Void
+    @State private var confirmsClearAll = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -301,6 +336,13 @@ struct ClipboardView: View {
             .fill(model.theme.background.opacity(model.opacity)))
         .overlay(RoundedRectangle(cornerRadius: 14)
             .stroke(model.theme.border.opacity(0.8), lineWidth: 1))
+        .confirmationDialog("Clear everything, including pinned items?",
+                            isPresented: $confirmsClearAll) {
+            Button("Clear Everything", role: .destructive) { onClear(true) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every entry, pinned or not, is removed. This cannot be undone.")
+        }
     }
 
     private var header: some View {
@@ -315,6 +357,11 @@ struct ClipboardView: View {
             Text(model.entries.count == 1 ? "1 item" : "\(model.entries.count) items")
                 .font(.system(size: 10.5))
                 .foregroundStyle(model.theme.subtext)
+            if model.pinnedCount > 0 {
+                Text("· \(model.pinnedCount) pinned")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(model.theme.accent)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -327,7 +374,8 @@ struct ClipboardView: View {
                 LazyVStack(spacing: 4) {
                     ForEach(Array(model.entries.enumerated()), id: \.element.id) { index, entry in
                         ClipboardRow(entry: entry, selected: index == model.selection,
-                                     theme: model.theme, onShelf: onShelf)
+                                     theme: model.theme, onShelf: onShelf,
+                                     onTogglePin: onTogglePin)
                             .id(entry.id)
                             .onTapGesture { onPick(entry) }
                     }
@@ -356,7 +404,7 @@ struct ClipboardView: View {
             Text("Nothing copied yet")
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(model.theme.text)
-            Text("Copy some text, then press ⌥V.")
+            Text("Copy some text or an image, then press ⌥V.")
                 .font(.system(size: 11))
                 .foregroundStyle(model.theme.subtext)
         }
@@ -381,13 +429,22 @@ struct ClipboardView: View {
             Text("·")
                 .font(.system(size: 10))
                 .foregroundStyle(model.theme.subtext.opacity(0.5))
-            Button("Clear") { onClear() }
+            Button("Clear") { onClear(false) }
                 .buttonStyle(.plain)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(model.entries.isEmpty
                     ? model.theme.subtext.opacity(0.4)
                     : model.theme.subtext)
-                .disabled(model.entries.isEmpty)
+                .disabled(model.entries.isEmpty || model.pinnedCount == model.entries.count)
+            if model.pinnedCount > 0 {
+                Text("·")
+                    .font(.system(size: 10))
+                    .foregroundStyle(model.theme.subtext.opacity(0.5))
+                Button("Clear All…") { confirmsClearAll = true }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(model.theme.subtext)
+            }
             Text("·")
                 .font(.system(size: 10))
                 .foregroundStyle(model.theme.subtext.opacity(0.5))
@@ -421,6 +478,7 @@ private struct ClipboardRow: View {
     let selected: Bool
     let theme: PaletteTheme
     let onShelf: (ClipboardEntry) -> Void
+    let onTogglePin: (ClipboardEntry) -> Void
     @State private var hovered = false
 
     var body: some View {
@@ -439,6 +497,13 @@ private struct ClipboardRow: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if entry.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(theme.accent)
+                    .help("Pinned · survives Clear")
+                    .accessibilityLabel("Pinned")
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -449,6 +514,7 @@ private struct ClipboardRow: View {
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
         .contextMenu {
+            Button(entry.isPinned ? "Unpin" : "Pin") { onTogglePin(entry) }
             Button("Add to Shelf") { onShelf(entry) }
         }
     }
@@ -471,6 +537,13 @@ private struct ClipboardRow: View {
                 .frame(width: 22, height: 22)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .help(url.lastPathComponent)
+        case let .storedImage(image):
+            Image(decorative: image.thumbnail, scale: 1)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .help(entry.detail)
         case .text:
             Image(systemName: "text.alignleft")
                 .font(.system(size: 10, weight: .medium))
