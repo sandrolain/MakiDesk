@@ -56,6 +56,8 @@ enum WindowController {
         case toggleFocusDim
         /// Show or hide the checklist card (T59).
         case toggleChecklist
+        /// Show the utility bar under the menu bar, or close it (F1).
+        case toggleUtilityBar
         /// Open the field that starts a timer (T61).
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).

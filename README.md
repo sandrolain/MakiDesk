@@ -196,6 +196,17 @@ instance. No Accessibility permission needed.
 the phrase, Return runs it; a wrong argument says what it expected instead of
 running something else. Every row is an action MakiDesk already has.
 
+### A utility bar that comes when called
+
+Rest the pointer just under the menu bar and a strip drops down: the everyday
+panels, the capture tools, the presentation toggles, and the figures worth
+glancing at — free disk, CPU, the nearest running timer, the windows in the
+switcher. It appears after a quarter of a second, retreats when the pointer
+leaves, takes no room from windows and never takes the keyboard by itself. The
+pin keeps it out; `⌃⌥B` opens it from the keyboard (arrows choose, Return runs,
+Esc closes), and `utility bar`, `bar show`, `bar hide` and `bar pin` do the same
+from the command box. It is left out of screenshots and recordings.
+
 ### Notices that stay readable
 
 Results are reported by a small, themed notice. Its state tints the icon and

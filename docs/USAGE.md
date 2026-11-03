@@ -487,6 +487,7 @@ written in words. It is the menu and the shortcuts, typed:
 | `notes`, `clipboard`, `shelf`, `switcher`, `search`, `checklist` | Open a panel |
 | `settings`, `shortcuts`, `screenshots`, `screenshot`, `capture window`, `capture screen`, `record`, `ocr`, `measure`, `colour` | The app commands |
 | `minimap`, `focus border`, `focus dim`, `peek`, `clear peek` | Presentation |
+| `utility bar`, `bar show`, `bar hide`, `bar pin` | Open, close or pin the utility bar |
 | `timer 25m`, `timer 8:30` | Start a timer with the same syntax as the timer field |
 | `dismiss notices` | Take every notice away |
 
@@ -503,6 +504,41 @@ written in words. It is the menu and the shortcuts, typed:
   still open.
 - The box used to be on `⌃Space`, which macOS gives to the input source when
   more than one language is enabled; it moved to `⌃⌥R` so it cannot be taken.
+
+## Utility bar
+
+A strip of commands and figures that comes down from the menu bar when you need
+it, and leaves no room behind.
+
+- **Opening it.** Rest the pointer in the thin strip just under the menu bar for
+  a quarter of a second. The bar drops down, stays while the pointer is on it,
+  and retreats when the pointer leaves or you click elsewhere. `⌃⌥B` opens it
+  from the keyboard, and the same key closes it. The menu bar's **Utility Bar**
+  item does the same, and the command box has `utility bar`, `bar show`,
+  `bar hide` and `bar pin`.
+- **What is on it.** On the left the everyday panels and tools — Notes,
+  Clipboard, Shelf, Timer, the command box, then screenshots, text from the
+  screen, colour and measure. In the middle the presentation toggles — focus
+  border, focus dim, mini map — lit in the accent while on. On the right the
+  figures: free disk, CPU, the nearest running timer and the number of windows
+  in the switcher. A click runs the same action as the shortcut and the menu.
+- **The pin.** The pin on the right keeps the bar out. It lasts for the session:
+  quitting MakiDesk clears it, and so does clicking it again. The bar still takes
+  no space from windows — it is drawn over the top of the screen, never reserved.
+- **From the keyboard.** `⌃⌥B` gives the bar the keyboard and draws a
+  selection; `→`/`←` (or `↑`/`↓`) move it, **Return** runs the choice, and
+  **Esc** closes and gives the keyboard back.
+- **When it does not fit.** Narrow displays show icons only; the words appear on
+  wide ones, or when Settings says so. Anything that does not fit moves under
+  the chevron, which opens a menu rather than a popover so the bar never takes
+  the keyboard by itself.
+- **Settings ▸ Panels ▸ Utility bar** turns the pointer reveal off, sets the
+  height (28–56 pt, 38 by default) and chooses whether the labels follow the
+  display, are always shown or never shown. With the reveal off, only `⌃⌥B`,
+  the menu and the command box open it.
+- The bar is left out of screenshots and recordings, takes no Accessibility
+  permission of its own, and does nothing while it is hidden: the pointer is
+  sampled only while the feature is on.
 
 ## Clipboard history
 
@@ -940,9 +976,9 @@ first one.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
   width, corner and display), the countdown card (visibility, opacity, corner
   and display), the window switcher/search appearance (including the groups
-  column and its announcements), the annotated screenshot's clipboard copy, the
-  notice for screenshots macOS saves, and text recognition quality and
-  correction.
+  column and its announcements), the utility bar (pointer reveal, height and
+  labels), the annotated screenshot's clipboard copy, the notice for screenshots
+  macOS saves, and text recognition quality and correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **System** — the free space beside the icon (when to show it, its format, the
   warning level) and the CPU watch (on or off, the threshold and window, the
@@ -1123,6 +1159,7 @@ The table below is generated from the app's own table, with
 | Leave the group in use | `⌃⌥⌘L` | Desktop |
 | Clear the peek designation | `⌃⌥⌘H` | Desktop |
 | Apply the suggested layout | `⌃⌥⌘↩` | Desktop |
+| Utility bar | `⌃⌥B` | Window |
 
 <!-- shortcuts:end -->
 

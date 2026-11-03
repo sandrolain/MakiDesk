@@ -115,6 +115,7 @@ enum CommandRouter {
         case .toggleFocusBorder: return "focus border"
         case .toggleFocusDim: return "focus dim"
         case .toggleChecklist: return "checklist"
+        case .toggleUtilityBar: return "utility bar"
         case .newTimer: return "timer"
         case .captureScreenshot: return "screenshot"
         case .captureWindow: return "window"

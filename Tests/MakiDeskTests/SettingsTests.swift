@@ -299,6 +299,7 @@ final class SettingsTests: XCTestCase {
             .shelfShakeEnabled, .shelfShakeSensitivity,
             .dragEnabled, .dragActivator, .layoutAsksFirst, .announceGroupChanges,
             .windowGap, .measureUnit, .colorPickerFormat,
+            .utilityBarEnabled, .utilityBarHeight, .utilityBarLabels,
             .systemDiskMenuBarMode, .systemDiskFormat, .systemDiskWarningThresholdGB,
             .systemCPUAlertsEnabled, .systemCPUThresholdPercent,
             .systemCPUSustainedMinutes, .systemCPUNotifySystem,

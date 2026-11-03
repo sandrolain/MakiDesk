@@ -39,6 +39,10 @@ enum CommandAction: Equatable {
     case dismissNotices
     case recognizeCopiedImage
     case openPorts
+    /// Keep the utility bar open, or let it retreat again (F1).
+    case pinUtilityBar
+    case showUtilityBar
+    case hideUtilityBar
 }
 
 /// Parsing and suggestions, kept pure: typing a command and choosing from the
@@ -96,6 +100,12 @@ enum CommandCatalog {
         entry("minimap", "Show or hide the mini map", .shortcut(.toggleMiniMap)),
         entry("focus border", "Show or hide the focus border", .shortcut(.toggleFocusBorder)),
         entry("focus dim", "Dim everything outside the front window", .shortcut(.toggleFocusDim)),
+        // The utility bar
+        entry("utility bar", "Open or close the utility bar", .shortcut(.toggleUtilityBar)),
+        entry("bar", "Open or close the utility bar", .shortcut(.toggleUtilityBar)),
+        entry("bar show", "Open the utility bar", .showUtilityBar),
+        entry("bar hide", "Close the utility bar", .hideUtilityBar),
+        entry("bar pin", "Keep the utility bar open", .pinUtilityBar),
         // Peek
         entry("peek", "Designate the front window for the peek", .shortcut(.peekDesignate)),
         entry("clear peek", "Remove the peek designation", .shortcut(.clearPeek)),

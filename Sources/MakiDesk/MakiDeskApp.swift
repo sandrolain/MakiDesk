@@ -32,6 +32,7 @@ struct MakiDeskApp: App {
         ShelfController.shared.start()
         IdlePerformanceMetrics.shared.start()
         SystemMonitor.shared.start()
+        UtilityBarController.shared.start()
     }
 
     /// A menu item whose shortcut text sits after the title. The menu has no
@@ -102,6 +103,10 @@ struct MakiDeskApp: App {
                        keys: shortcutKeys(.toggleChecklist),
                        icon: "checklist") {
                 store.updateChecklistVisible(!store.checklistVisible)
+            }
+            menuButton("Utility Bar", keys: shortcutKeys(.toggleUtilityBar),
+                       icon: "rectangle.topthird.inset.filled") {
+                store.applyShortcut(.toggleUtilityBar)
             }
             Menu {
                 // No remaining time in these titles: a title that changed every

@@ -325,5 +325,8 @@ enum ShortcutDefinitions {
             modifiers: ctrlOptCmd, action: .clearPeek),
         def("app.applyAdvice", "Apply the suggested layout", section: "App", key: kVK_Return,
             modifiers: ctrlOptCmd, action: .applySuggestedLayout),
+        def("app.utilityBar", "Utility bar", section: "App", key: kVK_ANSI_B,
+            action: .toggleUtilityBar,
+            note: "Rest the pointer in the strip under the menu bar to open it; pin keeps it out."),
     ]
 }

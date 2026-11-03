@@ -82,6 +82,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `MakiSignpost.swift` | The Instruments intervals: a frame write, a recognition request. Cheap when nobody is recording, no content in them. |
 | `FloatingPanel.swift` | The panel base class: a subclass names its style (utility, keyOverlay, passive, readOnly) instead of overriding the same three members. |
 | `HUDMessage.swift`, `HUDMessages.swift` | What a notice says, as a value; the capture family's sentences are written once and checked by a test. |
+| `UtilityBarController.swift`, `UtilityBarView.swift` | The utility bar's panel and lifecycle: pointer reveal with a 10 Hz sample while enabled, pin, overflow menu, keyboard session, capture exclusion. |
+| `BarReveal.swift`, `BarLayout.swift`, `BarItemCatalog.swift`, `UtilityBarModel.swift` | Pure rules for when the bar opens and retreats, what fits, which commands it offers, and the info text; no AppKit or Accessibility I/O. |
 | `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
 | `LegacyMigration.swift` | One-time migration from the project's previous name. |
@@ -242,6 +244,25 @@ them in a panel with an `NSTextField` that reports the arrows, Tab, Return and
 Escape through `doCommandBy:`, so the palette's keys work while the field has the
 keyboard. Running a command goes through the same `applyShortcut` the menu uses,
 so a phrase and a menu row cannot diverge.
+
+The utility bar (F1/F2) is a `FloatingPanel` in the `passive` style at
+`.statusBar` level, placed at the top of the display's `visibleFrame` so it never
+sits behind the menu bar and never reserves space. `BarReveal` is the whole
+decision — a 250 ms dwell in the 8 pt strip, a 400 ms linger, a dismissal that
+waits for the pointer to leave, and a pin that only suppresses the retreat — as
+a value with the pointer and clock injected, so the timing is tested without a
+panel. `UtilityBarController` samples the pointer at 10 Hz through one
+`RunLoop.common` timer that exists only while the setting is on, and stops it,
+the click monitors and the `NSWorkspace` observers when it is turned off.
+`BarItemCatalog` is the only list of controls: each entry names an existing
+`ShortcutAction`, so a click runs the same `applyShortcut` as the key and the
+menu. `BarLayout` picks what fits from the widths the view also uses (least
+important first, rightmost on a tie), and the remainder becomes an `NSMenu`, not
+a popover, because a passive panel must not become key. `⌃⌥B` is the one
+keyboard session: the panel's `canBecomeKey` is true only then, arrows move the
+selection, Esc closes, and `PanelFocusReturn` gives the keyboard back. Its
+window number is passed to `SCContentFilter(display:excludingWindows:)` while it
+is visible, so the bar stays out of screenshots, OCR and recordings.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and

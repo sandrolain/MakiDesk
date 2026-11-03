@@ -107,6 +107,11 @@ enum SettingsDefaults {
         .clipboardKeepsImages: true,
         .clipboardImageBudgetMB: 32,
 
+        // Utility bar (F1): opens on approach, 38 pt, labels by width.
+        .utilityBarEnabled: true,
+        .utilityBarHeight: 38,
+        .utilityBarLabels: BarLabelMode.auto.rawValue,
+
         // Screenshots and recordings. The library folder has no default: an
         // absent key means "the system folder", which is not a value.
         .screenshotCopyToClipboard: true,

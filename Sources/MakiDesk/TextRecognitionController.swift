@@ -387,7 +387,10 @@ final class TextRecognitionController {
                 frame: WindowController.flip(screen.frame),
                 scale: screen.backingScaleFactor
             )
-            return try await ScreenRegionCapture.capture(display: display)
+            return try await ScreenRegionCapture.capture(
+                display: display,
+                excluding: UtilityBarController.shared.excludedWindowNumbers
+            )
         }
     }
 

@@ -121,6 +121,11 @@ final class WorkspaceStore {
     var gap = Settings.double(.windowGap).clamped(to: 0...80)
     var showMiniMap = Settings.bool(.showMiniMap)
     var showPreview = Settings.bool(.showPreview)
+    /// The utility bar (F1/F2): whether it opens on approach, how tall it is,
+    /// and whether it shows the words beside the icons.
+    var utilityBarEnabled = Settings.bool(.utilityBarEnabled)
+    var utilityBarHeight = min(max(Settings.int(.utilityBarHeight), 28), 56)
+    var utilityBarLabels = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
     /// OCR quality and correction (T41). Languages stay automatic.
     var ocrFastRecognition = Settings.bool(.ocrFastRecognition)
     var ocrLanguageCorrection = Settings.bool(.ocrLanguageCorrection)
@@ -789,6 +794,28 @@ final class WorkspaceStore {
         Settings.set(value, for: .showMiniMap)
     }
 
+    /// The utility bar's three preferences. The controller re-reads them after
+    /// every change, so it can stop its pointer sampling the moment the bar is
+    /// turned off.
+    func updateUtilityBarEnabled(_ value: Bool) {
+        utilityBarEnabled = value
+        Settings.set(value, for: .utilityBarEnabled)
+        UtilityBarController.shared.applySettings()
+    }
+
+    func updateUtilityBarHeight(_ value: Int) {
+        let clamped = min(max(value, 28), 56)
+        utilityBarHeight = clamped
+        Settings.set(clamped, for: .utilityBarHeight)
+        UtilityBarController.shared.applySettings()
+    }
+
+    func updateUtilityBarLabels(_ value: BarLabelMode) {
+        utilityBarLabels = value
+        Settings.set(value.rawValue, for: .utilityBarLabels)
+        UtilityBarController.shared.applySettings()
+    }
+
     func updateShowPreview(_ value: Bool) {
         showPreview = value
         Settings.set(value, for: .showPreview)
@@ -1249,6 +1276,9 @@ final class WorkspaceStore {
         updateGap(12)
         updateMiniMapVisibility(true)
         updateShowPreview(true)
+        updateUtilityBarEnabled(true)
+        updateUtilityBarHeight(Int(UtilityBarModel.defaultHeight))
+        updateUtilityBarLabels(.auto)
         updateOCRFastRecognition(false)
         updateOCRLanguageCorrection(true)
         updateMiniMapPosition(.topRight)
@@ -1410,6 +1440,9 @@ final class WorkspaceStore {
             return
         case .toggleChecklist:
             updateChecklistVisible(!checklistVisible)
+            return
+        case .toggleUtilityBar:
+            UtilityBarController.shared.toggle()
             return
         case .newTimer:
             TimerInputController.shared.show()

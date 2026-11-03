@@ -124,6 +124,7 @@ final class CommandRouterTests: XCTestCase {
         .recognizeText, .sampleColor, .measureArea,
         .openSettings, .openKeyboardShortcuts, .openScreenshots,
         .toggleFocusBorder, .toggleMiniMap, .toggleFocusDim, .toggleChecklist,
+        .toggleUtilityBar,
         .newTimer, .captureScreenshot, .captureWindow, .captureScreen, .recordArea,
         .runCommand, .focusSelection, .leaveGroup, .clearPeek, .applySuggestedLayout,
         .assignToGroup(1), .recallGroup(1), .peekDesignate,

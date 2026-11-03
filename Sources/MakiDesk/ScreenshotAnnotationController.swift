@@ -157,7 +157,10 @@ final class ScreenshotAnnotationController {
             guard let self else { return }
             defer { self.isSelecting = false }
             do {
-                let image = try await ScreenRegionCapture.capture(display: display)
+                let image = try await ScreenRegionCapture.capture(
+                    display: display,
+                    excluding: UtilityBarController.shared.excludedWindowNumbers
+                )
                 self.present(image: image, selection: ScreenRegionSelector.Selection(
                     rect: CGRect(origin: .zero, size: display.frame.size),
                     display: display, image: image, point: nil

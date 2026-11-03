@@ -485,6 +485,7 @@ final class ScreenRegionSelector {
         // Taken before the overlays close: if the window server still lists one
         // when the capture runs, it is left out of the image.
         let excluded = overlays.map { CGWindowID(truncatingIfNeeded: $0.window.windowNumber) }
+            + UtilityBarController.shared.excludedWindowNumbers
         tearDown(restoreFocus: true)
 
         Task { @MainActor in
@@ -558,6 +559,7 @@ final class ScreenRegionSelector {
         snapshotGeneration &+= 1
         let generation = snapshotGeneration
         let excluded = overlays.map { CGWindowID(truncatingIfNeeded: $0.window.windowNumber) }
+            + UtilityBarController.shared.excludedWindowNumbers
 
         snapshotTask = Task { @MainActor [weak self] in
             let image = try? await ScreenRegionCapture.capture(display: display,

@@ -43,6 +43,14 @@ extension HUDMessage {
                    detail: reason)
     }
 
+    // MARK: - Utility bar
+
+    static func utilityBarIsOff() -> HUDMessage {
+        HUDMessage(title: "The utility bar is off",
+                   symbol: "rectangle.topthird.inset.filled",
+                   detail: "Turn it on in Settings ▸ Panels ▸ Utility bar.")
+    }
+
     // MARK: - Text recognition
 
     static func textCopied(size: String, preview: String,

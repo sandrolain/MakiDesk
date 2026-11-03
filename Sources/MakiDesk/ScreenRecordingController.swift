@@ -373,7 +373,12 @@ final class ScreenRecordingController {
                     HUDController.shared.show(HUDMessage.recordingFailed(reason: message))
                 }
             }
-            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let barWindows = Set(UtilityBarController.shared.excludedWindowNumbers)
+            let excludedWindows = barWindows.isEmpty
+                ? []
+                : content.windows.filter { barWindows.contains($0.windowID) }
+            let filter = SCContentFilter(display: display,
+                                         excludingWindows: excludedWindows)
             let configuration = SCStreamConfiguration()
             configuration.sourceRect = ScreenRegionGeometry.displayLocalRect(
                 selection.rect, in: selection.display

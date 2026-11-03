@@ -44,6 +44,10 @@ identity asks again. A Developer ID-signed public release behaves best here.
 - **Window metadata** through Accessibility: app, title, frame, minimized/full
   screen state and the accessible element used to set a frame. This is needed
   to list windows and move them.
+- **The pointer position**, while the utility bar is enabled: sampled ten
+  times a second to decide whether the pointer is resting in the strip under the
+  menu bar and whether it is still on the open bar. Nothing is recorded or
+  logged, and the sampling stops the moment the feature is turned off.
 - **Window images** through ScreenCaptureKit, only while previews or the
   content measure are in use. The images are downscaled and kept **in memory**;
   they are used for the switcher cards, the overlay and the edge-energy score,
@@ -104,7 +108,7 @@ All paths are under your user account:
 | Dropzone runs | `~/Library/Caches/MakiDesk/DropzoneRuns/<run>/` | Removed when the run ends unless kept or revealed |
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
-| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, disk label and CPU watch, date of the last disk warning) | Until reset |
+| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
 | Shelf | RAM + a temporary staging folder | Until the shelf closes |
@@ -175,7 +179,9 @@ that action; the library does not copy or upload screenshots on its own.
 ## Window previews
 
 ScreenCaptureKit frames are requested for visible windows to draw the switcher
-cards, the overlay and the content score. They stay in memory, are never
+cards, the overlay and the content score. The utility bar's own window is passed
+to ScreenCaptureKit as an excluded window while it is visible, so neither it nor
+the selection overlays appear in a capture, an OCR pass or a recording. They stay in memory, are never
 uploaded, and are not part of the notes/groups data. Without Screen Recording
 the switcher falls back to app icons and the content-weighted layout uses the
 per-kind weights only.

@@ -147,6 +147,12 @@ final class CommandBoxController {
             TextRecognitionController.shared.recognizeCopiedImage()
         case .openPorts:
             PortsWindowController.shared.show()
+        case .pinUtilityBar:
+            UtilityBarController.shared.togglePin()
+        case .showUtilityBar:
+            UtilityBarController.shared.show()
+        case .hideUtilityBar:
+            UtilityBarController.shared.dismiss()
         }
     }
 
