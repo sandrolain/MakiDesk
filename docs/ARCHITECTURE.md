@@ -159,6 +159,7 @@ moment ago is still there.
 All layout maths is pure and unit-tested:
 
 - `TilingEngine` has the seven-position ladder, fixed halves/quarters,
+  `fullSpan` (the ladder's full state on one axis, keeping the other),
   `gridFrames`, `goldenSpiralSlots` (capped at six) and
   `weightedFrames` (squarified treemap, deterministic, gap-inset).
 - `LayoutAdvisor` classifies windows by app/title (`WindowKind`), reads the
@@ -167,6 +168,11 @@ All layout maths is pure and unit-tested:
   pure; all of its rules can be read off tests.
 - `WorkspaceStore.applyFrame` is the only path that writes a frame, so a layout,
   a drag, a recall and a manual move all remember the same arrangement.
+- `ArrowChord` is the two-arrow chord: a Carbon hot key carries one key, so the
+  partner arrow's physical state (`CGEventSource.keyState`, no event tap and no
+  extra permission) turns an ordinary step into the full span of that axis. The
+  pair must still carry its default rows; a remapped or disabled arrow turns the
+  chord off. The rule is pure and tested with an injected key state.
 
 `WindowCapture` produces downscaled images on a background queue and
 `edgeEnergy` turns them into a scalar. The switcher uses the same captures for

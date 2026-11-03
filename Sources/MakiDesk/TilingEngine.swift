@@ -173,6 +173,19 @@ enum TilingEngine {
         }
     }
 
+    /// The full extent of `area` on `axis`, keeping the window's current size
+    /// and position across the other one. It is the ladder's fourth state
+    /// (`ladder[3]`), reachable directly by holding both arrows of a pair
+    /// (S03) instead of walking to it.
+    static func fullSpan(of rect: CGRect, in area: CGRect, axis: Axis) -> CGRect {
+        switch axis {
+        case .horizontal:
+            return CGRect(x: area.minX, y: rect.minY, width: area.width, height: rect.height)
+        case .vertical:
+            return CGRect(x: rect.minX, y: area.minY, width: rect.width, height: area.height)
+        }
+    }
+
     /// Index of the ladder state closest to `rect`.
     static func nearestIndex(to rect: CGRect, among rects: [CGRect]) -> Int {
         var best = 0

@@ -65,6 +65,7 @@ MakiDesk to be focused):
 |---|---|
 | Left / right half | `⌃⌥←` / `⌃⌥→` |
 | Top / bottom half | `⌃⌥↑` / `⌃⌥↓` |
+| Whole height / whole width (both arrows held) | `⌃⌥↑`+`↓` / `⌃⌥←`+`→` |
 | Top-left / top-right quarter | `⌃⌥U` / `⌃⌥I` |
 | Bottom-left / bottom-right quarter | `⌃⌥J` / `⌃⌥K` |
 | Center → full screen → golden (cycle) | `⌃⌥↩` |
@@ -72,6 +73,13 @@ MakiDesk to be focused):
 | Golden ratio | `⌃⌥P` |
 | Toggle full screen | `⌃⌥F` |
 | Minimize | `⌃⌥M` |
+
+**Both arrows at once: the whole axis.** Hold `⌃⌥` and press `↑` and `↓`
+together — the window takes the whole height of the screen and keeps its width
+and horizontal position; `←` and `→` together do the same for the width, keeping
+the height. The second arrow of the pair completes the chord: one arrow alone is
+still the single step below. Remapping or turning off either arrow of a pair
+turns its chord off, so no unexpected key can stretch a window.
 
 **The arrow keys walk a ladder.** `⌃⌥←`/`→` step the window horizontally and
 `⌃⌥↑`/`↓` vertically through the golden/half/full positions. Horizontal steps
@@ -1044,6 +1052,8 @@ The table below is generated from the app's own table, with
 | Right column | `⌃⌥→` | Window |
 | Top row | `⌃⌥↑` | Window |
 | Bottom row | `⌃⌥↓` | Window |
+| Full height — both vertical arrows | ⌃⌥↑ + ↓ | Gesture |
+| Full width — both horizontal arrows | ⌃⌥← + → | Gesture |
 | Top-left quarter | `⌃⌥U` | Window |
 | Top-right quarter | `⌃⌥I` | Window |
 | Bottom-left quarter | `⌃⌥J` | Window |

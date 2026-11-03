@@ -30,6 +30,46 @@ final class GeometryTests: XCTestCase {
         }
     }
 
+    func testFullHeightKeepsTheWidthAndTheHorizontalPosition() {
+        let rect = CGRect(x: 120, y: 300, width: 400, height: 200)
+        let full = TilingEngine.fullSpan(of: rect, in: area, axis: .vertical)
+        XCTAssertEqual(full.minX, 120)
+        XCTAssertEqual(full.width, 400)
+        XCTAssertEqual(full.minY, area.minY)
+        XCTAssertEqual(full.height, area.height)
+    }
+
+    func testFullWidthKeepsTheHeightAndTheVerticalPosition() {
+        let rect = CGRect(x: 120, y: 300, width: 400, height: 200)
+        let full = TilingEngine.fullSpan(of: rect, in: area, axis: .horizontal)
+        XCTAssertEqual(full.minX, area.minX)
+        XCTAssertEqual(full.width, area.width)
+        XCTAssertEqual(full.minY, 300)
+        XCTAssertEqual(full.height, 200)
+    }
+
+    func testFullSpanIsTheFourthLadderState() {
+        let rect = CGRect(x: 120, y: 100, width: 400, height: 300)
+        let horizontal = TilingEngine.ladderRects(area: area, axis: .horizontal,
+                                                  orthogonal: rect.minY...rect.maxY)[3]
+        let vertical = TilingEngine.ladderRects(area: area, axis: .vertical,
+                                                orthogonal: rect.minX...rect.maxX)[3]
+        XCTAssertEqual(TilingEngine.fullSpan(of: rect, in: area, axis: .horizontal),
+                       horizontal)
+        XCTAssertEqual(TilingEngine.fullSpan(of: rect, in: area, axis: .vertical),
+                       vertical)
+    }
+
+    func testFullSpanKeepsANegativeDisplayOrigin() {
+        let secondary = CGRect(x: -1920, y: -260, width: 1920, height: 1080)
+        let rect = CGRect(x: -1800, y: -100, width: 500, height: 300)
+        let full = TilingEngine.fullSpan(of: rect, in: secondary, axis: .vertical)
+        XCTAssertEqual(full.minX, -1800)
+        XCTAssertEqual(full.width, 500)
+        XCTAssertEqual(full.minY, secondary.minY)
+        XCTAssertEqual(full.height, secondary.height)
+    }
+
     func testVerticalLadderFitsHeight() {
         let rects = TilingEngine.ladderRects(area: area, axis: .vertical, orthogonal: 0...1000)
         XCTAssertEqual(rects[0].height, minor * area.height, accuracy: 0.5)

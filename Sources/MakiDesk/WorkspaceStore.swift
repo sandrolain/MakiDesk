@@ -1573,6 +1573,16 @@ final class WorkspaceStore {
         let area = visible
         let current = tilingTarget.frame.insetBy(dx: -gapHalf, dy: -gapHalf)
 
+        // Both arrows of a pair, held at once with ⌃⌥: the full extent of that
+        // axis, with the other dimension left as it is (S03).
+        if let axis = ArrowChord.axis(for: action, bindings: shortcutBindings) {
+            let logical = TilingEngine.fullSpan(of: current, in: area, axis: axis)
+            applyFrame(logical.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
+                       reason: axis == .horizontal ? "full width" : "full height",
+                       animate: false)
+            return
+        }
+
         if let outcome = ladderStep(action, area: area, current: current) {
             // Arrow commands are discrete steps. Apply the final frame once,
             // then use the bounded T27 verification retries if an app restores
