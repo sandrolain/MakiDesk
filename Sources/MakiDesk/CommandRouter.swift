@@ -112,6 +112,7 @@ enum CommandRouter {
         case .openSettings: return "settings"
         case .openKeyboardShortcuts: return "shortcuts"
         case .openScreenshots: return "screenshots"
+        case .openPorts: return "ports"
         case .toggleFocusBorder: return "focus border"
         case .toggleFocusDim: return "focus dim"
         case .toggleChecklist: return "checklist"

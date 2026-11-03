@@ -450,7 +450,7 @@ struct MakiDeskApp: App {
                     Button("Turn On CPU Alerts") { system.updateCPUAlertsEnabled(true) }
                 }
                 Divider()
-                Button("Ports…") { PortsWindowController.shared.show() }
+                Button("Ports…") { store.applyShortcut(.openPorts) }
                 Divider()
                 Button("MakiDesk Settings…") { openSystemSettingsTab() }
             } label: {

@@ -124,7 +124,9 @@ final class WorkspaceStore {
     /// The utility bar (F1/F2): whether it opens on approach, how tall it is,
     /// and whether it shows the words beside the icons.
     var utilityBarEnabled = Settings.bool(.utilityBarEnabled)
-    var utilityBarHeight = min(max(Settings.int(.utilityBarHeight), 28), 56)
+    var utilityBarHeight = min(max(Settings.int(.utilityBarHeight),
+                                   Int(UtilityBarModel.heightRange.lowerBound)),
+                               Int(UtilityBarModel.heightRange.upperBound))
     var utilityBarLabels = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
     /// OCR quality and correction (T41). Languages stay automatic.
     var ocrFastRecognition = Settings.bool(.ocrFastRecognition)
@@ -804,7 +806,8 @@ final class WorkspaceStore {
     }
 
     func updateUtilityBarHeight(_ value: Int) {
-        let clamped = min(max(value, 28), 56)
+        let clamped = min(max(value, Int(UtilityBarModel.heightRange.lowerBound)),
+                          Int(UtilityBarModel.heightRange.upperBound))
         utilityBarHeight = clamped
         Settings.set(clamped, for: .utilityBarHeight)
         UtilityBarController.shared.applySettings()
@@ -1428,6 +1431,9 @@ final class WorkspaceStore {
             return
         case .openScreenshots:
             ScreenshotLibraryController.shared.show()
+            return
+        case .openPorts:
+            PortsWindowController.shared.show()
             return
         case .runCommand:
             CommandBoxController.shared.show()

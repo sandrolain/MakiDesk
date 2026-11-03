@@ -5,19 +5,19 @@ import Foundation
 ///
 /// Pure on purpose: the pointer arrives as a value and the answer is an action,
 /// so the timings and the awkward cases — a drag, a dismissal while the pointer
-/// is still in the strip, a pointer that leaves and comes back, a pinned bar —
-/// are tests instead of a manual inspection of a moving panel.
+/// is still in the trigger band, a pointer that leaves and comes back, a pinned
+/// bar — are tests instead of a manual inspection of a moving panel.
 ///
 /// The bar never reserves space: it is a panel that appears over the top of the
 /// screen and retreats. Nothing here touches windows or Accessibility.
 struct BarReveal: Equatable {
     struct Timings: Equatable {
-        /// How long the pointer rests in the strip before the bar appears.
+        /// How long the pointer rests in the trigger band before the bar appears.
         var dwell: TimeInterval = 0.25
         /// How long it may stay outside the bar before the bar retreats.
         var linger: TimeInterval = 0.4
-        /// The strip just below the menu bar that starts the reveal.
-        var zoneHeight: CGFloat = 8
+        /// The smallest trigger band, used where there is no menu bar.
+        var zoneHeight: CGFloat = 12
     }
 
     enum Action: Equatable {
@@ -32,9 +32,9 @@ struct BarReveal: Equatable {
 
     private var enteredZoneAt: TimeInterval?
     private var leftBarAt: TimeInterval?
-    /// After a dismissal the pointer may still be inside the strip — or inside
-    /// the area the bar just left. Without this the bar would come straight
-    /// back on the next tick.
+    /// After a dismissal the pointer may still be inside the trigger band — or
+    /// inside the area the bar just left. Without this the bar would come
+    /// straight back on the next tick.
     private var waitsForExit = false
     /// A command or the menu asked for the bar while the pointer was elsewhere:
     /// it stays until the pointer arrives (and the ordinary linger takes over).
@@ -51,12 +51,14 @@ struct BarReveal: Equatable {
                       width: area.width, height: height)
     }
 
-    /// The strip that starts the reveal: the top few points of the desktop
-    /// area, right below the menu bar.
-    static func zone(in area: CGRect, height: CGFloat) -> CGRect {
-        let height = max(1, height)
-        return CGRect(x: area.minX, y: area.maxY - height,
-                      width: area.width, height: height)
+    /// The band that starts the reveal: the whole menu bar where the display
+    /// has one — the easiest edge to reach, and it never overlaps a window's
+    /// buttons — or the top `minimum` points of the screen elsewhere.
+    static func zone(for screen: CGRect, desktop: CGRect, minimum: CGFloat) -> CGRect {
+        let menuBar = max(0, screen.maxY - desktop.maxY)
+        let height = max(1, max(menuBar, minimum))
+        return CGRect(x: screen.minX, y: screen.maxY - height,
+                      width: screen.width, height: height)
     }
 
     // MARK: - State
@@ -67,11 +69,12 @@ struct BarReveal: Equatable {
     }
 
     /// The user closed it (Esc, a click elsewhere, a command that opened a
-    /// panel). If the pointer is still in the strip, wait for it to leave.
-    mutating func dismiss(pointer: CGPoint, area: CGRect, barHeight: CGFloat) {
+    /// panel). If the pointer is still in the trigger band, wait for it to
+    /// leave.
+    mutating func dismiss(pointer: CGPoint, area: CGRect, zone: CGRect,
+                          barHeight: CGFloat) {
         let bar = Self.barFrame(in: area, height: barHeight)
-        let strip = Self.zone(in: area, height: timings.zoneHeight)
-        waitsForExit = bar.contains(pointer) || strip.contains(pointer)
+        waitsForExit = bar.contains(pointer) || zone.contains(pointer)
         isVisible = false
         enteredZoneAt = nil
         leftBarAt = nil
@@ -101,7 +104,8 @@ struct BarReveal: Equatable {
 
     // MARK: - The decision
 
-    mutating func update(pointer: CGPoint, area: CGRect, barHeight: CGFloat,
+    mutating func update(pointer: CGPoint, area: CGRect, zone: CGRect,
+                         barHeight: CGFloat,
                          pressed: Bool, suppressed: Bool, now: TimeInterval) -> Action {
         if suppressed {
             enteredZoneAt = nil
@@ -110,15 +114,16 @@ struct BarReveal: Equatable {
         }
 
         let bar = Self.barFrame(in: area, height: barHeight)
-        let strip = Self.zone(in: area, height: timings.zoneHeight)
-        let inStrip = strip.contains(pointer)
+        let inZone = zone.contains(pointer)
         let inBar = bar.contains(pointer)
 
-        if waitsForExit, !inStrip, !inBar { waitsForExit = false }
+        if waitsForExit, !inZone, !inBar { waitsForExit = false }
 
         if isVisible {
             guard !isPinned else { return .none }
-            if inBar {
+            // The trigger band counts as "on the bar": the pointer can rest in
+            // the menu bar, decide, and only then move down onto the bar.
+            if inBar || inZone {
                 leftBarAt = nil
                 sticky = false
             } else if sticky {
@@ -137,7 +142,7 @@ struct BarReveal: Equatable {
             return .none
         }
 
-        guard inStrip else {
+        guard inZone else {
             enteredZoneAt = nil
             return .none
         }

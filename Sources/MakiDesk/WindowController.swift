@@ -49,6 +49,9 @@ enum WindowController {
         case openSettings
         case openKeyboardShortcuts
         case openScreenshots
+        /// The listening TCP ports and their processes. No hot key of its own:
+        /// the menu, the command box and the utility bar offer it.
+        case openPorts
         /// Toggle presentation the user configured in Settings.
         case toggleFocusBorder
         case toggleMiniMap

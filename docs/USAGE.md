@@ -518,15 +518,19 @@ written in words. It is the menu and the shortcuts, typed:
 A strip of commands and figures that comes down from the menu bar when you need
 it, and leaves no room behind.
 
-- **Opening it.** Rest the pointer in the thin strip just under the menu bar for
-  a quarter of a second. The bar drops down, stays while the pointer is on it,
-  and retreats when the pointer leaves or you click elsewhere. `⌃⌥B` opens it
+- **Opening it.** Rest the pointer on the menu bar for a quarter of a second.
+  The whole menu bar is the trigger — fling the pointer to the top edge and it
+  is already inside — and the bar drops down just below it. On a display without
+  a menu bar the top edge works the same way. It stays while the pointer is on
+  the bar or on the menu bar, and retreats when the pointer leaves or you click
+  elsewhere. `⌃⌥B` opens it
   from the keyboard, and the same key closes it. The menu bar's **Utility Bar**
   item does the same, and the command box has `utility bar`, `bar show`,
   `bar hide` and `bar pin`.
 - **What is on it.** On the left the everyday panels and tools — Notes,
   Clipboard, Shelf, Timer, the command box, then screenshots, text from the
-  screen, colour and measure. In the middle the presentation toggles — focus
+  screen, colour, measure and the Ports window. In the middle the presentation
+  toggles — focus
   border, focus dim, mini map — lit in the accent while on. On the right the
   figures: free disk, CPU, the nearest running timer and the number of windows
   in the switcher. A click runs the same action as the shortcut and the menu.
@@ -541,9 +545,10 @@ it, and leaves no room behind.
   the chevron, which opens a menu rather than a popover so the bar never takes
   the keyboard by itself.
 - **Settings ▸ Panels ▸ Utility bar** turns the pointer reveal off, sets the
-  height (28–56 pt, 38 by default) and chooses whether the labels follow the
-  display, are always shown or never shown. With the reveal off, only `⌃⌥B`,
-  the menu and the command box open it.
+  height (28–64 pt, 46 by default) and chooses whether the labels follow the
+  display, are always shown or never shown. The buttons grow with the height, so
+  a taller bar is easier to hit, not just more padded. With the reveal off, only
+  `⌃⌥B`, the menu and the command box open it.
 - The bar is left out of screenshots and recordings, takes no Accessibility
   permission of its own, and does nothing while it is hidden: the pointer is
   sampled only while the feature is on.

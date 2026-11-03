@@ -99,6 +99,8 @@ enum BarItemCatalog {
                 zone: .utility, kind: .shortcut(.sampleColor), priority: 3),
         BarItem(id: "measure", title: "Measure", symbol: "ruler",
                 zone: .utility, kind: .shortcut(.measureArea), priority: 3),
+        BarItem(id: "ports", title: "Ports", symbol: "network",
+                zone: .utility, kind: .shortcut(.openPorts), priority: 3),
         BarItem(id: "command", title: "Command box", symbol: "command",
                 zone: .utility, kind: .shortcut(.runCommand), priority: 2),
     ]

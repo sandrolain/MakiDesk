@@ -5,16 +5,21 @@ import XCTest
 /// F2: when the bar opens and when it retreats, decided without a screen.
 ///
 /// The pointer and the clock are values, so the awkward cases — a dwell, a
-/// drag, a dismissal while the pointer is still in the strip — are assertions
-/// rather than a manual inspection of a moving panel.
+/// drag, a dismissal while the pointer is still in the trigger band — are
+/// assertions rather than a manual inspection of a moving panel.
 final class BarRevealTests: XCTestCase {
-    /// A 1440×860 desktop area below a menu bar, in AppKit coordinates.
+    /// A 1440 × 884 screen with a 24 pt menu bar, in AppKit coordinates: the
+    /// desktop area is what remains below it.
+    private let screen = CGRect(x: 0, y: 0, width: 1440, height: 884)
     private let area = CGRect(x: 0, y: 0, width: 1440, height: 860)
-    private let height: CGFloat = 38
+    private let height: CGFloat = 46
+    private var zone: CGRect {
+        BarReveal.zone(for: screen, desktop: area, minimum: 12)
+    }
 
-    /// A point in the 8 pt strip under the menu bar.
-    private var inStrip: CGPoint { CGPoint(x: 700, y: area.maxY - 4) }
-    /// A point inside the open bar, but below the strip.
+    /// A point in the menu bar, the band that starts the reveal.
+    private var inZone: CGPoint { CGPoint(x: 700, y: screen.maxY - 12) }
+    /// A point inside the open bar.
     private var insideBar: CGPoint { CGPoint(x: 700, y: area.maxY - 24) }
     /// A point far from the bar.
     private var outside: CGPoint { CGPoint(x: 700, y: area.midY) }
@@ -22,7 +27,8 @@ final class BarRevealTests: XCTestCase {
     private func show(_ reveal: inout BarReveal, at time: TimeInterval) -> BarReveal.Action {
         var action = BarReveal.Action.none
         for step in stride(from: 0.0, through: time, by: 0.05) {
-            action = reveal.update(pointer: inStrip, area: area, barHeight: height,
+            action = reveal.update(pointer: inZone, area: area, zone: zone,
+                                   barHeight: height,
                                    pressed: false, suppressed: false, now: step)
         }
         return action
@@ -39,78 +45,94 @@ final class BarRevealTests: XCTestCase {
         XCTAssertEqual(frame.minY, area.maxY - height)
     }
 
-    func testTheStripIsTheTopFewPoints() {
-        let strip = BarReveal.zone(in: area, height: 8)
-        XCTAssertEqual(strip.maxY, area.maxY)
-        XCTAssertEqual(strip.height, 8)
-        XCTAssertTrue(strip.contains(inStrip))
-        XCTAssertFalse(strip.contains(insideBar))
+    func testTheMenuBarIsTheTriggerBand() {
+        // The whole menu bar, not a thin strip under it: the pointer can be
+        // flung to the top edge and still be inside the band.
+        XCTAssertEqual(zone.minX, screen.minX)
+        XCTAssertEqual(zone.width, screen.width)
+        XCTAssertEqual(zone.maxY, screen.maxY)
+        XCTAssertEqual(zone.height, screen.maxY - area.maxY)
+        XCTAssertTrue(zone.contains(inZone))
+        XCTAssertTrue(zone.contains(CGPoint(x: 700, y: screen.maxY - 1)))
+        XCTAssertFalse(zone.contains(insideBar))
+    }
+
+    func testADisplayWithoutAMenuBarGetsAMinimumBand() {
+        // A secondary display: visibleFrame reaches the top edge, so the band
+        // falls back to the minimum instead of shrinking to nothing.
+        let secondary = CGRect(x: -1920, y: -260, width: 1920, height: 1080)
+        let band = BarReveal.zone(for: secondary, desktop: secondary, minimum: 12)
+        XCTAssertEqual(band.maxY, secondary.maxY)
+        XCTAssertEqual(band.height, 12)
+        XCTAssertEqual(band.minX, secondary.minX)
+        XCTAssertEqual(band.width, secondary.width)
     }
 
     func testANonPositiveHeightStaysAVisibleLine() {
         XCTAssertEqual(BarReveal.barFrame(in: area, height: 0).height, 1)
         XCTAssertEqual(BarReveal.barFrame(in: area, height: -10).height, 1)
-        XCTAssertEqual(BarReveal.zone(in: area, height: 0).height, 1)
+        XCTAssertEqual(BarReveal.zone(for: screen, desktop: area, minimum: 0).height,
+                       screen.maxY - area.maxY)
     }
 
     func testADisplayWithANegativeOriginKeepsIt() {
         // A secondary display to the left and below the main one.
         let secondary = CGRect(x: -1920, y: -260, width: 1920, height: 1080)
-        let frame = BarReveal.barFrame(in: secondary, height: 38)
+        let frame = BarReveal.barFrame(in: secondary, height: 46)
         XCTAssertEqual(frame.minX, -1920)
         XCTAssertEqual(frame.width, 1920)
         XCTAssertEqual(frame.maxY, secondary.maxY)
-        XCTAssertEqual(frame.minY, secondary.maxY - 38)
+        XCTAssertEqual(frame.minY, secondary.maxY - 46)
     }
 
     // MARK: - Opening
 
-    func testThePointerMustDwellInTheStrip() {
+    func testThePointerMustDwellInTheTriggerBand() {
         var reveal = BarReveal()
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0), .none)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.2), .none)
         XCTAssertFalse(reveal.isVisible)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.25), .show)
         XCTAssertTrue(reveal.isVisible)
     }
 
-    func testLeavingTheStripRestartsTheDwell() {
+    func testLeavingTheTriggerBandRestartsTheDwell() {
         var reveal = BarReveal()
-        _ = reveal.update(pointer: inStrip, area: area, barHeight: height,
+        _ = reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 0)
-        _ = reveal.update(pointer: outside, area: area, barHeight: height,
+        _ = reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 0.1)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.3), .none)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.55), .show)
     }
 
     func testAMouseButtonHeldDownNeverOpensIt() {
         var reveal = BarReveal()
-        _ = reveal.update(pointer: inStrip, area: area, barHeight: height,
+        _ = reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                           pressed: true, suppressed: false, now: 0)
-        _ = reveal.update(pointer: inStrip, area: area, barHeight: height,
+        _ = reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                           pressed: true, suppressed: false, now: 1)
         XCTAssertFalse(reveal.isVisible)
         // The dwell starts once the button is released.
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 1.05), .none)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 1.3), .show)
     }
 
     func testSuppressedMeansOff() {
         var reveal = BarReveal()
         XCTAssertEqual(show(&reveal, at: 0.3), .show)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: true, now: 0.4), .hide)
         XCTAssertFalse(reveal.isVisible)
         // Still suppressed: no dwell, no reveal.
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: true, now: 2), .none)
         XCTAssertFalse(reveal.isVisible)
     }
@@ -121,7 +143,19 @@ final class BarRevealTests: XCTestCase {
         var reveal = BarReveal()
         _ = show(&reveal, at: 0.3)
         for time in stride(from: 0.35, through: 5.0, by: 0.1) {
-            XCTAssertEqual(reveal.update(pointer: insideBar, area: area, barHeight: height,
+            XCTAssertEqual(reveal.update(pointer: insideBar, area: area, zone: zone, barHeight: height,
+                                         pressed: false, suppressed: false, now: time), .none)
+        }
+        XCTAssertTrue(reveal.isVisible)
+    }
+
+    func testRestingInTheMenuBarKeepsItOpen() {
+        // The pointer stays where it started the reveal: the band counts as
+        // "on the bar", so the user can decide before moving down onto it.
+        var reveal = BarReveal()
+        _ = show(&reveal, at: 0.3)
+        for time in stride(from: 0.35, through: 5.0, by: 0.1) {
+            XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                          pressed: false, suppressed: false, now: time), .none)
         }
         XCTAssertTrue(reveal.isVisible)
@@ -130,11 +164,11 @@ final class BarRevealTests: XCTestCase {
     func testItRetreatsAfterTheLinger() {
         var reveal = BarReveal()
         _ = show(&reveal, at: 0.3)
-        XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.5), .none)
-        XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.85), .none)
-        XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 0.9), .hide)
         XCTAssertFalse(reveal.isVisible)
     }
@@ -142,11 +176,11 @@ final class BarRevealTests: XCTestCase {
     func testAComeBackCancelsTheRetreat() {
         var reveal = BarReveal()
         _ = show(&reveal, at: 0.3)
-        _ = reveal.update(pointer: outside, area: area, barHeight: height,
+        _ = reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 0.5)
-        _ = reveal.update(pointer: insideBar, area: area, barHeight: height,
+        _ = reveal.update(pointer: insideBar, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 0.6)
-        XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 1.5), .none)
         XCTAssertTrue(reveal.isVisible)
     }
@@ -156,7 +190,7 @@ final class BarRevealTests: XCTestCase {
         _ = show(&reveal, at: 0.3)
         reveal.setPinned(true)
         for time in stride(from: 0.4, through: 10.0, by: 0.5) {
-            XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+            XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                          pressed: false, suppressed: false, now: time), .none)
         }
         XCTAssertTrue(reveal.isVisible)
@@ -165,19 +199,19 @@ final class BarRevealTests: XCTestCase {
     func testADismissedBarWaitsForThePointerToLeave() {
         var reveal = BarReveal()
         _ = show(&reveal, at: 0.3)
-        reveal.dismiss(pointer: inStrip, area: area, barHeight: height)
+        reveal.dismiss(pointer: inZone, area: area, zone: zone, barHeight: height)
         XCTAssertFalse(reveal.isVisible)
         // Still in the strip: nothing comes back, however long it stays.
         for time in stride(from: 0.4, through: 4.0, by: 0.2) {
-            XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+            XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                          pressed: false, suppressed: false, now: time), .none)
         }
         // Away, then back: the dwell starts over and the bar returns.
-        _ = reveal.update(pointer: outside, area: area, barHeight: height,
+        _ = reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 4.1)
-        _ = reveal.update(pointer: inStrip, area: area, barHeight: height,
+        _ = reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 4.2)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 4.45), .show)
     }
 
@@ -187,16 +221,16 @@ final class BarRevealTests: XCTestCase {
         XCTAssertTrue(reveal.isVisible)
         // The pointer is elsewhere: an explicit show does not retreat.
         for time in stride(from: 0.0, through: 10.0, by: 1.0) {
-            XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+            XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                          pressed: false, suppressed: false, now: time), .none)
         }
         XCTAssertTrue(reveal.isVisible)
         // Once the pointer has been on it, the ordinary linger applies.
-        _ = reveal.update(pointer: insideBar, area: area, barHeight: height,
+        _ = reveal.update(pointer: insideBar, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 10.1)
-        _ = reveal.update(pointer: outside, area: area, barHeight: height,
+        _ = reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 10.2)
-        XCTAssertEqual(reveal.update(pointer: outside, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: outside, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 10.6), .hide)
     }
 
@@ -204,15 +238,15 @@ final class BarRevealTests: XCTestCase {
         var reveal = BarReveal()
         _ = show(&reveal, at: 0.3)
         reveal.setPinned(true)
-        reveal.dismiss(pointer: inStrip, area: area, barHeight: height)
+        reveal.dismiss(pointer: inZone, area: area, zone: zone, barHeight: height)
         reveal.reset()
         XCTAssertFalse(reveal.isVisible)
         // A screen change does not take the pin away.
         XCTAssertTrue(reveal.isPinned)
         // No exit is owed after a reset: the strip works again straight away.
-        _ = reveal.update(pointer: inStrip, area: area, barHeight: height,
+        _ = reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                           pressed: false, suppressed: false, now: 1)
-        XCTAssertEqual(reveal.update(pointer: inStrip, area: area, barHeight: height,
+        XCTAssertEqual(reveal.update(pointer: inZone, area: area, zone: zone, barHeight: height,
                                      pressed: false, suppressed: false, now: 1.25), .show)
     }
 
@@ -220,7 +254,7 @@ final class BarRevealTests: XCTestCase {
         let timings = BarReveal.Timings()
         XCTAssertEqual(timings.dwell, 0.25)
         XCTAssertEqual(timings.linger, 0.4)
-        XCTAssertEqual(timings.zoneHeight, 8)
+        XCTAssertEqual(timings.zoneHeight, 12)
     }
 }
 
@@ -390,6 +424,16 @@ final class BarItemCatalogTests: XCTestCase {
         XCTAssertTrue(actions.contains(.newTimer))
     }
 
+    func testTheBarOffersThePortsWindow() {
+        guard let ports = BarItemCatalog.item(id: "ports") else {
+            return XCTFail("missing the ports item")
+        }
+        XCTAssertEqual(ports.kind, .shortcut(.openPorts))
+        XCTAssertEqual(ports.zone, .utility)
+        XCTAssertEqual(ports.priority, 3)
+        XCTAssertEqual(ports.symbol, "network")
+    }
+
     func testTheInfoValuesCoverWhatTheMenuBarReads() {
         XCTAssertEqual(Set(BarItemCatalog.info.compactMap { item -> BarItem.Info? in
             guard case let .info(info) = item.kind else { return nil }
@@ -437,7 +481,7 @@ final class UtilityBarWiringTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: name) }
         Settings.registerDefaults(in: defaults)
         XCTAssertTrue(Settings.bool(.utilityBarEnabled, in: defaults))
-        XCTAssertEqual(Settings.int(.utilityBarHeight, in: defaults), 38)
+        XCTAssertEqual(Settings.int(.utilityBarHeight, in: defaults), 46)
         XCTAssertEqual(Settings.string(.utilityBarLabels, in: defaults),
                        BarLabelMode.auto.rawValue)
     }

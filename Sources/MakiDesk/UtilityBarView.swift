@@ -17,6 +17,12 @@ struct UtilityBarView: View {
 
     private var theme: PaletteTheme { store.theme }
 
+    /// The buttons grow with the bar, within limits: a taller bar should feel
+    /// roomier, not merely padded.
+    private var controlHeight: CGFloat {
+        min(max(model.height - 14, 24), 38)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let labels = model.showsLabels(at: proxy.size.width)
@@ -89,7 +95,7 @@ struct UtilityBarView: View {
     private var divider: some View {
         Rectangle()
             .fill(theme.border.opacity(0.65))
-            .frame(width: 1, height: 16)
+            .frame(width: 1, height: min(controlHeight - 10, 20))
             .padding(.horizontal, 4)
     }
 
@@ -120,7 +126,7 @@ struct UtilityBarView: View {
                 }
             }
             .padding(.horizontal, 6)
-            .frame(height: 26)
+            .frame(height: controlHeight)
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(background(for: item))
@@ -163,7 +169,7 @@ struct UtilityBarView: View {
                 }
             }
             .padding(.horizontal, 5)
-            .frame(height: 26)
+            .frame(height: controlHeight)
             .background(RoundedRectangle(cornerRadius: 6).fill(background(for: item)))
             .contentShape(Rectangle())
         }

@@ -254,10 +254,13 @@ so a phrase and a menu row cannot diverge.
 The utility bar (F1/F2) is a `FloatingPanel` in the `passive` style at
 `.statusBar` level, placed at the top of the display's `visibleFrame` so it never
 sits behind the menu bar and never reserves space. `BarReveal` is the whole
-decision — a 250 ms dwell in the 8 pt strip, a 400 ms linger, a dismissal that
+decision — a 250 ms dwell in the trigger band, a 400 ms linger, a dismissal that
 waits for the pointer to leave, and a pin that only suppresses the retreat — as
 a value with the pointer and clock injected, so the timing is tested without a
-panel. `UtilityBarController` samples the pointer at 10 Hz through one
+panel. The band is the whole menu bar where the display has one
+(`frame.maxY - visibleFrame.maxY`), with a 12 pt minimum at the top edge
+elsewhere; while the bar is open it counts as part of the bar, so the pointer
+can rest at the top and move down in its own time. `UtilityBarController` samples the pointer at 10 Hz through one
 `RunLoop.common` timer that exists only while the setting is on, and stops it,
 the click monitors and the `NSWorkspace` observers when it is turned off.
 `BarItemCatalog` is the only list of controls: each entry names an existing

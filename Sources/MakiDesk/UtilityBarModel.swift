@@ -12,11 +12,11 @@ final class UtilityBarModel {
     var isPinned = false
     /// The bar took the keyboard with ⌃⌥B and draws a selection.
     var isKeyboardDriven = false
-    var height: CGFloat = 38
+    var height: CGFloat = 46
     var labelMode: BarLabelMode = .auto
 
-    static let defaultHeight: CGFloat = 38
-    static let heightRange: ClosedRange<CGFloat> = 28...56
+    static let defaultHeight: CGFloat = 46
+    static let heightRange: ClosedRange<CGFloat> = 28...64
     /// Below this the words beside the icons would push the info values out.
     static let labelWidth: CGFloat = 1_150
 

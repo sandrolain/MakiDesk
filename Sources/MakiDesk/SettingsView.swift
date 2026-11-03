@@ -917,7 +917,8 @@ struct SettingsView: View {
                     SliderRow(title: "Height",
                               value: Binding(get: { Double(store.utilityBarHeight) },
                                              set: { store.updateUtilityBarHeight(Int($0.rounded())) }),
-                              range: 28...56, step: 2,
+                              range: Double(UtilityBarModel.heightRange.lowerBound)...Double(UtilityBarModel.heightRange.upperBound),
+                              step: 2,
                               unit: " pt", decimals: 0)
                         .disabled(!store.utilityBarEnabled)
                     Picker("Labels", selection: Binding(
@@ -927,10 +928,10 @@ struct SettingsView: View {
                         ForEach(BarLabelMode.allCases) { Text($0.title).tag($0) }
                     }
                     .disabled(!store.utilityBarEnabled)
-                    caption("Rest the pointer in the strip under the menu bar for a quarter of a second and the bar appears; it retreats when the pointer leaves, and stays while the pin on its right is on. ⌃⌥B opens it from the keyboard — arrows choose, ⏎ runs, Esc closes — and the menu bar's Utility Bar item does the same. The bar takes no room from windows and stays out of screenshots and recordings. Labels follow the display's width; Automatic shows them on wide screens only. The pin lasts until MakiDesk quits.")
+                    caption("Rest the pointer on the menu bar for a quarter of a second and the bar appears below it; it retreats when the pointer leaves, and stays while the pin on its right is on. On a display without a menu bar the top edge works the same way. ⌃⌥B opens it from the keyboard — arrows choose, ⏎ runs, Esc closes — and the menu bar's Utility Bar item does the same. The bar takes no room from windows and stays out of screenshots and recordings. Labels follow the display's width; Automatic shows them on wide screens only. The pin lasts until MakiDesk quits.")
                 }
                 SettingsSection("What it shows") {
-                    caption("Left: Notes, Clipboard, Shelf, Timer, Command box, then the tools that capture or measure. Middle: the focus border, the focus dim and the mini map, lit while on. Right: free disk, CPU, the nearest running timer and the number of windows in the switcher; a click opens the same place the menu would. Anything that does not fit moves under the chevron, which is a menu rather than a popover so the bar never takes the keyboard by itself.")
+                    caption("Left: Notes, Clipboard, Shelf, Timer, Command box, then the tools that capture or measure and the Ports window. Middle: the focus border, the focus dim and the mini map, lit while on. Right: free disk, CPU, the nearest running timer and the number of windows in the switcher; a click opens the same place the menu would. Anything that does not fit moves under the chevron, which is a menu rather than a popover so the bar never takes the keyboard by itself.")
                 }
             }
         }

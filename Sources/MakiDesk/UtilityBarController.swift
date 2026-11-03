@@ -101,7 +101,8 @@ final class UtilityBarController {
     func dismiss() {
         let pointer = NSEvent.mouseLocation
         if let screen = screen(containing: pointer) {
-            reveal.dismiss(pointer: pointer, area: screen.visibleFrame, barHeight: model.height)
+            reveal.dismiss(pointer: pointer, area: screen.visibleFrame,
+                           zone: triggerZone(for: screen), barHeight: model.height)
         } else {
             reveal.reset()
         }
@@ -208,6 +209,7 @@ final class UtilityBarController {
         guard let screen = screen(containing: pointer) else { return }
         let pressed = NSEvent.pressedMouseButtons != 0
         switch reveal.update(pointer: pointer, area: screen.visibleFrame,
+                             zone: triggerZone(for: screen),
                              barHeight: model.height, pressed: pressed,
                              suppressed: false,
                              now: ProcessInfo.processInfo.systemUptime) {
@@ -370,6 +372,13 @@ final class UtilityBarController {
 
     private func screen(containing point: CGPoint) -> NSScreen? {
         NSScreen.screens.first { $0.frame.contains(point) }
+    }
+
+    /// The menu bar where the display has one, a small band at the top edge
+    /// elsewhere. `visibleFrame` already leaves the menu bar out.
+    private func triggerZone(for screen: NSScreen) -> CGRect {
+        BarReveal.zone(for: screen.frame, desktop: screen.visibleFrame,
+                       minimum: reveal.timings.zoneHeight)
     }
 }
 

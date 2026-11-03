@@ -122,7 +122,7 @@ final class CommandRouterTests: XCTestCase {
         .switchWindows, .switchWindowsBack, .searchWindows,
         .toggleNotes, .clipboardHistory, .toggleShelf,
         .recognizeText, .sampleColor, .measureArea,
-        .openSettings, .openKeyboardShortcuts, .openScreenshots,
+        .openSettings, .openKeyboardShortcuts, .openScreenshots, .openPorts,
         .toggleFocusBorder, .toggleMiniMap, .toggleFocusDim, .toggleChecklist,
         .toggleUtilityBar,
         .newTimer, .captureScreenshot, .captureWindow, .captureScreen, .recordArea,
