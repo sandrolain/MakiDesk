@@ -47,6 +47,9 @@ final class UtilityBarController {
     func applySettings() {
         model.height = Self.clampedHeight(Settings.int(.utilityBarHeight))
         model.labelMode = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
+        model.hiddenItems = BarItemCatalog.hidden(
+            from: Settings.string(.utilityBarHiddenItems)
+        )
 
         guard Settings.bool(.utilityBarEnabled) else {
             if isVisible { dismiss() }
@@ -133,8 +136,6 @@ final class UtilityBarController {
                 SystemMonitor.shared.openStorageSettings()
             case .cpu:
                 SystemMonitor.shared.openActivityMonitor()
-            case .timers:
-                WorkspaceStore.shared.applyShortcut(.newTimer)
             case .windows:
                 WorkspaceStore.shared.applyShortcut(.switchWindows)
             }
@@ -174,7 +175,10 @@ final class UtilityBarController {
             self?.activate(item)
         }
         isPoppingMenu = true
-        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        menu.popUp(positioning: nil,
+                   at: panel.map { BarLayout.menuAnchor(in: $0.frame) }
+                       ?? NSEvent.mouseLocation,
+                   in: nil)
         isPoppingMenu = false
     }
 
@@ -281,9 +285,11 @@ final class UtilityBarController {
         }
     }
 
-    /// Never swallows the click: it only notices that it landed elsewhere.
+    /// Never swallows the click: it only notices that it landed elsewhere. A
+    /// pinned bar is not dismissed by a click: the pin means "stay".
     private func closeIfClickWasOutside() {
-        guard isPoppingMenu == false, isVisible, let panel else { return }
+        guard isPoppingMenu == false, isVisible, let panel,
+              reveal.closesOnOutsideClick else { return }
         guard panel.frame.contains(NSEvent.mouseLocation) == false else { return }
         dismiss()
     }
@@ -317,6 +323,16 @@ final class UtilityBarController {
     }
 
     private func screenChanged() {
+        // A pinned bar has to move, not disappear: the display went away, the
+        // user did not ask for the bar to close.
+        if reveal.isPinned {
+            if isVisible, let panel,
+               let screen = screen(containing: NSEvent.mouseLocation)
+                   ?? NSScreen.main ?? NSScreen.screens.first {
+                position(panel, on: screen)
+            }
+            return
+        }
         reveal.reset()
         closePanel()
     }

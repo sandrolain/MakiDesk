@@ -99,6 +99,7 @@ enum SettingsKey: String, CaseIterable, Sendable {
     case timerSoundName = "timerSoundName"
     case utilityBarEnabled = "utilityBarEnabled"
     case utilityBarHeight = "utilityBarHeight"
+    case utilityBarHiddenItems = "utilityBarHiddenItems"
     case utilityBarLabels = "utilityBarLabels"
     case windowGap = "windowGap"
 }

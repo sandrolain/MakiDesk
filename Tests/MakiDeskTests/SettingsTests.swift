@@ -300,6 +300,7 @@ final class SettingsTests: XCTestCase {
             .dragEnabled, .dragActivator, .layoutAsksFirst, .announceGroupChanges,
             .windowGap, .measureUnit, .colorPickerFormat,
             .utilityBarEnabled, .utilityBarHeight, .utilityBarLabels,
+            .utilityBarHiddenItems,
             .systemDiskMenuBarMode, .systemDiskFormat, .systemDiskWarningThresholdGB,
             .systemCPUAlertsEnabled, .systemCPUThresholdPercent,
             .systemCPUSustainedMinutes, .systemCPUNotifySystem,

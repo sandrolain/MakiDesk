@@ -928,10 +928,22 @@ struct SettingsView: View {
                         ForEach(BarLabelMode.allCases) { Text($0.title).tag($0) }
                     }
                     .disabled(!store.utilityBarEnabled)
-                    caption("Rest the pointer on the menu bar for a quarter of a second and the bar appears below it; it retreats when the pointer leaves, and stays while the pin on its right is on. On a display without a menu bar the top edge works the same way. ⌃⌥B opens it from the keyboard — arrows choose, ⏎ runs, Esc closes — and the menu bar's Utility Bar item does the same. The bar takes no room from windows and stays out of screenshots and recordings. Labels follow the display's width; Automatic shows them on wide screens only. The pin lasts until MakiDesk quits.")
+                    caption("Rest the pointer on the menu bar for a quarter of a second and the bar appears below it; it retreats when the pointer leaves, and stays while the pin on its right is on. On a display without a menu bar the top edge works the same way. ⌃⌥B opens it from the keyboard — arrows choose, ⏎ runs, Esc closes — and the menu bar's Utility Bar item does the same. The bar takes no room from windows and stays out of screenshots and recordings. Labels follow the display's width; Automatic shows them on wide screens only. A pinned bar ignores clicks elsewhere and display changes; the pin, ⌃⌥B or the menu close it. The pin lasts until MakiDesk quits.")
                 }
-                SettingsSection("What it shows") {
-                    caption("Left: Notes, Clipboard, Shelf, Timer, Command box, then the tools that capture or measure and the Ports window. Middle: the focus border, the focus dim and the mini map, lit while on. Right: free disk, CPU, the nearest running timer and the number of windows in the switcher; a click opens the same place the menu would. Anything that does not fit moves under the chevron, which is a menu rather than a popover so the bar never takes the keyboard by itself.")
+                SettingsSection("Buttons") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8,
+                                                  alignment: .leading)],
+                              alignment: .leading, spacing: 4) {
+                        ForEach(BarItemCatalog.hideable) { item in
+                            Toggle(item.title, isOn: Binding(
+                                get: { store.utilityBarHidden.contains(item.id) == false },
+                                set: { store.updateUtilityBarVisibility(item.id, shown: $0) }
+                            ))
+                            .toggleStyle(.checkbox)
+                        }
+                    }
+                    .disabled(!store.utilityBarEnabled)
+                    caption("Untick the buttons you never use: with fewer of them everything fits and the chevron disappears. The pin and the Settings button are always there, and the chevron appears when something does not fit. The Timer button carries the nearest running countdown as a badge, so there is one Timer, not two. The left group holds the panels and the capture tools, the middle the focus border, the focus dim and the mini map, the right the figures and the number of windows in the switcher.")
                 }
             }
         }

@@ -107,9 +107,11 @@ enum SettingsDefaults {
         .clipboardKeepsImages: true,
         .clipboardImageBudgetMB: 32,
 
-        // Utility bar (F1): opens on approach, 46 pt, labels by width.
+        // Utility bar (F1): opens on approach, 46 pt, every button, labels by
+        // width. Hidden buttons are a comma-separated list: empty means all.
         .utilityBarEnabled: true,
         .utilityBarHeight: 46,
+        .utilityBarHiddenItems: "",
         .utilityBarLabels: BarLabelMode.auto.rawValue,
 
         // Screenshots and recordings. The library folder has no default: an

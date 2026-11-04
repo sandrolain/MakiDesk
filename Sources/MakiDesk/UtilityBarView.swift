@@ -27,13 +27,18 @@ struct UtilityBarView: View {
         GeometryReader { proxy in
             let labels = model.showsLabels(at: proxy.size.width)
             let plan = plan(for: proxy.size.width, labels: labels)
+            let shown = BarItemCatalog.visible(model.hiddenItems)
+                .filter { plan.visible.contains($0.id) }
+            let utility = shown.filter { $0.zone == .utility }
+            let toggles = shown.filter { $0.zone == .toggle }
+            let infoItems = shown.filter { $0.zone == .info }
             HStack(spacing: 2) {
-                zone(.utility, plan: plan, labels: labels)
-                divider
-                zone(.toggle, plan: plan, labels: labels)
+                zone(utility, plan: plan, labels: labels)
+                if utility.isEmpty == false, toggles.isEmpty == false { divider }
+                zone(toggles, plan: plan, labels: labels)
                 Spacer(minLength: 6)
-                infoZone(plan: plan, labels: labels)
-                divider
+                infoZone(infoItems, plan: plan, labels: labels)
+                if infoItems.isEmpty == false { divider }
                 rightZone(plan: plan)
             }
             .padding(.horizontal, 8)
@@ -67,14 +72,22 @@ struct UtilityBarView: View {
 
     // MARK: - Zones
 
-    private func zone(_ zone: BarItem.Zone, plan: BarLayout.Plan, labels: Bool) -> some View {
-        ForEach(BarItemCatalog.all.filter { $0.zone == zone && plan.visible.contains($0.id) }) { item in
-            control(item, labels: labels)
+    private func zone(_ items: [BarItem], plan: BarLayout.Plan, labels: Bool) -> some View {
+        ForEach(items.filter { plan.visible.contains($0.id) }) { item in
+            // The Timer button carries the nearest countdown as a badge, so it
+            // has to refresh itself; the other controls change with their store.
+            if item.id == "timer" {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    control(item, labels: labels, now: context.date)
+                }
+            } else {
+                control(item, labels: labels)
+            }
         }
     }
 
-    private func infoZone(plan: BarLayout.Plan, labels: Bool) -> some View {
-        ForEach(BarItemCatalog.info.filter { plan.visible.contains($0.id) }) { item in
+    private func infoZone(_ items: [BarItem], plan: BarLayout.Plan, labels: Bool) -> some View {
+        ForEach(items.filter { plan.visible.contains($0.id) }) { item in
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 info(item, labels: labels, now: context.date)
             }
@@ -101,7 +114,8 @@ struct UtilityBarView: View {
 
     // MARK: - Controls
 
-    private func control(_ item: BarItem, labels: Bool, overflowCount: Int = 0) -> some View {
+    private func control(_ item: BarItem, labels: Bool, overflowCount: Int = 0,
+                         now: Date = Date()) -> some View {
         Button {
             selected = item.id
             controller.activate(item)
@@ -116,7 +130,7 @@ struct UtilityBarView: View {
                         .foregroundStyle(tint(for: item))
                         .lineLimit(1)
                 }
-                if let badge = badge(for: item, overflowCount: overflowCount) {
+                if let badge = badge(for: item, overflowCount: overflowCount, now: now) {
                     Text(badge)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(theme.text)
@@ -212,7 +226,8 @@ struct UtilityBarView: View {
         return .clear
     }
 
-    private func badge(for item: BarItem, overflowCount: Int) -> String? {
+    private func badge(for item: BarItem, overflowCount: Int = 0,
+                       now: Date = Date()) -> String? {
         switch item.id {
         case "clipboard":
             let count = ClipboardHistory.shared.entries.count
@@ -220,6 +235,8 @@ struct UtilityBarView: View {
         case "checklist":
             let remaining = ChecklistStore.shared.remaining
             return remaining > 0 ? "\(remaining)" : nil
+        case "timer":
+            return model.timerText(now: now)
         case "overflow":
             return overflowCount > 0 ? "\(overflowCount)" : nil
         default:
@@ -240,20 +257,28 @@ struct UtilityBarView: View {
     // MARK: - Plan and keyboard
 
     private func plan(for width: CGFloat, labels: Bool) -> BarLayout.Plan {
-        let items = BarItemCatalog.planned.map {
-            BarLayoutItem(id: $0.id, priority: $0.priority, width: $0.width(labels: labels))
+        let items = BarItemCatalog.visible(model.hiddenItems).map {
+            BarLayoutItem(id: $0.id, priority: $0.priority,
+                          width: $0.width(labels: labels, badge: badge(for: $0)))
         }
         // The right-hand controls are never planned away, so their width, the
         // spacing, the two dividers and the side padding are taken out first.
+        // The chevron's own count is not known until the plan is made, so its
+        // widest usual badge is reserved up front.
         let right = BarItemCatalog.right.reduce(0) { $0 + $1.width(labels: false) }
-        let count = CGFloat(BarItemCatalog.planned.count + BarItemCatalog.right.count)
-        let reserve = right + count * 2 + 18 + 6 + 16
+        let count = CGFloat(items.count + BarItemCatalog.right.count)
+        let reserve = right + 24 + count * 2 + 18 + 6 + 16
         return BarLayout.plan(items, available: width, reserve: reserve)
     }
 
     private func orderedIDs(labels: Bool) -> [String] {
         let plan = plan(for: width, labels: labels)
-        return plan.visible + BarItemCatalog.right.map(\.id)
+        // The chevron is only drawn when something overflowed, so the keyboard
+        // must not stop on a control that is not there.
+        let right = BarItemCatalog.right
+            .filter { $0.id != "overflow" || plan.overflow.isEmpty == false }
+            .map(\.id)
+        return plan.visible + right
     }
 
     private func focusIfNeeded() {

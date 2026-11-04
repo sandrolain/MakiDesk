@@ -529,26 +529,31 @@ it, and leaves no room behind.
   `bar hide` and `bar pin`.
 - **What is on it.** On the left the everyday panels and tools — Notes,
   Clipboard, Shelf, Timer, the command box, then screenshots, text from the
-  screen, colour, measure and the Ports window. In the middle the presentation
-  toggles — focus
+  screen, colour, measure and the Ports window. The Timer button carries the
+  nearest running countdown as a badge, so one Timer is both the command and the
+  figure. In the middle the presentation toggles — focus
   border, focus dim, mini map — lit in the accent while on. On the right the
-  figures: free disk, CPU, the nearest running timer and the number of windows
-  in the switcher. A click runs the same action as the shortcut and the menu.
-- **The pin.** The pin on the right keeps the bar out. It lasts for the session:
-  quitting MakiDesk clears it, and so does clicking it again. The bar still takes
-  no space from windows — it is drawn over the top of the screen, never reserved.
+  figures: free disk, CPU and the number of windows in the switcher. A click runs
+  the same action as the shortcut and the menu.
+- **The pin.** The pin on the right keeps the bar open. It lasts for the session:
+  quitting MakiDesk clears it, and so does clicking it again. A pinned bar ignores
+  clicks elsewhere and display changes — close it with the pin, `⌃⌥B` or the menu.
+  The bar still takes no space from windows — it is drawn over the top of the
+  screen, never reserved.
 - **From the keyboard.** `⌃⌥B` gives the bar the keyboard and draws a
   selection; `→`/`←` (or `↑`/`↓`) move it, **Return** runs the choice, and
   **Esc** closes and gives the keyboard back.
 - **When it does not fit.** Narrow displays show icons only; the words appear on
   wide ones, or when Settings says so. Anything that does not fit moves under
-  the chevron, which opens a menu rather than a popover so the bar never takes
-  the keyboard by itself.
+  the chevron, whose menu opens just below it. Untick the buttons you never use
+  and everything fits.
 - **Settings ▸ Panels ▸ Utility bar** turns the pointer reveal off, sets the
-  height (28–64 pt, 46 by default) and chooses whether the labels follow the
-  display, are always shown or never shown. The buttons grow with the height, so
-  a taller bar is easier to hit, not just more padded. With the reveal off, only
-  `⌃⌥B`, the menu and the command box open it.
+  height (28–64 pt, 46 by default), chooses whether the labels follow the
+  display, are always shown or never shown, and lists every button with a tick.
+  The pin and the Settings button always stay; the chevron appears when
+  something does not fit. The buttons grow with
+  the height, so a taller bar is easier to hit, not just more padded. With the
+  reveal off, only `⌃⌥B`, the menu and the command box open it.
 - The bar is left out of screenshots and recordings, takes no Accessibility
   permission of its own, and does nothing while it is hidden: the pointer is
   sampled only while the feature is on.

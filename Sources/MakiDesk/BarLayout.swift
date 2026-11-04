@@ -23,6 +23,13 @@ enum BarLayout {
         var isEmpty: Bool { visible.isEmpty }
     }
 
+    /// Where the overflow menu opens: just under the chevron at the right edge
+    /// of the panel. Anchoring it there keeps it beside the bar even when the
+    /// keyboard opened it and the pointer is on another display.
+    static func menuAnchor(in panel: CGRect, inset: CGFloat = 10) -> CGPoint {
+        CGPoint(x: panel.maxX - inset, y: panel.minY - 2)
+    }
+
     static func plan(_ items: [BarLayoutItem], available: CGFloat,
                      reserve: CGFloat = 0) -> Plan {
         guard items.isEmpty == false else { return Plan(visible: [], overflow: []) }

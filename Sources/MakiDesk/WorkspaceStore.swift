@@ -128,6 +128,10 @@ final class WorkspaceStore {
                                    Int(UtilityBarModel.heightRange.lowerBound)),
                                Int(UtilityBarModel.heightRange.upperBound))
     var utilityBarLabels = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
+    /// The buttons the user keeps out of the bar, by id (F1).
+    var utilityBarHidden = BarItemCatalog.hidden(
+        from: Settings.string(.utilityBarHiddenItems)
+    )
     /// OCR quality and correction (T41). Languages stay automatic.
     var ocrFastRecognition = Settings.bool(.ocrFastRecognition)
     var ocrLanguageCorrection = Settings.bool(.ocrLanguageCorrection)
@@ -796,9 +800,9 @@ final class WorkspaceStore {
         Settings.set(value, for: .showMiniMap)
     }
 
-    /// The utility bar's three preferences. The controller re-reads them after
-    /// every change, so it can stop its pointer sampling the moment the bar is
-    /// turned off.
+    /// The utility bar's preferences. The controller re-reads them after every
+    /// change, so it can stop its pointer sampling the moment the bar is turned
+    /// off.
     func updateUtilityBarEnabled(_ value: Bool) {
         utilityBarEnabled = value
         Settings.set(value, for: .utilityBarEnabled)
@@ -816,6 +820,24 @@ final class WorkspaceStore {
     func updateUtilityBarLabels(_ value: BarLabelMode) {
         utilityBarLabels = value
         Settings.set(value.rawValue, for: .utilityBarLabels)
+        UtilityBarController.shared.applySettings()
+    }
+
+    /// Shows or hides one button. The right-hand controls are not offered, and
+    /// the catalog ignores them even if an old preference names them.
+    func updateUtilityBarVisibility(_ id: String, shown: Bool) {
+        guard BarItemCatalog.hideable.contains(where: { $0.id == id }) else { return }
+        var hidden = utilityBarHidden
+        if shown { hidden.remove(id) } else { hidden.insert(id) }
+        updateUtilityBarHidden(hidden)
+    }
+
+    /// Replaces the whole set, for the factory reset.
+    func updateUtilityBarHidden(_ hidden: Set<String>) {
+        let known = Set(BarItemCatalog.hideable.map(\.id))
+        let filtered = hidden.intersection(known)
+        utilityBarHidden = filtered
+        Settings.set(BarItemCatalog.stored(filtered), for: .utilityBarHiddenItems)
         UtilityBarController.shared.applySettings()
     }
 
@@ -1282,6 +1304,7 @@ final class WorkspaceStore {
         updateUtilityBarEnabled(true)
         updateUtilityBarHeight(Int(UtilityBarModel.defaultHeight))
         updateUtilityBarLabels(.auto)
+        updateUtilityBarHidden([])
         updateOCRFastRecognition(false)
         updateOCRLanguageCorrection(true)
         updateMiniMapPosition(.topRight)

@@ -43,7 +43,6 @@ struct BarItem: Identifiable, Equatable {
     enum Info: String, CaseIterable, Identifiable, Sendable {
         case disk
         case cpu
-        case timers
         case windows
 
         var id: String { rawValue }
@@ -64,17 +63,23 @@ struct BarItem: Identifiable, Equatable {
     }
 
     /// A stable estimate for `BarLayout`; the view uses the same numbers for
-    /// its own buttons, so the plan and the pixels agree.
-    func width(labels: Bool) -> CGFloat {
+    /// its own buttons, so the plan and the pixels agree. A badge is part of
+    /// the width: a count is not free, and a plan that forgets it truncates the
+    /// labels beside the icon.
+    func width(labels: Bool, badge: String? = nil) -> CGFloat {
+        let base: CGFloat
         switch kind {
         case .info:
-            return labels ? 74 : 56
+            base = labels ? 74 : 56
         case .pin, .overflow, .customize:
-            return 26
+            base = 26
         case .shortcut:
-            guard labels else { return 26 }
-            return 26 + CGFloat(title.count) * 6.2 + 8
+            base = labels ? 26 + CGFloat(title.count) * 6.2 + 8 : 26
         }
+        guard let badge, badge.isEmpty == false else { return base }
+        // 9 pt semibold digits, 4 pt of side padding and the 5 pt gap after
+        // the icon or the label.
+        return base + CGFloat(badge.count) * 5.5 + 13
     }
 }
 
@@ -119,8 +124,6 @@ enum BarItemCatalog {
                 zone: .info, kind: .info(.disk), priority: 2),
         BarItem(id: "cpu", title: "CPU", symbol: "cpu",
                 zone: .info, kind: .info(.cpu), priority: 2),
-        BarItem(id: "timers", title: "Timer", symbol: "hourglass",
-                zone: .info, kind: .info(.timers), priority: 3),
         BarItem(id: "windows", title: "Windows", symbol: "macwindow",
                 zone: .info, kind: .info(.windows), priority: 3),
     ]
@@ -136,6 +139,30 @@ enum BarItemCatalog {
 
     static let planned: [BarItem] = utility + toggles + info
     static let all: [BarItem] = planned + right
+
+    /// Everything the user may hide. The right-hand controls stay: the bar
+    /// would lose its pin and the way to Settings.
+    static let hideable: [BarItem] = planned
+
+    /// Reads the stored list, dropping names that no longer exist and the
+    /// right-hand controls, so an old preference cannot remove the pin.
+    static func hidden(from stored: String?) -> Set<String> {
+        guard let stored, stored.isEmpty == false else { return [] }
+        let known = Set(hideable.map(\.id))
+        return Set(stored.split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .filter(known.contains))
+    }
+
+    /// The inverse, in catalog order: a stable string, so the same choice does
+    /// not produce a new value on every write.
+    static func stored(_ hidden: Set<String>) -> String {
+        hideable.map(\.id).filter(hidden.contains).joined(separator: ",")
+    }
+
+    static func visible(_ hidden: Set<String>) -> [BarItem] {
+        planned.filter { hidden.contains($0.id) == false }
+    }
 
     static func item(id: String) -> BarItem? {
         all.first { $0.id == id }

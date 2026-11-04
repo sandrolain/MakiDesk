@@ -196,6 +196,16 @@ final class BarRevealTests: XCTestCase {
         XCTAssertTrue(reveal.isVisible)
     }
 
+    func testAPinnedBarIgnoresAnOutsideClick() {
+        var reveal = BarReveal()
+        _ = show(&reveal, at: 0.3)
+        XCTAssertTrue(reveal.closesOnOutsideClick)
+        reveal.setPinned(true)
+        XCTAssertFalse(reveal.closesOnOutsideClick)
+        reveal.setPinned(false)
+        XCTAssertTrue(reveal.closesOnOutsideClick)
+    }
+
     func testADismissedBarWaitsForThePointerToLeave() {
         var reveal = BarReveal()
         _ = show(&reveal, at: 0.3)
@@ -362,6 +372,14 @@ final class BarLayoutTests: XCTestCase {
         XCTAssertEqual(plan.visible, ["a"])
         XCTAssertEqual(plan.overflow, ["b"])
     }
+
+    func testTheOverflowMenuOpensUnderTheBar() {
+        let panel = CGRect(x: 0, y: 800, width: 900, height: 46)
+        let anchor = BarLayout.menuAnchor(in: panel)
+        XCTAssertEqual(anchor.x, panel.maxX - 10)
+        XCTAssertEqual(anchor.y, panel.minY - 2)
+        XCTAssertLessThan(anchor.y, panel.minY)
+    }
 }
 
 /// F1: the bar's contents name existing commands, so the bar cannot grow a
@@ -441,6 +459,46 @@ final class BarItemCatalogTests: XCTestCase {
         }), Set(BarItem.Info.allCases))
     }
 
+    func testTheTimerIsOneButtonWithItsCountdown() {
+        let timers = BarItemCatalog.planned.filter { $0.title == "Timer" }
+        XCTAssertEqual(timers.count, 1)
+        XCTAssertEqual(timers.first?.kind, .shortcut(.newTimer))
+    }
+
+    func testHiddenButtonsAreReadAndWrittenInCatalogOrder() {
+        XCTAssertEqual(BarItemCatalog.hidden(from: nil), [])
+        XCTAssertEqual(BarItemCatalog.hidden(from: ""), [])
+        XCTAssertEqual(BarItemCatalog.hidden(from: "measure,ports"), ["measure", "ports"])
+        XCTAssertEqual(BarItemCatalog.hidden(from: "measure, ports"), ["measure", "ports"])
+        XCTAssertEqual(BarItemCatalog.hidden(from: BarItemCatalog.stored(["measure", "ports"])),
+                       ["measure", "ports"])
+        // Unknown names and the right-hand controls cannot hide anything that
+        // is not hideable: the pin and the Settings button never leave.
+        XCTAssertEqual(BarItemCatalog.hidden(from: "pin,measure,nope"), ["measure"])
+        XCTAssertEqual(BarItemCatalog.stored(["ports", "measure"]), "measure,ports")
+        XCTAssertEqual(BarItemCatalog.visible(["measure"]).count,
+                       BarItemCatalog.hideable.count - 1)
+        XCTAssertFalse(BarItemCatalog.visible(["measure"]).map(\.id).contains("measure"))
+    }
+
+    func testThePinAndSettingsCannotBeHidden() {
+        for item in BarItemCatalog.right {
+            XCTAssertFalse(BarItemCatalog.hideable.contains { $0.id == item.id }, item.id)
+        }
+    }
+
+    func testABadgeWidensTheEstimate() {
+        guard let clipboard = BarItemCatalog.item(id: "clipboard") else {
+            return XCTFail("missing the clipboard item")
+        }
+        XCTAssertEqual(clipboard.width(labels: false, badge: nil),
+                       clipboard.width(labels: false))
+        XCTAssertGreaterThan(clipboard.width(labels: false, badge: "12"),
+                             clipboard.width(labels: false))
+        XCTAssertGreaterThan(clipboard.width(labels: false, badge: "1234"),
+                             clipboard.width(labels: false, badge: "1"))
+    }
+
     func testLabelModesHaveTitles() {
         XCTAssertEqual(BarLabelMode.allCases, [.auto, .always, .never])
         for mode in BarLabelMode.allCases {
@@ -484,6 +542,7 @@ final class UtilityBarWiringTests: XCTestCase {
         XCTAssertEqual(Settings.int(.utilityBarHeight, in: defaults), 46)
         XCTAssertEqual(Settings.string(.utilityBarLabels, in: defaults),
                        BarLabelMode.auto.rawValue)
+        XCTAssertEqual(Settings.string(.utilityBarHiddenItems, in: defaults), "")
     }
 
     func testTheCommandBoxReachesItInWords() {

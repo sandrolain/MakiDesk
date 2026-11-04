@@ -68,6 +68,11 @@ struct BarReveal: Equatable {
         if pinned { leftBarAt = nil }
     }
 
+    /// The pin outranks an outside click: a bar the user blocked stays where it
+    /// is until the pin, Esc or ⌃⌥B closes it. A screen change is different —
+    /// the bar has to move, not disappear (see `UtilityBarController`).
+    var closesOnOutsideClick: Bool { isPinned == false }
+
     /// The user closed it (Esc, a click elsewhere, a command that opened a
     /// panel). If the pointer is still in the trigger band, wait for it to
     /// leave.

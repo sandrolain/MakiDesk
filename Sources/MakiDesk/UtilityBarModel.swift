@@ -14,6 +14,10 @@ final class UtilityBarModel {
     var isKeyboardDriven = false
     var height: CGFloat = 46
     var labelMode: BarLabelMode = .auto
+    /// The buttons the user chose to keep out of the bar (F1). Read from the
+    /// preferences at launch and after every change; the right-hand controls
+    /// are never in it.
+    var hiddenItems: Set<String> = []
 
     static let defaultHeight: CGFloat = 46
     static let heightRange: ClosedRange<CGFloat> = 28...64
@@ -43,10 +47,14 @@ final class UtilityBarModel {
             return BarInfoText.disk(SystemMonitor.shared.menuBarDiskText)
         case .cpu:
             return BarInfoText.cpu(SystemMonitor.shared.cpuPercent)
-        case .timers:
-            return BarInfoText.timer(TimerController.shared.timers, now: now) ?? BarInfoText.empty
         case .windows:
             return BarInfoText.windows(WorkspaceStore.shared.windows.count)
         }
+    }
+
+    /// The nearest running countdown, shown as the Timer button's badge. The
+    /// separate info value was a second control with the same name.
+    func timerText(now: Date) -> String? {
+        BarInfoText.timer(TimerController.shared.timers, now: now)
     }
 }

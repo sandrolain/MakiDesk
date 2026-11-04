@@ -255,19 +255,27 @@ The utility bar (F1/F2) is a `FloatingPanel` in the `passive` style at
 `.statusBar` level, placed at the top of the display's `visibleFrame` so it never
 sits behind the menu bar and never reserves space. `BarReveal` is the whole
 decision — a 250 ms dwell in the trigger band, a 400 ms linger, a dismissal that
-waits for the pointer to leave, and a pin that only suppresses the retreat — as
+waits for the pointer to leave, and a pin that suppresses the retreat and makes
+an outside click leave the bar alone — as
 a value with the pointer and clock injected, so the timing is tested without a
 panel. The band is the whole menu bar where the display has one
 (`frame.maxY - visibleFrame.maxY`), with a 12 pt minimum at the top edge
 elsewhere; while the bar is open it counts as part of the bar, so the pointer
-can rest at the top and move down in its own time. `UtilityBarController` samples the pointer at 10 Hz through one
+can rest at the top and move down in its own time. A screen change repositions a
+pinned bar instead of closing it. `UtilityBarController` samples the pointer at
+10 Hz through one
 `RunLoop.common` timer that exists only while the setting is on, and stops it,
 the click monitors and the `NSWorkspace` observers when it is turned off.
 `BarItemCatalog` is the only list of controls: each entry names an existing
 `ShortcutAction`, so a click runs the same `applyShortcut` as the key and the
-menu. `BarLayout` picks what fits from the widths the view also uses (least
-important first, rightmost on a tie), and the remainder becomes an `NSMenu`, not
-a popover, because a passive panel must not become key. `⌃⌥B` is the one
+menu. The catalog also owns the hideable set — the right-hand controls can never
+leave — stored as a comma-separated list and filtered before planning, so the
+view never sees a hidden button. `BarLayout` picks what fits from the widths the
+view also uses, badges included (least important first, rightmost on a tie), and
+the remainder becomes an `NSMenu` anchored under the chevron rather than at the
+pointer, because a passive panel must not become key and a keyboard session can
+open it from another display. The Timer button carries the nearest countdown as
+its badge; a second info control with the same name was removed. `⌃⌥B` is the one
 keyboard session: the panel's `canBecomeKey` is true only then, arrows move the
 selection, Esc closes, and `PanelFocusReturn` gives the keyboard back. Its
 window number is passed to `SCContentFilter(display:excludingWindows:)` while it
