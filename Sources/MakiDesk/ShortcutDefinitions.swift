@@ -159,6 +159,7 @@ enum ShortcutDefinitions {
         ShortcutSectionDefinition(title: "Text & colour", note: nil, definitions: capture),
         ShortcutSectionDefinition(title: "Screenshots", note: "The capture goes to the shelf.", definitions: screenshots),
         ShortcutSectionDefinition(title: "Measure", note: "Or drag with ⌥ from the centre; the pinned badge copies the values.", definitions: measure),
+        ShortcutSectionDefinition(title: "Pointer", note: "A pulse needs no permission; the ring stops by itself.", definitions: pointer),
         ShortcutSectionDefinition(title: "App", note: "No global Quit: ⌥⇧Q stays inside the window switcher.", definitions: app),
     ]
 
@@ -309,6 +310,15 @@ enum ShortcutDefinitions {
         info("measure.centre", "Measure from the centre", section: "Measure", keys: "⌥ + drag"),
         info("measure.snap", "Snap to windows and displays", section: "Measure", keys: "auto",
              note: "Within 6 pt of an edge or a centre."),
+    ]
+
+    private static let pointer: [ShortcutDefinition] = [
+        def("pointer.locate", "Locate pointer", section: "Pointer", key: kVK_ANSI_P,
+            modifiers: ctrlOptShift, action: .locatePointer,
+            note: "Three rings around the pointer on the display it is on. No permission is involved."),
+        def("pointer.toggle", "Pointer effects on / off", section: "Pointer", key: kVK_ANSI_X,
+            modifiers: ctrlOptShift, action: .togglePointerEffects,
+            note: "A ring follows the pointer for five minutes, or until the shortcut is pressed again."),
     ]
 
     private static let app: [ShortcutDefinition] = [

@@ -356,6 +356,23 @@ extension HUDMessage {
                    symbol: "circle.lefthalf.filled")
     }
 
+    // MARK: - Pointer
+
+    static func pointerEffects(active: Bool, minutes: Int? = nil) -> HUDMessage {
+        let detail: String? = {
+            guard active, let minutes else { return nil }
+            return "\(minutes) min · press the shortcut again to stop"
+        }()
+        return HUDMessage(title: active ? "Pointer effects on" : "Pointer effects off",
+                          symbol: "circle.dashed", detail: detail)
+    }
+
+    static let pointerEffectsEnded = HUDMessage(
+        title: "Pointer effects ended",
+        symbol: "circle.dashed",
+        detail: "The presentation window is over."
+    )
+
     static let accessibilityNotGranted = HUDMessage(
         title: "Accessibility not granted", symbol: "exclamationmark.triangle.fill")
 

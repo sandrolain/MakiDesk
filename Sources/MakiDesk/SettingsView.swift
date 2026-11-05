@@ -68,7 +68,7 @@ struct SettingsView: View {
     }
 
     private enum PanelsPage: String, CaseIterable, Identifiable {
-        case shelf, cards, switcher, look, tools, bar
+        case shelf, cards, switcher, look, tools, pointer, bar
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -77,6 +77,7 @@ struct SettingsView: View {
             case .switcher: return "Switcher"
             case .look: return "Look"
             case .tools: return "Tools"
+            case .pointer: return "Pointer"
             case .bar: return "Utility bar"
             }
         }
@@ -906,6 +907,58 @@ struct SettingsView: View {
                         ForEach(MeasurementUnit.allCases) { Text($0.title).tag($0) }
                     }
                     caption("⌃⌥⇧M drags a measurement over any app: ⇧ keeps a square, ⌥ measures from the centre, and values snap within 6 pt to windows and displays. Measurements stay until their ✕ or Clear Measurements. Millimetres and inches are estimated from the display's reported physical size.")
+                }
+            }
+            if panelsPage == .pointer {
+                SettingsSection("Pointer effects") {
+                    Picker("Presentation style", selection: Binding(
+                        get: { store.pointerEffectStyle },
+                        set: { store.updatePointerEffectStyle($0) }
+                    )) {
+                        ForEach(PointerEffectStyle.allCases) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
+                    Text(store.pointerEffectStyle.summary)
+                        .font(.caption)
+                        .foregroundStyle(theme.subtext)
+                    Toggle("Ripple on click", isOn: Binding(
+                        get: { store.pointerClickRipple },
+                        set: { store.updatePointerClickRipple($0) }
+                    ))
+                    SliderRow(title: "Ring size",
+                              value: Binding(get: { Double(store.pointerEffectSize) },
+                                             set: { store.updatePointerEffectSize($0) }),
+                              range: Double(PointerEffectSettings.sizeRange.lowerBound)
+                                  ... Double(PointerEffectSettings.sizeRange.upperBound),
+                              step: 2, unit: " pt", decimals: 0)
+                    SliderRow(title: "Intensity",
+                              value: Binding(get: { store.pointerEffectIntensity },
+                                             set: { store.updatePointerEffectIntensity($0) }),
+                              range: PointerEffectSettings.intensityRange,
+                              step: 0.05, unit: "%", percent: true)
+                    SliderRow(title: "Pulse duration",
+                              value: Binding(get: { store.pointerPulseDuration },
+                                             set: { store.updatePointerPulseDuration($0) }),
+                              range: PointerEffectSettings.pulseDurationRange,
+                              step: 0.1, unit: " s", decimals: 1)
+                    Stepper("Presentation ends after \(store.pointerPresentationMinutes) min",
+                            value: Binding(get: { store.pointerPresentationMinutes },
+                                           set: { store.updatePointerPresentationMinutes($0) }),
+                            in: PointerEffectSettings.presentationMinutesRange)
+                    Toggle("Visible to other capture apps", isOn: Binding(
+                        get: { store.pointerEffectsInCaptures },
+                        set: { store.updatePointerEffectsInCaptures($0) }
+                    ))
+                    HStack(spacing: 12) {
+                        Button("Test pulse") {
+                            PointerEffectController.shared.pulse()
+                        }
+                        Text("⌃⌥⇧P · ⌃⌥⇧X")
+                            .font(.caption)
+                            .foregroundStyle(theme.subtext)
+                    }
+                    caption("⌃⌥⇧P shows a pulse around the pointer, on the display it is on. ⌃⌥⇧X follows the pointer for five minutes, or until the shortcut is pressed again, using the style selected above. The ribbon fades when movement stops; particles settle to a faint sparkle; orbit dots animate in Core Animation; spotlight dims the screen around a clear area. The pointer is read in memory, never recorded. A click leaves a ripple while the presentation is on. MakiDesk's own still captures leave the effect out, because they are taken without the system pointer; recordings keep both. The option above asks capture pipelines that honour the window's sharing type to leave the effect out too, and some recorders ignore it. Reduce Motion simplifies the animations; spotlight remains a static dim with a clear circle.")
                 }
             }
             if panelsPage == .bar {

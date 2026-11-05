@@ -46,6 +46,16 @@ why it chose a layout. The content-weighted layout is a squarified treemap:
 areas follow a weight, not a fixed cell, and the seven app-kind weights are
 editable in Settings.
 
+### A pointer you can find
+
+`⌃⌥⇧P` pulses three rings around the pointer, on the display it is on: useful
+on a large screen or a projector, and it needs no permission. `⌃⌥⇧X` starts a
+five-minute presentation effect, or stops it when pressed again. Choose an
+accent ring, tapered ribbon, moving particles, orbiting dots or a spotlight in
+Settings ▸ Panels ▸ Pointer; click ripples can be enabled too. It stops by
+itself and is never left on. The system pointer is never replaced: the effect
+is drawn around it, not over it.
+
 ### A switcher you will actually use
 
 `⌥⇥` opens live previews of every window; `⌥Space` adds a search field that
@@ -279,6 +289,8 @@ Taskfile commands and the signing notes.
 | `⌥Space` | search windows and applications |
 | `⌃⌥W` | content-weighted layout |
 | `⌃⌥⇧O` | text from a selected area |
+| `⌃⌥⇧P` | locate pointer |
+| `⌃⌥⇧X` | pointer effects on/off |
 | `⌥N` | notes |
 | `⌥V` | clipboard history |
 | `⌃⌥D` | shelf |

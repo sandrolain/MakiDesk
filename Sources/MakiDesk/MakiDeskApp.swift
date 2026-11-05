@@ -13,6 +13,7 @@ struct MakiDeskApp: App {
     }()
 
     @State private var system = SystemMonitor.shared
+    @State private var pointerEffects = PointerEffectController.shared
 
     @NSApplicationDelegateAdaptor(MakiDeskAppDelegate.self) private var appDelegate
 
@@ -237,6 +238,30 @@ struct MakiDeskApp: App {
                     icon: "rectangle.inset.filled"
                 ) {
                     store.updateMiniMapVisibility(!store.showMiniMap)
+                }
+                Divider()
+                menuButton("Locate Pointer", keys: shortcutKeys(.locatePointer), icon: "scope") {
+                    PointerEffectController.shared.pulse()
+                }
+                menuButton(
+                    pointerEffects.isPresentationActive ? "Stop Pointer Effects" : "Pointer Effects",
+                    keys: shortcutKeys(.togglePointerEffects),
+                    icon: "circle.dashed"
+                ) {
+                    PointerEffectController.shared.togglePresentation()
+                }
+                Menu("Pointer Effects Style") {
+                    ForEach(PointerEffectStyle.allCases) { style in
+                        Button {
+                            store.updatePointerEffectStyle(style)
+                        } label: {
+                            if store.pointerEffectStyle == style {
+                                Label(style.label, systemImage: "checkmark")
+                            } else {
+                                Text(style.label)
+                            }
+                        }
+                    }
                 }
             } label: {
                 Label("Window", systemImage: "macwindow")

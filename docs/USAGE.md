@@ -175,6 +175,44 @@ itself and everything above it stay clear. Off by default.
   frontmost app's topmost window when it is unavailable. No Screen Recording
   permission is involved.
 
+## Pointer effects
+
+Two overlays MakiDesk draws itself, for finding the pointer and for showing it
+to someone else. Neither asks for a permission: the pointer is read in memory
+through the same global mouse events the utility bar already uses, and nothing
+is captured, written or logged.
+
+- `⌃⌥⇧P` — **Locate pointer**. Three rings expand from the pointer for about a
+  second, on the display it is on, then disappear. It installs nothing that
+  outlives the effect, and it works while MakiDesk is not the active app.
+- `⌃⌥⇧X` — **Pointer effects**. The selected style follows the pointer for five
+  minutes, or until the shortcut is pressed again. The **Window** menu has the
+  same switch and a style submenu, a notice confirms it, and it stops by itself
+  at the deadline, so a presentation cannot leave it running. A click leaves a
+  ripple.
+- **Settings ▸ Panels ▸ Pointer** chooses the presentation style: **Ring** (an
+  accent-colour halo), **Ribbon** (a short tapered trail), **Particles** (small
+  sparks, brighter while moving), **Orbit** (three rotating dots) or
+  **Spotlight** (the screen dimmed around a clear circle). It also sets size
+  (24–80 pt), intensity, pulse duration, presentation length (1–30 min), click
+  ripple and whether capture apps that honour the window sharing type see the
+  effect. **Test pulse** previews the current size and intensity.
+- The effect stays on the display the pointer is on; it is not carried across the
+  gap between two screens. A resolution change rebuilds it, a sleep closes it,
+  and the monitors exist only while the mode is on.
+- The system pointer stays above every window and is never replaced: effects
+  are drawn around it, not over it. Its size and colour remain the ones in
+  macOS's Accessibility ▸ Display ▸ Pointer.
+- Still captures taken by MakiDesk leave the effect out: the capture is made
+  without the system cursor, and an effect alone would be a ghost. Recordings keep
+  the cursor and the effect. The capture option above covers other pipelines
+  only when they honour the window's sharing type; some recorders ignore it.
+- Reduce Motion turns pulse and ripple into fades, shows a static ring instead
+  of a moving ribbon or particles, and stops the orbit rotation. The spotlight
+  remains a static dim with a clear circle.
+- Off means off: with no presentation running, nothing samples the pointer and no
+  monitor or timer exists.
+
 ## Layouts
 
 With three or more windows in view, MakiDesk can lay them out as a set:
@@ -1038,6 +1076,7 @@ main global keys:
 | Groups | `⌃⌥1…9`, `⌃⌥⌘1…9` |
 | Focus | `⌃⌥⌘V`, `⌃⌥⌘A`, `⌃⌥⌘Z` |
 | Focus dim, focus border | `⌃⌥⌘D`, `⌃⌥⌘B` |
+| Pointer effects | `⌃⌥⇧P`, `⌃⌥⇧X` |
 | Peek | `⌃⌥⌘P`, hold `⌃⌥H`, clear `⌃⌥⌘H` |
 
 The mini-map has no global key: it is in the menu and in Settings ▸ Panels.
@@ -1164,6 +1203,13 @@ The table below is generated from the app's own table, with
 | Keep a square | ⇧ + drag | Gesture |
 | Measure from the centre | ⌥ + drag | Gesture |
 | Snap to windows and displays | auto | Gesture |
+
+**Pointer**
+
+| Command | Keys | Where |
+|---|---|---|
+| Locate pointer | `⌃⌥⇧P` | Screen |
+| Pointer effects on / off | `⌃⌥⇧X` | Screen |
 
 **App**
 

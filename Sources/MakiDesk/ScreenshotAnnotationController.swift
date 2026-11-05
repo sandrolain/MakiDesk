@@ -160,6 +160,7 @@ final class ScreenshotAnnotationController {
                 let image = try await ScreenRegionCapture.capture(
                     display: display,
                     excluding: UtilityBarController.shared.excludedWindowNumbers
+                        + PointerEffectController.shared.excludedWindowNumbers
                 )
                 self.present(image: image, selection: ScreenRegionSelector.Selection(
                     rect: CGRect(origin: .zero, size: display.frame.size),

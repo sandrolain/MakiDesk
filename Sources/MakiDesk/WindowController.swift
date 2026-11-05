@@ -55,6 +55,10 @@ enum WindowController {
         /// Toggle presentation the user configured in Settings.
         case toggleFocusBorder
         case toggleMiniMap
+        /// A pulse around the pointer, on the display it is on (E1).
+        case locatePointer
+        /// Follow the pointer for a few minutes, or stop (E3).
+        case togglePointerEffects
         /// Dim everything outside the focused window (T62).
         case toggleFocusDim
         /// Show or hide the checklist card (T59).

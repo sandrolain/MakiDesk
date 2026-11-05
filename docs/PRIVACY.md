@@ -30,6 +30,10 @@ Both are granted by you in **System Settings ▸ Privacy & Security** and can be
 revoked there at any time. The app does not request Input Monitoring, Full Disk
 Access, Contacts, Calendar, Microphone, Camera or Automation.
 
+The pointer effects add no permission at all: `⌃⌥⇧P` and `⌃⌥⇧X` read the pointer
+through AppKit's mouse events and draw their own transparent panels, so they
+keep working with every TCC permission off.
+
 The optional **system notification** copy of a CPU notice is not a TCC
 permission: macOS asks once, when you switch the option on in Settings ▸ System,
 and the app posts nothing to Notification Center until you allow it. The in-app
@@ -48,6 +52,11 @@ identity asks again. A Developer ID-signed public release behaves best here.
   times a second to decide whether the pointer is resting in the strip under the
   menu bar and whether it is still on the open bar. Nothing is recorded or
   logged, and the sampling stops the moment the feature is turned off.
+- **The pointer position**, while the pointer effects are in use: read once for
+  `⌃⌥⇧P`, and through the same global mouse events while a presentation effect
+  is on, to place a transparent panel around the pointer. It is used in memory
+  only; the position is never recorded, logged or written, and nothing samples
+  the pointer or stays on screen once the feature is off.
 - **Window images** through ScreenCaptureKit, only while previews or the
   content measure are in use. The images are downscaled and kept **in memory**;
   they are used for the switcher cards, the overlay and the edge-energy score,
@@ -208,7 +217,8 @@ MakiDesk writes to the system log (`com.makidesk.app`, one category per part:
 `app`, `index`, `capture`, `palette`, `notes`, `ocr`, `shortcuts`, `store`).
 What goes there is deliberately narrow: durations, counts, revisions and ids the
 app chose itself. Window titles, note text, clipboard content, recognised text,
-file paths and screenshots are **not** logged, so a log excerpt can be shared.
+file paths, screenshots and pointer coordinates are **not** logged, so a log
+excerpt can be shared.
 
 **Copy diagnostics** in Settings ▸ General ▸ Permissions puts a short report on
 the clipboard: the app and macOS versions, which permission is on, how many

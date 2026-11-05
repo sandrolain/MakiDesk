@@ -153,6 +153,10 @@ final class CommandBoxController {
             UtilityBarController.shared.show()
         case .hideUtilityBar:
             UtilityBarController.shared.dismiss()
+        case .locatePointer:
+            PointerEffectController.shared.pulse()
+        case .togglePointerEffects:
+            PointerEffectController.shared.togglePresentation()
         }
     }
 

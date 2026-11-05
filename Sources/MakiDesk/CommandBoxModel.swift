@@ -43,6 +43,9 @@ enum CommandAction: Equatable {
     case pinUtilityBar
     case showUtilityBar
     case hideUtilityBar
+    /// A pulse around the pointer, and the presentation ring (E1–E3).
+    case locatePointer
+    case togglePointerEffects
 }
 
 /// Parsing and suggestions, kept pure: typing a command and choosing from the
@@ -100,6 +103,8 @@ enum CommandCatalog {
         entry("minimap", "Show or hide the mini map", .shortcut(.toggleMiniMap)),
         entry("focus border", "Show or hide the focus border", .shortcut(.toggleFocusBorder)),
         entry("focus dim", "Dim everything outside the front window", .shortcut(.toggleFocusDim)),
+        entry("locate pointer", "Pulse around the pointer", .locatePointer),
+        entry("pointer effects", "Follow the pointer for a few minutes", .togglePointerEffects),
         // The utility bar
         entry("utility bar", "Open or close the utility bar", .shortcut(.toggleUtilityBar)),
         entry("bar", "Open or close the utility bar", .shortcut(.toggleUtilityBar)),

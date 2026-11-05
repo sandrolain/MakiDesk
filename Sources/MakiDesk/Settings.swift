@@ -157,6 +157,15 @@ enum SettingsDefaults {
         .focusDimDesktopDims: false,
         .focusDimStopsOnAppChange: false,
 
+        // Pointer effects (E1–E3): off until asked for, 44 pt, 60%, 0.8 s, 5 min.
+        .pointerEffectStyle: PointerEffectSettings.defaultStyle.rawValue,
+        .pointerEffectSize: Double(PointerEffectSettings.defaultSize),
+        .pointerEffectIntensity: PointerEffectSettings.defaultIntensity,
+        .pointerPulseDuration: PointerEffectSettings.defaultPulseDuration,
+        .pointerPresentationMinutes: PointerEffectSettings.defaultPresentationMinutes,
+        .pointerEffectsInCaptures: PointerEffectSettings.defaultIncludesInCaptures,
+        .pointerClickRipple: PointerEffectSettings.defaultClickRipple,
+
         // Text recognition (T41/T54).
         .ocrFastRecognition: false,
         .ocrLanguageCorrection: true,

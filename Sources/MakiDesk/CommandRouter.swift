@@ -124,6 +124,8 @@ enum CommandRouter {
         case .recordArea: return "recording"
         case .runCommand: return "command"
         case .toggleMiniMap: return "mini map"
+        case .locatePointer: return "pointer"
+        case .togglePointerEffects: return "pointer effects"
         case .focusSelection: return "focus selection"
         case .leaveGroup: return "left group"
         case .clearPeek: return "peek cleared"

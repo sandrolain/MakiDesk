@@ -390,6 +390,7 @@ final class TextRecognitionController {
             return try await ScreenRegionCapture.capture(
                 display: display,
                 excluding: UtilityBarController.shared.excludedWindowNumbers
+                    + PointerEffectController.shared.excludedWindowNumbers
             )
         }
     }

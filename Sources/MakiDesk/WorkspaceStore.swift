@@ -206,6 +206,25 @@ final class WorkspaceStore {
     /// Whether switching to another app ends the effect.
     var focusDimStopsOnAppChange = Settings.bool(.focusDimStopsOnAppChange)
 
+    /// Pointer effects (E1–E3): a pulse, a ring that follows the pointer while
+    /// presentation mode is on, and a click ripple. Nothing is on at launch.
+    var pointerEffectStyle = Settings.value(.pointerEffectStyle, as: PointerEffectStyle.self)
+        ?? PointerEffectSettings.defaultStyle
+    var pointerEffectSize = min(max(CGFloat(Settings.double(.pointerEffectSize)),
+                                    PointerEffectSettings.sizeRange.lowerBound),
+                                PointerEffectSettings.sizeRange.upperBound)
+    var pointerEffectIntensity = min(max(Settings.double(.pointerEffectIntensity),
+                                         PointerEffectSettings.intensityRange.lowerBound),
+                                     PointerEffectSettings.intensityRange.upperBound)
+    var pointerPulseDuration = min(max(Settings.double(.pointerPulseDuration),
+                                       PointerEffectSettings.pulseDurationRange.lowerBound),
+                                   PointerEffectSettings.pulseDurationRange.upperBound)
+    var pointerPresentationMinutes = min(max(Settings.int(.pointerPresentationMinutes),
+                                             PointerEffectSettings.presentationMinutesRange.lowerBound),
+                                         PointerEffectSettings.presentationMinutesRange.upperBound)
+    var pointerEffectsInCaptures = Settings.bool(.pointerEffectsInCaptures)
+    var pointerClickRipple = Settings.bool(.pointerClickRipple)
+
     /// Notices (T52/T60): where they sit, how long they stay and how they are
     /// announced. `HUDController` reads the same keys through `HUDSettings`.
     var hudPosition = Settings.value(.hudPosition, as: HUDPosition.self) ?? .bottomCenter
@@ -1105,6 +1124,80 @@ final class WorkspaceStore {
         Settings.set(value, for: .focusDimStopsOnAppChange)
     }
 
+    // MARK: - Pointer effects (E1–E3)
+
+    func updatePointerEffectStyle(_ value: PointerEffectStyle) {
+        pointerEffectStyle = value
+        Settings.set(value.rawValue, for: .pointerEffectStyle)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerEffectSize(_ value: Double) {
+        let clamped = min(max(CGFloat(value), PointerEffectSettings.sizeRange.lowerBound),
+                          PointerEffectSettings.sizeRange.upperBound)
+        pointerEffectSize = clamped
+        Settings.set(Double(clamped), for: .pointerEffectSize)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerEffectIntensity(_ value: Double) {
+        let clamped = min(max(value, PointerEffectSettings.intensityRange.lowerBound),
+                          PointerEffectSettings.intensityRange.upperBound)
+        pointerEffectIntensity = clamped
+        Settings.set(clamped, for: .pointerEffectIntensity)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerPulseDuration(_ value: Double) {
+        let clamped = min(max(value, PointerEffectSettings.pulseDurationRange.lowerBound),
+                          PointerEffectSettings.pulseDurationRange.upperBound)
+        pointerPulseDuration = clamped
+        Settings.set(clamped, for: .pointerPulseDuration)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerPresentationMinutes(_ value: Int) {
+        let clamped = min(max(value, PointerEffectSettings.presentationMinutesRange.lowerBound),
+                          PointerEffectSettings.presentationMinutesRange.upperBound)
+        pointerPresentationMinutes = clamped
+        Settings.set(clamped, for: .pointerPresentationMinutes)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerEffectsInCaptures(_ value: Bool) {
+        pointerEffectsInCaptures = value
+        Settings.set(value, for: .pointerEffectsInCaptures)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerClickRipple(_ value: Bool) {
+        pointerClickRipple = value
+        Settings.set(value, for: .pointerClickRipple)
+        PointerEffectController.shared.applySettings()
+    }
+
+    /// The factory reset's pointer half. One write per key and one settings
+    /// refresh, so six sliders do not rebuild the surfaces six times.
+    func resetPointerEffects() {
+        pointerEffectStyle = PointerEffectSettings.defaultStyle
+        pointerEffectSize = PointerEffectSettings.defaultSize
+        pointerEffectIntensity = PointerEffectSettings.defaultIntensity
+        pointerPulseDuration = PointerEffectSettings.defaultPulseDuration
+        pointerPresentationMinutes = PointerEffectSettings.defaultPresentationMinutes
+        pointerEffectsInCaptures = PointerEffectSettings.defaultIncludesInCaptures
+        pointerClickRipple = PointerEffectSettings.defaultClickRipple
+        Settings.set(PointerEffectSettings.defaultStyle.rawValue, for: .pointerEffectStyle)
+        Settings.set(Double(PointerEffectSettings.defaultSize), for: .pointerEffectSize)
+        Settings.set(PointerEffectSettings.defaultIntensity, for: .pointerEffectIntensity)
+        Settings.set(PointerEffectSettings.defaultPulseDuration, for: .pointerPulseDuration)
+        Settings.set(PointerEffectSettings.defaultPresentationMinutes,
+                     for: .pointerPresentationMinutes)
+        Settings.set(PointerEffectSettings.defaultIncludesInCaptures,
+                     for: .pointerEffectsInCaptures)
+        Settings.set(PointerEffectSettings.defaultClickRipple, for: .pointerClickRipple)
+        PointerEffectController.shared.applySettings()
+    }
+
     func updateChecklistVisible(_ value: Bool) {
         checklistVisible = value
         Settings.set(value, for: .checklistVisible)
@@ -1341,6 +1434,7 @@ final class WorkspaceStore {
         updateFocusDimDisplayMode(.independent)
         updateFocusDimDesktopDims(false)
         updateFocusDimStopsOnAppChange(false)
+        resetPointerEffects()
         updateChecklistVisible(false)
         updateChecklistOpacity(ChecklistSettings.defaultOpacity)
         updateChecklistWidth(ChecklistSettings.defaultWidth)
@@ -1478,6 +1572,12 @@ final class WorkspaceStore {
             return
         case .toggleMiniMap:
             updateMiniMapVisibility(!showMiniMap)
+            return
+        case .locatePointer:
+            PointerEffectController.shared.pulse()
+            return
+        case .togglePointerEffects:
+            PointerEffectController.shared.togglePresentation()
             return
         case .leaveGroup:
             leaveGroup()

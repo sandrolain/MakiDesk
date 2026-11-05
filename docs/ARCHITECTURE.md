@@ -38,6 +38,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `WindowController.swift` | Accessibility wrappers: discovery, frontmost window, frames, capabilities, full screen, screens. |
 | `WindowIndex.swift` | Cached window index with AX/workspace/screen observers; stable identity. |
 | `WindowOutlineController.swift`, `FocusBorder.swift` | Click-through focus-border panel and its pure geometry. |
+| `PointerEffect.swift`, `PointerEffectController.swift`, `PointerEffectSurface.swift` | Pointer pulse, five presentation styles and click ripple: pure trail/display rules; one click-through panel per display; no permission, no logged coordinates. |
 | `WindowCapture.swift` | ScreenCaptureKit previews and the edge-energy content measure. |
 | `TilingEngine.swift` | Pure geometry: ladders, halves, quarters, grid, golden spiral, squarified treemap. |
 | `LayoutAdvisor.swift` | Pure advisor: window kinds, content measure, priors, suggested preset, reasons. |
@@ -395,6 +396,39 @@ only when the add field is clicked, and `PanelFocusReturn` gives them back on
 hide or on `Esc`. The card is SwiftUI in an `NSHostingView` and the controller
 re-measures it after each change, so the list grows and shrinks with its
 content.
+
+## Pointer effects
+
+`PointerEffectController` owns three things that share one surface per display:
+a one-shot pulse (`⌃⌥⇧P`), a selected presentation style that follows the pointer
+while the mode is on (`⌃⌥⇧X`, five minutes by default), and a ripple on click.
+`PointerEffect.swift` holds the decisions as values — pulse timing and ring
+stagger, a bounded/de-duplicated trail, display choice for a point (including
+the gap between displays), the local point on a negative-origin display, radius
+clamping and the follow factor — so they are tested without a window server.
+
+The surface is one borderless, non-activating `FloatingPanel` per `NSScreen`,
+at `statusBar + 1`, `ignoresMouseEvents` for its whole life, in every space and
+over full-screen windows. The ring is a `CAShapeLayer` and radial glow; the
+ribbon is a short filled path (at most 26 samples); particles use one
+`CAEmitterLayer`; orbit dots rotate as a single child layer; spotlight is a
+static dark layer with an even-odd circular mask. The click ripple and pulse
+are transient Core Animation layers. Only the spotlight shades the full display;
+the others update small layer properties and do not redraw a full-screen view.
+The follower samples the pointer at 60 Hz only while it is moving (or while a
+button is held, because a native drag can swallow `mouseMoved`), and stops about
+a second after the pointer settles. The global and local mouse monitors exist
+only while presentation mode is on; a pulse installs no monitor at all, and a
+generation counter stops a late pulse from clearing a newer one. Reduce Motion
+replaces the ribbon/particles with a static ring and pauses orbit rotation. Sleep,
+screen sleep, screen lock and a display parameter change tear the surfaces down
+instead of leaving a transparent high-level window behind; the panel is
+excluded from the app's still captures by window number, while recordings keep
+the cursor and the effect.
+
+No Accessibility, Input Monitoring or Screen Recording is involved: only
+`NSEvent.mouseLocation`, and a panel that never takes a click. The pointer is
+never logged or persisted.
 
 ## System monitor
 

@@ -268,6 +268,21 @@ final class SettingsTests: XCTestCase {
                                       in: defaults), .hex)
     }
 
+    func testThePointerDefaultsAreDeclared() {
+        Settings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(Settings.double(.pointerEffectSize, in: defaults), 44,
+                       accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.pointerEffectIntensity, in: defaults), 0.6,
+                       accuracy: 0.001)
+        XCTAssertEqual(Settings.double(.pointerPulseDuration, in: defaults), 0.8,
+                       accuracy: 0.001)
+        XCTAssertEqual(Settings.int(.pointerPresentationMinutes, in: defaults), 5)
+        XCTAssertTrue(Settings.bool(.pointerEffectsInCaptures, in: defaults))
+        XCTAssertTrue(Settings.bool(.pointerClickRipple, in: defaults))
+        XCTAssertEqual(Settings.string(.pointerEffectStyle, in: defaults), "ring")
+    }
+
     /// The table is the list of keys whose reads have moved. Adding a domain
     /// means adding it here, which forces the question "are its reads using
     /// this, or still carrying their own fallback?".
@@ -294,6 +309,9 @@ final class SettingsTests: XCTestCase {
             .focusDimEnabled, .focusDimOpacity, .focusDimFade, .focusDimColour,
             .focusDimSource, .focusDimDisplayMode, .focusDimDesktopDims,
             .focusDimStopsOnAppChange,
+            .pointerEffectSize, .pointerEffectIntensity, .pointerEffectStyle,
+            .pointerPulseDuration,
+            .pointerPresentationMinutes, .pointerEffectsInCaptures, .pointerClickRipple,
             .ocrFastRecognition, .ocrLanguageCorrection,
             .ocrOutputDestination, .ocrRevealHistory,
             .shelfShakeEnabled, .shelfShakeSensitivity,
