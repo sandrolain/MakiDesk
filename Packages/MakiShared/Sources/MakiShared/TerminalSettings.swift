@@ -188,6 +188,13 @@ public struct TerminalThemeDocument: Codable, Equatable, Sendable {
     public var cursor: String
     public var selectionBackground: String
     public var selectionForeground: String
+    /// The helper's own window chrome follows the same palette. Optional so an
+    /// older theme file still reads; `normalized()` fills them.
+    public var surface: String?
+    public var surfaceSelected: String?
+    public var subtext: String?
+    public var accent: String?
+    public var border: String?
     public var ansi: [String]
 
     public init(version: Int = TerminalThemeDocument.currentVersion,
@@ -198,6 +205,11 @@ public struct TerminalThemeDocument: Codable, Equatable, Sendable {
                 cursor: String,
                 selectionBackground: String,
                 selectionForeground: String,
+                surface: String? = nil,
+                surfaceSelected: String? = nil,
+                subtext: String? = nil,
+                accent: String? = nil,
+                border: String? = nil,
                 ansi: [String] = TerminalThemeDocument.standardANSI) {
         self.version = version
         self.id = id
@@ -207,6 +219,11 @@ public struct TerminalThemeDocument: Codable, Equatable, Sendable {
         self.cursor = cursor
         self.selectionBackground = selectionBackground
         self.selectionForeground = selectionForeground
+        self.surface = surface
+        self.surfaceSelected = surfaceSelected
+        self.subtext = subtext
+        self.accent = accent
+        self.border = border
         self.ansi = ansi
     }
 
@@ -228,6 +245,11 @@ public struct TerminalThemeDocument: Codable, Equatable, Sendable {
         selectionForeground = try container.decodeIfPresent(String.self,
                                                             forKey: .selectionForeground)
             ?? fallback.selectionForeground
+        surface = try container.decodeIfPresent(String.self, forKey: .surface)
+        surfaceSelected = try container.decodeIfPresent(String.self, forKey: .surfaceSelected)
+        subtext = try container.decodeIfPresent(String.self, forKey: .subtext)
+        accent = try container.decodeIfPresent(String.self, forKey: .accent)
+        border = try container.decodeIfPresent(String.self, forKey: .border)
         ansi = try container.decodeIfPresent([String].self, forKey: .ansi) ?? fallback.ansi
     }
 
@@ -246,7 +268,12 @@ public struct TerminalThemeDocument: Codable, Equatable, Sendable {
         foreground: "#CDD6F4",
         cursor: "#CBA6F7",
         selectionBackground: "#585B70",
-        selectionForeground: "#CDD6F4"
+        selectionForeground: "#CDD6F4",
+        surface: "#313244",
+        surfaceSelected: "#45475A",
+        subtext: "#A6ADC8",
+        accent: "#CBA6F7",
+        border: "#585B70"
     )
 
     /// Keeps sixteen well-formed colours and a resolved pair of surfaces.
@@ -261,6 +288,13 @@ public struct TerminalThemeDocument: Codable, Equatable, Sendable {
                                                fallback: fallback.selectionBackground)
         copy.selectionForeground = Self.colour(selectionForeground,
                                                fallback: fallback.selectionForeground)
+        copy.surface = Self.colour(surface ?? copy.background, fallback: copy.background)
+        copy.surfaceSelected = Self.colour(surfaceSelected ?? copy.selectionBackground,
+                                           fallback: copy.selectionBackground)
+        copy.subtext = Self.colour(subtext ?? copy.foreground, fallback: copy.foreground)
+        copy.accent = Self.colour(accent ?? copy.cursor, fallback: copy.cursor)
+        copy.border = Self.colour(border ?? copy.selectionBackground,
+                                  fallback: copy.selectionBackground)
         var colours: [String] = []
         for index in 0..<16 {
             let candidate = index < ansi.count ? ansi[index] : ""

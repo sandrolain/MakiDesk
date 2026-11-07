@@ -662,8 +662,9 @@ it running, so its shells keep working.
   reconnect.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
   starts your login shell), the quake height (30–60% of the screen) and the SSH
-  profiles. The terminal follows the MakiDesk theme, and a change reaches the
-  helper without a restart. Each theme brings its own sixteen ANSI colours;
+  profiles. The terminal, its sidebar and its title bar follow the MakiDesk
+  theme, and a change reaches the helper without a restart. Each theme brings
+  its own sixteen ANSI colours;
   the named MakiDesk themes reuse the palette they were drawn from (Plum is
   Dracula, Arctic is Nord, Midnight is Tokyo Night, Caramel is Gruvbox,
   Graphite is One Dark).

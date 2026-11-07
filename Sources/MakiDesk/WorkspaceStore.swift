@@ -985,6 +985,9 @@ final class WorkspaceStore {
         themeID = value
         Settings.set(value, for: .themeID)
         NotificationCenter.default.post(name: .makiDeskThemeChanged, object: nil)
+        // The terminal follows the palette too; write theme.json and tell a
+        // running helper to reload it.
+        TerminalController.shared.themeDidChange()
     }
 
     func updateOverlayScale(_ value: Double) {

@@ -53,7 +53,8 @@ identity before the outer app.
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
 - **Settings and theme:** `Terminal/settings.json` (font, shell command, quake
   height) and `Terminal/theme.json` (MakiDesk palette plus the theme's sixteen
-  ANSI colours) are written by MakiDesk; the helper reloads them on
+  ANSI colours, plus the surface/text/accent colours for the helper's own
+  sidebar and title bar) are written by MakiDesk; the helper reloads them on
   `settingsChanged` and `themeChanged`.
 - **Agent status CLI:** `Contents/Resources/bin/makidesk status working`,
   `waiting` or `done` connects to the helper socket, reads

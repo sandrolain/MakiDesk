@@ -1125,7 +1125,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(theme.subtext)
                 }
-                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The terminal follows the MakiDesk theme: changing it in Panels ▸ Look updates the terminal too. The quake panel uses the same setting for its height.")
+                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
             }
             sshProfilesSection
         }

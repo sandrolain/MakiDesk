@@ -17,6 +17,11 @@ extension TerminalThemeDocument {
             cursor: palette.accent.terminalHex,
             selectionBackground: palette.surfaceSelected.terminalHex,
             selectionForeground: palette.text.terminalHex,
+            surface: palette.surface.terminalHex,
+            surfaceSelected: palette.surfaceSelected.terminalHex,
+            subtext: palette.subtext.terminalHex,
+            accent: palette.accent.terminalHex,
+            border: palette.border.terminalHex,
             ansi: TerminalThemePalettes.ansi(for: palette.id)
         )
     }

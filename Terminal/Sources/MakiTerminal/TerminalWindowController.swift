@@ -7,6 +7,7 @@ import MakiTerminalCore
 final class TerminalPaneHostView: NSView {
     let paneID: PaneID
     let surfaceView: TerminalSurfaceView
+    var accentColor: NSColor = .controlAccentColor
     var isFocused = false {
         didSet { updateBorder() }
     }
@@ -32,10 +33,21 @@ final class TerminalPaneHostView: NSView {
         fatalError("not used")
     }
 
-    private func updateBorder() {
+    func updateBorder() {
         guard let layer else { return }
         layer.borderWidth = isFocused ? 1 : 0
-        layer.borderColor = NSColor(red: 0.796, green: 0.651, blue: 0.969, alpha: 1).cgColor
+        layer.borderColor = accentColor.cgColor
+    }
+}
+
+/// A selected row painted with the theme instead of the system accent.
+final class WorkspaceRowView: NSTableRowView {
+    var selectedColor: NSColor = .selectedContentBackgroundColor
+
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        selectedColor.setFill()
+        NSBezierPath(rect: bounds).fill()
     }
 }
 
@@ -109,6 +121,8 @@ final class TerminalWindowController: NSWindowController,
     private let runtime: GhosttyRuntime
     private let layoutStore = TerminalLayoutStore()
     private var terminalSettings: TerminalSettingsDocument
+    private var uiTheme = TerminalUITheme.fallback
+    private var addButton: NSButton?
     private var saveTimer: Timer?
     private var workspaces: [TerminalWorkspace] = []
     private var selected = 0
@@ -156,7 +170,9 @@ final class TerminalWindowController: NSWindowController,
         super.init(window: window)
         window.delegate = self
         window.center()
+        uiTheme = TerminalUITheme(document: TerminalThemeStore().load())
         buildInterface()
+        applyUITheme()
         restoreOrCreate()
     }
 
@@ -173,6 +189,7 @@ final class TerminalWindowController: NSWindowController,
         splitView.translatesAutoresizingMaskIntoConstraints = false
 
         sidebar.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.wantsLayer = true
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.wantsLayer = true
 
@@ -207,6 +224,7 @@ final class TerminalWindowController: NSWindowController,
         tableView.dataSource = self
         tableView.delegate = self
         tableView.backgroundColor = .clear
+        scroll.drawsBackground = false
         scroll.documentView = tableView
 
         let bar = NSStackView()
@@ -222,6 +240,7 @@ final class TerminalWindowController: NSWindowController,
         add.isBordered = false
         add.bezelStyle = .inline
         add.toolTip = "New workspace or SSH session"
+        addButton = add
 
         closeButton.image = NSImage(systemSymbolName: "minus",
                                     accessibilityDescription: "Close workspace")
@@ -554,6 +573,7 @@ final class TerminalWindowController: NSWindowController,
         if let cliPath { surface.environment["MAKIDESK_CLI"] = cliPath }
         surface.environment["MAKIDESK_WORKSPACE_ID"] = workspace.id.uuidString
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
+        host.accentColor = uiTheme.accent
         quakeWorkspace = workspace
         quakeHost = host
         surface.attach(runtime: runtime)
@@ -570,7 +590,8 @@ final class TerminalWindowController: NSWindowController,
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.isOpaque = true
-        panel.backgroundColor = .black
+        panel.backgroundColor = uiTheme.background
+        panel.appearance = NSAppearance(named: uiTheme.isDark ? .darkAqua : .aqua)
         panel.hasShadow = true
         panel.contentView = host
         quakePanel = panel
@@ -586,12 +607,41 @@ final class TerminalWindowController: NSWindowController,
                       width: visible.width, height: height)
     }
 
+    // MARK: - Theme
+
+    private func applyUITheme() {
+        window?.appearance = NSAppearance(named: uiTheme.isDark ? .darkAqua : .aqua)
+        window?.backgroundColor = uiTheme.background
+        window?.titlebarAppearsTransparent = true
+        sidebar.layer?.backgroundColor = uiTheme.surface.cgColor
+        contentView.layer?.backgroundColor = uiTheme.background.cgColor
+        applyQuakeAppearance()
+        addButton?.contentTintColor = uiTheme.subtext
+        closeButton.contentTintColor = uiTheme.subtext
+        tableView.reloadData()
+        for host in paneViews.values {
+            host.accentColor = uiTheme.accent
+            host.updateBorder()
+        }
+        if let quakeHost {
+            quakeHost.accentColor = uiTheme.accent
+            quakeHost.updateBorder()
+        }
+    }
+
+    private func applyQuakeAppearance() {
+        quakePanel?.appearance = NSAppearance(named: uiTheme.isDark ? .darkAqua : .aqua)
+        quakePanel?.backgroundColor = uiTheme.background
+    }
+
     // MARK: - Settings
 
     func applyTerminalSettings() {
         let settings = TerminalSettingsStore().load()
         let theme = TerminalThemeStore().load()
         terminalSettings = settings
+        uiTheme = TerminalUITheme(document: theme)
+        applyUITheme()
         runtime.apply(settings: settings, theme: theme)
         for host in paneViews.values {
             host.surfaceView.shellCommand = settings.shell
@@ -662,6 +712,7 @@ final class TerminalWindowController: NSWindowController,
             surface.environment["MAKIDESK_WORKSPACE_ID"] = workspaces[selected].id.uuidString
         }
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
+        host.accentColor = uiTheme.accent
         paneViews[pane] = host
         surface.attach(runtime: runtime)
         return host
@@ -735,6 +786,12 @@ final class TerminalWindowController: NSWindowController,
         workspaces.count
     }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let view = WorkspaceRowView()
+        view.selectedColor = uiTheme.surfaceSelected
+        return view
+    }
+
     func tableView(_ tableView: NSTableView,
                    viewFor tableColumn: NSTableColumn?,
                    row: Int) -> NSView? {
@@ -761,6 +818,8 @@ final class TerminalWindowController: NSWindowController,
         }
         let workspace = workspaces[row]
         cell.textField?.stringValue = workspace.title
+        cell.textField?.textColor = uiTheme.text
+        cell.dot.layer?.backgroundColor = uiTheme.accent.cgColor
         cell.dot.isHidden = attentionWorkspaces.contains(workspace.id) == false
         if let state = agentStates[workspace.id] {
             cell.agentDot.isHidden = false

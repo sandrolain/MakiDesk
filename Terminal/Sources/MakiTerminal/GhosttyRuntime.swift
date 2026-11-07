@@ -129,12 +129,16 @@ final class GhosttyRuntime {
         guard let app, let newConfig = Self.makeConfig(settings: settings, theme: theme) else {
             return
         }
-        ghostty_app_update_config(app, newConfig)
+        // The app config is updated without propagation, then every live
+        // surface is reconfigured: a new surface alone would leave open
+        // terminals on the old colours.
+        ghostty_app_update_config_without_surface_propagation(app, newConfig)
         if let config {
             retiredConfigs.append(config)
         }
         config = newConfig
         for surface in liveSurfaces() {
+            ghostty_surface_update_config(surface, newConfig)
             ghostty_surface_refresh(surface)
         }
     }
