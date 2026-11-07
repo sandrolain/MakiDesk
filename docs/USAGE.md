@@ -638,6 +638,16 @@ it running, so its shells keep working.
   fails or runs for two seconds or more leaves the same dot when the shell
   reports command boundaries (OSC 133). If MakiDesk is not running, the HUD
   notice is simply skipped.
+- **Agent status.** The helper ships a tiny `makidesk` CLI, exposed as
+  `$MAKIDESK_CLI` (a stable link at
+  `~/Library/Application Support/MakiDesk/Terminal/bin/makidesk`). A hook or
+  script can run `"$MAKIDESK_CLI" status working`,
+  `… waiting --title "Needs input"` or `… done`; the workspace id comes from
+  `MAKIDESK_WORKSPACE_ID`. The sidebar shows a blue dot while working, orange
+  while waiting and green when done; selecting the workspace clears the green
+  one. Nothing is written to disk. **After updating MakiDesk, quit the terminal
+  helper (⌘Q) and reopen it**: a helper that was already running keeps its old
+  environment, and an existing pane does not gain the new variables.
 - **tmux.** **New tmux Session** in the sidebar's **+** menu runs
   `tmux new-session -A -s makidesk-…`: it attaches to that workspace's session
   or creates it. Closing the pane detaches; the tmux server keeps the session,
@@ -655,8 +665,8 @@ it running, so its shells keep working.
   profiles. The terminal follows the MakiDesk theme, and a change reaches the
   helper without a restart; the ANSI palette is still the same fixed sixteen
   colours for every theme.
-- **Not there yet.** agent badges, tabs inside a pane, per-theme ANSI palettes,
-  and a verified IME.
+- **Not there yet.** automatic agent hooks (the CLI is manual), tabs inside a
+  pane, per-theme ANSI palettes, and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut

@@ -157,7 +157,9 @@ MakiDesk. It is removed when the helper quits.
 
 Desktop notifications emitted by the shell (OSC 9/777) are forwarded to
 MakiDesk and shown as notices; their title and body live in the notice history
-in memory, like every other notice, and are never written to disk.
+in memory, like every other notice, and are never written to disk. Agent
+statuses sent by the bundled `makidesk` CLI (working, waiting, done, optional
+title) also live only in the helper's memory and are shown as a sidebar dot.
 
 The helper starts your login shell, so macOS attributes whatever that shell reads
 or connects to (shell startup files, tools it launches, `ssh`) to the helper, not

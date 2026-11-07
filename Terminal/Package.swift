@@ -11,6 +11,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "MakiTerminal", targets: ["MakiTerminal"]),
+        .executable(name: "makidesk", targets: ["makidesk"]),
     ],
     dependencies: [
         .package(path: "../Packages/MakiShared"),
@@ -23,6 +24,10 @@ let package = Package(
         ),
         .target(name: "MakiTerminalCore",
                 dependencies: [.product(name: "MakiShared", package: "MakiShared")]),
+        .executableTarget(
+            name: "makidesk",
+            dependencies: [.product(name: "MakiShared", package: "MakiShared")]
+        ),
         .executableTarget(
             name: "MakiTerminal",
             dependencies: [

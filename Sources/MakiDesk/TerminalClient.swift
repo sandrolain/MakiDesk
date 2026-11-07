@@ -212,7 +212,7 @@ final class TerminalClient {
                 )
             }
         case .ping, .pong, .state, .settingsRequested,
-             .settingsChanged, .themeChanged, .willTerminate:
+             .settingsChanged, .themeChanged, .agentStatus, .willTerminate:
             break
         case .hello, .showMain, .hideMain, .toggleQuake, .quit:
             break

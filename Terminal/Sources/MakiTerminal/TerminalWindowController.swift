@@ -42,6 +42,7 @@ final class TerminalPaneHostView: NSView {
 /// A sidebar row with an attention dot (F3 L1).
 final class WorkspaceCellView: NSTableCellView {
     let dot = NSView()
+    let agentDot = NSView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -50,9 +51,18 @@ final class WorkspaceCellView: NSTableCellView {
         dot.layer?.cornerRadius = 3
         dot.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         dot.isHidden = true
+        agentDot.translatesAutoresizingMaskIntoConstraints = false
+        agentDot.wantsLayer = true
+        agentDot.layer?.cornerRadius = 3
+        agentDot.isHidden = true
+        addSubview(agentDot)
         addSubview(dot)
         NSLayoutConstraint.activate([
-            dot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            agentDot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            agentDot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            agentDot.widthAnchor.constraint(equalToConstant: 6),
+            agentDot.heightAnchor.constraint(equalToConstant: 6),
+            dot.trailingAnchor.constraint(equalTo: agentDot.leadingAnchor, constant: -6),
             dot.centerYAnchor.constraint(equalTo: centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 6),
             dot.heightAnchor.constraint(equalToConstant: 6),
@@ -111,9 +121,18 @@ final class TerminalWindowController: NSWindowController,
     private var quakeWorkspace: TerminalWorkspace?
     private var quakeHost: TerminalPaneHostView?
     private var quakeVisible = false
+    private var cliPath: String? {
+        if TerminalCLI.isAvailable() { return TerminalCLI.stableURL.path }
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("bin/makidesk"),
+              FileManager.default.isExecutableFile(atPath: url.path) else { return nil }
+        return url.path
+    }
     /// Workspaces that produced something worth returning to. Session state:
     /// a dot in the sidebar, cleared by selecting the workspace.
     private var attentionWorkspaces: Set<UUID> = []
+    /// Agent lifecycle per workspace, from the `makidesk` CLI; session only.
+    private var agentStates: [UUID: AgentState] = [:]
+    private var agentLabels: [UUID: String] = [:]
 
     private let splitView = NSSplitView()
     private let sidebar = NSView()
@@ -436,6 +455,21 @@ final class TerminalWindowController: NSWindowController,
         }
     }
 
+    /// Applies a status from the helper's CLI. Unknown workspace ids (a stale
+    /// shell from another session) are ignored.
+    func setAgentState(_ state: AgentState, forWorkspaceID id: UUID, label: String?) {
+        guard let index = workspaces.firstIndex(where: { $0.id == id }) else { return }
+        if state == .done, index == selected, window?.isKeyWindow == true {
+            agentStates[id] = nil
+            agentLabels[id] = nil
+            tableView.reloadData()
+            return
+        }
+        agentStates[id] = state
+        agentLabels[id] = label
+        tableView.reloadData()
+    }
+
     /// Marks the workspace that owns `view`. Selecting it, or focusing it when
     /// it is already on screen, clears the mark.
     func markAttention(for view: TerminalSurfaceView?) {
@@ -517,6 +551,7 @@ final class TerminalWindowController: NSWindowController,
         surface.paneID = pane
         surface.shellCommand = terminalSettings.shell
         surface.environment["MAKIDESK_TERMINAL"] = "1"
+        if let cliPath { surface.environment["MAKIDESK_CLI"] = cliPath }
         surface.environment["MAKIDESK_WORKSPACE_ID"] = workspace.id.uuidString
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         quakeWorkspace = workspace
@@ -622,6 +657,7 @@ final class TerminalWindowController: NSWindowController,
         surface.onFocus = { [weak self] in self?.focusPane(pane) }
 
         surface.environment["MAKIDESK_TERMINAL"] = "1"
+        if let cliPath { surface.environment["MAKIDESK_CLI"] = cliPath }
         if selected < workspaces.count {
             surface.environment["MAKIDESK_WORKSPACE_ID"] = workspaces[selected].id.uuidString
         }
@@ -655,6 +691,14 @@ final class TerminalWindowController: NSWindowController,
 
     func windowDidBecomeKey(_ notification: Notification) {
         clearAttention(for: selected)
+        if workspaces.indices.contains(selected) {
+            let id = workspaces[selected].id
+            if agentStates[id] == .done {
+                agentStates[id] = nil
+                agentLabels[id] = nil
+                tableView.reloadData()
+            }
+        }
     }
 
     // MARK: - Focus
@@ -674,6 +718,14 @@ final class TerminalWindowController: NSWindowController,
         let focused = workspaces[selected].focusedPane
         for (pane, host) in paneViews {
             host.isFocused = pane == focused
+        }
+    }
+
+    private static func agentColour(_ state: AgentState) -> NSColor {
+        switch state {
+        case .working: return .systemBlue
+        case .waiting: return .systemOrange
+        case .done: return .systemGreen
         }
     }
 
@@ -707,8 +759,17 @@ final class TerminalWindowController: NSWindowController,
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
         }
-        cell.textField?.stringValue = workspaces[row].title
-        cell.dot.isHidden = attentionWorkspaces.contains(workspaces[row].id) == false
+        let workspace = workspaces[row]
+        cell.textField?.stringValue = workspace.title
+        cell.dot.isHidden = attentionWorkspaces.contains(workspace.id) == false
+        if let state = agentStates[workspace.id] {
+            cell.agentDot.isHidden = false
+            cell.agentDot.layer?.backgroundColor = Self.agentColour(state).cgColor
+            cell.toolTip = agentLabels[workspace.id]
+        } else {
+            cell.agentDot.isHidden = true
+            cell.toolTip = nil
+        }
         return cell
     }
 
@@ -717,6 +778,13 @@ final class TerminalWindowController: NSWindowController,
         guard row >= 0, row < workspaces.count, row != selected else { return }
         selected = row
         clearAttention(for: row)
+        if workspaces.indices.contains(row) {
+            let id = workspaces[row].id
+            if agentStates[id] == .done {
+                agentStates[id] = nil
+                agentLabels[id] = nil
+            }
+        }
         rebuildContent()
         scheduleSave()
     }

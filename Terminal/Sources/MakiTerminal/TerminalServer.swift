@@ -27,6 +27,7 @@ final class TerminalIPCServer {
     var onQuit: (() -> Void)?
     var onSettingsChanged: (() -> Void)?
     var onThemeChanged: (() -> Void)?
+    var onAgentStatus: ((UUID, AgentState, String?) -> Void)?
     var onPeerConnected: (() -> Void)?
 
     init(socketURL: URL = TerminalSocketLocation.socketURL) {
@@ -209,6 +210,13 @@ final class TerminalIPCServer {
             DispatchQueue.main.async { [weak self] in self?.onSettingsChanged?() }
         case .themeChanged:
             DispatchQueue.main.async { [weak self] in self?.onThemeChanged?() }
+        case .agentStatus:
+            guard let raw = message.body?.workspaceID,
+                  let id = UUID(uuidString: raw),
+                  let state = message.body?.agentState else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.onAgentStatus?(id, state, message.body?.message)
+            }
         case .welcome, .pong, .state, .attention, .settingsRequested, .willTerminate:
             break
         }
@@ -242,7 +250,9 @@ final class TerminalIPCServer {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return false }
         if app.bundleIdentifier == "com.makidesk.app" { return true }
         // `swift run` has no app bundle; the executable name is still MakiDesk.
-        return app.executableURL?.lastPathComponent == "MakiDesk"
+        if app.executableURL?.lastPathComponent == "MakiDesk" { return true }
+        // The helper's own CLI: the closed status message is all it can send.
+        return app.executableURL?.lastPathComponent == "makidesk"
     }
 
     private func canConnect(to url: URL) -> Bool {

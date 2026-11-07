@@ -55,6 +55,13 @@ identity before the outer app.
   height) and `Terminal/theme.json` (MakiDesk palette plus sixteen ANSI colours)
   are written by MakiDesk; the helper reloads them on `settingsChanged` and
   `themeChanged`.
+- **Agent status CLI:** `Contents/Resources/bin/makidesk status working`,
+  `waiting` or `done` connects to the helper socket, reads
+  `MAKIDESK_WORKSPACE_ID` and only updates a sidebar dot. The helper recreates a
+  stable link at `~/Library/Application Support/MakiDesk/Terminal/bin/makidesk`
+  and exports its path as `MAKIDESK_CLI` in each pane; quote it in the shell.
+  A helper started before an update does not have the new variables: quit and
+  reopen it.
 - **Notifications and attention:** OSC 9/777 desktop notifications are
   forwarded over the socket (`attention`) and shown as MakiDesk notices; the
   workspace gets a dot in the sidebar, cleared by selecting it or returning to
@@ -72,7 +79,8 @@ identity before the outer app.
 
 ## What is not there yet
 
-- agent badges; per-theme ANSI palettes; tmux control mode (L3).
+- automatic agent hooks (the CLI exists, the hooks are left to the user);
+  per-theme ANSI palettes; tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling, search and links are the same
   kind of not-yet-verified surface.

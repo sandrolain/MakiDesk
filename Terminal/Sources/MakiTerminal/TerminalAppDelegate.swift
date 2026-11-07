@@ -12,6 +12,9 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
 
+        // A stable, space-free path for `MAKIDESK_CLI`; recreated every launch
+        // so a moved app bundle cannot leave a dangling link.
+        _ = TerminalCLI.install()
         let settings = TerminalSettingsStore().load()
         let theme = TerminalThemeStore().load()
         do {
@@ -76,6 +79,9 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         server.onToggleQuake = { [weak self] in self?.terminal?.toggleQuake() }
         server.onSettingsChanged = { [weak self] in self?.terminal?.applyTerminalSettings() }
         server.onThemeChanged = { [weak self] in self?.terminal?.applyTerminalSettings() }
+        server.onAgentStatus = { [weak self] id, state, label in
+            self?.terminal?.setAgentState(state, forWorkspaceID: id, label: label)
+        }
         server.onQuit = { NSApp.terminate(nil) }
         server.start { started in
             guard started == false else { return }

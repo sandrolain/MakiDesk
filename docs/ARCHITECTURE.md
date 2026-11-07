@@ -329,6 +329,11 @@ launches the helper; `⌃⌥Q` sends `toggleQuake`. The quake is a borderless
 `NSPanel` at the floating level with its own scratch workspace, kept alive while
 hidden and deliberately outside the saved layout.
 
+The helper also ships `Contents/Resources/bin/makidesk`, a one-shot status
+client. It reads `MAKIDESK_WORKSPACE_ID`, connects to the same socket, sends
+one `agentStatus` frame and exits; the server accepts it by executable name and
+only updates a sidebar dot. Panes receive `MAKIDESK_CLI` with its path.
+
 `TerminalController` watches `NSWorkspace.didActivateApplicationNotification`.
 While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`
 with the two terminal rows, so every other table row and the peek's hold key are
