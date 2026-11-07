@@ -41,7 +41,7 @@ enum PointerEffectStyle: String, CaseIterable, Identifiable, Sendable {
         case .ring: return "A ring in the accent colour, with a soft glow."
         case .ribbon: return "A tapered trail that fades behind the pointer."
         case .particles: return "Small sparks around the pointer, brighter while it moves."
-        case .orbit: return "Three dots circling the pointer."
+        case .orbit: return "Dots circling the pointer; number and size are adjustable."
         case .spotlight: return "The screen dimmed except around the pointer."
         }
     }
@@ -139,6 +139,107 @@ struct PointerTrail: Equatable, Sendable {
     }
 }
 
+/// How many particles, how large, and the same for the orbit dots (E5/E6).
+/// Everything is clamped here, so a hand-edited default cannot ask Core
+/// Animation for a thousand particles or a dot that swallows the pointer.
+struct PointerEffectTuning: Equatable, Sendable {
+    var particleCount: Int
+    var particleSize: CGFloat
+    var orbitCount: Int
+    var orbitDotSize: CGFloat
+
+    static let standard = PointerEffectTuning(
+        particleCount: PointerParticles.defaultCount,
+        particleSize: PointerParticles.defaultSize,
+        orbitCount: PointerOrbit.defaultCount,
+        orbitDotSize: PointerOrbit.defaultSize
+    )
+
+    init(particleCount: Int, particleSize: CGFloat,
+         orbitCount: Int, orbitDotSize: CGFloat) {
+        self.particleCount = PointerParticles.clampedCount(particleCount)
+        self.particleSize = PointerParticles.clampedSize(particleSize)
+        self.orbitCount = PointerOrbit.clampedCount(orbitCount)
+        self.orbitDotSize = PointerOrbit.clampedSize(orbitDotSize)
+    }
+}
+
+/// The particle style's numbers as values: the steady state a count asks for,
+/// the scale a size in points becomes, and the two cells' shares.
+enum PointerParticles {
+    static let countRange = 10...160
+    static let sizeRange: ClosedRange<CGFloat> = 3...14
+    static let defaultCount = 60
+    static let defaultSize: CGFloat = 3
+
+    /// The sprite is drawn at this many pixels; `CAEmitterCell.scale` is a
+    /// fraction of it, so a size in points is this ratio.
+    static let spriteSide: CGFloat = 48
+    static let primaryShare = 0.8
+    static let secondaryShare = 0.2
+    static let primaryLifetime: TimeInterval = 0.72
+    static let secondaryLifetime: TimeInterval = 0.55
+
+    static func clampedCount(_ count: Int) -> Int {
+        min(max(count, countRange.lowerBound), countRange.upperBound)
+    }
+
+    static func clampedSize(_ size: CGFloat) -> CGFloat {
+        min(max(size, sizeRange.lowerBound), sizeRange.upperBound)
+    }
+
+    static func spriteScale(for size: CGFloat) -> CGFloat {
+        clampedSize(size) / spriteSide
+    }
+
+    /// The birth rate that holds `count` particles alive for `lifetime`
+    /// seconds, weighted by `share`.
+    static func birthRate(count: Int, share: Double, lifetime: TimeInterval) -> Float {
+        let population = Double(clampedCount(count)) * min(max(share, 0), 1)
+        return Float(population / max(lifetime, 0.05))
+    }
+}
+
+/// The orbit style's numbers: how many dots, their sizes, and the radius that
+/// leaves room for all of them.
+enum PointerOrbit {
+    static let countRange = 1...8
+    static let sizeRange: ClosedRange<CGFloat> = 3...16
+    static let defaultCount = 3
+    static let defaultSize: CGFloat = 7
+
+    /// Dots after the leading one are a little smaller, so the group reads as
+    /// moving rather than as a dotted circle.
+    static let trailingScale: CGFloat = 0.72
+    static let minimumRadius: CGFloat = 12
+    /// Room for one dot plus a gap, in units of its diameter.
+    static let spacing: CGFloat = 1.8
+
+    static func clampedCount(_ count: Int) -> Int {
+        min(max(count, countRange.lowerBound), countRange.upperBound)
+    }
+
+    static func clampedSize(_ size: CGFloat) -> CGFloat {
+        min(max(size, sizeRange.lowerBound), sizeRange.upperBound)
+    }
+
+    /// One size per dot: the leading dot at `dotSize`, the rest smaller.
+    static func dotSizes(dotSize: CGFloat, count: Int) -> [CGFloat] {
+        let size = clampedSize(dotSize)
+        return (0..<clampedCount(count)).map { index in
+            index == 0 ? size : max(2, size * trailingScale)
+        }
+    }
+
+    /// The radius the dots orbit at: the style's own radius, grown when many
+    /// large dots would otherwise touch.
+    static func radius(base: CGFloat, dotSize: CGFloat, count: Int) -> CGFloat {
+        let room = CGFloat(clampedCount(count)) * clampedSize(dotSize) * spacing
+            / (2 * .pi)
+        return max(max(base, minimumRadius), room)
+    }
+}
+
 /// The settings the effects read. Everything is clamped on the way in, so an
 /// old or hand-edited default cannot make an effect unexpectedly large.
 struct PointerEffectSettings: Equatable, Sendable {
@@ -146,9 +247,15 @@ struct PointerEffectSettings: Equatable, Sendable {
     var size: CGFloat
     var intensity: Double
     var pulseDuration: TimeInterval
+    /// The presentation's deadline in minutes. `0` means no deadline: the mode
+    /// stays on until the shortcut is pressed again.
     var presentationMinutes: Int
     var includesInCaptures: Bool
     var clickRipple: Bool
+    var particleCount: Int
+    var particleSize: CGFloat
+    var orbitCount: Int
+    var orbitDotSize: CGFloat
 
     static let defaultStyle = PointerEffectStyle.ring
     static let defaultSize: CGFloat = 44
@@ -158,9 +265,14 @@ struct PointerEffectSettings: Equatable, Sendable {
     static let defaultPulseDuration: TimeInterval = 0.8
     static let pulseDurationRange: ClosedRange<TimeInterval> = 0.4...2
     static let defaultPresentationMinutes = 5
-    static let presentationMinutesRange = 1...30
+    static let unlimitedPresentationMinutes = 0
+    static let presentationMinutesRange = 0...30
     static let defaultIncludesInCaptures = true
     static let defaultClickRipple = true
+    static let defaultParticleCount = PointerParticles.defaultCount
+    static let defaultParticleSize = PointerParticles.defaultSize
+    static let defaultOrbitCount = PointerOrbit.defaultCount
+    static let defaultOrbitDotSize = PointerOrbit.defaultSize
 
     static let standard = PointerEffectSettings(
         style: defaultStyle,
@@ -169,12 +281,34 @@ struct PointerEffectSettings: Equatable, Sendable {
         pulseDuration: defaultPulseDuration,
         presentationMinutes: defaultPresentationMinutes,
         includesInCaptures: defaultIncludesInCaptures,
-        clickRipple: defaultClickRipple
+        clickRipple: defaultClickRipple,
+        particleCount: defaultParticleCount,
+        particleSize: defaultParticleSize,
+        orbitCount: defaultOrbitCount,
+        orbitDotSize: defaultOrbitDotSize
     )
+
+    /// `0` is a length, not an "off": the presentation then has no deadline.
+    var presentationIsUnlimited: Bool {
+        presentationMinutes == Self.unlimitedPresentationMinutes
+    }
+
+    var tuning: PointerEffectTuning {
+        PointerEffectTuning(particleCount: particleCount,
+                            particleSize: particleSize,
+                            orbitCount: orbitCount,
+                            orbitDotSize: orbitDotSize)
+    }
 
     init(style: PointerEffectStyle, size: CGFloat, intensity: Double,
          pulseDuration: TimeInterval, presentationMinutes: Int,
-         includesInCaptures: Bool, clickRipple: Bool) {
+         includesInCaptures: Bool, clickRipple: Bool,
+         particleCount: Int, particleSize: CGFloat,
+         orbitCount: Int, orbitDotSize: CGFloat) {
+        let tuning = PointerEffectTuning(particleCount: particleCount,
+                                         particleSize: particleSize,
+                                         orbitCount: orbitCount,
+                                         orbitDotSize: orbitDotSize)
         self.style = style
         self.size = min(max(size, Self.sizeRange.lowerBound), Self.sizeRange.upperBound)
         self.intensity = min(max(intensity, Self.intensityRange.lowerBound),
@@ -186,6 +320,10 @@ struct PointerEffectSettings: Equatable, Sendable {
                                        Self.presentationMinutesRange.upperBound)
         self.includesInCaptures = includesInCaptures
         self.clickRipple = clickRipple
+        self.particleCount = tuning.particleCount
+        self.particleSize = tuning.particleSize
+        self.orbitCount = tuning.orbitCount
+        self.orbitDotSize = tuning.orbitDotSize
     }
 
     /// Reads the registered defaults. `Settings.registerDefaults()` runs before
@@ -200,7 +338,11 @@ struct PointerEffectSettings: Equatable, Sendable {
             pulseDuration: Settings.double(.pointerPulseDuration, in: defaults),
             presentationMinutes: Settings.int(.pointerPresentationMinutes, in: defaults),
             includesInCaptures: Settings.bool(.pointerEffectsInCaptures, in: defaults),
-            clickRipple: Settings.bool(.pointerClickRipple, in: defaults)
+            clickRipple: Settings.bool(.pointerClickRipple, in: defaults),
+            particleCount: Settings.int(.pointerParticleCount, in: defaults),
+            particleSize: Settings.double(.pointerParticleSize, in: defaults),
+            orbitCount: Settings.int(.pointerOrbitCount, in: defaults),
+            orbitDotSize: Settings.double(.pointerOrbitDotSize, in: defaults)
         )
     }
 }

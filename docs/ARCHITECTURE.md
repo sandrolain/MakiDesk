@@ -401,11 +401,14 @@ content.
 
 `PointerEffectController` owns three things that share one surface per display:
 a one-shot pulse (`⌃⌥⇧P`), a selected presentation style that follows the pointer
-while the mode is on (`⌃⌥⇧X`, five minutes by default), and a ripple on click.
-`PointerEffect.swift` holds the decisions as values — pulse timing and ring
-stagger, a bounded/de-duplicated trail, display choice for a point (including
-the gap between displays), the local point on a negative-origin display, radius
-clamping and the follow factor — so they are tested without a window server.
+while the mode is on (`⌃⌥⇧X`; five minutes by default, or no deadline when the
+length is `0`), and a ripple on click. `PointerEffect.swift` holds the decisions
+as values — pulse timing and ring stagger, a bounded/de-duplicated trail, display
+choice for a point (including the gap between displays), the local point on a
+negative-origin display, radius clamping, the follow factor, and the particle/orbit
+tuning (a count turned into an emitter birth rate, a size turned into a sprite
+scale, dot sizes and the radius that leaves room for them) — so they are tested
+without a window server.
 
 The surface is one borderless, non-activating `FloatingPanel` per `NSScreen`,
 at `statusBar + 1`, `ignoresMouseEvents` for its whole life, in every space and

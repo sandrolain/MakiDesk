@@ -222,8 +222,26 @@ final class WorkspaceStore {
     var pointerPresentationMinutes = min(max(Settings.int(.pointerPresentationMinutes),
                                              PointerEffectSettings.presentationMinutesRange.lowerBound),
                                          PointerEffectSettings.presentationMinutesRange.upperBound)
+    /// The finite length the "No time limit" toggle goes back to. Not
+    /// persisted: the persisted key already holds either the length or `0`.
+    var pointerFinitePresentationMinutes = {
+        let saved = Settings.int(.pointerPresentationMinutes)
+        return saved > 0 ? saved : PointerEffectSettings.defaultPresentationMinutes
+    }()
     var pointerEffectsInCaptures = Settings.bool(.pointerEffectsInCaptures)
     var pointerClickRipple = Settings.bool(.pointerClickRipple)
+    var pointerParticleCount = min(max(Settings.int(.pointerParticleCount),
+                                       PointerParticles.countRange.lowerBound),
+                                   PointerParticles.countRange.upperBound)
+    var pointerParticleSize = min(max(CGFloat(Settings.double(.pointerParticleSize)),
+                                      PointerParticles.sizeRange.lowerBound),
+                                  PointerParticles.sizeRange.upperBound)
+    var pointerOrbitCount = min(max(Settings.int(.pointerOrbitCount),
+                                    PointerOrbit.countRange.lowerBound),
+                                PointerOrbit.countRange.upperBound)
+    var pointerOrbitDotSize = min(max(CGFloat(Settings.double(.pointerOrbitDotSize)),
+                                      PointerOrbit.sizeRange.lowerBound),
+                                  PointerOrbit.sizeRange.upperBound)
 
     /// Notices (T52/T60): where they sit, how long they stay and how they are
     /// announced. `HUDController` reads the same keys through `HUDSettings`.
@@ -1160,7 +1178,38 @@ final class WorkspaceStore {
         let clamped = min(max(value, PointerEffectSettings.presentationMinutesRange.lowerBound),
                           PointerEffectSettings.presentationMinutesRange.upperBound)
         pointerPresentationMinutes = clamped
+        if clamped > PointerEffectSettings.unlimitedPresentationMinutes {
+            pointerFinitePresentationMinutes = clamped
+        }
         Settings.set(clamped, for: .pointerPresentationMinutes)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerParticleCount(_ value: Int) {
+        let clamped = PointerParticles.clampedCount(value)
+        pointerParticleCount = clamped
+        Settings.set(clamped, for: .pointerParticleCount)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerParticleSize(_ value: Double) {
+        let clamped = PointerParticles.clampedSize(CGFloat(value))
+        pointerParticleSize = clamped
+        Settings.set(Double(clamped), for: .pointerParticleSize)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerOrbitCount(_ value: Int) {
+        let clamped = PointerOrbit.clampedCount(value)
+        pointerOrbitCount = clamped
+        Settings.set(clamped, for: .pointerOrbitCount)
+        PointerEffectController.shared.applySettings()
+    }
+
+    func updatePointerOrbitDotSize(_ value: Double) {
+        let clamped = PointerOrbit.clampedSize(CGFloat(value))
+        pointerOrbitDotSize = clamped
+        Settings.set(Double(clamped), for: .pointerOrbitDotSize)
         PointerEffectController.shared.applySettings()
     }
 
@@ -1184,8 +1233,13 @@ final class WorkspaceStore {
         pointerEffectIntensity = PointerEffectSettings.defaultIntensity
         pointerPulseDuration = PointerEffectSettings.defaultPulseDuration
         pointerPresentationMinutes = PointerEffectSettings.defaultPresentationMinutes
+        pointerFinitePresentationMinutes = PointerEffectSettings.defaultPresentationMinutes
         pointerEffectsInCaptures = PointerEffectSettings.defaultIncludesInCaptures
         pointerClickRipple = PointerEffectSettings.defaultClickRipple
+        pointerParticleCount = PointerEffectSettings.defaultParticleCount
+        pointerParticleSize = PointerEffectSettings.defaultParticleSize
+        pointerOrbitCount = PointerEffectSettings.defaultOrbitCount
+        pointerOrbitDotSize = PointerEffectSettings.defaultOrbitDotSize
         Settings.set(PointerEffectSettings.defaultStyle.rawValue, for: .pointerEffectStyle)
         Settings.set(Double(PointerEffectSettings.defaultSize), for: .pointerEffectSize)
         Settings.set(PointerEffectSettings.defaultIntensity, for: .pointerEffectIntensity)
@@ -1195,6 +1249,12 @@ final class WorkspaceStore {
         Settings.set(PointerEffectSettings.defaultIncludesInCaptures,
                      for: .pointerEffectsInCaptures)
         Settings.set(PointerEffectSettings.defaultClickRipple, for: .pointerClickRipple)
+        Settings.set(PointerEffectSettings.defaultParticleCount, for: .pointerParticleCount)
+        Settings.set(Double(PointerEffectSettings.defaultParticleSize),
+                     for: .pointerParticleSize)
+        Settings.set(PointerEffectSettings.defaultOrbitCount, for: .pointerOrbitCount)
+        Settings.set(Double(PointerEffectSettings.defaultOrbitDotSize),
+                     for: .pointerOrbitDotSize)
         PointerEffectController.shared.applySettings()
     }
 

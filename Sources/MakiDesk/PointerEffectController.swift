@@ -28,6 +28,7 @@ final class PointerEffectController {
     @ObservationIgnored private var lastPointer: CGPoint?
     @ObservationIgnored private var lastMoveAt = Date.distantPast
     @ObservationIgnored private var effectDisplayID: CGDirectDisplayID?
+    @ObservationIgnored private var presentationStartedAt: Date?
     @ObservationIgnored private var pulseGenerations: [CGDirectDisplayID: Int] = [:]
     @ObservationIgnored private var pulseHideWork: [CGDirectDisplayID: DispatchWorkItem] = [:]
     @ObservationIgnored private var expiryWork: DispatchWorkItem?
@@ -63,6 +64,7 @@ final class PointerEffectController {
             surface.setSharingType(sharingType)
         }
         if isPresentationActive {
+            updateDeadline()
             updateEffect(at: NSEvent.mouseLocation)
         }
     }
@@ -127,9 +129,8 @@ final class PointerEffectController {
 
         let now = Date()
         isPresentationActive = true
-        presentationEndsAt = now.addingTimeInterval(
-            TimeInterval(settings.presentationMinutes * 60)
-        )
+        presentationStartedAt = now
+        updateDeadline()
         let pointer = NSEvent.mouseLocation
         follow = PointerFollow(pointer)
         lastPointer = pointer
@@ -140,7 +141,6 @@ final class PointerEffectController {
         installObservers()
         updateEffect(at: pointer)
         startTicker()
-        scheduleExpiry()
 
         HUDController.shared.show(
             HUDMessage.pointerEffects(active: true, minutes: settings.presentationMinutes)
@@ -160,6 +160,7 @@ final class PointerEffectController {
         guard isPresentationActive else { return }
         isPresentationActive = false
         presentationEndsAt = nil
+        presentationStartedAt = nil
         expiryWork?.cancel()
         expiryWork = nil
         removeMonitors()
@@ -183,6 +184,27 @@ final class PointerEffectController {
 
     private func presentationExpired() {
         stopPresentation(announce: true, reason: .expired)
+    }
+
+    /// Recomputes the deadline from the moment the presentation started, so a
+    /// settings change neither extends it nor restarts it. Turning the length
+    /// to `0` while it runs removes the deadline; giving it a length again
+    /// schedules the remaining time, or ends it at once if that has passed.
+    private func updateDeadline() {
+        expiryWork?.cancel()
+        expiryWork = nil
+        guard let startedAt = presentationStartedAt else {
+            presentationEndsAt = nil
+            return
+        }
+        guard settings.presentationMinutes > 0 else {
+            presentationEndsAt = nil
+            return
+        }
+        presentationEndsAt = startedAt.addingTimeInterval(
+            TimeInterval(settings.presentationMinutes * 60)
+        )
+        scheduleExpiry()
     }
 
     private func scheduleExpiry() {
@@ -336,7 +358,8 @@ final class PointerEffectController {
             )
         surface.update(style: settings.style, at: local, radius: radius,
                        intensity: settings.intensity, colour: accent,
-                       trail: trail, isMoving: isMoving, reduceMotion: reduceMotion)
+                       trail: trail, isMoving: isMoving,
+                       reduceMotion: reduceMotion, tuning: settings.tuning)
     }
 
     private func hideAllEffects() {

@@ -141,8 +141,13 @@ final class PointerEffectTests: XCTestCase {
         XCTAssertEqual(settings.pulseDuration, PointerEffectSettings.defaultPulseDuration)
         XCTAssertEqual(settings.presentationMinutes,
                        PointerEffectSettings.defaultPresentationMinutes)
+        XCTAssertFalse(settings.presentationIsUnlimited)
         XCTAssertTrue(settings.includesInCaptures)
         XCTAssertTrue(settings.clickRipple)
+        XCTAssertEqual(settings.particleCount, PointerParticles.defaultCount)
+        XCTAssertEqual(settings.particleSize, PointerParticles.defaultSize)
+        XCTAssertEqual(settings.orbitCount, PointerOrbit.defaultCount)
+        XCTAssertEqual(settings.orbitDotSize, PointerOrbit.defaultSize)
         XCTAssertEqual(settings, PointerEffectSettings.standard)
     }
 
@@ -168,8 +173,90 @@ final class PointerEffectTests: XCTestCase {
         XCTAssertEqual(low.size, PointerEffectSettings.sizeRange.lowerBound)
         XCTAssertEqual(low.intensity, PointerEffectSettings.intensityRange.lowerBound)
         XCTAssertEqual(low.pulseDuration, PointerEffectSettings.pulseDurationRange.upperBound)
-        XCTAssertEqual(low.presentationMinutes,
-                       PointerEffectSettings.presentationMinutesRange.lowerBound)
+        XCTAssertEqual(low.presentationMinutes, PointerEffectSettings.unlimitedPresentationMinutes)
+        XCTAssertTrue(low.presentationIsUnlimited,
+                      "zero is the mode with no deadline, not a clamp to one minute")
+    }
+
+    func testTheTuningIsClampedAndTravelsWithTheSettings() {
+        defaults.set(1000, forKey: SettingsKey.pointerParticleCount.rawValue)
+        defaults.set(0.0, forKey: SettingsKey.pointerParticleSize.rawValue)
+        defaults.set(40, forKey: SettingsKey.pointerOrbitCount.rawValue)
+        defaults.set(100.0, forKey: SettingsKey.pointerOrbitDotSize.rawValue)
+
+        let high = PointerEffectSettings.load(from: defaults)
+        XCTAssertEqual(high.particleCount, PointerParticles.countRange.upperBound)
+        XCTAssertEqual(high.particleSize, PointerParticles.sizeRange.lowerBound)
+        XCTAssertEqual(high.orbitCount, PointerOrbit.countRange.upperBound)
+        XCTAssertEqual(high.orbitDotSize, PointerOrbit.sizeRange.upperBound)
+        XCTAssertEqual(high.tuning,
+                       PointerEffectTuning(particleCount: high.particleCount,
+                                           particleSize: high.particleSize,
+                                           orbitCount: high.orbitCount,
+                                           orbitDotSize: high.orbitDotSize))
+
+        defaults.set(0, forKey: SettingsKey.pointerParticleCount.rawValue)
+        defaults.set(99.0, forKey: SettingsKey.pointerParticleSize.rawValue)
+        defaults.set(0, forKey: SettingsKey.pointerOrbitCount.rawValue)
+        defaults.set(0.0, forKey: SettingsKey.pointerOrbitDotSize.rawValue)
+
+        let low = PointerEffectSettings.load(from: defaults)
+        XCTAssertEqual(low.particleCount, PointerParticles.countRange.lowerBound)
+        XCTAssertEqual(low.particleSize, PointerParticles.sizeRange.upperBound)
+        XCTAssertEqual(low.orbitCount, PointerOrbit.countRange.lowerBound)
+        XCTAssertEqual(low.orbitDotSize, PointerOrbit.sizeRange.lowerBound)
+    }
+
+    // MARK: - Particle and orbit tuning
+
+    func testTheParticleSizeBecomesASpriteScale() {
+        XCTAssertEqual(PointerParticles.spriteScale(for: 14),
+                       14 / PointerParticles.spriteSide, accuracy: 0.0001)
+        XCTAssertEqual(PointerParticles.spriteScale(for: 0),
+                       PointerParticles.sizeRange.lowerBound / PointerParticles.spriteSide,
+                       accuracy: 0.0001)
+        XCTAssertEqual(PointerParticles.spriteScale(for: 1000),
+                       PointerParticles.sizeRange.upperBound / PointerParticles.spriteSide,
+                       accuracy: 0.0001)
+    }
+
+    func testTheParticleBirthRateHoldsTheAskedPopulation() {
+        let rate = PointerParticles.birthRate(
+            count: 60, share: 1, lifetime: 0.5
+        )
+        XCTAssertEqual(rate, 120, accuracy: 0.001,
+                       "60 particles living 0.5 s need 120 births a second")
+        let split = PointerParticles.birthRate(
+            count: 60, share: PointerParticles.secondaryShare,
+            lifetime: PointerParticles.secondaryLifetime
+        )
+        XCTAssertEqual(Double(split), 60 * PointerParticles.secondaryShare
+                        / PointerParticles.secondaryLifetime, accuracy: 0.001)
+        XCTAssertEqual(PointerParticles.birthRate(count: 60, share: 0, lifetime: 1), 0,
+                       "a cell with no share of the population emits nothing")
+    }
+
+    func testOrbitDotsFollowTheCountAndLeadWithTheFullSize() {
+        let sizes = PointerOrbit.dotSizes(dotSize: 10, count: 4)
+        XCTAssertEqual(sizes.count, 4)
+        XCTAssertEqual(sizes.first, 10)
+        XCTAssertTrue(sizes.dropFirst().allSatisfy {
+            $0 == max(2, 10 * PointerOrbit.trailingScale)
+        })
+        XCTAssertEqual(PointerOrbit.dotSizes(dotSize: 10, count: 0).count,
+                       PointerOrbit.countRange.lowerBound, "one dot is the minimum")
+        XCTAssertEqual(PointerOrbit.dotSizes(dotSize: 10, count: 40).count,
+                       PointerOrbit.countRange.upperBound)
+    }
+
+    func testTheOrbitRadiusGrowsForManyLargeDots() {
+        XCTAssertEqual(PointerOrbit.radius(base: 20, dotSize: 7, count: 3), 20,
+                       "three small dots fit inside the usual radius")
+        XCTAssertEqual(PointerOrbit.radius(base: 20, dotSize: 16, count: 8),
+                       8 * 16 * PointerOrbit.spacing / (2 * .pi),
+                       accuracy: 0.001)
+        XCTAssertEqual(PointerOrbit.radius(base: 0, dotSize: 3, count: 1),
+                       PointerOrbit.minimumRadius)
     }
 
     func testTheSwitchesAreOffOnlyWhenTheUserSaysSo() {

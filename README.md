@@ -50,11 +50,13 @@ editable in Settings.
 
 `⌃⌥⇧P` pulses three rings around the pointer, on the display it is on: useful
 on a large screen or a projector, and it needs no permission. `⌃⌥⇧X` starts a
-five-minute presentation effect, or stops it when pressed again. Choose an
-accent ring, tapered ribbon, moving particles, orbiting dots or a spotlight in
-Settings ▸ Panels ▸ Pointer; click ripples can be enabled too. It stops by
-itself and is never left on. The system pointer is never replaced: the effect
-is drawn around it, not over it.
+presentation effect (five minutes by default, or with no time limit), or stops
+it when pressed again. Choose an accent ring, tapered ribbon, moving particles,
+orbiting dots or a spotlight in Settings ▸ Panels ▸ Pointer, where the particle
+count and size and the number and size of the orbit dots are adjustable too;
+click ripples can be enabled as well. It stops by itself unless you asked for no
+limit, and is never left on. The system pointer is never replaced: the effect is
+drawn around it, not over it.
 
 ### A switcher you will actually use
 

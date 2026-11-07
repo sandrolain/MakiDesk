@@ -165,6 +165,10 @@ enum SettingsDefaults {
         .pointerPresentationMinutes: PointerEffectSettings.defaultPresentationMinutes,
         .pointerEffectsInCaptures: PointerEffectSettings.defaultIncludesInCaptures,
         .pointerClickRipple: PointerEffectSettings.defaultClickRipple,
+        .pointerParticleCount: PointerEffectSettings.defaultParticleCount,
+        .pointerParticleSize: Double(PointerEffectSettings.defaultParticleSize),
+        .pointerOrbitCount: PointerEffectSettings.defaultOrbitCount,
+        .pointerOrbitDotSize: Double(PointerEffectSettings.defaultOrbitDotSize),
 
         // Text recognition (T41/T54).
         .ocrFastRecognition: false,

@@ -281,6 +281,12 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(Settings.bool(.pointerEffectsInCaptures, in: defaults))
         XCTAssertTrue(Settings.bool(.pointerClickRipple, in: defaults))
         XCTAssertEqual(Settings.string(.pointerEffectStyle, in: defaults), "ring")
+        XCTAssertEqual(Settings.int(.pointerParticleCount, in: defaults), 60)
+        XCTAssertEqual(Settings.double(.pointerParticleSize, in: defaults), 3,
+                       accuracy: 0.001)
+        XCTAssertEqual(Settings.int(.pointerOrbitCount, in: defaults), 3)
+        XCTAssertEqual(Settings.double(.pointerOrbitDotSize, in: defaults), 7,
+                       accuracy: 0.001)
     }
 
     /// The table is the list of keys whose reads have moved. Adding a domain
@@ -312,6 +318,8 @@ final class SettingsTests: XCTestCase {
             .pointerEffectSize, .pointerEffectIntensity, .pointerEffectStyle,
             .pointerPulseDuration,
             .pointerPresentationMinutes, .pointerEffectsInCaptures, .pointerClickRipple,
+            .pointerParticleCount, .pointerParticleSize,
+            .pointerOrbitCount, .pointerOrbitDotSize,
             .ocrFastRecognition, .ocrLanguageCorrection,
             .ocrOutputDestination, .ocrRevealHistory,
             .shelfShakeEnabled, .shelfShakeSensitivity,

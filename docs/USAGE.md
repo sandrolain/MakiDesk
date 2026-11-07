@@ -186,17 +186,19 @@ is captured, written or logged.
   second, on the display it is on, then disappear. It installs nothing that
   outlives the effect, and it works while MakiDesk is not the active app.
 - `⌃⌥⇧X` — **Pointer effects**. The selected style follows the pointer for five
-  minutes, or until the shortcut is pressed again. The **Window** menu has the
-  same switch and a style submenu, a notice confirms it, and it stops by itself
-  at the deadline, so a presentation cannot leave it running. A click leaves a
-  ripple.
+  minutes, or until the shortcut is pressed again; with **No time limit** on it
+  stays on until you stop it. The **Window** menu has the same switch and a style
+  submenu, a notice confirms it, and a timed presentation stops by itself at the
+  deadline, so it cannot be left running by accident. A click leaves a ripple.
 - **Settings ▸ Panels ▸ Pointer** chooses the presentation style: **Ring** (an
   accent-colour halo), **Ribbon** (a short tapered trail), **Particles** (small
-  sparks, brighter while moving), **Orbit** (three rotating dots) or
+  sparks, brighter while moving), **Orbit** (dots circling the pointer) or
   **Spotlight** (the screen dimmed around a clear circle). It also sets size
-  (24–80 pt), intensity, pulse duration, presentation length (1–30 min), click
-  ripple and whether capture apps that honour the window sharing type see the
-  effect. **Test pulse** previews the current size and intensity.
+  (24–80 pt), intensity, pulse duration, presentation length (1–30 min, or no
+  time limit), click ripple and whether capture apps that honour the window
+  sharing type see the effect. Particles have their own count (10–160) and size
+  (3–14 pt); orbit has a dot count (1–8) and dot size (3–16 pt). **Test pulse**
+  previews the current size and intensity.
 - The effect stays on the display the pointer is on; it is not carried across the
   gap between two screens. A resolution change rebuilds it, a sleep closes it,
   and the monitors exist only while the mode is on.

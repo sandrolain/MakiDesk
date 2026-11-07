@@ -922,6 +922,40 @@ struct SettingsView: View {
                     Text(store.pointerEffectStyle.summary)
                         .font(.caption)
                         .foregroundStyle(theme.subtext)
+                    if store.pointerEffectStyle == .particles {
+                        SliderRow(title: "Particle count",
+                                  value: Binding(
+                                      get: { Double(store.pointerParticleCount) },
+                                      set: { store.updatePointerParticleCount(Int($0.rounded())) }
+                                  ),
+                                  range: Double(PointerParticles.countRange.lowerBound)
+                                      ... Double(PointerParticles.countRange.upperBound),
+                                  step: 2)
+                        SliderRow(title: "Particle size",
+                                  value: Binding(
+                                      get: { Double(store.pointerParticleSize) },
+                                      set: { store.updatePointerParticleSize($0) }
+                                  ),
+                                  range: Double(PointerParticles.sizeRange.lowerBound)
+                                      ... Double(PointerParticles.sizeRange.upperBound),
+                                  step: 0.5, unit: " pt", decimals: 1)
+                    }
+                    if store.pointerEffectStyle == .orbit {
+                        Stepper("Orbit dots: \(store.pointerOrbitCount)",
+                                value: Binding(
+                                    get: { store.pointerOrbitCount },
+                                    set: { store.updatePointerOrbitCount($0) }
+                                ),
+                                in: PointerOrbit.countRange)
+                        SliderRow(title: "Dot size",
+                                  value: Binding(
+                                      get: { Double(store.pointerOrbitDotSize) },
+                                      set: { store.updatePointerOrbitDotSize($0) }
+                                  ),
+                                  range: Double(PointerOrbit.sizeRange.lowerBound)
+                                      ... Double(PointerOrbit.sizeRange.upperBound),
+                                  step: 0.5, unit: " pt", decimals: 1)
+                    }
                     Toggle("Ripple on click", isOn: Binding(
                         get: { store.pointerClickRipple },
                         set: { store.updatePointerClickRipple($0) }
@@ -942,10 +976,30 @@ struct SettingsView: View {
                                              set: { store.updatePointerPulseDuration($0) }),
                               range: PointerEffectSettings.pulseDurationRange,
                               step: 0.1, unit: " s", decimals: 1)
-                    Stepper("Presentation ends after \(store.pointerPresentationMinutes) min",
-                            value: Binding(get: { store.pointerPresentationMinutes },
-                                           set: { store.updatePointerPresentationMinutes($0) }),
-                            in: PointerEffectSettings.presentationMinutesRange)
+                    Toggle("No time limit", isOn: Binding(
+                        get: {
+                            store.pointerPresentationMinutes
+                                == PointerEffectSettings.unlimitedPresentationMinutes
+                        },
+                        set: { unlimited in
+                            store.updatePointerPresentationMinutes(
+                                unlimited
+                                    ? PointerEffectSettings.unlimitedPresentationMinutes
+                                    : store.pointerFinitePresentationMinutes
+                            )
+                        }
+                    ))
+                    if store.pointerPresentationMinutes
+                        > PointerEffectSettings.unlimitedPresentationMinutes {
+                        Stepper("Presentation ends after \(store.pointerPresentationMinutes) min",
+                                value: Binding(get: { store.pointerPresentationMinutes },
+                                               set: { store.updatePointerPresentationMinutes($0) }),
+                                in: 1...PointerEffectSettings.presentationMinutesRange.upperBound)
+                    } else {
+                        Text("The presentation stays on until the shortcut is pressed again.")
+                            .font(.caption)
+                            .foregroundStyle(theme.subtext)
+                    }
                     Toggle("Visible to other capture apps", isOn: Binding(
                         get: { store.pointerEffectsInCaptures },
                         set: { store.updatePointerEffectsInCaptures($0) }
@@ -958,7 +1012,7 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(theme.subtext)
                     }
-                    caption("⌃⌥⇧P shows a pulse around the pointer, on the display it is on. ⌃⌥⇧X follows the pointer for five minutes, or until the shortcut is pressed again, using the style selected above. The ribbon fades when movement stops; particles settle to a faint sparkle; orbit dots animate in Core Animation; spotlight dims the screen around a clear area. The pointer is read in memory, never recorded. A click leaves a ripple while the presentation is on. MakiDesk's own still captures leave the effect out, because they are taken without the system pointer; recordings keep both. The option above asks capture pipelines that honour the window's sharing type to leave the effect out too, and some recorders ignore it. Reduce Motion simplifies the animations; spotlight remains a static dim with a clear circle.")
+                    caption("⌃⌥⇧P shows a pulse around the pointer, on the display it is on. ⌃⌥⇧X follows the pointer with the style selected above: five minutes by default, or until you stop it when No time limit is on. The ribbon fades when movement stops; particles settle to a faint sparkle and can be made more numerous or larger; orbit dots animate in Core Animation and their number and size are adjustable; spotlight dims the screen around a clear area. The pointer is read in memory, never recorded. A click leaves a ripple while the presentation is on. MakiDesk's own still captures leave the effect out, because they are taken without the system pointer; recordings keep both. The option above asks capture pipelines that honour the window's sharing type to leave the effect out too, and some recorders ignore it. Reduce Motion simplifies the animations; spotlight remains a static dim with a clear circle.")
                 }
             }
             if panelsPage == .bar {

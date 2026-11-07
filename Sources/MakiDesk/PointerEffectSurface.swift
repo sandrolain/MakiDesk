@@ -69,12 +69,12 @@ final class PointerEffectSurface {
 
     func update(style: PointerEffectStyle, at point: CGPoint, radius: CGFloat,
                 intensity: Double, colour: NSColor, trail: PointerTrail,
-                isMoving: Bool, reduceMotion: Bool) {
+                isMoving: Bool, reduceMotion: Bool, tuning: PointerEffectTuning) {
         ringVisible = true
         effectView.update(style: style, at: point, radius: radius,
                           intensity: intensity, colour: colour,
                           trail: trail, isMoving: isMoving,
-                          reduceMotion: reduceMotion)
+                          reduceMotion: reduceMotion, tuning: tuning)
         if panel.isVisible == false {
             panel.orderFrontRegardless()
         }
@@ -145,8 +145,11 @@ final class PointerEffectView: NSView {
 
     private var layerBounds: CGRect = .zero
     private var orbitRadius: CGFloat = -1
+    private var orbitCount = 0
+    private var orbitDotSize: CGFloat = 0
     private var particleImage: CGImage?
     private var particleColour: NSColor?
+    private var particleTuning: PointerEffectTuning?
     private var currentStyle: PointerEffectStyle?
 
     override var isOpaque: Bool { false }
@@ -233,25 +236,36 @@ final class PointerEffectView: NSView {
         emitterLayer.emitterMode = .points
         emitterLayer.renderMode = .additive
         emitterLayer.emitterSize = CGSize(width: 1, height: 1)
-        emitterLayer.emitterCells = [
-            makeEmitterCell(scale: 0.06, birthRate: 80, lifetime: 0.72),
-            makeEmitterCell(scale: 0.045, birthRate: 20, lifetime: 0.55),
-        ]
+        applyEmitterCells(PointerEffectTuning.standard)
     }
 
-    private func makeEmitterCell(scale: CGFloat, birthRate: Float,
-                                 lifetime: Float) -> CAEmitterCell {
+    /// The cell's share of the asked-for population decides its birth rate, so
+    /// a count is the steady state the eye sees, not an opaque number.
+    private func applyEmitterCells(_ tuning: PointerEffectTuning) {
+        emitterLayer.emitterCells = [
+            makeEmitterCell(tuning: tuning, share: PointerParticles.primaryShare,
+                            lifetime: PointerParticles.primaryLifetime),
+            makeEmitterCell(tuning: tuning, share: PointerParticles.secondaryShare,
+                            lifetime: PointerParticles.secondaryLifetime),
+        ]
+        particleColour = nil
+    }
+
+    private func makeEmitterCell(tuning: PointerEffectTuning, share: Double,
+                                 lifetime: TimeInterval) -> CAEmitterCell {
         let cell = CAEmitterCell()
+        let scale = PointerParticles.spriteScale(for: tuning.particleSize)
         cell.contents = particleSprite()
-        cell.birthRate = birthRate
-        cell.lifetime = lifetime
+        cell.birthRate = PointerParticles.birthRate(count: tuning.particleCount,
+                                                    share: share, lifetime: lifetime)
+        cell.lifetime = Float(lifetime)
         cell.lifetimeRange = 0.18
         cell.velocity = 25
         cell.velocityRange = 22
         cell.emissionRange = .pi * 2
         cell.scale = scale
-        cell.scaleRange = 0.025
-        cell.scaleSpeed = -0.045
+        cell.scaleRange = scale * 0.42
+        cell.scaleSpeed = -scale * 0.75
         cell.alphaSpeed = -1.15
         cell.spinRange = .pi * 2
         return cell
@@ -285,7 +299,7 @@ final class PointerEffectView: NSView {
 
     func update(style: PointerEffectStyle, at point: CGPoint, radius: CGFloat,
                 intensity: Double, colour: NSColor, trail: PointerTrail,
-                isMoving: Bool, reduceMotion: Bool) {
+                isMoving: Bool, reduceMotion: Bool, tuning: PointerEffectTuning) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
 
@@ -314,11 +328,11 @@ final class PointerEffectView: NSView {
                 updateRing(at: point, radius: radius, intensity: intensity, colour: colour)
             } else {
                 updateParticles(at: point, intensity: intensity, colour: colour,
-                                isMoving: isMoving)
+                                isMoving: isMoving, tuning: tuning)
             }
         case .orbit:
             updateOrbit(at: point, radius: radius, intensity: intensity,
-                        colour: colour, reduceMotion: reduceMotion)
+                        colour: colour, reduceMotion: reduceMotion, tuning: tuning)
         case .spotlight:
             updateSpotlight(at: point, radius: radius, intensity: intensity,
                             colour: colour, reduceMotion: reduceMotion)
@@ -382,10 +396,15 @@ final class PointerEffectView: NSView {
     }
 
     private func updateParticles(at point: CGPoint, intensity: Double,
-                                colour: NSColor, isMoving: Bool) {
+                                colour: NSColor, isMoving: Bool,
+                                tuning: PointerEffectTuning) {
         glowLayer.opacity = 0
         ringLayer.opacity = 0
         coreLayer.opacity = 0
+        if particleTuning != tuning {
+            particleTuning = tuning
+            applyEmitterCells(tuning)
+        }
         emitterLayer.emitterPosition = point
         if particleColour != colour, let cells = emitterLayer.emitterCells, cells.count >= 2 {
             cells[0].color = colour.cgColor
@@ -393,28 +412,35 @@ final class PointerEffectView: NSView {
             emitterLayer.emitterCells = cells
             particleColour = colour
         }
-        emitterLayer.birthRate = isMoving ? Float(0.5 + intensity * 0.5) : 0.06
-        emitterLayer.opacity = 1
+        emitterLayer.birthRate = isMoving ? 1 : 0.06
+        emitterLayer.opacity = Float(0.75 + 0.25 * intensity)
     }
 
     private func updateOrbit(at point: CGPoint, radius: CGFloat,
                              intensity: Double, colour: NSColor,
-                             reduceMotion: Bool) {
-        let orbit = max(12, radius * 0.9)
-        let extent = orbit + 8
+                             reduceMotion: Bool, tuning: PointerEffectTuning) {
+        let orbit = PointerOrbit.radius(base: max(12, radius * 0.9),
+                                        dotSize: tuning.orbitDotSize,
+                                        count: tuning.orbitCount)
+        let sizes = PointerOrbit.dotSizes(dotSize: tuning.orbitDotSize,
+                                          count: tuning.orbitCount)
+        let largest = sizes.max() ?? tuning.orbitDotSize
+        let extent = orbit + largest / 2 + 8
         orbitLayer.position = point
-        if orbitRadius != orbit || orbitLayer.sublayers?.isEmpty != false {
+        if orbitRadius != orbit || orbitCount != sizes.count
+            || orbitDotSize != tuning.orbitDotSize
+            || orbitLayer.sublayers?.isEmpty != false {
             orbitRadius = orbit
+            orbitCount = sizes.count
+            orbitDotSize = tuning.orbitDotSize
             orbitLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
             orbitLayer.bounds = CGRect(origin: .zero,
                                        size: CGSize(width: extent * 2, height: extent * 2))
             orbitLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
-            let count = 3
-            for index in 0..<count {
+            for (index, dotSize) in sizes.enumerated() {
                 let dot = CAShapeLayer()
-                let dotSize: CGFloat = index == 0 ? 7 : 5
                 dot.bounds = CGRect(x: 0, y: 0, width: dotSize, height: dotSize)
-                let angle = Double(index) * .pi * 2 / Double(count)
+                let angle = Double(index) * .pi * 2 / Double(sizes.count)
                 dot.position = CGPoint(x: extent + cos(angle) * orbit,
                                        y: extent + sin(angle) * orbit)
                 dot.path = CGPath(ellipseIn: dot.bounds, transform: nil)

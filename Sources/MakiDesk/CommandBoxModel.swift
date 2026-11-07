@@ -104,7 +104,7 @@ enum CommandCatalog {
         entry("focus border", "Show or hide the focus border", .shortcut(.toggleFocusBorder)),
         entry("focus dim", "Dim everything outside the front window", .shortcut(.toggleFocusDim)),
         entry("locate pointer", "Pulse around the pointer", .locatePointer),
-        entry("pointer effects", "Follow the pointer for a few minutes", .togglePointerEffects),
+        entry("pointer effects", "Follow the pointer until stopped", .togglePointerEffects),
         // The utility bar
         entry("utility bar", "Open or close the utility bar", .shortcut(.toggleUtilityBar)),
         entry("bar", "Open or close the utility bar", .shortcut(.toggleUtilityBar)),

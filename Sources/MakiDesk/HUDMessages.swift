@@ -361,7 +361,10 @@ extension HUDMessage {
     static func pointerEffects(active: Bool, minutes: Int? = nil) -> HUDMessage {
         let detail: String? = {
             guard active, let minutes else { return nil }
-            return "\(minutes) min · press the shortcut again to stop"
+            let window = minutes > PointerEffectSettings.unlimitedPresentationMinutes
+                ? "\(minutes) min"
+                : "No time limit"
+            return "\(window) · press the shortcut again to stop"
         }()
         return HUDMessage(title: active ? "Pointer effects on" : "Pointer effects off",
                           symbol: "circle.dashed", detail: detail)
