@@ -1,4 +1,5 @@
 import AppKit
+import MakiShared
 
 final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: TerminalAppDelegate?
@@ -10,8 +11,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
 
+        let settings = TerminalSettingsStore().load()
+        let theme = TerminalThemeStore().load()
         do {
-            runtime = try GhosttyRuntime()
+            runtime = try GhosttyRuntime(settings: settings, theme: theme)
         } catch {
             let alert = NSAlert()
             alert.messageText = "MakiDesk Terminal could not start"
@@ -23,8 +26,9 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         }
         guard let runtime else { return }
 
-        let controller = TerminalWindowController(runtime: runtime)
+        let controller = TerminalWindowController(runtime: runtime, settings: settings)
         terminal = controller
+        runtime.liveSurfaces = { [weak controller] in controller?.allSurfaces ?? [] }
         runtime.onSurfaceClosed = { [weak controller] view in
             controller?.paneDidExit(view)
         }
@@ -60,6 +64,8 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         server.onShowMain = { [weak self] in self?.showMain() }
         server.onHideMain = { [weak self] in self?.hideMain() }
         server.onToggleQuake = { [weak self] in self?.terminal?.toggleQuake() }
+        server.onSettingsChanged = { [weak self] in self?.terminal?.applyTerminalSettings() }
+        server.onThemeChanged = { [weak self] in self?.terminal?.applyTerminalSettings() }
         server.onQuit = { NSApp.terminate(nil) }
         server.start { started in
             guard started == false else { return }

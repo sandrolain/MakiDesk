@@ -24,6 +24,8 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         case state
         case attention
         case settingsRequested
+        case settingsChanged
+        case themeChanged
         case willTerminate
     }
 

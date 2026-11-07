@@ -9,7 +9,7 @@ struct SettingsView: View {
         /// window and `@AppStorage` reads it here, so the literal lives once.
         static let defaultsKey = SettingsKey.settingsTab.rawValue
 
-        case general, windows, layouts, panels, notifications, groups, system, dropzones
+        case general, windows, layouts, panels, terminal, notifications, groups, system, dropzones
 
         var id: String { rawValue }
 
@@ -19,6 +19,7 @@ struct SettingsView: View {
             case .windows: return "Windows"
             case .layouts: return "Layouts"
             case .panels: return "Panels"
+            case .terminal: return "Terminal"
             case .notifications: return "Notifications"
             case .groups: return "Groups"
             case .system: return "System"
@@ -33,6 +34,7 @@ struct SettingsView: View {
             case .windows: return "macwindow"
             case .layouts: return "rectangle.split.3x1"
             case .panels: return "rectangle.on.rectangle"
+            case .terminal: return "terminal"
             case .notifications: return "bell"
             case .groups: return "square.grid.2x2"
             case .system: return "gauge"
@@ -346,6 +348,7 @@ struct SettingsView: View {
                     case .windows: windowsTab
                     case .layouts: layoutsTab
                     case .panels: panelsTab
+                    case .terminal: terminalTab
                     case .notifications: notificationsTab
                     case .groups: groupsTab
                     case .system: systemTab
@@ -1076,6 +1079,55 @@ struct SettingsView: View {
         .animation(selectionAnimation, value: panelsPage)
     }
 
+
+    // MARK: - Terminal
+
+    private var terminalTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SettingsSection("Terminal") {
+                TextField("Font family", text: Binding(
+                    get: { TerminalController.shared.settings.fontFamily ?? "" },
+                    set: { value in
+                        TerminalController.shared.updateSettings {
+                            $0.fontFamily = value.isEmpty ? nil : value
+                        }
+                    }
+                ))
+                SliderRow(title: "Font size",
+                          value: Binding(
+                            get: { TerminalController.shared.settings.fontSize },
+                            set: { value in
+                                TerminalController.shared.updateSettings { $0.fontSize = value }
+                            }),
+                          range: 10...20, step: 1, unit: " pt", decimals: 0)
+                TextField("Shell command (empty: login shell)", text: Binding(
+                    get: { TerminalController.shared.settings.shell ?? "" },
+                    set: { value in
+                        TerminalController.shared.updateSettings {
+                            $0.shell = value.isEmpty ? nil : value
+                        }
+                    }
+                ))
+                SliderRow(title: "Quake height",
+                          value: Binding(
+                            get: { TerminalController.shared.settings.quakeHeightFraction },
+                            set: { value in
+                                TerminalController.shared.updateSettings {
+                                    $0.quakeHeightFraction = value
+                                }
+                            }),
+                          range: 0.3...0.6, step: 0.05, unit: "%", percent: true)
+                HStack(spacing: 12) {
+                    Button("Open Terminal") { TerminalController.shared.open() }
+                    Button("Open Quake") { TerminalController.shared.toggleQuake() }
+                    Text("⌃⌥O · ⌃⌥`")
+                        .font(.caption)
+                        .foregroundStyle(theme.subtext)
+                }
+                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The terminal follows the MakiDesk theme: changing it in Panels ▸ Look updates the terminal too. The quake panel uses the same setting for its height.")
+            }
+        }
+    }
 
     // MARK: - Groups
 

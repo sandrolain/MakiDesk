@@ -1,5 +1,6 @@
 import AppKit
 import GhosttyKit
+import MakiShared
 
 /// Owns the Ghostty app and the surface callbacks (F1).
 ///
@@ -22,6 +23,14 @@ final class GhosttyRuntime {
     var onDirectory: ((TerminalSurfaceView, String) -> Void)?
 
     private var tickScheduled = false
+    private var settings: TerminalSettingsDocument
+    private var theme: TerminalThemeDocument
+    private var config: ghostty_config_t?
+    /// Reloads are rare; keeping the old config alive is cheaper than risking a
+    /// surface that still points at it.
+    private var retiredConfigs: [ghostty_config_t] = []
+    /// Filled by the window controller, so a reload can refresh every surface.
+    var liveSurfaces: () -> [ghostty_surface_t] = { [] }
     private static weak var shared: GhosttyRuntime?
 
     enum RuntimeError: Error, LocalizedError {
@@ -41,17 +50,17 @@ final class GhosttyRuntime {
         }
     }
 
-    init() throws {
+    init(settings: TerminalSettingsDocument, theme: TerminalThemeDocument) throws {
+        self.settings = settings
+        self.theme = theme
         GhosttyRuntime.shared = self
         let status = ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv)
         guard status == 0 else { throw RuntimeError.initialization(status) }
 
-        guard let config = ghostty_config_new() else { throw RuntimeError.configuration }
-        let text = Self.spikeConfig
-        text.withCString { pointer in
-            ghostty_config_load_string(config, pointer, UInt(text.utf8.count), "makidesk-terminal")
+        guard let config = Self.makeConfig(settings: settings, theme: theme) else {
+            throw RuntimeError.configuration
         }
-        ghostty_config_finalize(config)
+        self.config = config
 
         var runtime = ghostty_runtime_config_s()
         runtime.userdata = Unmanaged.passUnretained(self).toOpaque()
@@ -104,6 +113,27 @@ final class GhosttyRuntime {
         guard let app = ghostty_app_new(&runtime, config) else { throw RuntimeError.application }
         self.app = app
     }
+
+    /// Re-reads the two shared documents and applies them to the app config.
+    /// Existing surfaces get the new font and colours; new surfaces also get
+    /// the shell command.
+    func apply(settings: TerminalSettingsDocument, theme: TerminalThemeDocument) {
+        self.settings = settings
+        self.theme = theme
+        guard let app, let newConfig = Self.makeConfig(settings: settings, theme: theme) else {
+            return
+        }
+        ghostty_app_update_config(app, newConfig)
+        if let config {
+            retiredConfigs.append(config)
+        }
+        config = newConfig
+        for surface in liveSurfaces() {
+            ghostty_surface_refresh(surface)
+        }
+    }
+
+    var shellCommand: String? { settings.shell }
 
     func scheduleTick() {
         guard tickScheduled == false else { return }
@@ -175,39 +205,40 @@ final class GhosttyRuntime {
             .takeUnretainedValue()
     }
 
-    // MARK: - Appearance
+    // MARK: - Configuration
 
-    /// MakiDesk's Mocha palette mapped to a Ghostty config. The real helper
-    /// will generate this from `terminal-theme.json`; the ANSI palette here is
-    /// a placeholder, because `PaletteTheme` has no ANSI colours yet.
-    private static let spikeConfig = """
-    background = #1E1E2E
-    foreground = #CDD6F4
-    cursor-color = #CBA6F7
-    cursor-text = #1E1E2E
-    selection-background = #585B70
-    selection-foreground = #CDD6F4
-    font-family = SF Mono
-    font-size = 13
-    macos-option-as-alt = true
-    window-padding-x = 8
-    window-padding-y = 8
-    confirm-close-surface = false
-    palette = 0=#45475A
-    palette = 1=#F38BA8
-    palette = 2=#A6E3A1
-    palette = 3=#F9E2AF
-    palette = 4=#89B4FA
-    palette = 5=#F5C2E7
-    palette = 6=#94E2D5
-    palette = 7=#BAC2DE
-    palette = 8=#585B70
-    palette = 9=#F38BA8
-    palette = 10=#A6E3A1
-    palette = 11=#F9E2AF
-    palette = 12=#89B4FA
-    palette = 13=#F5C2E7
-    palette = 14=#94E2D5
-    palette = 15=#A6ADC8
-    """
+    private static func makeConfig(settings: TerminalSettingsDocument,
+                                   theme: TerminalThemeDocument) -> ghostty_config_t? {
+        guard let config = ghostty_config_new() else { return nil }
+        let text = configurationText(settings: settings, theme: theme)
+        text.withCString { pointer in
+            ghostty_config_load_string(config, pointer, UInt(text.utf8.count),
+                                       "makidesk-terminal")
+        }
+        ghostty_config_finalize(config)
+        return config
+    }
+
+    private static func configurationText(settings: TerminalSettingsDocument,
+                                          theme: TerminalThemeDocument) -> String {
+        let family = settings.fontFamily ?? "SF Mono"
+        var lines = [
+            "background = \(theme.background)",
+            "foreground = \(theme.foreground)",
+            "cursor-color = \(theme.cursor)",
+            "cursor-text = \(theme.background)",
+            "selection-background = \(theme.selectionBackground)",
+            "selection-foreground = \(theme.selectionForeground)",
+            "font-family = \(family)",
+            "font-size = \(settings.fontSize)",
+            "macos-option-as-alt = true",
+            "window-padding-x = 8",
+            "window-padding-y = 8",
+            "confirm-close-surface = false",
+        ]
+        for (index, colour) in theme.ansi.enumerated() {
+            lines.append("palette = \(index)=\(colour)")
+        }
+        return lines.joined(separator: "\n")
+    }
 }

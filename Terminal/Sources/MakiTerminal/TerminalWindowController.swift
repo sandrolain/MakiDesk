@@ -1,4 +1,6 @@
 import AppKit
+import GhosttyKit
+import MakiShared
 import MakiTerminalCore
 
 /// One terminal pane and its focus border (F1).
@@ -70,6 +72,7 @@ final class TerminalWindowController: NSWindowController,
                                       NSSplitViewDelegate {
     private let runtime: GhosttyRuntime
     private let layoutStore = TerminalLayoutStore()
+    private var terminalSettings: TerminalSettingsDocument
     private var saveTimer: Timer?
     private var workspaces: [TerminalWorkspace] = []
     private var selected = 0
@@ -89,8 +92,9 @@ final class TerminalWindowController: NSWindowController,
     private let tableView = NSTableView()
     private let closeButton = NSButton()
 
-    init(runtime: GhosttyRuntime) {
+    init(runtime: GhosttyRuntime, settings: TerminalSettingsDocument) {
         self.runtime = runtime
+        self.terminalSettings = settings
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1000, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -398,6 +402,7 @@ final class TerminalWindowController: NSWindowController,
         let pane = workspace.focusedPane
         let surface = TerminalSurfaceView(frame: .zero)
         surface.paneID = pane
+        surface.shellCommand = terminalSettings.shell
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         quakeWorkspace = workspace
         quakeHost = host
@@ -426,9 +431,28 @@ final class TerminalWindowController: NSWindowController,
         guard let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else {
             return NSRect(x: 0, y: 0, width: 1000, height: 420)
         }
-        let height = max(240, visible.height * 0.45)
+        let height = max(240, visible.height * terminalSettings.quakeHeightFraction)
         return NSRect(x: visible.minX, y: visible.maxY - height,
                       width: visible.width, height: height)
+    }
+
+    // MARK: - Settings
+
+    func applyTerminalSettings() {
+        let settings = TerminalSettingsStore().load()
+        let theme = TerminalThemeStore().load()
+        terminalSettings = settings
+        runtime.apply(settings: settings, theme: theme)
+        for host in paneViews.values {
+            host.surfaceView.shellCommand = settings.shell
+        }
+        quakeHost?.surfaceView.shellCommand = settings.shell
+    }
+
+    var allSurfaces: [ghostty_surface_t] {
+        var surfaces = paneViews.values.compactMap(\.surfaceView.surface)
+        if let quake = quakeHost?.surfaceView.surface { surfaces.append(quake) }
+        return surfaces
     }
 
     // MARK: - Content
@@ -474,6 +498,7 @@ final class TerminalWindowController: NSWindowController,
 
         let surface = TerminalSurfaceView(frame: .zero)
         surface.paneID = pane
+        surface.shellCommand = terminalSettings.shell
         surface.onFocus = { [weak self] in self?.focusPane(pane) }
         if selected < workspaces.count {
             surface.workingDirectory = workspaces[selected].directory(for: pane)

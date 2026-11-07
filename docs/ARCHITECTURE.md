@@ -327,8 +327,17 @@ hidden and deliberately outside the saved layout.
 While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`
 with the two terminal rows, so every other table row and the peek's hold key are
 unregistered and the shell receives those combinations. Losing focus puts them
-back; the two exceptions stay global so the terminal can always be left. The
-terminal settings page is the remaining F1 work.
+back; the two exceptions stay global so the terminal can always be left.
+
+Settings and theme travel as two JSON documents in
+`Terminal/settings.json` and `Terminal/theme.json`, written by MakiDesk and read
+by the helper. `TerminalController` owns the settings in memory for the
+Settings ▸ Terminal page, writes them on every edit and tells the helper
+`settingsChanged` through the socket after a short debounce; a theme change
+regenerates `theme.json` from `PaletteTheme` and sends `themeChanged`. The helper
+reloads both with `ghostty_app_update_config`, so an open terminal picks up the
+font and colours without a restart; the shell command applies to new panes. The
+ANSI sixteen colours are still a fixed set, independent of the palette.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and

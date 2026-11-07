@@ -17,6 +17,8 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     /// Set by the pane host before the surface is created; restore uses it to
     /// start the shell in the directory it had.
     var workingDirectory: String?
+    /// Empty or nil uses the login shell; otherwise this command runs instead.
+    var shellCommand: String?
     private var isDetached = false
 
     private var markedText = NSMutableAttributedString()
@@ -81,6 +83,9 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         var commandStorage: UnsafeMutablePointer<CChar>?
         if ProcessInfo.processInfo.environment["MAKIDESK_SPIKE_CLEAN_SHELL"] == "1" {
             commandStorage = strdup("/bin/zsh --no-rcs")
+            config.command = commandStorage.map { UnsafePointer($0) }
+        } else if let shellCommand, shellCommand.isEmpty == false {
+            commandStorage = strdup(shellCommand)
             config.command = commandStorage.map { UnsafePointer($0) }
         }
         defer { free(commandStorage) }

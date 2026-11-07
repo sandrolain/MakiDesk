@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import MakiShared
+import Observation
 
 /// The MakiDesk side of the terminal boundary (F1).
 ///
@@ -30,6 +31,15 @@ final class TerminalClient {
 
     func send(_ kind: TerminalMessage.Kind) {
         enqueue(kind)
+    }
+
+    /// For file-backed changes (theme, settings): tell a helper that is already
+    /// running, but never launch one just to deliver a notification.
+    func notify(_ kind: TerminalMessage.Kind) {
+        queue.async { [weak self] in
+            guard let self, self.fd >= 0 else { return }
+            self.sendLocked(TerminalMessage(kind: kind))
+        }
     }
 
     private func enqueue(_ kind: TerminalMessage.Kind) {
@@ -190,7 +200,11 @@ final class TerminalClient {
             } else {
                 for kind in queued { sendLocked(TerminalMessage(kind: kind)) }
             }
-        case .ping, .pong, .state, .attention, .settingsRequested, .willTerminate:
+            // A helper that outlived a previous MakiDesk may hold stale
+            // settings and colours: one reload reads both files.
+            sendLocked(TerminalMessage(kind: .settingsChanged))
+        case .ping, .pong, .state, .attention, .settingsRequested,
+             .settingsChanged, .themeChanged, .willTerminate:
             break
         case .hello, .showMain, .hideMain, .toggleQuake, .quit:
             break
@@ -264,16 +278,30 @@ final class TerminalClient {
 /// The small entry point the shortcut, menu and command box call, plus the
 /// frontmost observer that suspends MakiDesk's global keys while the helper has
 /// the keyboard (F1).
+@Observable
 @MainActor
 final class TerminalController {
     static let shared = TerminalController()
-    private let client = TerminalClient()
-    private var activationObserver: NSObjectProtocol?
-    private var lastFrontmost = false
+
+    /// The helper's preferences, observed by Settings ▸ Terminal. The file is
+    /// the source of truth; the helper re-reads it when it receives
+    /// `settingsChanged`.
+    var settings = TerminalSettingsStore().load()
+
+    @ObservationIgnored private let client = TerminalClient()
+    @ObservationIgnored private var activationObserver: NSObjectProtocol?
+    @ObservationIgnored private var lastFrontmost = false
+    @ObservationIgnored private var settingsNotifyTimer: Timer?
 
     private init() {}
 
     func start() {
+        let settingsStore = TerminalSettingsStore()
+        if FileManager.default.fileExists(atPath: settingsStore.fileURL.path) == false {
+            _ = settingsStore.save(settings)
+        }
+        syncTheme()
+
         guard activationObserver == nil else { return }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -295,6 +323,37 @@ final class TerminalController {
 
     func toggleQuake() {
         client.send(.toggleQuake)
+    }
+
+    /// Applies one edit from Settings, writes the shared file and tells the
+    /// helper to re-read it.
+    func updateSettings(_ change: (inout TerminalSettingsDocument) -> Void) {
+        var copy = settings
+        change(&copy)
+        settings = copy.normalized()
+        _ = TerminalSettingsStore().save(settings)
+
+        // A text field fires on every keystroke; the helper does not need to
+        // rebuild its config that often.
+        settingsNotifyTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.25, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.client.notify(.settingsChanged)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        settingsNotifyTimer = timer
+    }
+
+    /// Regenerates the theme document from the palette in force.
+    func syncTheme() {
+        let document = TerminalThemeDocument(palette: WorkspaceStore.shared.theme)
+        _ = TerminalThemeStore().save(document)
+        client.notify(.themeChanged)
+    }
+
+    func themeDidChange() {
+        syncTheme()
     }
 
     private func updateFrontmost(_ app: NSRunningApplication?) {

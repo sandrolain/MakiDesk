@@ -25,6 +25,8 @@ final class TerminalIPCServer {
     var onHideMain: (() -> Void)?
     var onToggleQuake: (() -> Void)?
     var onQuit: (() -> Void)?
+    var onSettingsChanged: (() -> Void)?
+    var onThemeChanged: (() -> Void)?
     var onPeerConnected: (() -> Void)?
 
     init(socketURL: URL = TerminalSocketLocation.socketURL) {
@@ -193,6 +195,10 @@ final class TerminalIPCServer {
             DispatchQueue.main.async { [weak self] in self?.onToggleQuake?() }
         case .quit:
             DispatchQueue.main.async { [weak self] in self?.onQuit?() }
+        case .settingsChanged:
+            DispatchQueue.main.async { [weak self] in self?.onSettingsChanged?() }
+        case .themeChanged:
+            DispatchQueue.main.async { [weak self] in self?.onThemeChanged?() }
         case .welcome, .pong, .state, .attention, .settingsRequested, .willTerminate:
             break
         }

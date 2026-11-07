@@ -630,10 +630,13 @@ it running, so its shells keep working.
   shortcuts, so the shell receives them. `⌃⌥O` and `` ⌃⌥` `` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in
   ⌘Tab while its window is open.
-- **Theme.** The helper currently uses the Mocha colours in a generated Ghostty
-  configuration; choosing another theme is part of the remaining work.
-- **Not there yet.** SSH profiles, tmux presets, agent badges, a terminal
-  settings page, tabs inside a pane, and a verified IME.
+- **Settings ▸ Terminal.** Font family and size, the shell command (empty
+  starts your login shell), and the quake height (30–60% of the screen). The
+  terminal follows the MakiDesk theme, and a change reaches the helper without a
+  restart; the ANSI palette is still the same fixed sixteen colours for every
+  theme.
+- **Not there yet.** SSH profiles, tmux presets, agent badges, tabs inside a
+  pane, and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut
@@ -1078,6 +1081,8 @@ first one.
   column and its announcements), the utility bar (pointer reveal, height,
   labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
   macOS saves, and text recognition quality and correction.
+- **Terminal** — font family and size, shell command, quake height; the
+  terminal follows the Appearance theme and applies changes without a restart.
 - **Groups** — rename, empty and inspect the nine groups.
 - **System** — the free space beside the icon (when to show it, its format, the
   warning level) and the CPU watch (on or off, the threshold and window, the

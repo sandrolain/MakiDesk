@@ -44,6 +44,10 @@ identity before the outer app.
 - **Persistence:** `Terminal/workspaces.json` holds titles, split tree, ratios,
   selection and each pane's last directory; it is atomic and versioned, and a
   corrupt file is quarantined. Scrollback is not saved.
+- **Settings and theme:** `Terminal/settings.json` (font, shell command, quake
+  height) and `Terminal/theme.json` (MakiDesk palette plus sixteen ANSI colours)
+  are written by MakiDesk; the helper reloads them on `settingsChanged` and
+  `themeChanged`.
 - **Two-app boundary:** `MakiShared` (framing and messages) and a Unix socket
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.
@@ -56,7 +60,7 @@ identity before the outer app.
 
 ## What is not there yet
 
-- SSH profiles, tmux presets, agent badges and the terminal settings page.
+- SSH profiles, tmux presets and agent badges; per-theme ANSI palettes.
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling, search and links are the same
   kind of not-yet-verified surface.
