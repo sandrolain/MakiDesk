@@ -631,9 +631,13 @@ it running, so its shells keep working.
   shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in
   ⌘Tab while its window is open.
-- **Notifications.** A desktop notification sent by a program in the shell
-  (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon, instead of
-  a bare system alert. If MakiDesk is not running, nothing is shown.
+- **Notifications and attention.** A desktop notification sent by a program in
+  the shell (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon,
+  instead of a bare system alert. The workspace also gets a dot in the sidebar;
+  selecting it, or bringing the window back, clears the dot. A command that
+  fails or runs for two seconds or more leaves the same dot when the shell
+  reports command boundaries (OSC 133). If MakiDesk is not running, the HUD
+  notice is simply skipped.
 - **tmux.** **New tmux Session** in the sidebar's **+** menu runs
   `tmux new-session -A -s makidesk-…`: it attaches to that workspace's session
   or creates it. Closing the pane detaches; the tmux server keeps the session,

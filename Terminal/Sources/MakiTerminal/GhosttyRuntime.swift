@@ -22,8 +22,11 @@ final class GhosttyRuntime {
     var onTitle: ((TerminalSurfaceView, String) -> Void)?
     var onDirectory: ((TerminalSurfaceView, String) -> Void)?
     /// A desktop notification from the shell (OSC 9/777), forwarded to
-    /// MakiDesk's notices.
-    var onNotification: ((String, String) -> Void)?
+    /// MakiDesk's notices and to the workspace's attention mark.
+    var onNotification: ((TerminalSurfaceView?, String, String) -> Void)?
+    /// A finished command, when the shell reports it (OSC 133). A failure or a
+    /// long command marks its workspace even without a notification.
+    var onCommandFinished: ((TerminalSurfaceView?, Int16, UInt64) -> Void)?
 
     private var tickScheduled = false
     private var settings: TerminalSettingsDocument
@@ -181,7 +184,14 @@ final class GhosttyRuntime {
             let title = notification.title.map { String(cString: $0) } ?? "Terminal"
             let body = notification.body.map { String(cString: $0) } ?? ""
             DispatchQueue.main.async {
-                GhosttyRuntime.shared?.onNotification?(title, body)
+                GhosttyRuntime.shared?.onNotification?(view, title, body)
+            }
+            return true
+        case GHOSTTY_ACTION_COMMAND_FINISHED:
+            let finished = action.action.command_finished
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onCommandFinished?(view, finished.exit_code,
+                                                          finished.duration)
             }
             return true
         case GHOSTTY_ACTION_OPEN_URL:

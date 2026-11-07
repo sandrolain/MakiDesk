@@ -31,7 +31,8 @@ final class TmuxSessionTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755],
                                               ofItemAtPath: tmux.path)
 
-        let found = TmuxSession.executableURL(environment: ["PATH": directory.path])
+        let found = TmuxSession.executableURL(environment: ["PATH": directory.path],
+                                              fixedPaths: [])
         XCTAssertEqual(found?.standardizedFileURL.path, tmux.standardizedFileURL.path)
     }
 }

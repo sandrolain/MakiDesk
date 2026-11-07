@@ -11,15 +11,10 @@ public enum TmuxSession {
     /// first so the helper finds it even when the login shell's PATH is odd.
     public static func executableURL(
         environment: [String: String] = ProcessInfo.processInfo.environment,
+        fixedPaths: [String] = defaultFixedPaths,
         fileManager: FileManager = .default
     ) -> URL? {
-        let fixed = [
-            "/opt/homebrew/bin/tmux",
-            "/usr/local/bin/tmux",
-            "/usr/bin/tmux",
-            "/bin/tmux",
-        ]
-        for path in fixed where fileManager.isExecutableFile(atPath: path) {
+        for path in fixedPaths where fileManager.isExecutableFile(atPath: path) {
             return URL(fileURLWithPath: path)
         }
         let path = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
@@ -29,6 +24,13 @@ public enum TmuxSession {
         }
         return nil
     }
+
+    public static let defaultFixedPaths = [
+        "/opt/homebrew/bin/tmux",
+        "/usr/local/bin/tmux",
+        "/usr/bin/tmux",
+        "/bin/tmux",
+    ]
 
     public static func command(sessionName: String, executable: String? = nil) -> String {
         let cleaned = sessionName.filter {

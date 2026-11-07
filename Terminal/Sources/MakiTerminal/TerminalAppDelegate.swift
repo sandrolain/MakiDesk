@@ -1,5 +1,6 @@
 import AppKit
 import MakiShared
+import MakiTerminalCore
 
 final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: TerminalAppDelegate?
@@ -38,8 +39,14 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         runtime.onDirectory = { [weak controller] view, path in
             controller?.updateDirectory(for: view, path: path)
         }
-        runtime.onNotification = { [weak self] title, body in
+        runtime.onNotification = { [weak self] view, title, body in
             self?.server?.sendAttention(title: title, detail: body)
+            self?.terminal?.markAttention(for: view)
+        }
+        runtime.onCommandFinished = { [weak self] view, code, duration in
+            guard CommandAttention.deservesAttention(exitCode: code,
+                                                     durationNanos: duration) else { return }
+            self?.terminal?.markAttention(for: view)
         }
 
         installMenu(target: controller)

@@ -39,6 +39,31 @@ final class TerminalPaneHostView: NSView {
     }
 }
 
+/// A sidebar row with an attention dot (F3 L1).
+final class WorkspaceCellView: NSTableCellView {
+    let dot = NSView()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = 3
+        dot.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        dot.isHidden = true
+        addSubview(dot)
+        NSLayoutConstraint.activate([
+            dot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            dot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            dot.widthAnchor.constraint(equalToConstant: 6),
+            dot.heightAnchor.constraint(equalToConstant: 6),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+}
+
 /// A split view that knows the path of the model node it presents, so a drag
 /// can be written back without searching the tree.
 final class WorkspaceSplitView: NSSplitView {
@@ -69,7 +94,8 @@ final class TerminalQuakePanel: NSPanel {
 final class TerminalWindowController: NSWindowController,
                                       NSTableViewDataSource,
                                       NSTableViewDelegate,
-                                      NSSplitViewDelegate {
+                                      NSSplitViewDelegate,
+                                      NSWindowDelegate {
     private let runtime: GhosttyRuntime
     private let layoutStore = TerminalLayoutStore()
     private var terminalSettings: TerminalSettingsDocument
@@ -85,6 +111,9 @@ final class TerminalWindowController: NSWindowController,
     private var quakeWorkspace: TerminalWorkspace?
     private var quakeHost: TerminalPaneHostView?
     private var quakeVisible = false
+    /// Workspaces that produced something worth returning to. Session state:
+    /// a dot in the sidebar, cleared by selecting the workspace.
+    private var attentionWorkspaces: Set<UUID> = []
 
     private let splitView = NSSplitView()
     private let sidebar = NSView()
@@ -106,6 +135,7 @@ final class TerminalWindowController: NSWindowController,
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 560, height: 320)
         super.init(window: window)
+        window.delegate = self
         window.center()
         buildInterface()
         restoreOrCreate()
@@ -258,6 +288,7 @@ final class TerminalWindowController: NSWindowController,
             return
         }
         disposeWorkspace(at: selected)
+        attentionWorkspaces.remove(workspaces[selected].id)
         workspaces.remove(at: selected)
         selected = min(selected, workspaces.count - 1)
         reloadSidebar()
@@ -402,6 +433,24 @@ final class TerminalWindowController: NSWindowController,
             reloadSidebar()
             rebuildContent()
             scheduleSave()
+        }
+    }
+
+    /// Marks the workspace that owns `view`. Selecting it, or focusing it when
+    /// it is already on screen, clears the mark.
+    func markAttention(for view: TerminalSurfaceView?) {
+        guard let view, let pane = view.paneID,
+              let index = workspaces.firstIndex(where: { $0.contains(pane) }) else { return }
+        if index == selected, window?.isKeyWindow == true { return }
+        if attentionWorkspaces.insert(workspaces[index].id).inserted {
+            tableView.reloadData()
+        }
+    }
+
+    private func clearAttention(for index: Int) {
+        guard index >= 0, index < workspaces.count else { return }
+        if attentionWorkspaces.remove(workspaces[index].id) != nil {
+            tableView.reloadData()
         }
     }
 
@@ -602,11 +651,18 @@ final class TerminalWindowController: NSWindowController,
         runtime.onDirectory = nil
     }
 
+    // MARK: - Window
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        clearAttention(for: selected)
+    }
+
     // MARK: - Focus
 
     private func focusPane(_ pane: PaneID) {
         guard selected < workspaces.count, workspaces[selected].contains(pane) else { return }
         if workspaces[selected].focus(pane) == false { return }
+        clearAttention(for: selected)
         updateFocusBorders()
         if let host = paneViews[pane] {
             window?.makeFirstResponder(host.surfaceView)
@@ -632,12 +688,12 @@ final class TerminalWindowController: NSWindowController,
                    row: Int) -> NSView? {
         guard row < workspaces.count else { return nil }
         let identifier = NSUserInterfaceItemIdentifier("workspaceCell")
-        let cell: NSTableCellView
+        let cell: WorkspaceCellView
         if let reused = tableView.makeView(withIdentifier: identifier, owner: self)
-            as? NSTableCellView {
+            as? WorkspaceCellView {
             cell = reused
         } else {
-            cell = NSTableCellView()
+            cell = WorkspaceCellView()
             cell.identifier = identifier
             let label = NSTextField(labelWithString: "")
             label.translatesAutoresizingMaskIntoConstraints = false
@@ -647,11 +703,12 @@ final class TerminalWindowController: NSWindowController,
             cell.textField = label
             NSLayoutConstraint.activate([
                 label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
+                label.trailingAnchor.constraint(equalTo: cell.dot.leadingAnchor, constant: -6),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
         }
         cell.textField?.stringValue = workspaces[row].title
+        cell.dot.isHidden = attentionWorkspaces.contains(workspaces[row].id) == false
         return cell
     }
 
@@ -659,6 +716,7 @@ final class TerminalWindowController: NSWindowController,
         let row = tableView.selectedRow
         guard row >= 0, row < workspaces.count, row != selected else { return }
         selected = row
+        clearAttention(for: row)
         rebuildContent()
         scheduleSave()
     }
