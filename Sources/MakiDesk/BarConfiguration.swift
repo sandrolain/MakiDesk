@@ -1,4 +1,5 @@
 import Foundation
+import MakiShared
 
 /// The utility bar's buttons as the user arranged them (F1).
 ///

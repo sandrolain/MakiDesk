@@ -8,6 +8,7 @@ let package = Package(
         .executable(name: "MakiDesk", targets: ["MakiDesk"])
     ],
     dependencies: [
+        .package(path: "Packages/MakiShared"),
         .package(url: "https://github.com/ChimeHQ/SwiftTreeSitter", from: "0.20.0"),
         .package(url: "https://github.com/alex-pinkus/tree-sitter-swift", revision: "82bb3a533e0801fd2bbaa11dc49676e10bf41948"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-json", from: "0.20.2"),
@@ -23,6 +24,7 @@ let package = Package(
         .executableTarget(
             name: "MakiDesk",
             dependencies: [
+                .product(name: "MakiShared", package: "MakiShared"),
                 .product(name: "SwiftTreeSitter", package: "SwiftTreeSitter"),
                 .product(name: "TreeSitterSwift", package: "tree-sitter-swift"),
                 .product(name: "TreeSitterJSON", package: "tree-sitter-json"),

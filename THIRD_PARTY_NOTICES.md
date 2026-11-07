@@ -4,6 +4,18 @@ MakiDesk itself is released under the MIT License (see `LICENSE`). The notes
 editor (T20) uses the tree-sitter runtime, its Swift bindings and a few
 grammars, all under permissive licences. Their copyright notices follow.
 
+## Ghostty
+
+The terminal helper links GhosttyKit, a prebuilt static build of Ghostty's
+terminal engine, under the MIT License.
+
+- **Ghostty** — MIT, Copyright (c) 2024 Mitchell Hashimoto and Ghostty
+  contributors. <https://github.com/ghostty-org/ghostty>
+- The spike uses the universal xcframework published by the cmux project from
+  its MIT-licensed Ghostty fork
+  (<https://github.com/manaflow-ai/ghostty>); the archive is pinned and
+  checksum-verified by `scripts/fetch-ghosttykit.sh`.
+
 ## tree-sitter
 
 - **tree-sitter** — MIT, Copyright (c) 2018–2024 Max Brunsfeld.

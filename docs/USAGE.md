@@ -607,6 +607,32 @@ it, and leaves no room behind.
   permission of its own, and does nothing while it is hidden: the pointer is
   sampled only while the feature is on.
 
+## Terminal
+
+A real terminal lives beside MakiDesk rather than inside it. `⌃⌥O`, or **Terminal**
+in the menu bar's menu, launches the embedded **MakiDesk Terminal** helper and
+brings its window forward. The helper is a separate app: quitting MakiDesk leaves
+it running, so its shells keep working.
+
+- **Workspaces.** The sidebar lists them. **+** adds one, **−** closes the
+  selected one, and the last one cannot be closed. `⌘T` adds a workspace too.
+- **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
+  one; `⌘W` closes the pane and `⇧⌘W` the workspace. Every pane is a real shell
+  with its own scrollback, copy/paste, links and Option-as-Meta.
+- **Restore.** Workspace titles, split trees, the selection and each pane's
+  last directory are saved in
+  `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
+  on the next launch. Scrollback is not saved.
+- **Theme.** The helper currently uses the Mocha colours in a generated Ghostty
+  configuration; choosing another theme is part of the remaining work.
+- **Not there yet.** The quake panel, SSH profiles, tmux presets, agent badges,
+  a terminal settings page, tabs inside a pane, and a verified IME. The helper
+  appears in the Dock and in ⌘Tab while its window is open.
+
+The helper is embedded when the app is bundled (`task bundle`); a development
+`swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut
+says so in a notice instead of failing silently.
+
 ## Clipboard history
 
 `⌥V` opens the last **texts and images** you copied. It is **in memory only** and
@@ -1237,6 +1263,7 @@ The table below is generated from the app's own table, with
 | Clear the peek designation | `⌃⌥⌘H` | Desktop |
 | Apply the suggested layout | `⌃⌥⌘↩` | Desktop |
 | Utility bar | `⌃⌥B` | Window |
+| Terminal | `⌃⌥O` | Window |
 
 <!-- shortcuts:end -->
 

@@ -118,6 +118,7 @@ All paths are under your user account:
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
+| Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, last directory per pane | Until you delete it; a factory reset does not remove it |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
@@ -136,6 +137,26 @@ reset. The timers file holds only a label, where the timer came from and its
 deadline (or, while paused, the time left). The utility bar's file holds only
 button ids, whether each is shown, and an optional renamed title or symbol; the
 old hidden-buttons preference is read once, migrated there and then removed.
+
+## Terminal
+
+The terminal is a separate helper app (`com.makidesk.app.terminal`). Its shell
+output, scrollback, selection and environment stay **in the helper's memory**;
+none of it is written to disk or to a log. The layout file holds only workspace
+titles, the split tree, the selection and each pane's last directory.
+
+While the helper runs it listens on
+`~/Library/Application Support/MakiDesk/Terminal/terminal.sock` (`0600` in a
+`0700` directory). The socket carries only the closed command/event set between
+the two apps, is local to the user, and the helper rejects a peer that is not
+MakiDesk. It is removed when the helper quits.
+
+The helper starts your login shell, so macOS attributes whatever that shell reads
+or connects to (shell startup files, tools it launches, `ssh`) to the helper, not
+to MakiDesk. That is why the first launch can ask for access to folders such as
+`~/Downloads` or for a network connection when your shell's own files do. The
+request comes from the shell's configuration, not from MakiDesk or libghostty;
+starting the shell with `--no-rcs` avoids both in the development spike.
 
 ## Clipboard
 

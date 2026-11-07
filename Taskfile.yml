@@ -46,6 +46,11 @@ tasks:
     cmds:
       - sh scripts/bundle-terminal.sh
 
+  terminal:release:
+    desc: Build and bundle the terminal helper with the release configuration
+    cmds:
+      - sh scripts/bundle-terminal.sh release
+
   terminal:run:
     desc: Launch the bundled terminal helper
     deps:
@@ -62,12 +67,16 @@ tasks:
     desc: Create dist/MakiDesk.app from release build
     deps:
       - release
+      - terminal:release
     cmds:
       - mkdir -p "{{.APP_BUNDLE}}/Contents/MacOS" "{{.APP_BUNDLE}}/Contents/Resources"
       - cp "{{.RELEASE_BIN}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
       - cp Resources/Info.plist "{{.APP_BUNDLE}}/Contents/Info.plist"
       - cp Resources/AppIcon.icns "{{.APP_BUNDLE}}/Contents/Resources/AppIcon.icns"
       - cp LICENSE THIRD_PARTY_NOTICES.md "{{.APP_BUNDLE}}/Contents/Resources/"
+      - mkdir -p "{{.APP_BUNDLE}}/Contents/Applications"
+      - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskTerminal.app"
+      - cp -R "{{.ROOT_DIR}}/dist/MakiDeskTerminal.app" "{{.APP_BUNDLE}}/Contents/Applications/"
 
   cert:
     desc: Create a stable self-signed signing identity (run once)
@@ -100,11 +109,18 @@ tasks:
       - |
         CERT_NAME="MakiDesk Local Signing"
         KEYCHAIN="$HOME/Library/Keychains/makidesk-signing.keychain-db"
+        HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskTerminal.app"
         if security find-identity -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$CERT_NAME"; then
           security unlock-keychain -p makidesk "$KEYCHAIN"
+          if [ -d "$HELPER" ]; then
+            codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$HELPER"
+          fi
           codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "{{.APP_BUNDLE}}"
           echo "Signed with '$CERT_NAME' — Accessibility permission survives rebuilds."
         else
+          if [ -d "$HELPER" ]; then
+            codesign --force --sign - -r='designated => identifier "com.makidesk.app.terminal"' "$HELPER"
+          fi
           codesign --force --deep --sign - -r='designated => identifier "com.makidesk.app"' "{{.APP_BUNDLE}}"
           echo "WARNING: ad-hoc signed. Accessibility permission may reset each build."
           echo "         Run 'task cert' once to create a stable identity."

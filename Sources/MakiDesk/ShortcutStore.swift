@@ -1,4 +1,5 @@
 import Foundation
+import MakiShared
 
 /// Reads and writes `~/Library/Application Support/MakiDesk/shortcuts.json`
 /// (T53 phase 2).

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// One JSON file, with the guarantees every store kept repeating (R07).
 ///
@@ -10,9 +11,11 @@ import Foundation
 ///
 /// What stays in each store is what actually differs: its envelope, its
 /// version, and what it returns when the file is missing or unreadable.
-enum StoredJSONFile {
+public enum StoredJSONFile {
+    private static let log = Logger(subsystem: "com.makidesk.shared", category: "store")
+
     /// `~/Library/Application Support/MakiDesk/<name>`.
-    static func defaultURL(named name: String) -> URL {
+    public static func defaultURL(named name: String) -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent("Library/Application Support", isDirectory: true)
@@ -22,11 +25,11 @@ enum StoredJSONFile {
 
     /// A fresh coder per call: the stores are value types and `JSONDecoder` is
     /// not documented as reentrant.
-    static func decoder() -> JSONDecoder { JSONDecoder() }
+    public static func decoder() -> JSONDecoder { JSONDecoder() }
 
     /// Pretty-printed and key-sorted, so the file stays readable and two files
     /// differing in content differ in their diff too.
-    static func encoder() -> JSONEncoder {
+    public static func encoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
@@ -34,7 +37,7 @@ enum StoredJSONFile {
 
     /// Writes atomically — a temporary file renamed over the target — so a
     /// crash mid-write cannot leave a truncated one. Creates the folder first.
-    static func write(_ data: Data, to url: URL) throws {
+    public static func write(_ data: Data, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
@@ -44,7 +47,7 @@ enum StoredJSONFile {
     /// recovery copies. Returns where it went, or `nil` when the move failed —
     /// in which case the source is untouched and still the only copy.
     @discardableResult
-    static func quarantine(_ url: URL, label: String) -> URL? {
+    public static func quarantine(_ url: URL, label: String) -> URL? {
         let base = url.appendingPathExtension("bak")
         var backup = base
         var suffix = 1
@@ -54,10 +57,10 @@ enum StoredJSONFile {
         }
         do {
             try FileManager.default.moveItem(at: url, to: backup)
-            MakiLog.store.error("\(label, privacy: .public): unreadable file set aside at \(backup.lastPathComponent, privacy: .public)")
+            log.error("\(label, privacy: .public): unreadable file set aside at \(backup.lastPathComponent, privacy: .public)")
             return backup
         } catch {
-            MakiLog.store.error("\(label, privacy: .public): could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
+            log.error("\(label, privacy: .public): could not preserve unreadable file -> \(error.localizedDescription, privacy: .public)")
             return nil
         }
     }

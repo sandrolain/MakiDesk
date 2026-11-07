@@ -12,15 +12,24 @@ let package = Package(
     products: [
         .executable(name: "MakiTerminal", targets: ["MakiTerminal"]),
     ],
+    dependencies: [
+        .package(path: "../Packages/MakiShared"),
+    ],
     targets: [
         // Fetched by `task terminal:fetch`; not in the repository.
         .binaryTarget(
             name: "GhosttyKit",
             path: "../vendor/GhosttyKit.xcframework"
         ),
+        .target(name: "MakiTerminalCore",
+                dependencies: [.product(name: "MakiShared", package: "MakiShared")]),
         .executableTarget(
             name: "MakiTerminal",
-            dependencies: ["GhosttyKit"],
+            dependencies: [
+                "GhosttyKit",
+                "MakiTerminalCore",
+                .product(name: "MakiShared", package: "MakiShared"),
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("Carbon"),
@@ -35,6 +44,10 @@ let package = Package(
                 .linkedLibrary("c++"),
                 .linkedLibrary("z"),
             ]
+        ),
+        .testTarget(
+            name: "MakiTerminalCoreTests",
+            dependencies: ["MakiTerminalCore"]
         ),
     ]
 )

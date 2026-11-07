@@ -1,15 +1,25 @@
 import AppKit
 import GhosttyKit
 
-/// Owns the single Ghostty app and the surface callbacks (F0).
+/// Owns the Ghostty app and the surface callbacks (F1).
 ///
-/// The real terminal helper will keep one runtime for its lifetime and many
-/// surfaces; the spike keeps one surface so the keyboard, IME and rendering
-/// path can be judged without the workspace model in the way.
+/// One runtime per helper process; any number of surfaces. The runtime knows
+/// which surface has the keyboard (for clipboards) and forwards title, cwd and
+/// close events to the window controller, which owns the workspace model.
 final class GhosttyRuntime {
     private(set) var app: ghostty_app_t?
-    /// The spike's only surface, needed by the clipboard callbacks.
-    var surface: ghostty_surface_t?
+
+    /// The surface that owns the keyboard. Clipboard read/write callbacks have
+    /// no surface argument, so the focused one answers them.
+    var focusedSurface: ghostty_surface_t?
+
+    /// The surface config userdata is the hosting view, so the close callback
+    /// can name the pane that exited. Called on the main queue.
+    var onSurfaceClosed: ((TerminalSurfaceView) -> Void)?
+    /// Title and directory actions carry the surface target; the controller
+    /// turns them into workspace titles and restore directories.
+    var onTitle: ((TerminalSurfaceView, String) -> Void)?
+    var onDirectory: ((TerminalSurfaceView, String) -> Void)?
 
     private var tickScheduled = false
     private static weak var shared: GhosttyRuntime?
@@ -51,12 +61,12 @@ final class GhosttyRuntime {
             let runtime = Unmanaged<GhosttyRuntime>.fromOpaque(userdata).takeUnretainedValue()
             runtime.scheduleTick()
         }
-        runtime.action_cb = { _, _, action in
-            GhosttyRuntime.shared?.handle(action) ?? false
+        runtime.action_cb = { _, target, action in
+            GhosttyRuntime.shared?.handle(target: target, action: action) ?? false
         }
         runtime.read_clipboard_cb = { _, _, state in
             guard let runtime = GhosttyRuntime.shared,
-                  let surface = runtime.surface,
+                  let surface = runtime.focusedSurface,
                   let text = NSPasteboard.general.string(forType: .string) else { return false }
             DispatchQueue.main.async {
                 text.withCString {
@@ -67,7 +77,7 @@ final class GhosttyRuntime {
         }
         runtime.confirm_read_clipboard_cb = { _, content, state, _ in
             guard let runtime = GhosttyRuntime.shared,
-                  let surface = runtime.surface,
+                  let surface = runtime.focusedSurface,
                   let content else { return }
             DispatchQueue.main.async {
                 ghostty_surface_complete_clipboard_request(surface, content, state, true)
@@ -82,8 +92,13 @@ final class GhosttyRuntime {
                 pasteboard.setString(text, forType: .string)
             }
         }
-        runtime.close_surface_cb = { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
+        runtime.close_surface_cb = { userdata, _ in
+            guard let userdata else { return }
+            let view = Unmanaged<TerminalSurfaceView>.fromOpaque(userdata)
+                .takeUnretainedValue()
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onSurfaceClosed?(view)
+            }
         }
 
         guard let app = ghostty_app_new(&runtime, config) else { throw RuntimeError.application }
@@ -102,13 +117,27 @@ final class GhosttyRuntime {
 
     // MARK: - Actions
 
-    private func handle(_ action: ghostty_action_s) -> Bool {
+    private func handle(target: ghostty_target_s, action: ghostty_action_s) -> Bool {
+        let view = targetView(target)
         switch action.tag {
         case GHOSTTY_ACTION_SET_TITLE:
             guard let title = action.action.set_title.title else { return true }
             let text = String(cString: title)
+            if let view {
+                DispatchQueue.main.async {
+                    GhosttyRuntime.shared?.onTitle?(view, text)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    (NSApp.keyWindow ?? NSApp.windows.first)?.title = text
+                }
+            }
+            return true
+        case GHOSTTY_ACTION_PWD:
+            guard let view, let path = action.action.pwd.pwd else { return true }
+            let directory = String(cString: path)
             DispatchQueue.main.async {
-                (NSApp.keyWindow ?? NSApp.windows.first)?.title = text
+                GhosttyRuntime.shared?.onDirectory?(view, directory)
             }
             return true
         case GHOSTTY_ACTION_RING_BELL:
@@ -124,6 +153,12 @@ final class GhosttyRuntime {
             guard let url = URL(string: String(decoding: data, as: UTF8.self)) else { return true }
             DispatchQueue.main.async { NSWorkspace.shared.open(url) }
             return true
+        case GHOSTTY_ACTION_CLOSE_TAB:
+            guard let view else { return false }
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onSurfaceClosed?(view)
+            }
+            return true
         case GHOSTTY_ACTION_QUIT, GHOSTTY_ACTION_CLOSE_ALL_WINDOWS:
             DispatchQueue.main.async { NSApp.terminate(nil) }
             return true
@@ -132,7 +167,15 @@ final class GhosttyRuntime {
         }
     }
 
-    // MARK: - Spike appearance
+    private func targetView(_ target: ghostty_target_s) -> TerminalSurfaceView? {
+        guard target.tag == GHOSTTY_TARGET_SURFACE else { return nil }
+        let surface = target.target.surface
+        guard let userdata = ghostty_surface_userdata(surface) else { return nil }
+        return Unmanaged<TerminalSurfaceView>.fromOpaque(userdata)
+            .takeUnretainedValue()
+    }
+
+    // MARK: - Appearance
 
     /// MakiDesk's Mocha palette mapped to a Ghostty config. The real helper
     /// will generate this from `terminal-theme.json`; the ANSI palette here is

@@ -1,4 +1,5 @@
 import Foundation
+import MakiShared
 
 /// Persists the numbered window groups to a small JSON file in Application
 /// Support.

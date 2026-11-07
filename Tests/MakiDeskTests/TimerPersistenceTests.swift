@@ -1,4 +1,5 @@
 import XCTest
+import MakiShared
 @testable import MakiDesk
 
 /// R07: the fifth store. Its quarantine was there before the shared one, and it

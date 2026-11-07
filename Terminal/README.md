@@ -1,10 +1,9 @@
-# MakiDesk Terminal — F0 spike
+# MakiDesk Terminal — F0 spike and F1 work in progress
 
-A separate SwiftPM package with one job: prove that libghostty can host a real,
-usable terminal inside the future MakiDesk helper. It is **not** the helper yet:
-there are no workspaces, splits, sidebar, quake panel, IPC or settings. Those
-belong to F1, and the design lives in
-`refs/docs/analisi-terminale-2026-11-07.md`.
+The terminal helper: a separate app that owns shells, workspaces and split panes
+while MakiDesk launches it and configures it. The design lives in
+`refs/docs/analisi-terminale-2026-11-07.md`; this file records what the code
+actually does.
 
 The package is deliberately apart from the root package: `swift build` at the
 repository root must keep working without the GhosttyKit binary.
@@ -17,42 +16,51 @@ task terminal:bundle    # builds and assembles dist/MakiDeskTerminal.app
 open dist/MakiDeskTerminal.app
 ```
 
-The bundle is ad-hoc signed, enough for a local spike. To run without the user's
-zsh startup files (useful when they ask for `~/Downloads` or network access):
+`task terminal:run` does both and opens the app. From a bundled MakiDesk, `⌃⌥O`
+or the menu bar's **Terminal** item launches the same helper from
+`Contents/Applications/`. A development `swift run` looks for
+`dist/MakiDeskTerminal.app`.
+
+To run without the user's zsh startup files (useful when they ask for
+`~/Downloads` or network access):
 
 ```sh
 MAKIDESK_SPIKE_CLEAN_SHELL=1 dist/MakiDeskTerminal.app/Contents/MacOS/MakiTerminal
 ```
 
-`task terminal:run` does `terminal:bundle` and opens the app.
+The bundle is ad-hoc signed by the script; `task sign` signs it with the project
+identity before the outer app.
 
-## What F0 proved
+## What is there
 
-Verified by hand on 7 November 2026, macOS 26, arm64, one window and one
-surface:
+- **GhosttyKit engine:** a login shell in a PTY, Metal rendering, keyboard and
+  `NSTextInputClient`, mouse, clipboard, Option-as-Meta, resize/reflow, title and
+  cwd actions.
+- **Workspaces in a sidebar:** add/close, selection, drag-free for now; each
+  workspace owns a binary split tree.
+- **Splits:** side-by-side and stacked, draggable dividers, focus border, close
+  pane, close workspace; surfaces are reused across rebuilds, so switching
+  workspaces never restarts a shell.
+- **Persistence:** `Terminal/workspaces.json` holds titles, split tree, ratios,
+  selection and each pane's last directory; it is atomic and versioned, and a
+  corrupt file is quarantined. Scrollback is not saved.
+- **Two-app boundary:** `MakiShared` (framing and messages) and a Unix socket
+  (`0600`) with a handshake, peer pid check, retries and notices. The helper is
+  `.regular` while its window is open; signing is inside-out.
+- **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
+  Close Pane `⌘W`, Close Workspace `⇧⌘W`.
 
-- **Rendering:** a login shell (`/usr/bin/login -flp … /bin/zsh`) starts in a
-  PTY and renders through Ghostty's Metal layer.
-- **Keyboard:** printable keys, Return, Ctrl+C and arrows reach the shell.
-- **Option as Meta:** `macos-option-as-alt = true` sends `Esc` + key (checked
-  with `cat -v`: Option+B shows `^[b`).
-- **Paste:** ⌘V runs Ghostty's `paste_from_clipboard` binding and the shell
-  receives the text.
-- **Copy:** ⌘A then ⌘C fills the macOS clipboard with the scrollback text.
-- **Resize:** changing the window size reflows the grid; the PTY follows.
-- **Title:** `SET_TITLE` updates the window title with the shell's cwd/user.
-- **Bundled app:** `dist/MakiDeskTerminal.app` launches from Finder, is ad-hoc
-  signed, and reports `com.makidesk.app.terminal`.
+## What is not there yet
 
-## What F0 did not prove
-
-- **IME composition and dead keys.** The `NSTextInputClient` path is implemented
-  but was not exercised with a composing input source.
-- **Drag selection, scrollback scrolling, mouse reporting, links, search.**
-- **Several surfaces at once**, tabs, splits, workspace restore.
-- **Signing with the project identity, hardened runtime, notarization.**
-- **Energy and memory** under load.
-- **A helper/IPC boundary**: none exists yet.
+- The **quake panel**, SSH profiles, tmux presets, agent badges and the terminal
+  settings page.
+- **Suspending MakiDesk's `⌃⌥` shortcuts while the helper is frontmost.** The
+  helper receives its keys, but MakiDesk's global family still fires.
+- **IME composition** with a real input source; the code path exists and was not
+  exercised. Drag selection, scrollback scrolling, search and links are the same
+  kind of not-yet-verified surface.
+- Signing with the project identity and notarization for release, multi-display
+  behaviour, energy and memory measurements.
 
 ## Engine provenance
 
@@ -65,17 +73,18 @@ MIT derivative). `scripts/fetch-ghosttykit.sh` pins:
 - archive SHA-256 `413515af9e3739068f91bae98bc33fa1d89d4ea20b35d0fa96b317379bb17ae2`
 
 The archive is about 129 MB, extracts to about 505 MB and is **not** committed
-(`vendor/` is ignored). The spike binary is about 18 MB after dead stripping.
-
+(`vendor/` is ignored). The helper binary is about 18 MB after dead stripping.
 Before distribution, decide whether to keep depending on that release or build
-GhosttyKit from upstream; the study lists this as a risk. The wrapper is kept
-small on purpose so the binary can be replaced:
+GhosttyKit from upstream; the study lists this as a risk.
 
-- `GhosttyRuntime.swift`: `ghostty_init`, one `ghostty_app_t`, callbacks
-  (tick, actions, clipboard, close).
-- `TerminalSurfaceView.swift`: `CAMetalLayer` host, sizing, `NSTextInputClient`,
-  key and mouse forwarding.
-- `TerminalAppDelegate.swift`: one window, minimal menu.
+## Layout
+
+- `MakiTerminalCore`: pure workspace/split model and `TerminalLayoutStore`;
+  tested without AppKit or Ghostty.
+- `MakiTerminal`: AppKit window, sidebar, split container, Ghostty host, IPC
+  server.
+- `../Packages/MakiShared`: message envelope, framing and socket path, linked by
+  both apps.
 
 ## A note on TCC and network prompts
 

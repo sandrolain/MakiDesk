@@ -1,4 +1,5 @@
 import CoreGraphics
+import MakiShared
 import Foundation
 
 /// One timer on the board (T61).

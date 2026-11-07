@@ -1,4 +1,5 @@
 import Darwin
+import MakiShared
 import Foundation
 
 /// Reads and writes `~/Library/Application Support/MakiDesk/dropzones.json`.

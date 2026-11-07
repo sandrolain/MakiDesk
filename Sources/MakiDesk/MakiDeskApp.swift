@@ -109,6 +109,9 @@ struct MakiDeskApp: App {
                        icon: "rectangle.topthird.inset.filled") {
                 store.applyShortcut(.toggleUtilityBar)
             }
+            menuButton("Terminal", keys: shortcutKeys(.openTerminal), icon: "terminal") {
+                TerminalController.shared.open()
+            }
             Menu {
                 // No remaining time in these titles: a title that changed every
                 // second rebuilt the open menu and closed it under the pointer.

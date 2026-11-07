@@ -344,5 +344,8 @@ enum ShortcutDefinitions {
         def("app.utilityBar", "Utility bar", section: "App", key: kVK_ANSI_B,
             action: .toggleUtilityBar,
             note: "Rest the pointer in the strip under the menu bar to open it; pin keeps it out."),
+        def("app.terminal", "Terminal", section: "App", key: kVK_ANSI_O,
+            action: .openTerminal,
+            note: "Opens the terminal window; the helper keeps its sessions when MakiDesk quits."),
     ]
 }

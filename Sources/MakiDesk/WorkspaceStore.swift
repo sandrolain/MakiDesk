@@ -1677,6 +1677,9 @@ final class WorkspaceStore {
         case .toggleUtilityBar:
             UtilityBarController.shared.toggle()
             return
+        case .openTerminal:
+            TerminalController.shared.open()
+            return
         case .newTimer:
             TimerInputController.shared.show()
             return

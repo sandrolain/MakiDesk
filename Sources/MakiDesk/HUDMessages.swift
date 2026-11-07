@@ -51,6 +51,26 @@ extension HUDMessage {
                    detail: "Turn it on in Settings ▸ Panels ▸ Utility bar.")
     }
 
+    // MARK: - Terminal
+
+    static func terminalNotInstalled() -> HUDMessage {
+        HUDMessage(title: "Terminal helper not found",
+                   symbol: "terminal",
+                   detail: "Build it with task terminal:bundle.")
+    }
+
+    static func terminalDidNotAnswer() -> HUDMessage {
+        HUDMessage(title: "The terminal did not answer",
+                   symbol: "exclamationmark.triangle.fill",
+                   detail: "Try again; the helper may have stopped.")
+    }
+
+    static func terminalVersionMismatch() -> HUDMessage {
+        HUDMessage(title: "Terminal version mismatch",
+                   symbol: "exclamationmark.triangle.fill",
+                   detail: "Quit the terminal and open it again.")
+    }
+
     // MARK: - Text recognition
 
     static func textCopied(size: String, preview: String,

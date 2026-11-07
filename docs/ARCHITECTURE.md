@@ -85,6 +85,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `HUDMessage.swift`, `HUDMessages.swift` | What a notice says, as a value; the capture family's sentences are written once and checked by a test. |
 | `UtilityBarController.swift`, `UtilityBarView.swift` | The utility bar's panel and lifecycle: pointer reveal with a 10 Hz sample while enabled, pin, overflow menu, keyboard session, capture exclusion. |
 | `BarReveal.swift`, `BarLayout.swift`, `BarItemCatalog.swift`, `BarConfiguration.swift`, `UtilityBarModel.swift` | Pure rules for when the bar opens and retreats, what fits, which commands it offers, the hand-editable buttons file, and the info text; no AppKit or Accessibility I/O. |
+| `TerminalClient.swift` | The MakiDesk side of the terminal helper: launch, one Unix-socket connection, handshake, retries and notices; no socket work on the main thread. |
 | `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
 | `LegacyMigration.swift` | One-time migration from the project's previous name. |
@@ -286,6 +287,42 @@ keyboard session: the panel's `canBecomeKey` is true only then, arrows move the
 selection, Esc closes, and `PanelFocusReturn` gives the keyboard back. Its
 window number is passed to `SCContentFilter(display:excludingWindows:)` while it
 is visible, so the bar stays out of screenshots, OCR and recordings.
+
+### The terminal helper (F1)
+
+The terminal is a second app, not a panel. `MakiDeskTerminal.app` lives in
+`Contents/Applications/` with bundle id `com.makidesk.app.terminal`; it is
+`.regular` while its window is open and is signed before the outer app. It links
+GhosttyKit (a static xcframework, MIT) and lives in the separate `Terminal/`
+SwiftPM package, so `swift build` at the repository root neither needs the
+binary nor rebuilds the helper. `MakiShared` is the only code both apps link: the
+message envelope, length-prefixed framing and the socket location. The workspace
+model and its persistence live in `MakiTerminalCore`, which is free of AppKit.
+
+MakiDesk talks to it over `~/Library/Application Support/MakiDesk/Terminal/terminal.sock`
+(`0600`, directory `0700`). Frames are four big-endian length bytes plus JSON;
+the kinds are a closed set (`hello`, `welcome`, `showMain`, `hideMain`,
+`toggleQuake`, `ping`, `quit` and events). The helper accepts one client, checks
+the peer pid and that it is MakiDesk (bundle id, or the development binary by
+name), and replies to `hello` with its version and pid. `TerminalClient` keeps
+the connection, retries a launch up to 30 times at 150 ms intervals, and reports
+failure in a notice; none of it blocks the main thread. A development `swift run`
+looks for `dist/MakiDeskTerminal.app`, because it has no app bundle to nest into.
+
+Inside the helper, a workspace is one sidebar row and one binary split tree of
+terminal panes; surfaces are reused across rebuilds, so switching workspaces
+never restarts a shell. Workspace titles, split ratios, the selection and each
+pane's last directory are written to `Terminal/workspaces.json`, atomically and
+with the usual quarantine/version rules; scrollback is not persisted. Closing the
+last pane of the last workspace starts a fresh shell instead of leaving an empty
+window. The helper's surface callbacks forward title, cwd and close events to the
+window controller; the focused surface answers clipboard requests.
+
+`⌃⌥O` and the menu bar item call `TerminalController`, which sends `showMain` or
+launches the helper. **Suspending MakiDesk's other global shortcuts while the
+helper is frontmost is not implemented yet**: the helper receives all keys, but
+the `⌃⌥` family still fires globally. That, the quake panel and the terminal
+settings page are the remaining F1 work.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and

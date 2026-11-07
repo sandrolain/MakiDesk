@@ -1,4 +1,5 @@
 import CoreGraphics
+import MakiShared
 import Foundation
 
 /// One line of the checklist. The text is short but may keep the user's own

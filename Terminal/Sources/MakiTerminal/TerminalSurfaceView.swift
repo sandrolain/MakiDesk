@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import GhosttyKit
+import MakiTerminalCore
 import QuartzCore
 
 /// One Ghostty surface hosted in an AppKit view (F0).
@@ -11,6 +12,12 @@ import QuartzCore
 final class TerminalSurfaceView: NSView, NSTextInputClient {
     private(set) var surface: ghostty_surface_t?
     private weak var runtime: GhosttyRuntime?
+    var paneID: PaneID?
+    var onFocus: (() -> Void)?
+    /// Set by the pane host before the surface is created; restore uses it to
+    /// start the shell in the directory it had.
+    var workingDirectory: String?
+    private var isDetached = false
 
     private var markedText = NSMutableAttributedString()
     private var trackingArea: NSTrackingArea?
@@ -50,10 +57,14 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     }
 
     func detach() {
+        guard isDetached == false else { return }
+        isDetached = true
         guard let surface else { return }
         ghostty_surface_set_focus(surface, false)
         ghostty_surface_free(surface)
-        runtime?.surface = nil
+        if runtime?.focusedSurface == surface {
+            runtime?.focusedSurface = nil
+        }
         self.surface = nil
     }
 
@@ -73,14 +84,22 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             config.command = commandStorage.map { UnsafePointer($0) }
         }
         defer { free(commandStorage) }
+        var directoryStorage: UnsafeMutablePointer<CChar>?
+        if let workingDirectory, workingDirectory.isEmpty == false {
+            directoryStorage = strdup(workingDirectory)
+            config.working_directory = directoryStorage.map { UnsafePointer($0) }
+        }
+        defer { free(directoryStorage) }
+
         guard let created = ghostty_surface_new(app, &config) else {
             NSLog("MakiTerminal: ghostty_surface_new returned nil")
             return
         }
         surface = created
-        runtime?.surface = created
+        if runtime?.focusedSurface == nil {
+            runtime?.focusedSurface = created
+        }
         ghostty_surface_set_content_scale(created, scale, scale)
-        ghostty_surface_set_focus(created, true)
         updateSurfaceSize()
     }
 
@@ -88,9 +107,8 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window != nil {
-            if let runtime { attach(runtime: runtime) }
-            makeFirstResponderSoon()
+        if window != nil, let runtime {
+            attach(runtime: runtime)
         }
     }
 
@@ -118,24 +136,26 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         ghostty_surface_set_size(surface, width, height)
     }
 
-    private func makeFirstResponderSoon() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let window = self.window else { return }
-            window.makeFirstResponder(self)
-        }
-    }
-
     // MARK: - Focus
 
     override var acceptsFirstResponder: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
-        if let surface { ghostty_surface_set_focus(surface, true) }
+        if let surface {
+            ghostty_surface_set_focus(surface, true)
+            runtime?.focusedSurface = surface
+            onFocus?()
+        }
         return true
     }
 
     override func resignFirstResponder() -> Bool {
-        if let surface { ghostty_surface_set_focus(surface, false) }
+        if let surface {
+            ghostty_surface_set_focus(surface, false)
+            if runtime?.focusedSurface == surface {
+                runtime?.focusedSurface = nil
+            }
+        }
         return true
     }
 
@@ -163,6 +183,11 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if let surface {
+            ghostty_surface_set_focus(surface, true)
+            runtime?.focusedSurface = surface
+        }
+        onFocus?()
         sendMouseButton(event, state: GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT)
     }
 

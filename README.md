@@ -222,6 +222,14 @@ opens it from the keyboard (arrows choose, Return runs, Esc closes), and
 box. Visibility, order and the words on each button live in a small JSON file
 you can edit by hand. It is left out of screenshots and recordings.
 
+### A terminal that outlives the menu bar
+
+`⌃⌥O` opens **MakiDesk Terminal**, a separate helper with a real shell, a sidebar
+of workspaces and split panes. Because it is a separate app, quitting MakiDesk
+does not end its sessions; it appears in the Dock and ⌘Tab while its window is
+open, and it restores the workspace layout and each shell's directory on the next
+launch. The helper is embedded in the app bundle.
+
 ### Notices that stay readable
 
 Results are reported by a small, themed notice. Its state tints the icon and

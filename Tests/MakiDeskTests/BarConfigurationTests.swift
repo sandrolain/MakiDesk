@@ -1,4 +1,5 @@
 import XCTest
+import MakiShared
 @testable import MakiDesk
 
 /// F1: the utility bar's buttons in `utility-bar.json`. The catalog still owns

@@ -65,6 +65,8 @@ enum WindowController {
         case toggleChecklist
         /// Show the utility bar under the menu bar, or close it (F1).
         case toggleUtilityBar
+        /// Open the terminal window, launching the helper if needed (F1).
+        case openTerminal
         /// Open the field that starts a timer (T61).
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).

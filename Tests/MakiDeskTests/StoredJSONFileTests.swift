@@ -1,4 +1,5 @@
 import XCTest
+import MakiShared
 @testable import MakiDesk
 
 /// R07: the mechanics four stores each carried a copy of. The stores' own tests
