@@ -273,6 +273,16 @@ final class TerminalWindowController: NSWindowController,
         workspaceItem.target = self
         menu.addItem(workspaceItem)
 
+        let hasTmux = TmuxSession.executableURL() != nil
+        let tmuxItem = NSMenuItem(
+            title: hasTmux ? "New tmux Session" : "New tmux Session (tmux not installed)",
+            action: #selector(newTmuxSessionAction(_:)),
+            keyEquivalent: ""
+        )
+        tmuxItem.target = self
+        tmuxItem.isEnabled = hasTmux
+        menu.addItem(tmuxItem)
+
         let profiles = terminalSettings.sshProfiles.filter(\.isValid)
         if profiles.isEmpty == false {
             menu.addItem(.separator())
@@ -288,6 +298,19 @@ final class TerminalWindowController: NSWindowController,
         menu.popUp(positioning: nil,
                    at: NSPoint(x: 0, y: sender.bounds.height + 4),
                    in: sender)
+    }
+
+    @objc func newTmuxSessionAction(_ sender: Any?) {
+        let id = UUID()
+        let name = TmuxSession.name(for: id)
+        var workspace = TerminalWorkspace(id: id, title: "tmux \(name.suffix(4))")
+        workspace.setCommand(TmuxSession.command(sessionName: name),
+                             for: workspace.focusedPane)
+        workspaces.append(workspace)
+        selected = workspaces.count - 1
+        reloadSidebar()
+        rebuildContent()
+        scheduleSave()
     }
 
     @objc func newSSHSessionAction(_ sender: NSMenuItem) {
@@ -444,6 +467,8 @@ final class TerminalWindowController: NSWindowController,
         let surface = TerminalSurfaceView(frame: .zero)
         surface.paneID = pane
         surface.shellCommand = terminalSettings.shell
+        surface.environment["MAKIDESK_TERMINAL"] = "1"
+        surface.environment["MAKIDESK_WORKSPACE_ID"] = workspace.id.uuidString
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         quakeWorkspace = workspace
         quakeHost = host
@@ -547,6 +572,10 @@ final class TerminalWindowController: NSWindowController,
             : terminalSettings.shell
         surface.onFocus = { [weak self] in self?.focusPane(pane) }
 
+        surface.environment["MAKIDESK_TERMINAL"] = "1"
+        if selected < workspaces.count {
+            surface.environment["MAKIDESK_WORKSPACE_ID"] = workspaces[selected].id.uuidString
+        }
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         paneViews[pane] = host
         surface.attach(runtime: runtime)

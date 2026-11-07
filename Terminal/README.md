@@ -47,6 +47,10 @@ identity before the outer app.
   saved.
 - **SSH profiles:** settings.json entries become `ssh` command lines in a new
   workspace from the sidebar's + menu; keys and prompts stay with ssh.
+- **tmux:** a preset runs `tmux new-session -A -s makidesk-…`, reattaching to the
+  workspace's session after a restore. The menu item is disabled when tmux is
+  not installed (common paths are checked before PATH). Panes also get
+  `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
 - **Settings and theme:** `Terminal/settings.json` (font, shell command, quake
   height) and `Terminal/theme.json` (MakiDesk palette plus sixteen ANSI colours)
   are written by MakiDesk; the helper reloads them on `settingsChanged` and
@@ -65,7 +69,7 @@ identity before the outer app.
 
 ## What is not there yet
 
-- tmux presets and agent badges; per-theme ANSI palettes.
+- agent badges; per-theme ANSI palettes; tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling, search and links are the same
   kind of not-yet-verified surface.

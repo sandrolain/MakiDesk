@@ -313,8 +313,10 @@ looks for `dist/MakiDeskTerminal.app`, because it has no app bundle to nest into
 Inside the helper, a workspace is one sidebar row and one binary split tree of
 terminal panes; surfaces are reused across rebuilds, so switching workspaces
 never restarts a shell. A pane may carry a command instead of the login shell:
-an SSH profile in `settings.json` becomes one, the sidebar's `+` menu starts a
-workspace with it, and the layout remembers it. Workspace titles, split ratios,
+an SSH profile in `settings.json` or the tmux preset becomes one, the sidebar's
+`+` menu starts a workspace with it, and the layout remembers it. Every pane
+receives `MAKIDESK_TERMINAL=1` and its workspace id through Ghostty's env-vars
+field, so scripts can identify where they run. Workspace titles, split ratios,
 the selection, each pane's last directory and its command are written to
 `Terminal/workspaces.json`, atomically and
 with the usual quarantine/version rules; scrollback is not persisted. Closing the

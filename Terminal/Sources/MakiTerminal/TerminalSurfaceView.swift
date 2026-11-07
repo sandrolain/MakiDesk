@@ -19,6 +19,8 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     var workingDirectory: String?
     /// Empty or nil uses the login shell; otherwise this command runs instead.
     var shellCommand: String?
+    /// Extra variables for the child shell, such as the workspace identity.
+    var environment: [String: String] = [:]
     private var isDetached = false
 
     private var markedText = NSMutableAttributedString()
@@ -89,6 +91,31 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             config.command = commandStorage.map { UnsafePointer($0) }
         }
         defer { free(commandStorage) }
+        var envStorage: [(key: UnsafeMutablePointer<CChar>, value: UnsafeMutablePointer<CChar>)] = []
+        var envArray: UnsafeMutablePointer<ghostty_env_var_s>?
+        if environment.isEmpty == false {
+            envArray = .allocate(capacity: environment.count)
+            for (index, entry) in environment.enumerated() {
+                guard let key = strdup(entry.key), let value = strdup(entry.value) else {
+                    continue
+                }
+                envStorage.append((key: key, value: value))
+                envArray?[index] = ghostty_env_var_s(
+                    key: UnsafePointer(key),
+                    value: UnsafePointer(value)
+                )
+            }
+            config.env_vars = envArray
+            config.env_var_count = envStorage.count
+        }
+        defer {
+            for entry in envStorage {
+                free(entry.key)
+                free(entry.value)
+            }
+            envArray?.deallocate()
+        }
+
         var directoryStorage: UnsafeMutablePointer<CChar>?
         if let workingDirectory, workingDirectory.isEmpty == false {
             directoryStorage = strdup(workingDirectory)

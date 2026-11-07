@@ -634,6 +634,12 @@ it running, so its shells keep working.
 - **Notifications.** A desktop notification sent by a program in the shell
   (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon, instead of
   a bare system alert. If MakiDesk is not running, nothing is shown.
+- **tmux.** **New tmux Session** in the sidebar's **+** menu runs
+  `tmux new-session -A -s makidesk-…`: it attaches to that workspace's session
+  or creates it. Closing the pane detaches; the tmux server keeps the session,
+  and reopening the same pane reattaches. The shell also receives
+  `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID`. The item is disabled and
+  says so when tmux is not installed (`brew install tmux`).
 - **SSH profiles.** Add them in **Settings ▸ Terminal ▸ SSH profiles** (name,
   host, user, port, optional key, remote command, agent forwarding), then pick
   **New SSH: …** from the sidebar's **+** menu. The pane runs `ssh` with those
@@ -645,8 +651,8 @@ it running, so its shells keep working.
   profiles. The terminal follows the MakiDesk theme, and a change reaches the
   helper without a restart; the ANSI palette is still the same fixed sixteen
   colours for every theme.
-- **Not there yet.** tmux presets, agent badges, tabs inside a pane, per-theme
-  ANSI palettes, and a verified IME.
+- **Not there yet.** agent badges, tabs inside a pane, per-theme ANSI palettes,
+  and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut
