@@ -214,11 +214,13 @@ running something else. Every row is an action MakiDesk already has.
 Rest the pointer on the menu bar and a strip drops down: the everyday panels,
 the capture tools, the Ports window, the presentation toggles, and the figures
 worth glancing at — free disk, CPU, the windows in the switcher and the
-countdown on Timer. Untick the buttons you never use. It appears after a quarter of a second, retreats when the pointer
-leaves, takes no room from windows and never takes the keyboard by itself. The
-pin keeps it out; `⌃⌥B` opens it from the keyboard (arrows choose, Return runs,
-Esc closes), and `utility bar`, `bar show`, `bar hide` and `bar pin` do the same
-from the command box. It is left out of screenshots and recordings.
+countdown on Timer. Untick the buttons you never use. It appears after a
+quarter of a second, retreats when the pointer leaves, takes no room from
+windows and never takes the keyboard by itself. The pin keeps it out; `⌃⌥B`
+opens it from the keyboard (arrows choose, Return runs, Esc closes), and
+`utility bar`, `bar show`, `bar hide` and `bar pin` do the same from the command
+box. Visibility, order and the words on each button live in a small JSON file
+you can edit by hand. It is left out of screenshots and recordings.
 
 ### Notices that stay readable
 

@@ -141,28 +141,10 @@ enum BarItemCatalog {
     static let all: [BarItem] = planned + right
 
     /// Everything the user may hide. The right-hand controls stay: the bar
-    /// would lose its pin and the way to Settings.
+    /// would lose its pin and the way to Settings. Visibility itself lives in
+    /// `BarConfiguration`, which also carries the order and the optional
+    /// per-button title and symbol.
     static let hideable: [BarItem] = planned
-
-    /// Reads the stored list, dropping names that no longer exist and the
-    /// right-hand controls, so an old preference cannot remove the pin.
-    static func hidden(from stored: String?) -> Set<String> {
-        guard let stored, stored.isEmpty == false else { return [] }
-        let known = Set(hideable.map(\.id))
-        return Set(stored.split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespaces) }
-            .filter(known.contains))
-    }
-
-    /// The inverse, in catalog order: a stable string, so the same choice does
-    /// not produce a new value on every write.
-    static func stored(_ hidden: Set<String>) -> String {
-        hideable.map(\.id).filter(hidden.contains).joined(separator: ",")
-    }
-
-    static func visible(_ hidden: Set<String>) -> [BarItem] {
-        planned.filter { hidden.contains($0.id) == false }
-    }
 
     static func item(id: String) -> BarItem? {
         all.first { $0.id == id }

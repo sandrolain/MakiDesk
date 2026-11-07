@@ -84,7 +84,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `FloatingPanel.swift` | The panel base class: a subclass names its style (utility, keyOverlay, passive, readOnly) instead of overriding the same three members. |
 | `HUDMessage.swift`, `HUDMessages.swift` | What a notice says, as a value; the capture family's sentences are written once and checked by a test. |
 | `UtilityBarController.swift`, `UtilityBarView.swift` | The utility bar's panel and lifecycle: pointer reveal with a 10 Hz sample while enabled, pin, overflow menu, keyboard session, capture exclusion. |
-| `BarReveal.swift`, `BarLayout.swift`, `BarItemCatalog.swift`, `UtilityBarModel.swift` | Pure rules for when the bar opens and retreats, what fits, which commands it offers, and the info text; no AppKit or Accessibility I/O. |
+| `BarReveal.swift`, `BarLayout.swift`, `BarItemCatalog.swift`, `BarConfiguration.swift`, `UtilityBarModel.swift` | Pure rules for when the bar opens and retreats, what fits, which commands it offers, the hand-editable buttons file, and the info text; no AppKit or Accessibility I/O. |
 | `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
 | `LegacyMigration.swift` | One-time migration from the project's previous name. |
@@ -269,13 +269,18 @@ pinned bar instead of closing it. `UtilityBarController` samples the pointer at
 the click monitors and the `NSWorkspace` observers when it is turned off.
 `BarItemCatalog` is the only list of controls: each entry names an existing
 `ShortcutAction`, so a click runs the same `applyShortcut` as the key and the
-menu. The catalog also owns the hideable set — the right-hand controls can never
-leave — stored as a comma-separated list and filtered before planning, so the
-view never sees a hidden button. `BarLayout` picks what fits from the widths the
-view also uses, badges included (least important first, rightmost on a tie), and
-the remainder becomes an `NSMenu` anchored under the chevron rather than at the
-pointer, because a passive panel must not become key and a keyboard session can
-open it from another display. The Timer button carries the nearest countdown as
+menu. `BarConfiguration` (`Application Support/MakiDesk/utility-bar.json`) holds
+the presentation the catalog does not: visibility, order inside each zone and an
+optional title and symbol per button. It is the only hand-editable bar state,
+loaded at start and re-read with one `stat` when the bar appears, so an edit
+applies without a relaunch; a corrupt file is quarantined as `.bak` and a newer
+one is used read-only. Ids missing from the file are appended visible, so a new
+catalog button needs no migration; the old comma-separated hidden list is read
+once and then removed. The right-hand controls never leave the bar. `BarLayout`
+picks what fits from the widths the view also uses, badges included (least
+important first, rightmost on a tie), and the remainder becomes an `NSMenu`
+anchored under the chevron rather than at the pointer, because a passive panel
+must not become key and a keyboard session can open it from another display. The Timer button carries the nearest countdown as
 its badge; a second info control with the same name was removed. `⌃⌥B` is the one
 keyboard session: the panel's `canBecomeKey` is true only then, arrows move the
 selection, Esc closes, and `PanelFocusReturn` gives the keyboard back. Its

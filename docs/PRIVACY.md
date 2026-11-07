@@ -117,7 +117,8 @@ All paths are under your user account:
 | Dropzone runs | `~/Library/Caches/MakiDesk/DropzoneRuns/<run>/` | Removed when the run ends unless kept or revealed |
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
-| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels/hidden buttons, disk label and CPU watch, date of the last disk warning) | Until reset |
+| Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
+| Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
 | Shelf | RAM + a temporary staging folder | Until the shelf closes |
@@ -132,7 +133,9 @@ All paths are under your user account:
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
 can remove groups, notes, clipboard history and dropzones; settings always
 reset. The timers file holds only a label, where the timer came from and its
-deadline (or, while paused, the time left).
+deadline (or, while paused, the time left). The utility bar's file holds only
+button ids, whether each is shown, and an optional renamed title or symbol; the
+old hidden-buttons preference is read once, migrated there and then removed.
 
 ## Clipboard
 

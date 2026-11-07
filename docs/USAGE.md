@@ -594,6 +594,15 @@ it, and leaves no room behind.
   something does not fit. The buttons grow with
   the height, so a taller bar is easier to hit, not just more padded. With the
   reveal off, only `⌃⌥B`, the menu and the command box open it.
+- **The buttons file.** Visibility and order also live in
+  `~/Library/Application Support/MakiDesk/utility-bar.json`: each entry names a
+  button id, says whether it is shown, and may set its own `title` and `symbol`.
+  Order applies inside a zone — the three zones keep their places — unknown ids
+  are ignored, and a new button appears on its own after an update. Edit it by
+  hand and the bar reads it the next time it appears, or use **Reveal buttons
+  file…** in Settings. A file that cannot be read is set aside as
+  `utility-bar.json.bak` and the default buttons are used; one written by a newer
+  MakiDesk is shown read-only. A factory reset deletes the file.
 - The bar is left out of screenshots and recordings, takes no Accessibility
   permission of its own, and does nothing while it is hidden: the pointer is
   sampled only while the feature is on.
@@ -1034,8 +1043,8 @@ first one.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
   width, corner and display), the countdown card (visibility, opacity, corner
   and display), the window switcher/search appearance (including the groups
-  column and its announcements), the utility bar (pointer reveal, height and
-  labels), the annotated screenshot's clipboard copy, the notice for screenshots
+  column and its announcements), the utility bar (pointer reveal, height,
+  labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
   macOS saves, and text recognition quality and correction.
 - **Groups** — rename, empty and inspect the nine groups.
 - **System** — the free space beside the icon (when to show it, its format, the

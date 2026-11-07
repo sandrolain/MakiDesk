@@ -47,9 +47,6 @@ final class UtilityBarController {
     func applySettings() {
         model.height = Self.clampedHeight(Settings.int(.utilityBarHeight))
         model.labelMode = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
-        model.hiddenItems = BarItemCatalog.hidden(
-            from: Settings.string(.utilityBarHiddenItems)
-        )
 
         guard Settings.bool(.utilityBarEnabled) else {
             if isVisible { dismiss() }
@@ -171,7 +168,7 @@ final class UtilityBarController {
             menu.addItem(entry)
         }
         overflowTarget.handler = { [weak self] id in
-            guard let item = BarItemCatalog.item(id: id) else { return }
+            guard let item = items.first(where: { $0.id == id }) else { return }
             self?.activate(item)
         }
         isPoppingMenu = true
@@ -227,6 +224,9 @@ final class UtilityBarController {
     }
 
     private func present(on screen: NSScreen) {
+        // One stat, not a read: a hand edit of the buttons file applies the
+        // next time the bar appears, and an unchanged file costs nothing.
+        WorkspaceStore.shared.reloadBarConfigurationIfChanged()
         let panel = panel ?? buildPanel()
         position(panel, on: screen)
         if panel.isVisible == false { panel.orderFrontRegardless() }

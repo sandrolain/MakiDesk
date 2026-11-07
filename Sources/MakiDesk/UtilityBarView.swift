@@ -27,7 +27,7 @@ struct UtilityBarView: View {
         GeometryReader { proxy in
             let labels = model.showsLabels(at: proxy.size.width)
             let plan = plan(for: proxy.size.width, labels: labels)
-            let shown = BarItemCatalog.visible(model.hiddenItems)
+            let shown = store.barConfiguration.resolvedItems()
                 .filter { plan.visible.contains($0.id) }
             let utility = shown.filter { $0.zone == .utility }
             let toggles = shown.filter { $0.zone == .toggle }
@@ -206,6 +206,11 @@ struct UtilityBarView: View {
 
     private func symbol(for item: BarItem) -> String {
         if item.id == "pin", model.isPinned { return "pin.fill" }
+        // A symbol typed into the buttons file may not exist: show the
+        // catalog's icon rather than a blank space.
+        if NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil) == nil {
+            return BarItemCatalog.item(id: item.id)?.symbol ?? item.symbol
+        }
         return item.symbol
     }
 
@@ -257,7 +262,7 @@ struct UtilityBarView: View {
     // MARK: - Plan and keyboard
 
     private func plan(for width: CGFloat, labels: Bool) -> BarLayout.Plan {
-        let items = BarItemCatalog.visible(model.hiddenItems).map {
+        let items = store.barConfiguration.resolvedItems().map {
             BarLayoutItem(id: $0.id, priority: $0.priority,
                           width: $0.width(labels: labels, badge: badge(for: $0)))
         }
@@ -298,10 +303,14 @@ struct UtilityBarView: View {
     }
 
     private func runSelected() {
-        guard let selected, let item = BarItemCatalog.item(id: selected) else { return }
+        guard let selected else { return }
+        let items = store.barConfiguration.resolvedItems()
+        guard let item = items.first(where: { $0.id == selected })
+                ?? BarItemCatalog.right.first(where: { $0.id == selected }) else { return }
         if case .overflow = item.kind {
             let plan = plan(for: width, labels: model.showsLabels(at: width))
-            controller.popOverflow(plan.overflow.compactMap(BarItemCatalog.item(id:)))
+            let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+            controller.popOverflow(plan.overflow.compactMap { byID[$0] })
         } else {
             controller.activate(item)
         }

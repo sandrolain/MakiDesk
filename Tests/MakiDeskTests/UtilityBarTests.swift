@@ -465,22 +465,6 @@ final class BarItemCatalogTests: XCTestCase {
         XCTAssertEqual(timers.first?.kind, .shortcut(.newTimer))
     }
 
-    func testHiddenButtonsAreReadAndWrittenInCatalogOrder() {
-        XCTAssertEqual(BarItemCatalog.hidden(from: nil), [])
-        XCTAssertEqual(BarItemCatalog.hidden(from: ""), [])
-        XCTAssertEqual(BarItemCatalog.hidden(from: "measure,ports"), ["measure", "ports"])
-        XCTAssertEqual(BarItemCatalog.hidden(from: "measure, ports"), ["measure", "ports"])
-        XCTAssertEqual(BarItemCatalog.hidden(from: BarItemCatalog.stored(["measure", "ports"])),
-                       ["measure", "ports"])
-        // Unknown names and the right-hand controls cannot hide anything that
-        // is not hideable: the pin and the Settings button never leave.
-        XCTAssertEqual(BarItemCatalog.hidden(from: "pin,measure,nope"), ["measure"])
-        XCTAssertEqual(BarItemCatalog.stored(["ports", "measure"]), "measure,ports")
-        XCTAssertEqual(BarItemCatalog.visible(["measure"]).count,
-                       BarItemCatalog.hideable.count - 1)
-        XCTAssertFalse(BarItemCatalog.visible(["measure"]).map(\.id).contains("measure"))
-    }
-
     func testThePinAndSettingsCannotBeHidden() {
         for item in BarItemCatalog.right {
             XCTAssertFalse(BarItemCatalog.hideable.contains { $0.id == item.id }, item.id)

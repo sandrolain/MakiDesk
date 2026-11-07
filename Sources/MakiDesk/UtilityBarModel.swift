@@ -14,10 +14,6 @@ final class UtilityBarModel {
     var isKeyboardDriven = false
     var height: CGFloat = 46
     var labelMode: BarLabelMode = .auto
-    /// The buttons the user chose to keep out of the bar (F1). Read from the
-    /// preferences at launch and after every change; the right-hand controls
-    /// are never in it.
-    var hiddenItems: Set<String> = []
 
     static let defaultHeight: CGFloat = 46
     static let heightRange: ClosedRange<CGFloat> = 28...64

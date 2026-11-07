@@ -1041,16 +1041,35 @@ struct SettingsView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8,
                                                   alignment: .leading)],
                               alignment: .leading, spacing: 4) {
-                        ForEach(BarItemCatalog.hideable) { item in
+                        ForEach(store.barConfiguration.resolvedItems(includingHidden: true)) { item in
                             Toggle(item.title, isOn: Binding(
-                                get: { store.utilityBarHidden.contains(item.id) == false },
-                                set: { store.updateUtilityBarVisibility(item.id, shown: $0) }
+                                get: { store.barConfiguration.isVisible(item.id) },
+                                set: { store.updateBarItemVisibility(item.id, shown: $0) }
                             ))
                             .toggleStyle(.checkbox)
                         }
                     }
+                    .disabled(!store.utilityBarEnabled || store.barConfigurationState.isWritable == false)
+                    HStack(spacing: 12) {
+                        Button("Reveal buttons file…") {
+                            store.revealBarConfigurationFile()
+                        }
+                        Button("Show all") {
+                            store.showAllBarButtons()
+                        }
+                        .disabled(store.barConfigurationState.isWritable == false)
+                    }
                     .disabled(!store.utilityBarEnabled)
-                    caption("Untick the buttons you never use: with fewer of them everything fits and the chevron disappears. The pin and the Settings button are always there, and the chevron appears when something does not fit. The Timer button carries the nearest running countdown as a badge, so there is one Timer, not two. The left group holds the panels and the capture tools, the middle the focus border, the focus dim and the mini map, the right the figures and the number of windows in the switcher.")
+                    if case let .futureVersion(version) = store.barConfigurationState {
+                        Text("utility-bar.json comes from a newer MakiDesk (version \(version)): it is used as it is and never rewritten.")
+                            .font(.caption)
+                            .foregroundStyle(theme.subtext)
+                    } else if store.barConfigurationState == .corrupt {
+                        Text("The buttons file could not be read: it was set aside as utility-bar.json.bak and the default buttons are in use.")
+                            .font(.caption)
+                            .foregroundStyle(theme.subtext)
+                    }
+                    caption("Untick the buttons you never use: with fewer of them everything fits and the chevron disappears. The pin and the Settings button are always there, and the chevron appears when something does not fit. The Timer button carries the nearest running countdown as a badge, so there is one Timer, not two. The left group holds the panels and the capture tools, the middle the focus border, the focus dim and the mini map, the right the figures and the number of windows in the switcher. Visibility and order also live in ~/Library/Application Support/MakiDesk/utility-bar.json, which you can edit by hand: each entry names an id, shown or not, and may override its title and symbol. Order applies inside each zone; unknown ids are ignored and a new button appears on its own. Changes are read when the bar next appears, and a file from a newer version is left untouched.")
                 }
             }
         }

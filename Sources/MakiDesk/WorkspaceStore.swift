@@ -128,10 +128,10 @@ final class WorkspaceStore {
                                    Int(UtilityBarModel.heightRange.lowerBound)),
                                Int(UtilityBarModel.heightRange.upperBound))
     var utilityBarLabels = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
-    /// The buttons the user keeps out of the bar, by id (F1).
-    var utilityBarHidden = BarItemCatalog.hidden(
-        from: Settings.string(.utilityBarHiddenItems)
-    )
+    /// The bar's buttons (F1), file-backed: visibility, order inside each zone
+    /// and an optional title and symbol per button, all editable by hand.
+    var barConfiguration = BarConfiguration.defaults
+    var barConfigurationState: BarConfigurationStore.State = .missing
     /// OCR quality and correction (T41). Languages stay automatic.
     var ocrFastRecognition = Settings.bool(.ocrFastRecognition)
     var ocrLanguageCorrection = Settings.bool(.ocrLanguageCorrection)
@@ -358,6 +358,10 @@ final class WorkspaceStore {
     /// Reads and writes the groups file (G2). Injectable only for tests, which
     /// point it at a temporary directory instead of Application Support.
     @ObservationIgnored var groupStore = GroupStore()
+    /// Reads and writes the utility bar's buttons file (F1). Injectable for the
+    /// same reason as `groupStore`.
+    @ObservationIgnored var barConfigurationStore = BarConfigurationStore()
+    @ObservationIgnored private var barConfigurationModified: Date?
     /// The window designated for the peek (T16): the one ⌃⌥H shows while held.
     /// Session only — quitting forgets it — and never written to disk.
     @ObservationIgnored private var peekRef: WindowRef?
@@ -421,6 +425,7 @@ final class WorkspaceStore {
     func start() {
         guard shortcutManager == nil else { return }
         loadGroups()
+        loadBarConfiguration()
         WindowIndex.shared.start()
         WindowOutlineController.shared.start()
         FocusDimController.shared.start()
@@ -861,21 +866,66 @@ final class WorkspaceStore {
     }
 
     /// Shows or hides one button. The right-hand controls are not offered, and
-    /// the catalog ignores them even if an old preference names them.
-    func updateUtilityBarVisibility(_ id: String, shown: Bool) {
+    /// a file from a newer version is left untouched.
+    func updateBarItemVisibility(_ id: String, shown: Bool) {
         guard BarItemCatalog.hideable.contains(where: { $0.id == id }) else { return }
-        var hidden = utilityBarHidden
-        if shown { hidden.remove(id) } else { hidden.insert(id) }
-        updateUtilityBarHidden(hidden)
+        guard barConfigurationState.isWritable else { return }
+        var configuration = barConfiguration
+        configuration.setVisible(shown, for: id)
+        updateBarConfiguration(configuration)
     }
 
-    /// Replaces the whole set, for the factory reset.
-    func updateUtilityBarHidden(_ hidden: Set<String>) {
-        let known = Set(BarItemCatalog.hideable.map(\.id))
-        let filtered = hidden.intersection(known)
-        utilityBarHidden = filtered
-        Settings.set(BarItemCatalog.stored(filtered), for: .utilityBarHiddenItems)
-        UtilityBarController.shared.applySettings()
+    /// Replaces the whole configuration, for the factory reset and for
+    /// "Show all".
+    func updateBarConfiguration(_ configuration: BarConfiguration) {
+        guard barConfigurationState.isWritable else { return }
+        barConfiguration = configuration
+        if barConfigurationStore.save(configuration) {
+            barConfigurationState = .loaded
+            barConfigurationModified = barConfigurationStore.modificationDate()
+        }
+    }
+
+    /// Turns every button back on, keeping the file's order and any renamed
+    /// title or symbol.
+    func showAllBarButtons() {
+        guard barConfigurationState.isWritable else { return }
+        var configuration = barConfiguration
+        for id in BarItemCatalog.hideable.map(\.id) {
+            configuration.setVisible(true, for: id)
+        }
+        updateBarConfiguration(configuration)
+    }
+
+    /// Deletes the file so the defaults apply again. A file written by a newer
+    /// version stays, as with the dropzones: it is read-only, not ours.
+    func resetBarConfiguration() {
+        guard barConfigurationStore.remove() else { return }
+        // The old hidden list would otherwise migrate back on the next launch.
+        Settings.remove(.utilityBarHiddenItems)
+        barConfiguration = .defaults
+        barConfigurationState = .missing
+        barConfigurationModified = nil
+    }
+
+    /// Writes the file if it does not exist yet, then shows it in the Finder so
+    /// it can be edited by hand.
+    func revealBarConfigurationFile() {
+        if FileManager.default.fileExists(atPath: barConfigurationStore.fileURL.path) == false {
+            updateBarConfiguration(barConfiguration)
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([barConfigurationStore.fileURL])
+    }
+
+    /// What the bar asks before it appears: one `stat`, and a read only when the
+    /// file changed. A hand edit applies without a relaunch.
+    func reloadBarConfigurationIfChanged() {
+        guard let date = barConfigurationStore.modificationDate() else {
+            if barConfigurationModified != nil { loadBarConfiguration() }
+            return
+        }
+        guard date != barConfigurationModified else { return }
+        loadBarConfiguration()
     }
 
     func updateShowPreview(_ value: Bool) {
@@ -1457,7 +1507,7 @@ final class WorkspaceStore {
         updateUtilityBarEnabled(true)
         updateUtilityBarHeight(Int(UtilityBarModel.defaultHeight))
         updateUtilityBarLabels(.auto)
-        updateUtilityBarHidden([])
+        resetBarConfiguration()
         updateOCRFastRecognition(false)
         updateOCRLanguageCorrection(true)
         updateMiniMapPosition(.topRight)
@@ -2472,6 +2522,37 @@ final class WorkspaceStore {
             loaded[group.slot] = group
         }
         groups = loaded
+    }
+
+    // MARK: - Utility bar buttons (F1)
+
+    /// Reads the buttons file at start and after a hand edit. A missing file
+    /// migrates the old comma-separated hidden list once and then drops it, so
+    /// deleting the file cannot bring back a choice the user has since changed.
+    private func loadBarConfiguration() {
+        let snapshot = barConfigurationStore.load()
+        switch snapshot.state {
+        case .missing:
+            guard let legacy = Settings.string(.utilityBarHiddenItems),
+                  let migrated = BarConfiguration.migrated(fromLegacyHidden: legacy) else {
+                barConfiguration = .defaults
+                barConfigurationState = .missing
+                barConfigurationModified = nil
+                return
+            }
+            barConfiguration = migrated
+            if barConfigurationStore.save(migrated) {
+                Settings.remove(.utilityBarHiddenItems)
+                barConfigurationState = .loaded
+                barConfigurationModified = barConfigurationStore.modificationDate()
+            } else {
+                barConfigurationState = .missing
+            }
+        case .loaded, .corrupt, .futureVersion:
+            barConfiguration = snapshot.configuration
+            barConfigurationState = snapshot.state
+            barConfigurationModified = barConfigurationStore.modificationDate()
+        }
     }
 
     /// Stores `group` and writes the whole set to disk. Every group mutation goes
