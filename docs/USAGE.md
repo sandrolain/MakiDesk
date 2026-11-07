@@ -620,8 +620,8 @@ it running, so its shells keep working.
 - **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
   one; `⌘W` closes the pane and `⇧⌘W` the workspace. Every pane is a real shell
   with its own scrollback, copy/paste, links and Option-as-Meta.
-- **Restore.** Workspace titles, split trees, the selection and each pane's
-  last directory are saved in
+- **Restore.** Workspace titles, split trees, the selection, each pane's last
+  directory and a pane's command (an SSH session, for instance) are saved in
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
   on the next launch. Scrollback is not saved.
 - **Quake.** `⌃⌥Q` drops a scratch terminal from the top of the screen; the
@@ -634,13 +634,19 @@ it running, so its shells keep working.
 - **Notifications.** A desktop notification sent by a program in the shell
   (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon, instead of
   a bare system alert. If MakiDesk is not running, nothing is shown.
+- **SSH profiles.** Add them in **Settings ▸ Terminal ▸ SSH profiles** (name,
+  host, user, port, optional key, remote command, agent forwarding), then pick
+  **New SSH: …** from the sidebar's **+** menu. The pane runs `ssh` with those
+  arguments; passwords are never stored, and keys and `known_hosts` remain
+  ssh's own. The command is saved with the layout, so a restored pane tries to
+  reconnect.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
-  starts your login shell), and the quake height (30–60% of the screen). The
-  terminal follows the MakiDesk theme, and a change reaches the helper without a
-  restart; the ANSI palette is still the same fixed sixteen colours for every
-  theme.
-- **Not there yet.** SSH profiles, tmux presets, agent badges, tabs inside a
-  pane, and a verified IME.
+  starts your login shell), the quake height (30–60% of the screen) and the SSH
+  profiles. The terminal follows the MakiDesk theme, and a change reaches the
+  helper without a restart; the ANSI palette is still the same fixed sixteen
+  colours for every theme.
+- **Not there yet.** tmux presets, agent badges, tabs inside a pane, per-theme
+  ANSI palettes, and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut
@@ -1085,8 +1091,9 @@ first one.
   column and its announcements), the utility bar (pointer reveal, height,
   labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
   macOS saves, and text recognition quality and correction.
-- **Terminal** — font family and size, shell command, quake height; the
-  terminal follows the Appearance theme and applies changes without a restart.
+- **Terminal** — font family and size, shell command, quake height and SSH
+  profiles; the terminal follows the theme chosen in Panels ▸ Look and applies
+  changes without a restart.
 - **Groups** — rename, empty and inspect the nine groups.
 - **System** — the free space beside the icon (when to show it, its format, the
   warning level) and the CPU watch (on or off, the threshold and window, the

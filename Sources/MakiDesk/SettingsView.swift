@@ -1,4 +1,5 @@
 import AppKit
+import MakiShared
 import SwiftUI
 
 struct SettingsView: View {
@@ -1126,7 +1127,101 @@ struct SettingsView: View {
                 }
                 caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The terminal follows the MakiDesk theme: changing it in Panels ▸ Look updates the terminal too. The quake panel uses the same setting for its height.")
             }
+            sshProfilesSection
         }
+    }
+
+    @ViewBuilder
+    private var sshProfilesSection: some View {
+        let profiles = TerminalController.shared.settings.sshProfiles
+        SettingsSection("SSH profiles") {
+            if profiles.isEmpty {
+                Text("No profiles yet. Add one and it appears in the terminal's + menu.")
+                    .font(.caption)
+                    .foregroundStyle(theme.subtext)
+            }
+            ForEach(profiles) { profile in
+                DisclosureGroup {
+                    sshProfileFields(profile)
+                        .padding(.top, 6)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(profile.displayName.isEmpty ? "New SSH profile" : profile.displayName)
+                        Spacer()
+                        Button {
+                            TerminalController.shared.removeSSHProfile(id: profile.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Remove this profile")
+                    }
+                }
+            }
+            Button("Add SSH profile") {
+                TerminalController.shared.addSSHProfile()
+            }
+            caption("A profile becomes an `ssh` command in a new workspace: host, user, port, optional key, remote command and agent forwarding. Passwords are never stored; keys and known_hosts remain ssh's own. The command is saved with the layout, so a restored pane reconnects.")
+        }
+    }
+
+    @ViewBuilder
+    private func sshProfileFields(_ profile: TerminalSSHProfile) -> some View {
+        TextField("Name", text: sshStringBinding(profile, \.name))
+        TextField("Host", text: sshStringBinding(profile, \.host))
+        TextField("User", text: sshStringBinding(profile, \.user))
+        TextField("Port", text: Binding(
+            get: {
+                profile.port.map(String.init) ?? ""
+            },
+            set: { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                TerminalController.shared.updateSSHProfile(id: profile.id) {
+                    $0.port = trimmed.isEmpty ? nil : Int(trimmed)
+                }
+            }
+        ))
+        TextField("Identity file (optional)", text: sshOptionalBinding(profile, \.identityFile))
+        TextField("Remote command (optional)", text: sshOptionalBinding(profile, \.remoteCommand))
+        Toggle("Forward agent", isOn: Binding(
+            get: { profile.forwardAgent },
+            set: { value in
+                TerminalController.shared.updateSSHProfile(id: profile.id) {
+                    $0.forwardAgent = value
+                }
+            }
+        ))
+    }
+
+    private func sshStringBinding(_ profile: TerminalSSHProfile,
+                                  _ keyPath: WritableKeyPath<TerminalSSHProfile, String>) -> Binding<String> {
+        Binding(
+            get: {
+                TerminalController.shared.settings.sshProfiles
+                    .first(where: { $0.id == profile.id })?[keyPath: keyPath] ?? ""
+            },
+            set: { value in
+                TerminalController.shared.updateSSHProfile(id: profile.id) {
+                    $0[keyPath: keyPath] = value
+                }
+            }
+        )
+    }
+
+    private func sshOptionalBinding(_ profile: TerminalSSHProfile,
+                                    _ keyPath: WritableKeyPath<TerminalSSHProfile, String?>) -> Binding<String> {
+        Binding(
+            get: {
+                TerminalController.shared.settings.sshProfiles
+                    .first(where: { $0.id == profile.id })?[keyPath: keyPath] ?? ""
+            },
+            set: { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                TerminalController.shared.updateSSHProfile(id: profile.id) {
+                    $0[keyPath: keyPath] = trimmed.isEmpty ? nil : value
+                }
+            }
+        )
     }
 
     // MARK: - Groups

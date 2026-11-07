@@ -33,6 +33,9 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
     /// Last directory reported by the shell, keyed by pane id string. Kept
     /// beside the tree so restoring a layout can start each shell where it was.
     public var directories: [String: String]
+    /// A command that runs instead of the login shell, keyed by pane id string.
+    /// SSH sessions live here so a restore reconnects them.
+    public var commands: [String: String]
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -42,6 +45,7 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
         self.root = .pane(firstPane)
         self.focusedPane = firstPane
         self.directories = [:]
+        self.commands = [:]
     }
 
     // MARK: - Queries
@@ -65,6 +69,19 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
     public mutating func setDirectory(_ path: String, for pane: PaneID) {
         guard path.isEmpty == false else { return }
         directories[pane.description] = path
+    }
+
+    public func command(for pane: PaneID) -> String? {
+        commands[pane.description]
+    }
+
+    public mutating func setCommand(_ command: String?, for pane: PaneID) {
+        let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, trimmed.isEmpty == false else {
+            commands[pane.description] = nil
+            return
+        }
+        commands[pane.description] = trimmed
     }
 
     public func node(at path: [Int]) -> SplitNode? {
@@ -106,6 +123,7 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
             focusedPane = paneIDs.first ?? PaneID()
         }
         directories[pane.description] = nil
+        commands[pane.description] = nil
         return true
     }
 

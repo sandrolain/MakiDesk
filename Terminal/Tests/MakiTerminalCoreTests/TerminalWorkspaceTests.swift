@@ -133,11 +133,26 @@ final class TerminalWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.directory(for: pane), "/tmp")
     }
 
+    func testACommandFollowsThePaneAndItsRemoval() throws {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        let pane = workspace.focusedPane
+        workspace.setCommand("ssh deploy@example.com", for: pane)
+        XCTAssertEqual(workspace.command(for: pane), "ssh deploy@example.com")
+
+        let other = try XCTUnwrap(workspace.split(pane, orientation: .stacked))
+        workspace.setCommand("   ", for: other)
+        XCTAssertNil(workspace.command(for: other))
+
+        _ = workspace.remove(pane)
+        XCTAssertNil(workspace.command(for: pane))
+    }
+
     func testTheLayoutRoundTripsThroughJSON() throws {
         var workspace = TerminalWorkspace(title: "Workspace 1")
         let first = workspace.focusedPane
         let second = try XCTUnwrap(workspace.split(first, orientation: .sideBySide))
         workspace.setDirectory("/Users/example", for: second)
+        workspace.setCommand("ssh deploy@example.com", for: second)
         workspace.title = "Project"
 
         let data = try JSONEncoder().encode(workspace)

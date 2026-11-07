@@ -312,8 +312,11 @@ looks for `dist/MakiDeskTerminal.app`, because it has no app bundle to nest into
 
 Inside the helper, a workspace is one sidebar row and one binary split tree of
 terminal panes; surfaces are reused across rebuilds, so switching workspaces
-never restarts a shell. Workspace titles, split ratios, the selection and each
-pane's last directory are written to `Terminal/workspaces.json`, atomically and
+never restarts a shell. A pane may carry a command instead of the login shell:
+an SSH profile in `settings.json` becomes one, the sidebar's `+` menu starts a
+workspace with it, and the layout remembers it. Workspace titles, split ratios,
+the selection, each pane's last directory and its command are written to
+`Terminal/workspaces.json`, atomically and
 with the usual quarantine/version rules; scrollback is not persisted. Closing the
 last pane of the last workspace starts a fresh shell instead of leaving an empty
 window. The helper's surface callbacks forward title, cwd and close events to the

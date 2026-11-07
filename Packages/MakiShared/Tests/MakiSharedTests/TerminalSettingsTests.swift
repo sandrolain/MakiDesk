@@ -75,4 +75,44 @@ final class TerminalSettingsTests: XCTestCase {
         let store = TerminalThemeStore(fileURL: directory.appendingPathComponent("theme.json"))
         XCTAssertEqual(store.load(), .fallback)
     }
+
+    func testAnSSHProfileBecomesACommandLine() {
+        let profile = TerminalSSHProfile(name: "Build", host: "example.com",
+                                         user: "deploy", port: 2222,
+                                         identityFile: "/Users/me/.ssh/id_ed25519",
+                                         remoteCommand: "cd /srv && ./run", forwardAgent: true)
+        XCTAssertEqual(profile.commandLine(),
+                       "ssh -p 2222 -i /Users/me/.ssh/id_ed25519 -A deploy@example.com 'cd /srv && ./run'")
+    }
+
+    func testAnSSHProfileWithoutAUserOrExtrasIsShort() {
+        let profile = TerminalSSHProfile(host: "example.com")
+        XCTAssertEqual(profile.commandLine(), "ssh example.com")
+    }
+
+    func testAnInvalidSSHProfileHasNoCommand() {
+        XCTAssertNil(TerminalSSHProfile(host: "   ").commandLine())
+        XCTAssertFalse(TerminalSSHProfile(host: "").isValid)
+        XCTAssertFalse(TerminalSSHProfile(host: "example.com", port: 0).isValid)
+    }
+
+    func testAProfileWithSpacesIsQuoted() {
+        let profile = TerminalSSHProfile(host: "example.com",
+                                         identityFile: "/Users/me/My Keys/id")
+        XCTAssertEqual(profile.commandLine(), "ssh -i '/Users/me/My Keys/id' example.com")
+    }
+
+    func testProfilesSurviveTheSettingsFile() {
+        let store = TerminalSettingsStore(fileURL: directory.appendingPathComponent("settings.json"))
+        let profile = TerminalSSHProfile(name: "  Build  ", host: " example.com ",
+                                         user: "deploy", port: 2222)
+        var settings = TerminalSettingsDocument.defaults
+        settings.sshProfiles = [profile]
+        XCTAssertTrue(store.save(settings))
+        let loaded = store.load()
+        XCTAssertEqual(loaded.sshProfiles.count, 1)
+        XCTAssertEqual(loaded.sshProfiles.first?.name, "Build")
+        XCTAssertEqual(loaded.sshProfiles.first?.host, "example.com")
+        XCTAssertEqual(loaded.sshProfiles.first?.port, 2222)
+    }
 }

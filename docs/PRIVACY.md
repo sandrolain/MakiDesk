@@ -119,7 +119,7 @@ All paths are under your user account:
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, last directory per pane | Until you delete it; a factory reset does not remove it |
-| Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, shell command, quake height) and `theme.json` (colours) | Until you delete them |
+| Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
@@ -143,8 +143,11 @@ old hidden-buttons preference is read once, migrated there and then removed.
 
 The terminal is a separate helper app (`com.makidesk.app.terminal`). Its shell
 output, scrollback, selection and environment stay **in the helper's memory**;
-none of it is written to disk or to a log. The layout file holds only workspace
-titles, the split tree, the selection and each pane's last directory.
+none of it is written to disk or to a log. The layout file holds workspace
+titles, the split tree, the selection and each pane's last directory; an SSH
+pane also saves the command that started it, which includes its host, user and
+key path. Passwords are never stored: `ssh` handles them, and keys and
+`known_hosts` remain in `~/.ssh`.
 
 While the helper runs it listens on
 `~/Library/Application Support/MakiDesk/Terminal/terminal.sock` (`0600` in a

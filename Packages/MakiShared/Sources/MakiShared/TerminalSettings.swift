@@ -1,5 +1,112 @@
 import Foundation
 
+/// One saved SSH target. The helper only turns it into an `ssh` command line:
+/// keys, `known_hosts` and prompts remain `ssh`'s own.
+public struct TerminalSSHProfile: Codable, Equatable, Sendable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var host: String
+    public var user: String
+    public var port: Int?
+    public var identityFile: String?
+    /// Passed to `ssh` as the remote command, not interpreted locally.
+    public var remoteCommand: String?
+    public var forwardAgent: Bool
+
+    public init(id: UUID = UUID(),
+                name: String = "",
+                host: String = "",
+                user: String = "",
+                port: Int? = nil,
+                identityFile: String? = nil,
+                remoteCommand: String? = nil,
+                forwardAgent: Bool = false) {
+        self.id = id
+        self.name = name
+        self.host = host
+        self.user = user
+        self.port = port
+        self.identityFile = identityFile
+        self.remoteCommand = remoteCommand
+        self.forwardAgent = forwardAgent
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        host = try container.decodeIfPresent(String.self, forKey: .host) ?? ""
+        user = try container.decodeIfPresent(String.self, forKey: .user) ?? ""
+        port = try container.decodeIfPresent(Int.self, forKey: .port)
+        identityFile = try container.decodeIfPresent(String.self, forKey: .identityFile)
+        remoteCommand = try container.decodeIfPresent(String.self, forKey: .remoteCommand)
+        forwardAgent = try container.decodeIfPresent(Bool.self, forKey: .forwardAgent) ?? false
+    }
+
+    public var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty == false { return trimmed }
+        return host
+    }
+
+    public var isValid: Bool {
+        host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            && (port == nil || (1...65535).contains(port ?? 0))
+    }
+
+    /// A shell-safe command line for Ghostty's `command`. Nil when there is no
+    /// host. Values are single-quoted only when they need it.
+    public func commandLine() -> String? {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedHost.isEmpty == false else { return nil }
+        var parts = ["ssh"]
+        if let port, (1...65535).contains(port) {
+            parts += ["-p", "\(port)"]
+        }
+        if let identity = identityFile?.trimmingCharacters(in: .whitespacesAndNewlines),
+           identity.isEmpty == false {
+            parts += ["-i", Self.quoted(identity)]
+        }
+        if forwardAgent { parts.append("-A") }
+        let trimmedUser = user.trimmingCharacters(in: .whitespacesAndNewlines)
+        let target = trimmedUser.isEmpty ? trimmedHost : "\(trimmedUser)@\(trimmedHost)"
+        parts.append(Self.quoted(target))
+        if let remote = remoteCommand?.trimmingCharacters(in: .whitespacesAndNewlines),
+           remote.isEmpty == false {
+            parts.append(Self.quoted(remote))
+        }
+        return parts.joined(separator: " ")
+    }
+
+    public func normalized() -> TerminalSSHProfile {
+        var copy = self
+        copy.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.host = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.user = user.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.identityFile = Self.cleaned(identityFile)
+        copy.remoteCommand = Self.cleaned(remoteCommand)
+        if let port, (1...65535).contains(port) == false {
+            copy.port = nil
+        }
+        return copy
+    }
+
+    /// Minimal shell quoting: a target like `user@host` stays readable, while
+    /// a path with spaces or a remote command with `&&` is protected.
+    static func quoted(_ value: String) -> String {
+        let safe = CharacterSet(charactersIn:
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%_-./:~")
+        if value.unicodeScalars.allSatisfy({ safe.contains($0) }) { return value }
+        return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func cleaned(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 /// The terminal helper's preferences, written by MakiDesk and read by the
 /// helper at launch and after a change. Plain value types: the file is the
 /// contract, not the UI.
@@ -15,17 +122,21 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
     public var shell: String?
     /// Share of the visible frame used by the quake panel, 0.3…0.6.
     public var quakeHeightFraction: Double
+    /// Saved SSH targets offered in the helper's sidebar.
+    public var sshProfiles: [TerminalSSHProfile]
 
     public init(version: Int = TerminalSettingsDocument.currentVersion,
                 fontFamily: String? = nil,
                 fontSize: Double = 13,
                 shell: String? = nil,
-                quakeHeightFraction: Double = 0.45) {
+                quakeHeightFraction: Double = 0.45,
+                sshProfiles: [TerminalSSHProfile] = []) {
         self.version = version
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.shell = shell
         self.quakeHeightFraction = quakeHeightFraction
+        self.sshProfiles = sshProfiles
     }
 
     public static var defaults: TerminalSettingsDocument { .init() }
@@ -39,6 +150,8 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         shell = try container.decodeIfPresent(String.self, forKey: .shell)
         quakeHeightFraction = try container.decodeIfPresent(Double.self,
                                                            forKey: .quakeHeightFraction) ?? 0.45
+        sshProfiles = try container.decodeIfPresent([TerminalSSHProfile].self,
+                                                    forKey: .sshProfiles) ?? []
     }
 
     /// A hand-edited file cannot put the font at 2 pt or the quake over the
@@ -50,6 +163,7 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         copy.quakeHeightFraction = min(max(quakeHeightFraction, 0.3), 0.6)
         copy.fontFamily = Self.cleaned(fontFamily)
         copy.shell = Self.cleaned(shell)
+        copy.sshProfiles = sshProfiles.map { $0.normalized() }
         return copy
     }
 

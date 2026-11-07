@@ -353,6 +353,23 @@ final class TerminalController {
         settingsNotifyTimer = timer
     }
 
+    func addSSHProfile() {
+        updateSettings { $0.sshProfiles.append(TerminalSSHProfile(name: "New SSH")) }
+    }
+
+    func removeSSHProfile(id: UUID) {
+        updateSettings { $0.sshProfiles.removeAll { $0.id == id } }
+    }
+
+    func updateSSHProfile(id: UUID, _ change: (inout TerminalSSHProfile) -> Void) {
+        updateSettings { document in
+            guard let index = document.sshProfiles.firstIndex(where: { $0.id == id }) else {
+                return
+            }
+            change(&document.sshProfiles[index])
+        }
+    }
+
     /// Regenerates the theme document from the palette in force.
     func syncTheme() {
         let document = TerminalThemeDocument(palette: WorkspaceStore.shared.theme)

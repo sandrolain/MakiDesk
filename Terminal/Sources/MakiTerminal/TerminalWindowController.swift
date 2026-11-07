@@ -168,11 +168,11 @@ final class TerminalWindowController: NSWindowController,
         bar.edgeInsets = NSEdgeInsets(top: 3, left: 8, bottom: 3, right: 8)
 
         let add = NSButton(image: NSImage(systemSymbolName: "plus",
-                                          accessibilityDescription: "New workspace")!,
-                           target: self, action: #selector(newWorkspaceAction(_:)))
+                                          accessibilityDescription: "New workspace or SSH session")!,
+                           target: self, action: #selector(newWorkspaceMenuAction(_:)))
         add.isBordered = false
         add.bezelStyle = .inline
-        add.toolTip = "New workspace"
+        add.toolTip = "New workspace or SSH session"
 
         closeButton.image = NSImage(systemSymbolName: "minus",
                                     accessibilityDescription: "Close workspace")
@@ -260,6 +260,47 @@ final class TerminalWindowController: NSWindowController,
         disposeWorkspace(at: selected)
         workspaces.remove(at: selected)
         selected = min(selected, workspaces.count - 1)
+        reloadSidebar()
+        rebuildContent()
+        scheduleSave()
+    }
+
+    @objc func newWorkspaceMenuAction(_ sender: NSButton) {
+        let menu = NSMenu()
+        let workspaceItem = NSMenuItem(title: "New Workspace",
+                                       action: #selector(newWorkspaceAction(_:)),
+                                       keyEquivalent: "")
+        workspaceItem.target = self
+        menu.addItem(workspaceItem)
+
+        let profiles = terminalSettings.sshProfiles.filter(\.isValid)
+        if profiles.isEmpty == false {
+            menu.addItem(.separator())
+            for profile in profiles {
+                let item = NSMenuItem(title: "New SSH: \(profile.displayName)",
+                                      action: #selector(newSSHSessionAction(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = profile.id.uuidString
+                menu.addItem(item)
+            }
+        }
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: sender.bounds.height + 4),
+                   in: sender)
+    }
+
+    @objc func newSSHSessionAction(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let profile = terminalSettings.sshProfiles.first(where: { $0.id.uuidString == raw }),
+              let command = profile.commandLine() else {
+            NSSound.beep()
+            return
+        }
+        var workspace = TerminalWorkspace(title: profile.displayName)
+        workspace.setCommand(command, for: workspace.focusedPane)
+        workspaces.append(workspace)
+        selected = workspaces.count - 1
         reloadSidebar()
         rebuildContent()
         scheduleSave()
@@ -498,11 +539,13 @@ final class TerminalWindowController: NSWindowController,
 
         let surface = TerminalSurfaceView(frame: .zero)
         surface.paneID = pane
-        surface.shellCommand = terminalSettings.shell
-        surface.onFocus = { [weak self] in self?.focusPane(pane) }
         if selected < workspaces.count {
             surface.workingDirectory = workspaces[selected].directory(for: pane)
         }
+        surface.shellCommand = selected < workspaces.count
+            ? (workspaces[selected].command(for: pane) ?? terminalSettings.shell)
+            : terminalSettings.shell
+        surface.onFocus = { [weak self] in self?.focusPane(pane) }
 
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         paneViews[pane] = host
