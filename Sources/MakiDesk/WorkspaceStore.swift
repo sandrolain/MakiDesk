@@ -579,6 +579,14 @@ final class WorkspaceStore {
         WindowOutlineController.shared.applySettings()
     }
 
+    /// The helper is frontmost: keep only its own two keys alive so the shell
+    /// can receive everything else. Called by `TerminalController`'s workspace
+    /// observer.
+    func setTerminalFrontmost(_ frontmost: Bool) {
+        shortcutManager?.setSuspended(frontmost,
+                                      keeping: ["app.terminal", "app.terminalQuake"])
+    }
+
     func openAccessibilitySettings() { WindowController.openAccessibilitySettings() }
     func openScreenRecordingSettings() { WindowController.openScreenRecordingSettings() }
 
@@ -1679,6 +1687,9 @@ final class WorkspaceStore {
             return
         case .openTerminal:
             TerminalController.shared.open()
+            return
+        case .toggleTerminalQuake:
+            TerminalController.shared.toggleQuake()
             return
         case .newTimer:
             TimerInputController.shared.show()

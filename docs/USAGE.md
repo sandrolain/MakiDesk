@@ -623,11 +623,17 @@ it running, so its shells keep working.
   last directory are saved in
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
   on the next launch. Scrollback is not saved.
+- **Quake.** `` ⌃⌥` `` drops a scratch terminal from the top of the screen; the
+  same key hides it. It is a separate session, not part of the saved workspace
+  layout, and it stays alive while hidden.
+- **While the terminal is in front.** MakiDesk suspends its other global
+  shortcuts, so the shell receives them. `⌃⌥O` and `` ⌃⌥` `` stay active, so you
+  can always come back or hide the quake. The helper appears in the Dock and in
+  ⌘Tab while its window is open.
 - **Theme.** The helper currently uses the Mocha colours in a generated Ghostty
   configuration; choosing another theme is part of the remaining work.
-- **Not there yet.** The quake panel, SSH profiles, tmux presets, agent badges,
-  a terminal settings page, tabs inside a pane, and a verified IME. The helper
-  appears in the Dock and in ⌘Tab while its window is open.
+- **Not there yet.** SSH profiles, tmux presets, agent badges, a terminal
+  settings page, tabs inside a pane, and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut
@@ -1264,6 +1270,7 @@ The table below is generated from the app's own table, with
 | Apply the suggested layout | `⌃⌥⌘↩` | Desktop |
 | Utility bar | `⌃⌥B` | Window |
 | Terminal | `⌃⌥O` | Window |
+| Terminal quake | `` ⌃⌥` `` | Window |
 
 <!-- shortcuts:end -->
 

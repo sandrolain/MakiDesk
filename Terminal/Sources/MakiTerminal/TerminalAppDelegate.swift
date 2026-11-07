@@ -59,9 +59,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         let server = TerminalIPCServer()
         server.onShowMain = { [weak self] in self?.showMain() }
         server.onHideMain = { [weak self] in self?.hideMain() }
-        // The quake panel is F1b; until it exists, the command brings the main
-        // window forward instead of silently doing nothing.
-        server.onToggleQuake = { [weak self] in self?.showMain() }
+        server.onToggleQuake = { [weak self] in self?.terminal?.toggleQuake() }
         server.onQuit = { NSApp.terminate(nil) }
         server.start { started in
             guard started == false else { return }
@@ -73,6 +71,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
 
     func showMain() {
         guard let window = terminal?.window else { return }
+        terminal?.hideQuakeIfVisible()
         NSApp.activate(ignoringOtherApps: true)
         terminal?.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -133,6 +132,13 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
                          action: #selector(TerminalSurfaceView.selectAll(_:)),
                          keyEquivalent: "a")
         editItem.submenu = editMenu
+
+        let viewItem = NSMenuItem()
+        mainMenu.addItem(viewItem)
+        let viewMenu = NSMenu(title: "View")
+        menu(viewMenu, "Show Quake", #selector(TerminalWindowController.toggleQuake),
+             "", [], target)
+        viewItem.submenu = viewMenu
 
         NSApp.mainMenu = mainMenu
     }

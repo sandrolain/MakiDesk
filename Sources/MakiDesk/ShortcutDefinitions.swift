@@ -347,5 +347,8 @@ enum ShortcutDefinitions {
         def("app.terminal", "Terminal", section: "App", key: kVK_ANSI_O,
             action: .openTerminal,
             note: "Opens the terminal window; the helper keeps its sessions when MakiDesk quits."),
+        def("app.terminalQuake", "Terminal quake", section: "App", key: kVK_ANSI_Grave,
+            action: .toggleTerminalQuake,
+            note: "Drops a scratch terminal from the top of the screen; the same key hides it."),
     ]
 }

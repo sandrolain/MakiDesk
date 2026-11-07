@@ -19,7 +19,7 @@ enum ShortcutTableDocument {
             lines.append("| Command | Keys | Where |")
             lines.append("|---|---|---|")
             for row in section.definitions {
-                let keys = row.isGlobal ? "`\(row.display)`" : row.display
+                let keys = row.isGlobal ? codeSpan(row.display) : row.display
                 let place = row.family?.name ?? "Gesture"
                 lines.append("| \(escape(row.title)) | \(keys) | \(place) |")
             }
@@ -60,5 +60,24 @@ enum ShortcutTableDocument {
     /// A title's own pipes would end the cell early.
     private static func escape(_ title: String) -> String {
         title.replacingOccurrences(of: "|", with: "\\|")
+    }
+
+    /// A backtick in the keys (the quake's `⌃⌥\``) would end a one-backtick
+    /// code span early. Use a fence longer than the longest run inside, and
+    /// pad when the content itself starts or ends with a backtick.
+    private static func codeSpan(_ text: String) -> String {
+        var longest = 0
+        var current = 0
+        for character in text {
+            if character == "`" {
+                current += 1
+                longest = max(longest, current)
+            } else {
+                current = 0
+            }
+        }
+        let fence = String(repeating: "`", count: longest + 1)
+        let needsPadding = text.hasPrefix("`") || text.hasSuffix("`")
+        return fence + (needsPadding ? " \(text) " : text) + fence
     }
 }

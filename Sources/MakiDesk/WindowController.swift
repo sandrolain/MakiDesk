@@ -67,6 +67,8 @@ enum WindowController {
         case toggleUtilityBar
         /// Open the terminal window, launching the helper if needed (F1).
         case openTerminal
+        /// Show or hide the terminal helper's quake panel (F1).
+        case toggleTerminalQuake
         /// Open the field that starts a timer (T61).
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).

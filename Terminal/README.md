@@ -48,14 +48,15 @@ identity before the outer app.
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.
 - **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
-  Close Pane `⌘W`, Close Workspace `⇧⌘W`.
+  Close Pane `⌘W`, Close Workspace `⇧⌘W`, Show Quake in View.
+- **Quake:** a borderless floating panel with its own scratch shell, toggled by
+  IPC; it stays alive while hidden and is not part of the saved layout.
+- **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
+  other global rows (and the peek hold key) and keeps only `⌃⌥O` and `` ⌃⌥` ``.
 
 ## What is not there yet
 
-- The **quake panel**, SSH profiles, tmux presets, agent badges and the terminal
-  settings page.
-- **Suspending MakiDesk's `⌃⌥` shortcuts while the helper is frontmost.** The
-  helper receives its keys, but MakiDesk's global family still fires.
+- SSH profiles, tmux presets, agent badges and the terminal settings page.
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling, search and links are the same
   kind of not-yet-verified surface.

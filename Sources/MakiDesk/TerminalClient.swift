@@ -18,28 +18,29 @@ final class TerminalClient {
     private var retryWorkItem: DispatchWorkItem?
     private var retriesLeft = 0
     private var isLaunching = false
+    /// Commands issued before the helper answered. They are sent after
+    /// `welcome`, never dropped because the launch was slow.
+    private var pending: [TerminalMessage.Kind] = []
 
     // MARK: - Commands
 
     func open() {
-        queue.async { [weak self] in
-            guard let self else { return }
-            if self.fd >= 0 {
-                self.sendLocked(TerminalMessage(kind: .showMain))
-                return
-            }
-            self.startLocked()
-        }
+        enqueue(.showMain)
     }
 
     func send(_ kind: TerminalMessage.Kind) {
+        enqueue(kind)
+    }
+
+    private func enqueue(_ kind: TerminalMessage.Kind) {
         queue.async { [weak self] in
             guard let self else { return }
             if self.fd >= 0 {
                 self.sendLocked(TerminalMessage(kind: kind))
-            } else {
-                self.startLocked()
+                return
             }
+            self.pending.append(kind)
+            self.startLocked()
         }
     }
 
@@ -52,6 +53,7 @@ final class TerminalClient {
             return
         }
         guard let helper = helperURL() else {
+            pending.removeAll()
             report(.terminalNotInstalled())
             return
         }
@@ -61,6 +63,7 @@ final class TerminalClient {
             self.queue.async {
                 self.isLaunching = false
                 guard launched else {
+                    self.pending.removeAll()
                     self.report(.terminalNotInstalled())
                     return
                 }
@@ -76,6 +79,7 @@ final class TerminalClient {
             return
         }
         guard retriesLeft > 0 else {
+            pending.removeAll()
             report(.terminalDidNotAnswer())
             return
         }
@@ -142,6 +146,7 @@ final class TerminalClient {
         timer.setEventHandler { [weak self] in
             guard let self, self.fd >= 0 else { return }
             self.disconnectLocked()
+            self.pending.removeAll()
             self.report(.terminalDidNotAnswer())
         }
         timer.resume()
@@ -174,10 +179,17 @@ final class TerminalClient {
             if let version = message.body?.protocolVersion,
                version != TerminalMessage.wireVersion {
                 disconnectLocked()
+                pending.removeAll()
                 report(.terminalVersionMismatch())
                 return
             }
-            sendLocked(TerminalMessage(kind: .showMain))
+            let queued = pending
+            pending.removeAll()
+            if queued.isEmpty {
+                sendLocked(TerminalMessage(kind: .showMain))
+            } else {
+                for kind in queued { sendLocked(TerminalMessage(kind: kind)) }
+            }
         case .ping, .pong, .state, .attention, .settingsRequested, .willTerminate:
             break
         case .hello, .showMain, .hideMain, .toggleQuake, .quit:
@@ -249,13 +261,33 @@ final class TerminalClient {
     }
 }
 
-/// The small entry point the shortcut, menu and command box call.
+/// The small entry point the shortcut, menu and command box call, plus the
+/// frontmost observer that suspends MakiDesk's global keys while the helper has
+/// the keyboard (F1).
 @MainActor
 final class TerminalController {
     static let shared = TerminalController()
     private let client = TerminalClient()
+    private var activationObserver: NSObjectProtocol?
+    private var lastFrontmost = false
 
     private init() {}
+
+    func start() {
+        guard activationObserver == nil else { return }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            MainActor.assumeIsolated {
+                self?.updateFrontmost(app)
+            }
+        }
+        updateFrontmost(NSWorkspace.shared.frontmostApplication)
+    }
 
     func open() {
         client.open()
@@ -263,5 +295,24 @@ final class TerminalController {
 
     func toggleQuake() {
         client.send(.toggleQuake)
+    }
+
+    private func updateFrontmost(_ app: NSRunningApplication?) {
+        let terminal = isTerminalHelper(app)
+        guard terminal != lastFrontmost else { return }
+        lastFrontmost = terminal
+        WorkspaceStore.shared.setTerminalFrontmost(terminal)
+    }
+
+    private func isTerminalHelper(_ app: NSRunningApplication?) -> Bool {
+        guard let app else { return false }
+        if app.bundleIdentifier == "com.makidesk.app.terminal" { return true }
+        return app.executableURL?.lastPathComponent == "MakiTerminal"
+    }
+
+    deinit {
+        if let activationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
+        }
     }
 }

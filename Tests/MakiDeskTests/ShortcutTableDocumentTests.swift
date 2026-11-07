@@ -32,6 +32,13 @@ final class ShortcutTableDocumentTests: XCTestCase {
         XCTAssertTrue(markdown.contains(ShortcutTableDocument.endMarker))
     }
 
+    func testABacktickKeyDoesNotBreakItsCodeSpan() {
+        let markdown = ShortcutTableDocument.markdown()
+        // The quake's key ends with a backtick; a single-backtick span would
+        // close early, so the table uses a longer fence and padding.
+        XCTAssertTrue(markdown.contains("`` ⌃⌥` ``"), markdown)
+    }
+
     func testTheBlockIsFoundBetweenItsMarkers() {
         let text = """
         Some prose.

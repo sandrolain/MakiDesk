@@ -16,6 +16,13 @@ final class ShortcutManager {
     fileprivate var releaseHandlers: [UInt32: () -> Void] = [:]
     private var dynamicKeys: [UInt32: EventHotKeyRef] = [:]
     private var nextDynamicID: UInt32 = 1000
+    /// While the terminal helper is frontmost the table is suspended except
+    /// for the rows that must stay reachable from inside it.
+    private var isSuspended = false
+    private var keptIDs: Set<String> = []
+    /// The peek's hold key is dynamic, so suspension has to take it away and
+    /// put it back separately from the table.
+    private var peekHoldRegistration: (id: UInt32, press: () -> Void, release: () -> Void)?
     private var handlerRef: EventHandlerRef?
     fileprivate let handler: (WindowController.ShortcutAction) -> Void
 
@@ -80,6 +87,7 @@ final class ShortcutManager {
                 disabledShortcutIDs.insert(definition.id)
                 continue
             }
+            if isSuspended, keptIDs.contains(definition.id) == false { continue }
             guard let binding = bindings.binding(for: definition.id),
                   let action = definition.action else { continue }
             var ref: EventHotKeyRef?
@@ -96,6 +104,29 @@ final class ShortcutManager {
             }
         }
         MakiLog.shortcuts.notice("hotkeys registered=\(self.registeredCount, privacy: .public) blocked=\(self.failedCount, privacy: .public) off=\(self.disabledShortcutIDs.count, privacy: .public)")
+    }
+
+    /// Leaves only `kept` registered while `suspended` is true. The terminal
+    /// helper is a real app with the keyboard: its own two keys must still
+    /// work, everything else belongs to the shell.
+    func setSuspended(_ suspended: Bool, keeping kept: Set<String>) {
+        guard suspended != isSuspended || kept != keptIDs else { return }
+        isSuspended = suspended
+        keptIDs = kept
+        if suspended {
+            if let registration = peekHoldRegistration {
+                unregister(registration.id)
+            }
+        }
+        reload(currentBindings)
+        if suspended == false, let registration = peekHoldRegistration {
+            let id = register(key: kVK_ANSI_H, modifiers: Self.ctrlOpt,
+                              onPress: registration.press,
+                              onRelease: registration.release)
+            peekHoldRegistration = id.map {
+                (id: $0, press: registration.press, release: registration.release)
+            }
+        }
     }
 
     /// Whether the system will let us own this combination right now. It
@@ -195,7 +226,17 @@ final class ShortcutManager {
     /// away, so it is the one binding that needs both halves of the press.
     func registerPeekHold(onPress: @escaping () -> Void,
                           onRelease: @escaping () -> Void) -> UInt32? {
-        register(key: kVK_ANSI_H, modifiers: Self.ctrlOpt, onPress: onPress, onRelease: onRelease)
+        peekHoldRegistration = nil
+        guard isSuspended == false else {
+            peekHoldRegistration = (id: 0, press: onPress, release: onRelease)
+            return nil
+        }
+        let id = register(key: kVK_ANSI_H, modifiers: Self.ctrlOpt,
+                          onPress: onPress, onRelease: onRelease)
+        if let id {
+            peekHoldRegistration = (id: id, press: onPress, release: onRelease)
+        }
+        return id
     }
 
     deinit {

@@ -55,6 +55,12 @@ final class WorkspaceSplitView: NSSplitView {
     }
 }
 
+/// A scratch terminal that drops from the top of the screen.
+final class TerminalQuakePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 /// The helper's main window (F1): a sidebar of workspaces on the left, the
 /// selected workspace's split tree on the right. Surfaces are reused across
 /// rebuilds, so switching tabs never restarts a shell.
@@ -71,6 +77,11 @@ final class TerminalWindowController: NSWindowController,
     private var paneViews: [PaneID: TerminalPaneHostView] = [:]
     private var isBuilding = false
     private var currentRootView: NSView?
+
+    private var quakePanel: TerminalQuakePanel?
+    private var quakeWorkspace: TerminalWorkspace?
+    private var quakeHost: TerminalPaneHostView?
+    private var quakeVisible = false
 
     private let splitView = NSSplitView()
     private let sidebar = NSView()
@@ -291,6 +302,10 @@ final class TerminalWindowController: NSWindowController,
 
     /// Called when the shell exits or Ghostty asks to close a surface.
     func paneDidExit(_ view: TerminalSurfaceView) {
+        if view === quakeHost?.surfaceView {
+            closeQuake()
+            return
+        }
         guard let pane = view.paneID,
               let index = workspaces.firstIndex(where: { $0.contains(pane) }) else { return }
 
@@ -338,6 +353,82 @@ final class TerminalWindowController: NSWindowController,
               let index = workspaces.firstIndex(where: { $0.contains(pane) }) else { return }
         workspaces[index].setDirectory(path, for: pane)
         scheduleSave()
+    }
+
+    // MARK: - Quake
+
+    @objc func toggleQuake() {
+        quakeVisible ? hideQuake() : showQuake()
+    }
+
+    func showQuake() {
+        guard let host = quakeHost ?? makeQuakeHost() else { return }
+        let panel = quakePanel ?? makeQuakePanel(host: host)
+        panel.setFrame(quakeFrame(), display: true)
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeFirstResponder(host.surfaceView)
+        host.isFocused = true
+        quakeVisible = true
+    }
+
+    func hideQuake() {
+        guard quakeVisible else { return }
+        quakeVisible = false
+        quakeHost?.isFocused = false
+        quakePanel?.orderOut(nil)
+    }
+
+    func hideQuakeIfVisible() {
+        hideQuake()
+    }
+
+    private func closeQuake() {
+        quakeVisible = false
+        quakePanel?.orderOut(nil)
+        quakePanel = nil
+        quakeHost?.surfaceView.detach()
+        quakeHost?.removeFromSuperview()
+        quakeHost = nil
+        quakeWorkspace = nil
+    }
+
+    private func makeQuakeHost() -> TerminalPaneHostView? {
+        let workspace = quakeWorkspace ?? TerminalWorkspace(title: "Quake")
+        let pane = workspace.focusedPane
+        let surface = TerminalSurfaceView(frame: .zero)
+        surface.paneID = pane
+        let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
+        quakeWorkspace = workspace
+        quakeHost = host
+        surface.attach(runtime: runtime)
+        return host
+    }
+
+    private func makeQuakePanel(host: TerminalPaneHostView) -> TerminalQuakePanel {
+        let panel = TerminalQuakePanel(contentRect: quakeFrame(),
+                                       styleMask: [.borderless],
+                                       backing: .buffered,
+                                       defer: false)
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.hidesOnDeactivate = false
+        panel.isOpaque = true
+        panel.backgroundColor = .black
+        panel.hasShadow = true
+        panel.contentView = host
+        quakePanel = panel
+        return panel
+    }
+
+    private func quakeFrame() -> NSRect {
+        guard let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else {
+            return NSRect(x: 0, y: 0, width: 1000, height: 420)
+        }
+        let height = max(240, visible.height * 0.45)
+        return NSRect(x: visible.minX, y: visible.maxY - height,
+                      width: visible.width, height: height)
     }
 
     // MARK: - Content
@@ -406,6 +497,7 @@ final class TerminalWindowController: NSWindowController,
     }
 
     func detachAllPanes() {
+        closeQuake()
         for pane in Array(paneViews.keys) { disposePane(pane) }
         paneViews.removeAll()
         runtime.onSurfaceClosed = nil

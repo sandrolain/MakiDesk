@@ -118,6 +118,7 @@ enum CommandRouter {
         case .toggleChecklist: return "checklist"
         case .toggleUtilityBar: return "utility bar"
         case .openTerminal: return "terminal"
+        case .toggleTerminalQuake: return "terminal quake"
         case .newTimer: return "timer"
         case .captureScreenshot: return "screenshot"
         case .captureWindow: return "window"

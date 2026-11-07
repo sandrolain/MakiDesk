@@ -319,10 +319,16 @@ window. The helper's surface callbacks forward title, cwd and close events to th
 window controller; the focused surface answers clipboard requests.
 
 `⌃⌥O` and the menu bar item call `TerminalController`, which sends `showMain` or
-launches the helper. **Suspending MakiDesk's other global shortcuts while the
-helper is frontmost is not implemented yet**: the helper receives all keys, but
-the `⌃⌥` family still fires globally. That, the quake panel and the terminal
-settings page are the remaining F1 work.
+launches the helper; `` ⌃⌥` `` sends `toggleQuake`. The quake is a borderless
+`NSPanel` at the floating level with its own scratch workspace, kept alive while
+hidden and deliberately outside the saved layout.
+
+`TerminalController` watches `NSWorkspace.didActivateApplicationNotification`.
+While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`
+with the two terminal rows, so every other table row and the peek's hold key are
+unregistered and the shell receives those combinations. Losing focus puts them
+back; the two exceptions stay global so the terminal can always be left. The
+terminal settings page is the remaining F1 work.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and
