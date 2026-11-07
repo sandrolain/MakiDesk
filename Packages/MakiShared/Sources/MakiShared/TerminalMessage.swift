@@ -1,5 +1,12 @@
 import Foundation
 
+/// The agent lifecycle shown as a dot in the workspace sidebar (F3 L2).
+public enum AgentState: String, Codable, Sendable, CaseIterable {
+    case working
+    case waiting
+    case done
+}
+
 /// One message on the MakiDesk ↔ Terminal socket (F1).
 ///
 /// A closed kind and a small optional body: the helper executes only message
@@ -26,6 +33,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         case settingsRequested
         case settingsChanged
         case themeChanged
+        case agentStatus
         case willTerminate
     }
 
@@ -40,6 +48,8 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         public var workspaceCount: Int?
         public var quakeVisible: Bool?
         public var page: String?
+        public var workspaceID: String?
+        public var agentState: AgentState?
 
         public init(protocolVersion: Int? = nil,
                     appVersion: String? = nil,
@@ -50,7 +60,9 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
                     detail: String? = nil,
                     workspaceCount: Int? = nil,
                     quakeVisible: Bool? = nil,
-                    page: String? = nil) {
+                    page: String? = nil,
+                    workspaceID: String? = nil,
+                    agentState: AgentState? = nil) {
             self.protocolVersion = protocolVersion
             self.appVersion = appVersion
             self.build = build
@@ -61,6 +73,8 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
             self.workspaceCount = workspaceCount
             self.quakeVisible = quakeVisible
             self.page = page
+            self.workspaceID = workspaceID
+            self.agentState = agentState
         }
     }
 

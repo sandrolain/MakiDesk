@@ -52,9 +52,9 @@ identity before the outer app.
   not installed (common paths are checked before PATH). Panes also get
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
 - **Settings and theme:** `Terminal/settings.json` (font, shell command, quake
-  height) and `Terminal/theme.json` (MakiDesk palette plus sixteen ANSI colours)
-  are written by MakiDesk; the helper reloads them on `settingsChanged` and
-  `themeChanged`.
+  height) and `Terminal/theme.json` (MakiDesk palette plus the theme's sixteen
+  ANSI colours) are written by MakiDesk; the helper reloads them on
+  `settingsChanged` and `themeChanged`.
 - **Agent status CLI:** `Contents/Resources/bin/makidesk status working`,
   `waiting` or `done` connects to the helper socket, reads
   `MAKIDESK_WORKSPACE_ID` and only updates a sidebar dot. The helper recreates a
@@ -80,7 +80,7 @@ identity before the outer app.
 ## What is not there yet
 
 - automatic agent hooks (the CLI exists, the hooks are left to the user);
-  per-theme ANSI palettes; tmux control mode (L3).
+  tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling, search and links are the same
   kind of not-yet-verified surface.

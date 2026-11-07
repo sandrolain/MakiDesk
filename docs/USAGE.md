@@ -663,10 +663,12 @@ it running, so its shells keep working.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
   starts your login shell), the quake height (30–60% of the screen) and the SSH
   profiles. The terminal follows the MakiDesk theme, and a change reaches the
-  helper without a restart; the ANSI palette is still the same fixed sixteen
-  colours for every theme.
+  helper without a restart. Each theme brings its own sixteen ANSI colours;
+  the named MakiDesk themes reuse the palette they were drawn from (Plum is
+  Dracula, Arctic is Nord, Midnight is Tokyo Night, Caramel is Gruvbox,
+  Graphite is One Dark).
 - **Not there yet.** automatic agent hooks (the CLI is manual), tabs inside a
-  pane, per-theme ANSI palettes, and a verified IME.
+  pane, and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut

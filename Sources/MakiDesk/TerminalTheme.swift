@@ -16,7 +16,8 @@ extension TerminalThemeDocument {
             foreground: palette.text.terminalHex,
             cursor: palette.accent.terminalHex,
             selectionBackground: palette.surfaceSelected.terminalHex,
-            selectionForeground: palette.text.terminalHex
+            selectionForeground: palette.text.terminalHex,
+            ansi: TerminalThemePalettes.ansi(for: palette.id)
         )
     }
 }

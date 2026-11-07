@@ -26,6 +26,20 @@ final class TerminalWireTests: XCTestCase {
         XCTAssertEqual(data.count, 4 + payload.count)
     }
 
+    func testAnAgentStatusBodyRoundTrips() throws {
+        let id = UUID()
+        let message = TerminalMessage(
+            kind: .agentStatus,
+            body: .init(message: "Waiting for input", workspaceID: id.uuidString,
+                        agentState: .waiting)
+        )
+        let data = try TerminalWire.frame(message)
+        var decoder = TerminalFrameDecoder()
+        XCTAssertEqual(try decoder.append(data), [message])
+        XCTAssertEqual(message.body?.agentState, .waiting)
+        XCTAssertEqual(message.body?.workspaceID, id.uuidString)
+    }
+
     func testAPartialFrameWaitsForTheRest() throws {
         let message = TerminalMessage(kind: .showMain)
         let data = try TerminalWire.frame(message)
