@@ -31,6 +31,28 @@ tasks:
     cmds:
       - swift run MakiDesk --dump-shortcuts docs/USAGE.md
 
+  terminal:fetch:
+    desc: Fetch and verify the pinned GhosttyKit xcframework
+    cmds:
+      - sh scripts/fetch-ghosttykit.sh
+
+  terminal:build:
+    desc: Build the terminal helper (F0 spike)
+    cmds:
+      - swift build --package-path Terminal
+
+  terminal:bundle:
+    desc: Build and bundle the terminal helper in dist/MakiDeskTerminal.app
+    cmds:
+      - sh scripts/bundle-terminal.sh
+
+  terminal:run:
+    desc: Launch the bundled terminal helper
+    deps:
+      - terminal:bundle
+    cmds:
+      - open dist/MakiDeskTerminal.app
+
   release:
     desc: Compile optimized release target
     cmds:
