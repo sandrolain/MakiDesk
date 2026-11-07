@@ -203,7 +203,15 @@ final class TerminalClient {
             // A helper that outlived a previous MakiDesk may hold stale
             // settings and colours: one reload reads both files.
             sendLocked(TerminalMessage(kind: .settingsChanged))
-        case .ping, .pong, .state, .attention, .settingsRequested,
+        case .attention:
+            let title = message.body?.message ?? "Terminal"
+            let detail = message.body?.detail
+            DispatchQueue.main.async {
+                HUDController.shared.show(
+                    HUDMessage.terminalNotification(title: title, detail: detail)
+                )
+            }
+        case .ping, .pong, .state, .settingsRequested,
              .settingsChanged, .themeChanged, .willTerminate:
             break
         case .hello, .showMain, .hideMain, .toggleQuake, .quit:

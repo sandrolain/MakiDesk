@@ -36,6 +36,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         public var pid: Int32?
         public var bundleIdentifier: String?
         public var message: String?
+        public var detail: String?
         public var workspaceCount: Int?
         public var quakeVisible: Bool?
         public var page: String?
@@ -46,6 +47,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
                     pid: Int32? = nil,
                     bundleIdentifier: String? = nil,
                     message: String? = nil,
+                    detail: String? = nil,
                     workspaceCount: Int? = nil,
                     quakeVisible: Bool? = nil,
                     page: String? = nil) {
@@ -55,6 +57,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
             self.pid = pid
             self.bundleIdentifier = bundleIdentifier
             self.message = message
+            self.detail = detail
             self.workspaceCount = workspaceCount
             self.quakeVisible = quakeVisible
             self.page = page

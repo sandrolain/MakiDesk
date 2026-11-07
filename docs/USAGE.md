@@ -631,6 +631,9 @@ it running, so its shells keep working.
   shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in
   ⌘Tab while its window is open.
+- **Notifications.** A desktop notification sent by a program in the shell
+  (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon, instead of
+  a bare system alert. If MakiDesk is not running, nothing is shown.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
   starts your login shell), and the quake height (30–60% of the screen). The
   terminal follows the MakiDesk theme, and a change reaches the helper without a

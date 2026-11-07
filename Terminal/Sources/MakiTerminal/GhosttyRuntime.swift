@@ -21,6 +21,9 @@ final class GhosttyRuntime {
     /// turns them into workspace titles and restore directories.
     var onTitle: ((TerminalSurfaceView, String) -> Void)?
     var onDirectory: ((TerminalSurfaceView, String) -> Void)?
+    /// A desktop notification from the shell (OSC 9/777), forwarded to
+    /// MakiDesk's notices.
+    var onNotification: ((String, String) -> Void)?
 
     private var tickScheduled = false
     private var settings: TerminalSettingsDocument
@@ -174,7 +177,12 @@ final class GhosttyRuntime {
             NSSound.beep()
             return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
-            NSSound.beep()
+            let notification = action.action.desktop_notification
+            let title = notification.title.map { String(cString: $0) } ?? "Terminal"
+            let body = notification.body.map { String(cString: $0) } ?? ""
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onNotification?(title, body)
+            }
             return true
         case GHOSTTY_ACTION_OPEN_URL:
             let source = action.action.open_url

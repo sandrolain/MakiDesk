@@ -302,7 +302,8 @@ model and its persistence live in `MakiTerminalCore`, which is free of AppKit.
 MakiDesk talks to it over `~/Library/Application Support/MakiDesk/Terminal/terminal.sock`
 (`0600`, directory `0700`). Frames are four big-endian length bytes plus JSON;
 the kinds are a closed set (`hello`, `welcome`, `showMain`, `hideMain`,
-`toggleQuake`, `ping`, `quit` and events). The helper accepts one client, checks
+`toggleQuake`, `ping`, `quit` and events, including `attention` for a shell
+notification that becomes a MakiDesk notice). The helper accepts one client, checks
 the peer pid and that it is MakiDesk (bundle id, or the development binary by
 name), and replies to `hello` with its version and pid. `TerminalClient` keeps
 the connection, retries a launch up to 30 times at 150 ms intervals, and reports

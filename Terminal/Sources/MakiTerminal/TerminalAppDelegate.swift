@@ -38,6 +38,9 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         runtime.onDirectory = { [weak controller] view, path in
             controller?.updateDirectory(for: view, path: path)
         }
+        runtime.onNotification = { [weak self] title, body in
+            self?.server?.sendAttention(title: title, detail: body)
+        }
 
         installMenu(target: controller)
         controller.showWindow(nil)

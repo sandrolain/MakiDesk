@@ -50,6 +50,16 @@ final class TerminalIPCServer {
         }
     }
 
+    /// Sends a shell desktop notification to MakiDesk, which turns it into a
+    /// notice. Dropped when no client is connected: the terminal keeps working.
+    func sendAttention(title: String, detail: String) {
+        queue.async { [weak self] in
+            guard let self, self.clientFD >= 0 else { return }
+            self.send(TerminalMessage(kind: .attention,
+                                      body: .init(message: title, detail: detail)))
+        }
+    }
+
     private func startLocked() -> Bool {
         guard running == false else { return true }
 

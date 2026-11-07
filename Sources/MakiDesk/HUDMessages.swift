@@ -53,6 +53,10 @@ extension HUDMessage {
 
     // MARK: - Terminal
 
+    static func terminalNotification(title: String, detail: String?) -> HUDMessage {
+        HUDMessage(title: title, symbol: "terminal", detail: detail)
+    }
+
     static func terminalNotInstalled() -> HUDMessage {
         HUDMessage(title: "Terminal helper not found",
                    symbol: "terminal",

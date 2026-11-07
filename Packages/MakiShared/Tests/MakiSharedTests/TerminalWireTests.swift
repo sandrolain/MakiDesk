@@ -7,7 +7,9 @@ final class TerminalWireTests: XCTestCase {
                                       body: .init(protocolVersion: 1,
                                                   appVersion: "0.1",
                                                   pid: 42,
-                                                  bundleIdentifier: "com.makidesk.app.terminal"))
+                                                  bundleIdentifier: "com.makidesk.app.terminal",
+                                                  message: "title",
+                                                  detail: "body"))
         let data = try TerminalWire.frame(message)
         var decoder = TerminalFrameDecoder()
         let messages = try decoder.append(data)

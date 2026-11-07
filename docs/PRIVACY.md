@@ -152,6 +152,10 @@ While the helper runs it listens on
 the two apps, is local to the user, and the helper rejects a peer that is not
 MakiDesk. It is removed when the helper quits.
 
+Desktop notifications emitted by the shell (OSC 9/777) are forwarded to
+MakiDesk and shown as notices; their title and body live in the notice history
+in memory, like every other notice, and are never written to disk.
+
 The helper starts your login shell, so macOS attributes whatever that shell reads
 or connects to (shell startup files, tools it launches, `ssh`) to the helper, not
 to MakiDesk. That is why the first launch can ask for access to folders such as
