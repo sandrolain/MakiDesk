@@ -319,7 +319,7 @@ window. The helper's surface callbacks forward title, cwd and close events to th
 window controller; the focused surface answers clipboard requests.
 
 `⌃⌥O` and the menu bar item call `TerminalController`, which sends `showMain` or
-launches the helper; `` ⌃⌥` `` sends `toggleQuake`. The quake is a borderless
+launches the helper; `⌃⌥Q` sends `toggleQuake`. The quake is a borderless
 `NSPanel` at the floating level with its own scratch workspace, kept alive while
 hidden and deliberately outside the saved layout.
 

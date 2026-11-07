@@ -111,6 +111,10 @@ enum CommandCatalog {
         entry("bar show", "Open the utility bar", .showUtilityBar),
         entry("bar hide", "Close the utility bar", .hideUtilityBar),
         entry("bar pin", "Keep the utility bar open", .pinUtilityBar),
+        // Terminal
+        entry("terminal", "Open the terminal", .shortcut(.openTerminal)),
+        entry("terminal quake", "Show or hide the terminal quake",
+              .shortcut(.toggleTerminalQuake)),
         // Peek
         entry("peek", "Designate the front window for the peek", .shortcut(.peekDesignate)),
         entry("clear peek", "Remove the peek designation", .shortcut(.clearPeek)),

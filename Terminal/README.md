@@ -56,7 +56,7 @@ identity before the outer app.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
   IPC; it stays alive while hidden and is not part of the saved layout.
 - **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
-  other global rows (and the peek hold key) and keeps only `⌃⌥O` and `` ⌃⌥` ``.
+  other global rows (and the peek hold key) and keeps only `⌃⌥O` and `⌃⌥Q`.
 
 ## What is not there yet
 

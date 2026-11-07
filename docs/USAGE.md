@@ -536,6 +536,7 @@ written in words. It is the menu and the shortcuts, typed:
 | `settings`, `shortcuts`, `screenshots`, `screenshot`, `capture window`, `capture screen`, `record`, `ocr`, `measure`, `colour` | The app commands |
 | `minimap`, `focus border`, `focus dim`, `peek`, `clear peek` | Presentation |
 | `utility bar`, `bar show`, `bar hide`, `bar pin` | Open, close or pin the utility bar |
+| `terminal`, `terminal quake` | Open the terminal or toggle its quake panel |
 | `timer 25m`, `timer 8:30` | Start a timer with the same syntax as the timer field |
 | `dismiss notices` | Take every notice away |
 
@@ -568,8 +569,8 @@ it, and leaves no room behind.
   item does the same, and the command box has `utility bar`, `bar show`,
   `bar hide` and `bar pin`.
 - **What is on it.** On the left the everyday panels and tools — Notes,
-  Clipboard, Shelf, Timer, the command box, then screenshots, text from the
-  screen, colour, measure and the Ports window. The Timer button carries the
+  Clipboard, Shelf, Timer, the command box, the Terminal and its Quake, then
+  screenshots, text from the screen, colour, measure and the Ports window. The Timer button carries the
   nearest running countdown as a badge, so one Timer is both the command and the
   figure. In the middle the presentation toggles — focus
   border, focus dim, mini map — lit in the accent while on. On the right the
@@ -623,11 +624,11 @@ it running, so its shells keep working.
   last directory are saved in
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
   on the next launch. Scrollback is not saved.
-- **Quake.** `` ⌃⌥` `` drops a scratch terminal from the top of the screen; the
+- **Quake.** `⌃⌥Q` drops a scratch terminal from the top of the screen; the
   same key hides it. It is a separate session, not part of the saved workspace
   layout, and it stays alive while hidden.
 - **While the terminal is in front.** MakiDesk suspends its other global
-  shortcuts, so the shell receives them. `⌃⌥O` and `` ⌃⌥` `` stay active, so you
+  shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in
   ⌘Tab while its window is open.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
@@ -1275,7 +1276,7 @@ The table below is generated from the app's own table, with
 | Apply the suggested layout | `⌃⌥⌘↩` | Desktop |
 | Utility bar | `⌃⌥B` | Window |
 | Terminal | `⌃⌥O` | Window |
-| Terminal quake | `` ⌃⌥` `` | Window |
+| Terminal quake | `⌃⌥Q` | Window |
 
 <!-- shortcuts:end -->
 
