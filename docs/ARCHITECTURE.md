@@ -292,12 +292,24 @@ is visible, so the bar stays out of screenshots, OCR and recordings.
 
 The terminal is a second app, not a panel. `MakiDeskTerminal.app` lives in
 `Contents/Applications/` with bundle id `com.makidesk.app.terminal`; it is
-`.regular` while its window is open and is signed before the outer app. It links
+`.regular` while its main window is open and is signed before the outer app. It links
 GhosttyKit (a static xcframework, MIT) and lives in the separate `Terminal/`
 SwiftPM package, so `swift build` at the repository root neither needs the
 binary nor rebuilds the helper. `MakiShared` is the only code both apps link: the
 message envelope, length-prefixed framing and the socket location. The workspace
 model and its persistence live in `MakiTerminalCore`, which is free of AppKit.
+`⌘W` closes the focused pane; with one pane it closes the workspace, and with
+one workspace it hides the window. `ghostty_surface_needs_confirm_quit` says
+whether the surface is not sitting at a prompt, and a pane whose session is a
+configured SSH/tmux command always counts; either case shows a Cancel-default
+confirmation before the pane or workspace is removed. The generated config no
+longer sets `confirm-close-surface = false`, so that answer is not suppressed.
+
+Closing the main window orders it out and switches the helper to `.accessory`:
+the surfaces stay alive, MakiDesk's ⌃⌥O calls `showMain` (which restores
+`.regular`), and `applicationShouldTerminateAfterLastWindowClosed` is false.
+Only Quit ends the shells, and `applicationShouldTerminate` shows a warning with
+Cancel as the default button first.
 
 MakiDesk talks to it over `~/Library/Application Support/MakiDesk/Terminal/terminal.sock`
 (`0600`, directory `0700`). Frames are four big-endian length bytes plus JSON;

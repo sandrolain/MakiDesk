@@ -168,6 +168,12 @@ enum ShortcutDefinitions {
     /// The rows that own a Carbon hot key; the others explain a gesture.
     static let global: [ShortcutDefinition] = all.filter(\.isGlobal)
 
+    /// Window-moving rows that can stay registered while the terminal is
+    /// frontmost, so the helper window is still arranged like any other.
+    static var windowShortcutIDs: Set<String> {
+        Set(window.filter(\.isGlobal).map(\.id))
+    }
+
     /// Lookup by stable id, used by the remapping table and the recorder. Built
     /// without `uniqueKeysWithValues` so a duplicate id can never crash at
     /// launch; a test still fails on duplicates.

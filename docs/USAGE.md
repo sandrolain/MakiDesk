@@ -617,12 +617,18 @@ it running, so its shells keep working.
 
 - **Workspaces.** The sidebar lists them. **+** adds one, **−** closes the
   selected one, and the last one cannot be closed. `⌘T` adds a workspace too.
-  Drag a row to reorder them, or use `⌃⌘↑` / `⌃⌘↓`; the order is saved with the
-  layout and the selected shell stays selected. `⌘1`…`⌘9` select a workspace
+  The row currently on screen has an accent bar and a brighter title; a
+  workspace with more than one pane shows how many at its right. Drag a row to
+  reorder, or use `⌃⌘↑` / `⌃⌘↓`; the order is saved with the layout and the
+  selected shell stays selected. `⌘1`…`⌘9` select a workspace
   directly, and `⌃⌘←` / `⌃⌘→` step to the previous or next one, wrapping at
   the ends.
 - **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
-  one; `⌘W` closes the pane and `⇧⌘W` the workspace. Every pane is a real shell
+  one; `⌘W` closes the focused pane, or the whole workspace when it holds a
+  single terminal, and hides the window when it is also the last workspace.
+  `⇧⌘W` closes the workspace. Closing a pane or workspace with a running
+  command asks first (SSH and tmux count as running); Cancel is the default.
+  Every pane is a real shell
   with its own scrollback, copy/paste, links and Option-as-Meta. `⌘⌥←`, `⌘⌥→`,
   `⌘⌥↑` and `⌘⌥↓` move the focus between panes; at an edge the shortcut beeps.
   `⇧⌘↩` fills the workspace with the focused pane and the same shortcut restores
@@ -641,13 +647,21 @@ it running, so its shells keep working.
   while hidden. MakiDesk's window switcher leaves the quake panel out, since it
   is toggled with its own shortcut; the helper's main window is still listed
   there.
+- **Closing and quitting.** The red close button hides the window; it does
+  not close the app or the shells. Running commands keep going, the Dock icon
+  disappears, and `⌃⌥O` brings the same window and sessions back. Quitting
+  **MakiDesk Terminal** (`⌘Q`) is the only action that ends them, and it asks
+  for confirmation first.
 - **Hidden means not drawn.** Workspaces you are not looking at, a hidden
   quake, a minimized window or an app that macOS has hidden stop rendering;
   their shells keep running and consuming output, and drawing resumes when they
   come back.
-- **While the terminal is in front.** MakiDesk suspends its other global
-  shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
-  can always come back or hide the quake. The helper appears in the Dock and in
+- **While the terminal is in front.** MakiDesk suspends its panel, screen and
+  desktop shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so
+  you can always come back or hide the quake. With **Settings ▸ Terminal ▸ Keep
+  window shortcuts while the terminal is in front** on (the default), the
+  `⌃⌥` window rows stay active too: `⌃⌥←`/`→`/`↑`/`↓` and the other Window
+  commands still arrange the helper window. The helper appears in the Dock and in
   ⌘Tab while its window is open.
 - **Find in the scrollback.** `⌘F` opens a find bar over the focused pane, or
   puts the keyboard back in it. Typing searches as you go and the bar reports

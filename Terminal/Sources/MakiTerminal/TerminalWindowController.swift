@@ -57,33 +57,63 @@ final class WorkspaceRowView: NSTableRowView {
     }
 }
 
-/// A sidebar row with an attention dot (F3 L1).
+/// A sidebar row with the selected marker, a pane count and attention dots.
 final class WorkspaceCellView: NSTableCellView {
     let dot = NSView()
     let agentDot = NSView()
+    let countLabel = NSTextField(labelWithString: "")
+    /// The left bar that marks the workspace currently on screen; it does not
+    /// depend on the table's focus, so the marker stays visible while the
+    /// terminal has the keyboard.
+    let accentBar = NSView()
+    let accessoriesStack = NSStackView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        wantsLayer = true
+
+        accentBar.translatesAutoresizingMaskIntoConstraints = false
+        accentBar.wantsLayer = true
+        accentBar.isHidden = true
+        addSubview(accentBar)
+
+        countLabel.translatesAutoresizingMaskIntoConstraints = false
+        countLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+        countLabel.textColor = .secondaryLabelColor
+        countLabel.isHidden = true
+
         dot.translatesAutoresizingMaskIntoConstraints = false
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3
         dot.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         dot.isHidden = true
+
         agentDot.translatesAutoresizingMaskIntoConstraints = false
         agentDot.wantsLayer = true
         agentDot.layer?.cornerRadius = 3
         agentDot.isHidden = true
-        addSubview(agentDot)
-        addSubview(dot)
+
+        accessoriesStack.translatesAutoresizingMaskIntoConstraints = false
+        accessoriesStack.orientation = .horizontal
+        accessoriesStack.alignment = .centerY
+        accessoriesStack.spacing = 6
+        accessoriesStack.detachesHiddenViews = true
+        accessoriesStack.setViews([countLabel, dot, agentDot], in: .leading)
+        addSubview(accessoriesStack)
+
         NSLayoutConstraint.activate([
-            agentDot.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            agentDot.centerYAnchor.constraint(equalTo: centerYAnchor),
-            agentDot.widthAnchor.constraint(equalToConstant: 6),
-            agentDot.heightAnchor.constraint(equalToConstant: 6),
-            dot.trailingAnchor.constraint(equalTo: agentDot.leadingAnchor, constant: -6),
-            dot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            accentBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            accentBar.topAnchor.constraint(equalTo: topAnchor),
+            accentBar.bottomAnchor.constraint(equalTo: bottomAnchor),
+            accentBar.widthAnchor.constraint(equalToConstant: 3),
+
+            accessoriesStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            accessoriesStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+
             dot.widthAnchor.constraint(equalToConstant: 6),
             dot.heightAnchor.constraint(equalToConstant: 6),
+            agentDot.widthAnchor.constraint(equalToConstant: 6),
+            agentDot.heightAnchor.constraint(equalToConstant: 6),
         ])
     }
 
@@ -246,7 +276,10 @@ final class TerminalWindowController: NSWindowController,
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("workspace"))
         column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
+        tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        tableView.autoresizingMask = [.width]
         tableView.headerView = nil
+        tableView.style = .fullWidth
         tableView.rowHeight = 30
         tableView.intercellSpacing = NSSize(width: 0, height: 2)
         tableView.selectionHighlightStyle = .regular
@@ -258,6 +291,7 @@ final class TerminalWindowController: NSWindowController,
         tableView.setDraggingSourceOperationMask(.move, forLocal: true)
         scroll.drawsBackground = false
         scroll.documentView = tableView
+        DispatchQueue.main.async { [weak self] in self?.fitSidebarColumn() }
 
         let bar = NSStackView()
         bar.translatesAutoresizingMaskIntoConstraints = false
@@ -366,14 +400,20 @@ final class TerminalWindowController: NSWindowController,
     }
 
     @objc func closeWorkspaceAction(_ sender: Any?) {
+        if quakePanel?.isKeyWindow == true {
+            hideQuake()
+            return
+        }
         closeSelectedWorkspace()
     }
 
     private func closeSelectedWorkspace() {
-        guard workspaces.count > 1 else {
+        guard workspaces.indices.contains(selected), workspaces.count > 1 else {
             NSSound.beep()
             return
         }
+        let workspace = workspaces[selected]
+        guard confirmClosing(workspace.paneIDs, in: workspace) else { return }
         disposeWorkspace(at: selected)
         attentionWorkspaces.remove(workspaces[selected].id)
         workspaces.remove(at: selected)
@@ -463,6 +503,7 @@ final class TerminalWindowController: NSWindowController,
                                             orientation: orientation) else { return }
         if let directory { workspace.setDirectory(directory, for: newPane) }
         workspaces[selected] = workspace
+        reloadSidebar()
         rebuildContent()
         scheduleSave()
     }
@@ -482,22 +523,67 @@ final class TerminalWindowController: NSWindowController,
     }
 
     @objc func closePaneAction(_ sender: Any?) {
+        if quakePanel?.isKeyWindow == true {
+            hideQuake()
+            return
+        }
         closeFocusedPane()
     }
 
     private func closeFocusedPane() {
         guard selected < workspaces.count else { return }
-        var workspace = workspaces[selected]
+        let workspace = workspaces[selected]
+        // ⌘W closes the workspace when it holds a single terminal, like a tab;
+        // with a single workspace it hides the window and keeps the shell.
+        guard workspace.paneCount > 1 else {
+            if workspaces.count == 1 {
+                window?.performClose(nil)
+            } else {
+                closeSelectedWorkspace()
+            }
+            return
+        }
         let pane = workspace.focusedPane
-        guard workspace.remove(pane) else {
+        guard confirmClosing([pane], in: workspace) else { return }
+        var updated = workspace
+        guard updated.remove(pane) else {
             NSSound.beep()
             return
         }
         disposePane(pane)
-        workspaces[selected] = workspace
+        workspaces[selected] = updated
+        reloadSidebar()
         rebuildContent()
-        focusPane(workspace.focusedPane)
+        focusPane(updated.focusedPane)
         scheduleSave()
+    }
+
+    /// A close that would end a running command asks first. Cancel is the
+    /// default button so Return cannot lose the process.
+    private func confirmClosing(_ panes: [PaneID], in workspace: TerminalWorkspace) -> Bool {
+        let busy = panes.filter { hasRunningCommand($0, in: workspace) }.count
+        guard busy > 0 else { return true }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        if panes.count == 1 {
+            alert.messageText = "Close this terminal?"
+            alert.informativeText = "A command is still running. Closing the terminal ends it."
+        } else {
+            alert.messageText = "Close this workspace?"
+            alert.informativeText = busy == 1
+                ? "A command is still running in one of its terminals."
+                : "Commands are still running in \(busy) of its \(panes.count) terminals."
+        }
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Close")
+        alert.buttons.last?.hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    private func hasRunningCommand(_ pane: PaneID,
+                                   in workspace: TerminalWorkspace) -> Bool {
+        guard let view = paneViews[pane]?.surfaceView else { return false }
+        return view.hasRunningCommand(configuredCommand: workspace.command(for: pane) != nil)
     }
 
     /// Called when the shell exits or Ghostty asks to close a surface.
@@ -514,6 +600,7 @@ final class TerminalWindowController: NSWindowController,
             guard workspace.remove(pane) else { return }
             disposePane(pane)
             workspaces[index] = workspace
+            reloadSidebar()
             if index == selected { rebuildContent(); focusPane(workspace.focusedPane) }
             scheduleSave()
             return
@@ -544,12 +631,12 @@ final class TerminalWindowController: NSWindowController,
         if state == .done, index == selected, window?.isKeyWindow == true {
             agentStates[id] = nil
             agentLabels[id] = nil
-            tableView.reloadData()
+            reloadSidebar()
             return
         }
         agentStates[id] = state
         agentLabels[id] = label
-        tableView.reloadData()
+        reloadSidebar()
     }
 
     /// Marks the workspace that owns `view`. Selecting it, or focusing it when
@@ -559,14 +646,14 @@ final class TerminalWindowController: NSWindowController,
               let index = workspaces.firstIndex(where: { $0.contains(pane) }) else { return }
         if index == selected, window?.isKeyWindow == true { return }
         if attentionWorkspaces.insert(workspaces[index].id).inserted {
-            tableView.reloadData()
+            reloadSidebar()
         }
     }
 
     private func clearAttention(for index: Int) {
         guard index >= 0, index < workspaces.count else { return }
         if attentionWorkspaces.remove(workspaces[index].id) != nil {
-            tableView.reloadData()
+            reloadSidebar()
         }
     }
 
@@ -576,7 +663,7 @@ final class TerminalWindowController: NSWindowController,
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return }
         workspaces[index].title = trimmed
-        tableView.reloadData()
+        reloadSidebar()
         if index == selected { window?.title = trimmed }
         scheduleSave()
     }
@@ -850,7 +937,7 @@ final class TerminalWindowController: NSWindowController,
         applyQuakeAppearance()
         addButton?.contentTintColor = uiTheme.subtext
         closeButton.contentTintColor = uiTheme.subtext
-        tableView.reloadData()
+        reloadSidebar()
         for host in paneViews.values {
             host.accentColor = uiTheme.accent
             host.findBar.apply(theme: uiTheme)
@@ -988,6 +1075,16 @@ final class TerminalWindowController: NSWindowController,
 
     // MARK: - Window
 
+    /// The red button hides the window instead of closing it: the surfaces,
+    /// their processes and the saved layout stay alive, and MakiDesk's ⌃⌥O
+    /// shows the same window again. Only Quit ends the sessions.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === window else { return true }
+        window?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
+        return false
+    }
+
     func windowDidBecomeKey(_ notification: Notification) {
         clearAttention(for: selected)
         if workspaces.indices.contains(selected) {
@@ -995,7 +1092,7 @@ final class TerminalWindowController: NSWindowController,
             if agentStates[id] == .done {
                 agentStates[id] = nil
                 agentLabels[id] = nil
-                tableView.reloadData()
+                reloadSidebar()
             }
         }
         // Key transitions are not always accompanied by an occlusion change,
@@ -1152,14 +1249,28 @@ final class TerminalWindowController: NSWindowController,
             cell.addSubview(label)
             cell.textField = label
             NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: cell.dot.leadingAnchor, constant: -6),
+                label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 12),
+                label.trailingAnchor.constraint(equalTo: cell.accessoriesStack.leadingAnchor,
+                                                constant: -8),
                 label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             ])
         }
         let workspace = workspaces[row]
+        let isCurrent = row == selected
         cell.textField?.stringValue = workspace.title
-        cell.textField?.textColor = uiTheme.text
+        cell.textField?.textColor = isCurrent ? uiTheme.text : uiTheme.subtext
+        cell.textField?.font = .systemFont(ofSize: 12.5,
+                                           weight: isCurrent ? .semibold : .medium)
+        cell.layer?.backgroundColor = isCurrent
+            ? uiTheme.surfaceSelected.cgColor
+            : NSColor.clear.cgColor
+        cell.accentBar.layer?.backgroundColor = uiTheme.accent.cgColor
+        cell.accentBar.isHidden = isCurrent == false
+        let paneCount = workspace.paneCount
+        cell.countLabel.stringValue = paneCount > 1 ? "\(paneCount)" : ""
+        cell.countLabel.textColor = uiTheme.subtext
+        cell.countLabel.isHidden = paneCount <= 1
+        cell.countLabel.toolTip = paneCount > 1 ? "\(paneCount) terminals" : nil
         cell.dot.layer?.backgroundColor = uiTheme.accent.cgColor
         cell.dot.isHidden = attentionWorkspaces.contains(workspace.id) == false
         if let state = agentStates[workspace.id] {
@@ -1204,18 +1315,28 @@ final class TerminalWindowController: NSWindowController,
             agentStates[id] = nil
             agentLabels[id] = nil
         }
-        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        reloadSidebar()
         rebuildContent()
         scheduleSave()
     }
 
     private func reloadSidebar() {
+        fitSidebarColumn()
         tableView.reloadData()
         closeButton.isEnabled = workspaces.count > 1
         if selected < workspaces.count {
             tableView.selectRowIndexes(IndexSet(integer: selected),
                                        byExtendingSelection: false)
         }
+    }
+
+    /// Keeps the single column as wide as the sidebar, so the row background
+    /// does not leave a blank strip on the right when the split is resized.
+    private func fitSidebarColumn() {
+        guard let column = tableView.tableColumns.first else { return }
+        let width = tableView.enclosingScrollView?.contentSize.width ?? sidebar.bounds.width
+        guard width > 0, abs(column.width - width) > 0.5 else { return }
+        column.width = width
     }
 
     // MARK: - Reordering
@@ -1289,6 +1410,7 @@ final class TerminalWindowController: NSWindowController,
     // MARK: - Split view
 
     func splitViewDidResizeSubviews(_ notification: Notification) {
+        fitSidebarColumn()
         guard isBuilding == false,
               let split = notification.object as? WorkspaceSplitView,
               split.subviews.count >= 2,

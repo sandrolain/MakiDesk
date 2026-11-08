@@ -106,6 +106,8 @@ struct SettingsView: View {
     static let minimumSize = CGSize(width: 800, height: 580)
 
     @AppStorage(SettingsTab.defaultsKey) private var settingsTab: SettingsTab = .general
+    @AppStorage(SettingsKey.keepTerminalWindowShortcuts.rawValue)
+    private var keepTerminalWindowShortcuts = true
     @AppStorage(ColorSamplerController.formatDefaultsKey)
     private var colorFormat: ColorClipboardFormat = .hex
     // The notice settings go through the store like every other preference:
@@ -1175,7 +1177,15 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(theme.subtext)
                 }
-                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live, as do selection copy and pointer hiding; the scrollback limit is memory per pane and applies to new panes. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
+                Toggle("Keep window shortcuts while the terminal is in front",
+                       isOn: Binding(
+                        get: { keepTerminalWindowShortcuts },
+                        set: { value in
+                            keepTerminalWindowShortcuts = value
+                            TerminalController.shared.reapplyShortcutSuspension()
+                        }
+                       ))
+                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live, as do selection copy and pointer hiding; the scrollback limit is memory per pane and applies to new panes. With the window shortcuts kept, ⌃⌥ arrows and the other Window rows still move the helper window; the panel, screen and desktop rows stay suspended so the shell receives them. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
             }
             agentHooksSection
             sshProfilesSection

@@ -318,7 +318,6 @@ final class GhosttyRuntime {
             "macos-option-as-alt = true",
             "window-padding-x = 8",
             "window-padding-y = 8",
-            "confirm-close-surface = false",
         ]
         if let megabytes = settings.scrollbackLimitMB {
             lines.append("scrollback-limit = \(megabytes * 1024 * 1024)")

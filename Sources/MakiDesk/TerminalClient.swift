@@ -337,6 +337,12 @@ final class TerminalController {
         client.send(.toggleQuake)
     }
 
+    /// The window-shortcut preference changed; register or release the rows
+    /// without waiting for the next app switch.
+    func reapplyShortcutSuspension() {
+        WorkspaceStore.shared.refreshTerminalShortcutSuspension()
+    }
+
     /// Applies one edit from Settings, writes the shared file and tells the
     /// helper to re-read it.
     func updateSettings(_ change: (inout TerminalSettingsDocument) -> Void) {

@@ -37,11 +37,17 @@ identity before the outer app.
   `NSTextInputClient`, mouse, clipboard, Option-as-Meta, resize/reflow, title and
   cwd actions.
 - **Workspaces in a sidebar:** add/close, selection and drag to reorder
-  (`⌃⌘↑`/`⌃⌘↓` from the menu); each
-  workspace owns a binary split tree.
+  (`⌃⌘↑`/`⌃⌘↓` from the menu); the current row has an accent bar, and rows
+  with more than one pane show the count. Each workspace owns a binary split
+  tree.
 - **Splits:** side-by-side and stacked, draggable dividers, focus border, close
   pane, close workspace; surfaces are reused across rebuilds, so switching
   workspaces never restarts a shell.
+- **Closing safely:** `⌘W` closes the focused pane, the workspace when it has
+  one pane, and hides the window when that is also the last workspace. A pane
+  that is not at a prompt, or that runs an SSH/tmux configured command, asks
+  for confirmation first (via `ghostty_surface_needs_confirm_quit`); the quake
+  is only hidden.
 - **Persistence:** `Terminal/workspaces.json` holds titles, split tree, ratios,
   selection, each pane's last directory and its command (SSH included); it is
   atomic and versioned, and a corrupt file is quarantined. Scrollback is not
@@ -88,13 +94,16 @@ identity before the outer app.
   is written to disk.
 - **Two-app boundary:** `MakiShared` (framing and messages) and a Unix socket
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
-  `.regular` while its window is open; signing is inside-out.
+  `.regular` while its main window is open; closing it hides the window and
+  switches to `.accessory`, leaving every surface and process alive. Quit is the
+  only action that ends them and it confirms first. Signing is inside-out.
 - **Menus:** a MakiDesk menu with Open MakiDesk and Terminal Settings… (`⌘,`);
   New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
   Workspace 1…9 `⌘1`…`⌘9`, Previous/Next Workspace `⌃⌘←`/`⌃⌘→`,
   Move Workspace Up `⌃⌘↑`, Move Workspace Down `⌃⌘↓`,
   Focus Pane `⌘⌥←/→/↑/↓`, Zoom Pane `⇧⌘↩`, Equalize Splits `⌃⌘E`,
-  Close Pane `⌘W`, Close Workspace `⇧⌘W`, Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
+  Close Pane or Workspace `⌘W`, Close Workspace `⇧⌘W`,
+  Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
   Show Quake in View.
 - **Find bar:** one per window, over the focused pane; the needle is sent to
   Ghostty as a `search:` binding action and the match total and selection come

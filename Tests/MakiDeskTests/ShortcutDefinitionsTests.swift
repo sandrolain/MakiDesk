@@ -182,3 +182,17 @@ final class ShortcutDefinitionsTests: XCTestCase {
         XCTAssertEqual(LocalKey.acceptNew.keys, "⌘↩")
     }
 }
+
+extension ShortcutDefinitionsTests {
+    func testTheTerminalKeepsOnlyTheWindowRows() {
+        let kept = ShortcutDefinitions.windowShortcutIDs
+        XCTAssertTrue(kept.contains("window.left"))
+        XCTAssertTrue(kept.contains("window.fullScreen"))
+        XCTAssertTrue(kept.contains("window.minimize"))
+        XCTAssertFalse(kept.contains("panel.notes"))
+        XCTAssertFalse(kept.contains("layout.grid"))
+        for id in kept {
+            XCTAssertEqual(ShortcutDefinitions.definition(id: id)?.section, "Window", id)
+        }
+    }
+}

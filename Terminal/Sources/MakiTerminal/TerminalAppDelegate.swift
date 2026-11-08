@@ -8,6 +8,9 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     private var runtime: GhosttyRuntime?
     private var terminal: TerminalWindowController?
     private var server: TerminalIPCServer?
+    /// Set only for a launch that must exit immediately (another helper owns
+    /// the socket); the normal quit path always confirms.
+    private var suppressQuitConfirmation = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
@@ -86,8 +89,31 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         terminal?.detachAllPanes()
     }
 
+    /// Closing the window keeps the sessions alive: the helper stays running as
+    /// an accessory app and MakiDesk's ⌃⌥O brings the same window back. Quitting
+    /// the app is the only action that ends the shells, so it asks first.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard suppressQuitConfirmation == false else { return .terminateNow }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Quit MakiDesk Terminal?"
+        alert.informativeText = "Every open terminal and its running command will be closed. The workspaces reopen next time, but running work is lost."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Quit")
+        if #available(macOS 11.0, *) {
+            alert.buttons.last?.hasDestructiveAction = true
+        }
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if flag == false { showMain() }
+        return true
     }
 
     // MARK: - IPC
@@ -106,6 +132,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         server.start { started in
             guard started == false else { return }
             // Another helper owns the socket; this launch is a duplicate.
+            self.suppressQuitConfirmation = true
             NSApp.terminate(nil)
         }
         self.server = server
@@ -114,6 +141,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     func showMain() {
         guard let window = terminal?.window else { return }
         terminal?.hideQuakeIfVisible()
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         terminal?.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
@@ -121,6 +149,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
 
     func hideMain() {
         terminal?.window?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Menu
@@ -201,7 +230,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
              #selector(TerminalWindowController.splitDownAction(_:)),
              "d", [.shift], target)
         fileMenu.addItem(.separator())
-        menu(fileMenu, "Close Pane",
+        menu(fileMenu, "Close Pane or Workspace",
              #selector(TerminalWindowController.closePaneAction(_:)),
              "w", [], target)
         menu(fileMenu, "Close Workspace",

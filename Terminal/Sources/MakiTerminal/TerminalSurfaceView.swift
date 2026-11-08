@@ -675,6 +675,15 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
+    /// Whether closing the pane would end a running command. Ghostty already
+    /// tracks this from the PTY and its prompt marks; a configured SSH/tmux
+    /// session is the session itself, so it always asks.
+    func hasRunningCommand(configuredCommand: Bool) -> Bool {
+        guard let surface else { return false }
+        if ghostty_surface_needs_confirm_quit(surface) { return true }
+        return configuredCommand
+    }
+
     private func readActiveScreenText() -> String? {
         guard let surface else { return nil }
         let selection = ghostty_selection_s(

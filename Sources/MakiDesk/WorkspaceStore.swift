@@ -582,9 +582,23 @@ final class WorkspaceStore {
     /// The helper is frontmost: keep only its own two keys alive so the shell
     /// can receive everything else. Called by `TerminalController`'s workspace
     /// observer.
+    private var terminalIsFrontmost = false
+
     func setTerminalFrontmost(_ frontmost: Bool) {
-        shortcutManager?.setSuspended(frontmost,
-                                      keeping: ["app.terminal", "app.terminalQuake"])
+        terminalIsFrontmost = frontmost
+        var keeping: Set<String> = ["app.terminal", "app.terminalQuake"]
+        let defaults = UserDefaults.standard
+        let keepsWindowRows = (defaults.object(forKey: SettingsKey.keepTerminalWindowShortcuts.rawValue)
+            as? Bool) ?? true
+        if keepsWindowRows {
+            keeping.formUnion(ShortcutDefinitions.windowShortcutIDs)
+        }
+        shortcutManager?.setSuspended(frontmost, keeping: keeping)
+    }
+
+    /// Re-applies the terminal suspension after the preference changes.
+    func refreshTerminalShortcutSuspension() {
+        setTerminalFrontmost(terminalIsFrontmost)
     }
 
     func openAccessibilitySettings() { WindowController.openAccessibilitySettings() }
