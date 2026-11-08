@@ -415,9 +415,12 @@ Settings ▸ Terminal page, writes them on every edit and tells the helper
 `settingsChanged` through the socket after a short debounce; a theme change
 regenerates `theme.json` from `PaletteTheme` and sends `themeChanged`. The helper
 reloads both with `ghostty_app_update_config`, so an open terminal picks up the
-font and colours without a restart; the shell command applies to new panes. Each
-theme carries its own sixteen ANSI colours and the surface/text/accent colours
-for the helper's sidebar and title bar.
+font, cursor and colours without a restart; the shell command and the
+scrollback limit apply to new panes. The generated configuration also disables
+Ghostty's shell-integration cursor (`shell-integration-features = no-cursor`),
+so the chosen shape is not replaced by a bar at the prompt. Each theme carries
+its own sixteen ANSI colours and the surface/text/accent colours for the
+helper's sidebar and title bar.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and

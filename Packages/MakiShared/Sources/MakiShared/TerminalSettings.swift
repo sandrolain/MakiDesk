@@ -107,6 +107,23 @@ public struct TerminalSSHProfile: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// The terminal cursor shapes Ghostty accepts.
+public enum TerminalCursorStyle: String, Codable, CaseIterable, Sendable {
+    case block
+    case bar
+    case underline
+    case blockHollow = "block_hollow"
+
+    public var label: String {
+        switch self {
+        case .block: return "Block"
+        case .bar: return "Bar"
+        case .underline: return "Underline"
+        case .blockHollow: return "Hollow block"
+        }
+    }
+}
+
 /// The terminal helper's preferences, written by MakiDesk and read by the
 /// helper at launch and after a change. Plain value types: the file is the
 /// contract, not the UI.
@@ -122,6 +139,14 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
     public var shell: String?
     /// Share of the visible frame used by the quake panel, 0.3…0.6.
     public var quakeHeightFraction: Double
+    /// The cursor shape; a running program can still override it with
+    /// `DECSCUSR`, and Ghostty's shell integration cursor is disabled so the
+    /// choice shows at the prompt too.
+    public var cursorStyle: TerminalCursorStyle
+    public var cursorBlink: Bool
+    /// Scrollback memory per pane, in megabytes; nil keeps Ghostty's default.
+    /// A change applies to new panes only.
+    public var scrollbackLimitMB: Int?
     /// Saved SSH targets offered in the helper's sidebar.
     public var sshProfiles: [TerminalSSHProfile]
 
@@ -130,12 +155,18 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
                 fontSize: Double = 13,
                 shell: String? = nil,
                 quakeHeightFraction: Double = 0.45,
+                cursorStyle: TerminalCursorStyle = .block,
+                cursorBlink: Bool = true,
+                scrollbackLimitMB: Int? = nil,
                 sshProfiles: [TerminalSSHProfile] = []) {
         self.version = version
         self.fontFamily = fontFamily
         self.fontSize = fontSize
         self.shell = shell
         self.quakeHeightFraction = quakeHeightFraction
+        self.cursorStyle = cursorStyle
+        self.cursorBlink = cursorBlink
+        self.scrollbackLimitMB = scrollbackLimitMB
         self.sshProfiles = sshProfiles
     }
 
@@ -150,6 +181,10 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         shell = try container.decodeIfPresent(String.self, forKey: .shell)
         quakeHeightFraction = try container.decodeIfPresent(Double.self,
                                                            forKey: .quakeHeightFraction) ?? 0.45
+        cursorStyle = try container.decodeIfPresent(TerminalCursorStyle.self,
+                                                    forKey: .cursorStyle) ?? .block
+        cursorBlink = try container.decodeIfPresent(Bool.self, forKey: .cursorBlink) ?? true
+        scrollbackLimitMB = try container.decodeIfPresent(Int.self, forKey: .scrollbackLimitMB)
         sshProfiles = try container.decodeIfPresent([TerminalSSHProfile].self,
                                                     forKey: .sshProfiles) ?? []
     }
@@ -163,6 +198,9 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         copy.quakeHeightFraction = min(max(quakeHeightFraction, 0.3), 0.6)
         copy.fontFamily = Self.cleaned(fontFamily)
         copy.shell = Self.cleaned(shell)
+        if let limit = scrollbackLimitMB {
+            copy.scrollbackLimitMB = min(max(limit, 1), 1024)
+        }
         copy.sshProfiles = sshProfiles.map { $0.normalized() }
         return copy
     }

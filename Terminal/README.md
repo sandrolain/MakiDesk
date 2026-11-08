@@ -51,11 +51,13 @@ identity before the outer app.
   workspace's session after a restore. The menu item is disabled when tmux is
   not installed (common paths are checked before PATH). Panes also get
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
-- **Settings and theme:** `Terminal/settings.json` (font, shell command, quake
-  height) and `Terminal/theme.json` (MakiDesk palette plus the theme's sixteen
-  ANSI colours, plus the surface/text/accent colours for the helper's own
-  sidebar and title bar) are written by MakiDesk; the helper reloads them on
-  `settingsChanged` and `themeChanged`.
+- **Settings and theme:** `Terminal/settings.json` (font, cursor shape and
+  blink, scrollback size, shell command, quake height) and `Terminal/theme.json`
+  (MakiDesk palette plus the theme's sixteen ANSI colours, plus the
+  surface/text/accent colours for the helper's own sidebar and title bar) are
+  written by MakiDesk; the helper reloads them on `settingsChanged` and
+  `themeChanged`. The generated config disables Ghostty's shell-integration
+  cursor so the chosen shape shows at the prompt.
 - **Agent status CLI:** `Contents/Resources/bin/makidesk status working`,
   `waiting` or `done` connects to the helper socket, reads
   `MAKIDESK_WORKSPACE_ID` and only updates a sidebar dot. The helper recreates a

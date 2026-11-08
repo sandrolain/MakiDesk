@@ -119,7 +119,7 @@ All paths are under your user account:
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, last directory per pane | Until you delete it; a factory reset does not remove it |
-| Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
+| Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, cursor, scrollback, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
 | Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |
 | Claude Code and Codex hooks (opt-in) | `~/.claude/settings.json` or `~/.codex/hooks.json` gains five handlers; a one-time `<name>.makidesk-backup` sits next to it | The handlers until you switch them off; the backup until you delete it |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |

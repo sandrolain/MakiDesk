@@ -287,11 +287,19 @@ final class GhosttyRuntime {
             "selection-foreground = \(theme.selectionForeground)",
             "font-family = \(family)",
             "font-size = \(settings.fontSize)",
+            "cursor-style = \(settings.cursorStyle.rawValue)",
+            "cursor-style-blink = \(settings.cursorBlink)",
+            // Ghostty's shell integration otherwise forces a bar at the prompt
+            // and would hide the chosen shape there.
+            "shell-integration-features = no-cursor",
             "macos-option-as-alt = true",
             "window-padding-x = 8",
             "window-padding-y = 8",
             "confirm-close-surface = false",
         ]
+        if let megabytes = settings.scrollbackLimitMB {
+            lines.append("scrollback-limit = \(megabytes * 1024 * 1024)")
+        }
         for (index, colour) in theme.ansi.enumerated() {
             lines.append("palette = \(index)=\(colour)")
         }

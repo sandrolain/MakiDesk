@@ -1083,6 +1083,14 @@ struct SettingsView: View {
 
     // MARK: - Terminal
 
+    /// The standard sizes plus a hand-edited value, so the picker still shows
+    /// what the file contains.
+    private var scrollbackChoices: [Int] {
+        let current = TerminalController.shared.settings.scrollbackLimitMB ?? 0
+        let standard = [0, 5, 20, 100]
+        return standard.contains(current) ? standard : (standard + [current]).sorted()
+    }
+
     private var terminalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
             SettingsSection("Terminal") {
@@ -1101,6 +1109,34 @@ struct SettingsView: View {
                                 TerminalController.shared.updateSettings { $0.fontSize = value }
                             }),
                           range: 10...20, step: 1, unit: " pt", decimals: 0)
+                Picker("Cursor", selection: Binding(
+                    get: { TerminalController.shared.settings.cursorStyle },
+                    set: { value in
+                        TerminalController.shared.updateSettings { $0.cursorStyle = value }
+                    }
+                )) {
+                    ForEach(TerminalCursorStyle.allCases, id: \.self) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                Toggle("Blink the cursor", isOn: Binding(
+                    get: { TerminalController.shared.settings.cursorBlink },
+                    set: { value in
+                        TerminalController.shared.updateSettings { $0.cursorBlink = value }
+                    }
+                ))
+                Picker("Scrollback", selection: Binding(
+                    get: { TerminalController.shared.settings.scrollbackLimitMB ?? 0 },
+                    set: { value in
+                        TerminalController.shared.updateSettings {
+                            $0.scrollbackLimitMB = value == 0 ? nil : value
+                        }
+                    }
+                )) {
+                    ForEach(scrollbackChoices, id: \.self) { megabytes in
+                        Text(megabytes == 0 ? "Default" : "\(megabytes) MB").tag(megabytes)
+                    }
+                }
                 TextField("Shell command (empty: login shell)", text: Binding(
                     get: { TerminalController.shared.settings.shell ?? "" },
                     set: { value in
@@ -1125,7 +1161,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(theme.subtext)
                 }
-                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
+                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live; the scrollback limit is memory per pane and applies to new panes. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
             }
             agentHooksSection
             sshProfilesSection

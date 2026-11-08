@@ -21,6 +21,44 @@ final class TerminalSettingsTests: XCTestCase {
         XCTAssertNil(settings.fontFamily)
         XCTAssertNil(settings.shell)
         XCTAssertEqual(settings.quakeHeightFraction, 0.45, accuracy: 0.001)
+        XCTAssertEqual(settings.cursorStyle, .block)
+        XCTAssertTrue(settings.cursorBlink)
+        XCTAssertNil(settings.scrollbackLimitMB)
+    }
+
+    func testAnOlderSettingsFileGainsTheNewDefaults() throws {
+        let old = """
+        {"version":1,"fontFamily":"Menlo","fontSize":14,"shell":"/bin/zsh","quakeHeightFraction":0.5}
+        """
+        let settings = try JSONDecoder().decode(TerminalSettingsDocument.self,
+                                                from: Data(old.utf8))
+        XCTAssertEqual(settings.fontFamily, "Menlo")
+        XCTAssertEqual(settings.cursorStyle, .block)
+        XCTAssertTrue(settings.cursorBlink)
+        XCTAssertNil(settings.scrollbackLimitMB)
+    }
+
+    func testCursorShapesAndScrollbackRoundTrip() {
+        let settings = TerminalSettingsDocument(cursorStyle: .bar,
+                                                cursorBlink: false,
+                                                scrollbackLimitMB: 20)
+        let data = try! JSONEncoder().encode(settings)
+        let decoded = try! JSONDecoder().decode(TerminalSettingsDocument.self, from: data)
+        XCTAssertEqual(decoded.cursorStyle, .bar)
+        XCTAssertFalse(decoded.cursorBlink)
+        XCTAssertEqual(decoded.scrollbackLimitMB, 20)
+    }
+
+    func testNormalizationClampsTheScrollbackAndChecksTheShape() {
+        XCTAssertEqual(TerminalSettingsDocument(scrollbackLimitMB: 0).normalized().scrollbackLimitMB, 1)
+        XCTAssertEqual(TerminalSettingsDocument(scrollbackLimitMB: 5000).normalized().scrollbackLimitMB, 1024)
+        XCTAssertNil(TerminalSettingsDocument(scrollbackLimitMB: nil).normalized().scrollbackLimitMB)
+
+        let raw = #"{"cursorStyle":"block_hollow"}"#
+        let decoded = try! JSONDecoder().decode(TerminalSettingsDocument.self,
+                                                from: Data(raw.utf8))
+        XCTAssertEqual(decoded.cursorStyle, .blockHollow)
+        XCTAssertEqual(decoded.cursorStyle.rawValue, "block_hollow")
     }
 
     func testNormalizationClampsAndCleans() {
