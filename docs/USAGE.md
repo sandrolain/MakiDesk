@@ -637,6 +637,12 @@ it running, so its shells keep working.
   match, `⇧Return` or `⇧⌘G` to the previous one, and `Esc` closes the bar and
   gives the keyboard back to the shell. The search covers Ghostty's scrollback
   and is not saved; each pane remembers its last query while the helper runs.
+- **Images on the clipboard.** When the clipboard holds an image and no text,
+  `⌘V` writes it as a PNG under
+  `~/Library/Application Support/MakiDesk/Terminal/pasted-images/` and types
+  its quoted path at the cursor — ready for an agent or a command that takes a
+  file. Files older than a week or beyond the newest 100 are removed when the
+  helper starts and after each paste; nothing leaves the Mac.
 - **Notifications and attention.** A desktop notification sent by a program in
   the shell (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon,
   instead of a bare system alert. The workspace also gets a dot in the sidebar;

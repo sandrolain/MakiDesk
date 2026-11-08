@@ -25,6 +25,13 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     /// starts from it instead of empty.
     var lastSearchNeedle = ""
     private var isDetached = false
+    /// Guards a slow image encode: a paste that finishes after the keyboard
+    /// moved elsewhere must not type into another surface.
+    private var pasteGeneration = 0
+    private static let imagePasteQueue = DispatchQueue(
+        label: "com.makidesk.terminal.image-paste",
+        qos: .userInitiated
+    )
 
     private var markedText = NSMutableAttributedString()
     private var trackingArea: NSTrackingArea?
@@ -361,7 +368,56 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     }
 
     @objc func paste(_ sender: Any?) {
+        if pasteImageAsPath() { return }
         performBindingAction("paste_from_clipboard")
+    }
+
+    /// A terminal sends text, not pictures: when the clipboard holds an image
+    /// and no text, the image becomes a PNG file and its quoted path is typed
+    /// at the cursor. Encoding runs on a worker; the insert lands only if this
+    /// surface still owns the keyboard and no newer paste superseded it.
+    private func pasteImageAsPath() -> Bool {
+        let pasteboard = NSPasteboard.general
+        if let text = pasteboard.string(forType: .string), text.isEmpty == false {
+            return false
+        }
+        let png = pasteboard.data(forType: .png)
+        let tiff = png == nil ? pasteboard.data(forType: .tiff) : nil
+        guard png != nil || tiff != nil, surface != nil else { return false }
+
+        let directory = TerminalImagePaste.directory
+        let target = directory.appendingPathComponent(TerminalImagePaste.fileName())
+        pasteGeneration &+= 1
+        let generation = pasteGeneration
+        Self.imagePasteQueue.async { [weak self, png, tiff, directory, target] in
+            var data = png
+            if data == nil, let tiff, let bitmap = NSBitmapImageRep(data: tiff) {
+                data = bitmap.representation(using: .png, properties: [:])
+            }
+            guard let data else { return }
+            do {
+                try FileManager.default.createDirectory(at: directory,
+                                                        withIntermediateDirectories: true)
+                try data.write(to: target, options: .atomic)
+            } catch {
+                return
+            }
+            // A long session can paste many images; bounding here keeps the
+            // directory from growing between launches.
+            TerminalImagePaste.prune(in: directory)
+            DispatchQueue.main.async {
+                guard let self, self.pasteGeneration == generation,
+                      self.surface != nil,
+                      self.window?.firstResponder === self else { return }
+                self.insertTextAtCursor(TerminalImagePaste.text(for: target.path))
+            }
+        }
+        return true
+    }
+
+    private func insertTextAtCursor(_ text: String) {
+        guard let surface else { return }
+        text.withCString { ghostty_surface_text_input(surface, $0, UInt(text.utf8.count)) }
     }
 
     @objc override func selectAll(_ sender: Any?) {

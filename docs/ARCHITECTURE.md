@@ -337,6 +337,14 @@ splits and the quake panel; the formatting and clamping of that state are a pure
 `TerminalSearchState` in `MakiTerminalCore`. A search session ends when the
 workspace is rebuilt, its pane closes or the bar is dismissed.
 
+An image paste cannot reach the shell as a picture: when the clipboard has an
+image and no text, `⌘V` writes a PNG under `Terminal/pasted-images/` on a
+worker, then types its shell-quoted path at the cursor. `TerminalImagePaste`
+owns the name, the quoting and the retention rule (newest 100, at most a week);
+the helper prunes at launch and after each paste, and a paste whose encode
+finishes after the keyboard moved to another surface is dropped. Text paste
+still goes through Ghostty's `paste_from_clipboard`.
+
 The helper also ships `Contents/Resources/bin/makidesk`, a one-shot status
 client. It reads `MAKIDESK_WORKSPACE_ID`, connects to the same socket, sends
 one `agentStatus` frame and exits; the server accepts it by executable name and

@@ -120,6 +120,7 @@ All paths are under your user account:
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, last directory per pane | Until you delete it; a factory reset does not remove it |
 | Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
+| Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
@@ -160,6 +161,12 @@ MakiDesk and shown as notices; their title and body live in the notice history
 in memory, like every other notice, and are never written to disk. Agent
 statuses sent by the bundled `makidesk` CLI (working, waiting, done, optional
 title) also live only in the helper's memory and are shown as a sidebar dot.
+
+An image pasted into a pane (when the clipboard holds no text) is written as a
+PNG under `…/MakiDesk/Terminal/pasted-images/`, because a terminal can only send
+text: the quoted path is typed at the cursor instead. Files older than a week or
+past the newest 100 are removed when the helper starts and after each new paste.
+Nothing is sent anywhere.
 
 The helper starts your login shell, so macOS attributes whatever that shell reads
 or connects to (shell startup files, tools it launches, `ssh`) to the helper, not

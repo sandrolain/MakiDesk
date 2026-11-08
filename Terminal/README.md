@@ -78,6 +78,10 @@ identity before the outer app.
   Ghostty as a `search:` binding action and the match total and selection come
   back as surface actions. `Esc` ends the session and returns the keyboard to
   the shell; each pane keeps its last needle for the run.
+- **Image paste:** an image with no text on the clipboard is encoded to PNG on a
+  worker under `Terminal/pasted-images/` and its shell-quoted path is typed at
+  the cursor; the files are pruned to the newest 100 and a week at launch and
+  after each paste.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
   IPC; it stays alive while hidden and is not part of the saved layout.
 - **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
@@ -89,8 +93,8 @@ identity before the outer app.
   tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling and links are the same kind of
-  not-yet-verified surface; find runs through Ghostty's search but was not
-  exercised on screen.
+  not-yet-verified surface; find runs through Ghostty's search and image paste
+  exists, but neither was exercised on screen.
 - Signing with the project identity and notarization for release, multi-display
   behaviour, energy and memory measurements.
 

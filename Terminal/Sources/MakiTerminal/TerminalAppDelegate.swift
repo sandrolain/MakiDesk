@@ -15,6 +15,11 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         // A stable, space-free path for `MAKIDESK_CLI`; recreated every launch
         // so a moved app bundle cannot leave a dangling link.
         _ = TerminalCLI.install()
+        // Old pasted images are only worth keeping for a while; the scan is
+        // small but does not belong on the launch path.
+        DispatchQueue.global(qos: .utility).async {
+            TerminalImagePaste.prune()
+        }
         let settings = TerminalSettingsStore().load()
         let theme = TerminalThemeStore().load()
         do {
