@@ -251,6 +251,11 @@ their frame, how many kept their size, and whether any frames overlap, come
 closer than the gap or fall outside the display. A newer command replaces the
 waiting verdict.
 
+For a few seconds after a layout, if an app moves a window off its slot,
+MakiDesk puts it back once. If the app does it again straight away, MakiDesk
+stops and leaves the window alone instead of trading writes with the app. A
+press, a drag, a display change or a new command ends that watch immediately.
+
 **Suggested layout.** Settings ▸ Layouts has *Ask before using the suggested
 layout*. With it on, `⌃⌥A` shows the advice and its reason and waits; running it
 again (or applying it from the menu) accepts. With it off, it applies at once.

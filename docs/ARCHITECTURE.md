@@ -178,6 +178,10 @@ All layout maths is pure and unit-tested:
   readback (bounded at two seconds) and reports placed, refused and unconfirmed
   counts plus overlaps, gap erosions and frames outside the display once. A newer
   command supersedes a waiting verdict instead of publishing a stale one.
+- `LayoutDriftGuard` watches the accepted frames for eight seconds. Two agreeing
+  drifted readings ask for one re-apply; a recurrence within five seconds, or a
+  second re-apply, stops the guard. A press, a display transition or a newer
+  command clears it, so the user is never fought for a window they moved.
 - A display transition is debounced on a fingerprint of the connected displays,
   their usable areas and their scales. The first notification saves every
   group's arrangement under the departing display key; the settle restores the

@@ -2384,12 +2384,28 @@ final class WorkspaceStore {
         let id: UUID
         let targets: [LayoutTarget]
         let gap: CGFloat
+        /// A drift re-apply keeps the original drift window and guard state.
+        let preserveDrift: Bool
         let completion: @MainActor (LayoutVerdict) -> Void
         var outcomes: [String: FrameOutcome] = [:]
         var deadline: DispatchWorkItem?
     }
 
     @ObservationIgnored private var activeLayoutRun: LayoutRun?
+
+    /// The last accepted layout, kept briefly so a window that an app takes back
+    /// can be put on its tile again. The window is the point: beyond it, a
+    /// different frame is the user's choice, not drift.
+    private struct LastLayout {
+        let targets: [LayoutTarget]
+        let gap: CGFloat
+        let until: Date
+    }
+
+    @ObservationIgnored private var lastLayout: LastLayout?
+    @ObservationIgnored private var layoutDriftStates: [String: LayoutDriftGuard] = [:]
+    private static let layoutDriftWindow: TimeInterval = 8
+    private static let layoutDriftRecurrence: TimeInterval = 5
 
     /// The most a layout command waits for its windows to answer. Each window
     /// has its own verification; this is the outer bound, so a window that
@@ -2400,9 +2416,11 @@ final class WorkspaceStore {
     /// collected, and the caller gets one verdict. A newer layout supersedes an
     /// older one without publishing its half-finished verdict.
     private func applyLayout(_ targets: [LayoutTarget], reason: String, gap: CGFloat,
+                             preserveDrift: Bool = false,
                              completion: @escaping @MainActor (LayoutVerdict) -> Void) {
         activeLayoutRun?.deadline?.cancel()
         activeLayoutRun = nil
+        if preserveDrift == false { cancelLayoutDrift() }
         guard targets.isEmpty == false else {
             completion(LayoutVerdict())
             return
@@ -2413,6 +2431,7 @@ final class WorkspaceStore {
             self?.finishLayoutRun(id: id, timedOut: true)
         }
         activeLayoutRun = LayoutRun(id: id, targets: targets, gap: gap,
+                                    preserveDrift: preserveDrift,
                                     completion: completion, deadline: deadline)
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.layoutVerdictDeadline,
                                       execute: deadline)
@@ -2427,9 +2446,59 @@ final class WorkspaceStore {
     }
 
     private func cancelActiveLayoutRun() {
-        guard let run = activeLayoutRun else { return }
+        guard let run = activeLayoutRun else {
+            cancelLayoutDrift()
+            return
+        }
         run.deadline?.cancel()
         activeLayoutRun = nil
+        cancelLayoutDrift()
+    }
+
+    /// Stops watching a layout for drift. A newer command, a drag or a new
+    /// layout makes the old intention history.
+    private func cancelLayoutDrift() {
+        lastLayout = nil
+        layoutDriftStates.removeAll()
+    }
+
+    /// One geometry notification against the last accepted layout. Two agreeing
+    /// drifted readings ask for one re-apply; if the app takes the frame back
+    /// again straight away, the guard gives up instead of fighting it.
+    private func noteLayoutDrift(key: String?, frame: CGRect) {
+        guard let key, displayTransitionActive == false else { return }
+        // A press is the user taking the window, not an app drifting it. The
+        // whole protection goes: the frame after the release is the user's.
+        if NSEvent.pressedMouseButtons & 1 != 0 {
+            cancelLayoutDrift()
+            return
+        }
+        guard let layout = lastLayout else { return }
+        guard Date() < layout.until else {
+            cancelLayoutDrift()
+            return
+        }
+        guard let target = layout.targets.first(where: { animationKey(for: $0.window) == key })
+        else { return }
+
+        var guardState = layoutDriftStates[key] ?? LayoutDriftGuard()
+        let decision = guardState.note(frame: frame, intended: target.frame, now: Date(),
+                                       recurrenceWindow: Self.layoutDriftRecurrence)
+        layoutDriftStates[key] = guardState
+
+        switch decision {
+        case .reapply:
+            applyLayout(layout.targets, reason: "layout drift", gap: layout.gap,
+                        preserveDrift: true) { [weak self] verdict in
+                self?.status = "Layout drift · reapplied \(verdict.placed) windows"
+            }
+        case .abandon:
+            MakiLog.index.notice("layout drift abandoned window=\(key, privacy: .public)")
+            cancelLayoutDrift()
+            status = "Layout drift · the app keeps its frame"
+        case .idle, .seen:
+            break
+        }
     }
 
     private func recordLayoutOutcome(_ outcome: FrameOutcome, key: String, runID: UUID) {
@@ -2450,6 +2519,18 @@ final class WorkspaceStore {
              outcome: run.outcomes[animationKey(for: target.window)] ?? .timedOut)
         }
         let verdict = LayoutVerdict.evaluate(evaluated, gap: run.gap)
+        let accepted = run.targets.filter { target in
+            if case .accepted = run.outcomes[animationKey(for: target.window)] {
+                return true
+            }
+            return false
+        }
+        if run.preserveDrift == false {
+            lastLayout = accepted.isEmpty ? nil : LastLayout(
+                targets: accepted, gap: run.gap,
+                until: Date().addingTimeInterval(Self.layoutDriftWindow))
+            layoutDriftStates.removeAll()
+        }
         if timedOut {
             MakiLog.index.notice("layout verdict deadline windows=\(run.targets.count, privacy: .public) answered=\(run.outcomes.count, privacy: .public)")
         } else {
@@ -2637,8 +2718,8 @@ final class WorkspaceStore {
         // the frame the command asked for is an animation step or the app's own
         // answer; the verification readback is the authority, so the model must
         // not oscillate on it.
-        if let key = frameIdentity(for: windows[index]),
-           let pending = pendingFrameTargets[key],
+        let key = frameIdentity(for: windows[index])
+        if let key, let pending = pendingFrameTargets[key],
            FrameMismatch.isAtTarget(frame, target: pending) == false {
             return
         }
@@ -2646,6 +2727,7 @@ final class WorkspaceStore {
         windows[index].y = frame.minY
         windows[index].width = frame.width
         windows[index].height = frame.height
+        noteLayoutDrift(key: key, frame: frame)
     }
 
     func refreshRealWindows() {
@@ -4566,6 +4648,7 @@ final class WorkspaceStore {
 
     private func move(windowAt index: Int, to point: CGPoint) {
         guard index < windows.count else { return }
+        cancelLayoutDrift()
         windows[index].x = point.x
         windows[index].y = point.y
         guard let element = elements[windows[index].id],
