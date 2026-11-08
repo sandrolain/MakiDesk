@@ -125,6 +125,46 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Menu
 
+    /// The MakiDesk.app that contains this helper, when the bundle is nested:
+    /// `MakiDesk.app/Contents/Applications/MakiDeskTerminal.app`.
+    private var containingMakiDesk: URL? {
+        let url = Bundle.main.bundleURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        guard url.lastPathComponent == "MakiDesk.app",
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
+    @objc private func openMakiDesk(_ sender: Any?) {
+        if let running = NSRunningApplication
+            .runningApplications(withBundleIdentifier: "com.makidesk.app").first {
+            running.activate(options: [.activateAllWindows])
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        if let url = containingMakiDesk
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.makidesk.app") {
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in }
+        }
+    }
+
+    @objc private func openMakiDeskSettings(_ sender: Any?) {
+        if let server, server.hasClient {
+            server.sendOpenSettings()
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "MakiDesk is not running"
+        alert.informativeText = "Open MakiDesk once, then choose Terminal Settings again."
+        alert.addButton(withTitle: "Open MakiDesk")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            openMakiDesk(nil)
+        }
+    }
+
     private func installMenu(target: TerminalWindowController) {
         let mainMenu = NSMenu()
 
@@ -139,6 +179,14 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
                         action: #selector(NSApplication.terminate(_:)),
                         keyEquivalent: "q")
         appItem.submenu = appMenu
+
+        let makiItem = NSMenuItem()
+        mainMenu.addItem(makiItem)
+        let makiMenu = NSMenu(title: "MakiDesk")
+        menu(makiMenu, "Open MakiDesk", #selector(openMakiDesk(_:)), "", [], self)
+        menu(makiMenu, "Terminal Settings…",
+             #selector(openMakiDeskSettings(_:)), ",", [], self)
+        makiItem.submenu = makiMenu
 
         let fileItem = NSMenuItem()
         mainMenu.addItem(fileItem)

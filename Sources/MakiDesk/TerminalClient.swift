@@ -211,6 +211,10 @@ final class TerminalClient {
                     HUDMessage.terminalNotification(title: title, detail: detail)
                 )
             }
+        case .openSettings:
+            DispatchQueue.main.async {
+                SettingsController.shared.show(tab: .terminal)
+            }
         case .ping, .pong, .state, .settingsRequested,
              .settingsChanged, .themeChanged, .agentStatus, .willTerminate:
             break

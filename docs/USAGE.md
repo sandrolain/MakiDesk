@@ -720,6 +720,9 @@ it running, so its shells keep working.
   arguments; passwords are never stored, and keys and `known_hosts` remain
   ssh's own. The command is saved with the layout, so a restored pane tries to
   reconnect.
+- **MakiDesk menu.** While the helper is in front, its own menu bar has
+  **Open MakiDesk** and **Terminal Settings…**. The second opens Settings ▸
+  Terminal directly, or offers to launch MakiDesk when it is not running.
 - **Settings ▸ Terminal.** Font family and size, the cursor shape and blink,
   the scrollback size per pane, copying selected text, hiding the pointer while
   typing, the shell command (empty starts your login shell), the quake height

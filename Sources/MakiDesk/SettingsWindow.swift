@@ -30,8 +30,14 @@ final class SettingsController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { settingsWindow?.isVisible == true }
 
-    /// Opens the window, or brings it back, with the keyboard.
-    func show() {
+    /// Opens the window, or brings it back, with the keyboard. A tab selected
+    /// from elsewhere (the terminal helper's menu) is written before the view
+    /// is built or read again, so the page is the requested one.
+    func show(tab: SettingsView.SettingsTab? = nil) {
+        if let tab {
+            UserDefaults.standard.set(tab.rawValue,
+                                      forKey: SettingsKey.settingsTab.rawValue)
+        }
         if settingsWindow == nil { build() }
         guard let window = settingsWindow else { return }
         applyTheme()

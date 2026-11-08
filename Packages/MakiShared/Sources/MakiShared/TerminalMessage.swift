@@ -34,6 +34,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         case settingsChanged
         case themeChanged
         case agentStatus
+        case openSettings
         case willTerminate
     }
 

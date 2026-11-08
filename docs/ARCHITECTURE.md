@@ -303,7 +303,8 @@ MakiDesk talks to it over `~/Library/Application Support/MakiDesk/Terminal/termi
 (`0600`, directory `0700`). Frames are four big-endian length bytes plus JSON;
 the kinds are a closed set (`hello`, `welcome`, `showMain`, `hideMain`,
 `toggleQuake`, `ping`, `quit` and events, including `attention` for a shell
-notification that becomes a MakiDesk notice). The helper accepts one client, checks
+notification that becomes a MakiDesk notice and `openSettings`, which the
+helper's MakiDesk menu uses to show Settings ▸ Terminal). The helper accepts one client, checks
 the peer pid and that it is MakiDesk (bundle id, or the development binary by
 name), and replies to `hello` with its version and pid. `TerminalClient` keeps
 the connection, retries a launch up to 30 times at 150 ms intervals, and reports

@@ -61,6 +61,20 @@ final class TerminalIPCServer {
         }
     }
 
+    /// Whether MakiDesk is connected right now; menu actions use it to decide
+    /// between an in-app request and offering to launch MakiDesk.
+    var hasClient: Bool {
+        queue.sync { clientFD >= 0 }
+    }
+
+    /// Asks MakiDesk to open its Settings window on the Terminal page.
+    func sendOpenSettings() {
+        queue.async { [weak self] in
+            guard let self, self.clientFD >= 0 else { return }
+            self.send(TerminalMessage(kind: .openSettings))
+        }
+    }
+
     private func startLocked() -> Bool {
         guard running == false else { return true }
 
@@ -217,7 +231,8 @@ final class TerminalIPCServer {
             DispatchQueue.main.async { [weak self] in
                 self?.onAgentStatus?(id, state, message.body?.message)
             }
-        case .welcome, .pong, .state, .attention, .settingsRequested, .willTerminate:
+        case .welcome, .pong, .state, .attention, .openSettings,
+             .settingsRequested, .willTerminate:
             break
         }
     }

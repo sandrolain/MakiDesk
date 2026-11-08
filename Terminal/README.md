@@ -89,7 +89,8 @@ identity before the outer app.
 - **Two-app boundary:** `MakiShared` (framing and messages) and a Unix socket
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.
-- **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
+- **Menus:** a MakiDesk menu with Open MakiDesk and Terminal Settings… (`⌘,`);
+  New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
   Workspace 1…9 `⌘1`…`⌘9`, Previous/Next Workspace `⌃⌘←`/`⌃⌘→`,
   Move Workspace Up `⌃⌘↑`, Move Workspace Down `⌃⌘↓`,
   Focus Pane `⌘⌥←/→/↑/↓`, Zoom Pane `⇧⌘↩`, Equalize Splits `⌃⌘E`,
