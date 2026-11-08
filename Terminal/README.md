@@ -98,6 +98,12 @@ identity before the outer app.
   inserted at the cursor (multi-line as one paste, trailing newline as Return).
   `TerminalAccessibilityText` in `MakiTerminalCore` caches the snapshot and
   diffs a written value against what the client read.
+- **Rendering follows the screen:** panes of unselected workspaces, a hidden
+  quake, a minimized window and a hidden app are marked not visible through
+  `ghostty_surface_set_occlusion` (the flag is "visible": false pauses), so
+  Ghostty stops drawing while their shells keep running. The flag is
+  recomputed after a workspace switch, on a quake toggle, on occlusion changes
+  and on key/main transitions.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
   IPC; it stays alive while hidden and is not part of the saved layout. The
   panel carries an Accessibility identifier, so MakiDesk's window switcher

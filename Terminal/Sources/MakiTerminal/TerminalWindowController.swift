@@ -699,13 +699,19 @@ final class TerminalWindowController: NSWindowController,
         panel.makeFirstResponder(host.surfaceView)
         host.isFocused = true
         quakeVisible = true
+        host.surfaceView.setRendererVisible(true)
+        updateRendererVisibility()
+        // The panel's occlusion state catches up after it is ordered front.
+        DispatchQueue.main.async { [weak self] in self?.updateRendererVisibility() }
     }
 
     func hideQuake() {
         guard quakeVisible else { return }
         quakeVisible = false
         quakeHost?.isFocused = false
+        quakeHost?.surfaceView.setRendererVisible(false)
         quakePanel?.orderOut(nil)
+        updateRendererVisibility()
     }
 
     func hideQuakeIfVisible() {
@@ -723,6 +729,7 @@ final class TerminalWindowController: NSWindowController,
         quakeHost?.removeFromSuperview()
         quakeHost = nil
         quakeWorkspace = nil
+        updateRendererVisibility()
     }
 
     private func makeQuakeHost() -> TerminalPaneHostView? {
@@ -760,6 +767,7 @@ final class TerminalWindowController: NSWindowController,
         // panel out of its window switcher by the identifier.
         panel.title = "MakiDesk Quake"
         panel.setAccessibilityIdentifier(TerminalIdentity.quakeAccessibilityIdentifier)
+        panel.delegate = self
         panel.contentView = host
         quakePanel = panel
         return panel
@@ -846,6 +854,7 @@ final class TerminalWindowController: NSWindowController,
         currentRootView = root
         updateFocusBorders()
         focusPane(workspaces[selected].focusedPane)
+        updateRendererVisibility()
         DispatchQueue.main.async { [weak self] in self?.isBuilding = false }
     }
 
@@ -927,6 +936,53 @@ final class TerminalWindowController: NSWindowController,
                 tableView.reloadData()
             }
         }
+        // Key transitions are not always accompanied by an occlusion change,
+        // and the first one is what lifts the pre-show state at launch.
+        updateRendererVisibility()
+        DispatchQueue.main.async { [weak self] in self?.updateRendererVisibility() }
+    }
+
+    func windowDidBecomeMain(_ notification: Notification) {
+        updateRendererVisibility()
+    }
+
+    /// A hidden window, a hidden app or a display that sleeps makes the whole
+    /// surface set stop rendering; the shells keep consuming output. Only the
+    /// selected workspace is on screen.
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        updateRendererVisibility()
+    }
+
+    private var mainWindowReportedVisible = false
+    private var quakePanelReportedVisible = false
+
+    private func updateRendererVisibility() {
+        let mainVisible = isVisible(window, reported: &mainWindowReportedVisible)
+        let visiblePanes: Set<PaneID> = workspaces.indices.contains(selected)
+            ? Set(workspaces[selected].paneIDs) : []
+        for (pane, host) in paneViews {
+            host.surfaceView.setRendererVisible(mainVisible && visiblePanes.contains(pane))
+        }
+        let quakeOnScreen = quakeVisible
+            && isVisible(quakePanel, reported: &quakePanelReportedVisible)
+        quakeHost?.surfaceView.setRendererVisible(quakeOnScreen)
+    }
+
+    /// `occlusionState` is authoritative on a real display; until a window has
+    /// reported it once, a virtual display's ordinary on-screen state is
+    /// trusted, and a key window is always visible.
+    private func isVisible(_ window: NSWindow?, reported: inout Bool) -> Bool {
+        guard let window else { return false }
+        let occlusionVisible = window.occlusionState.contains(.visible)
+        if occlusionVisible { reported = true }
+        return TerminalRendererVisibility.isVisible(
+            occlusionVisible: occlusionVisible,
+            windowHasReportedVisible: reported,
+            isVisible: window.isVisible,
+            isMiniaturized: window.isMiniaturized,
+            isOnActiveSpace: window.isOnActiveSpace,
+            isKeyWindow: window.isKeyWindow
+        )
     }
 
     // MARK: - Focus

@@ -25,6 +25,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     /// starts from it instead of empty.
     var lastSearchNeedle = ""
     private var isDetached = false
+    /// Whether Ghostty should render this pane. Hidden workspaces, a hidden
+    /// quake and occluded windows pass false; the shell keeps running. Default
+    /// true, so a surface created before the first visibility pass draws.
+    private var isRendererVisible = true
     /// Guards a slow image encode: a paste that finishes after the keyboard
     /// moved elsewhere must not type into another surface.
     private var pasteGeneration = 0
@@ -80,6 +84,18 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             runtime?.focusedSurface = nil
         }
         self.surface = nil
+    }
+
+    /// Tells Ghostty whether the pane may render. The C flag is "visible", not
+    /// "occluded": true keeps drawing, false pauses the renderer while the
+    /// shell keeps running. The value is replayed when a surface is created
+    /// after the pane moved off screen.
+    func setRendererVisible(_ visible: Bool) {
+        guard visible != isRendererVisible else { return }
+        isRendererVisible = visible
+        if let surface {
+            ghostty_surface_set_occlusion(surface, visible)
+        }
     }
 
     private func createSurface(app: ghostty_app_t) {
@@ -142,6 +158,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             runtime?.focusedSurface = created
         }
         ghostty_surface_set_content_scale(created, scale, scale)
+        ghostty_surface_set_occlusion(created, isRendererVisible)
         updateSurfaceSize()
     }
 

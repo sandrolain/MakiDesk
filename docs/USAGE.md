@@ -629,6 +629,10 @@ it running, so its shells keep working.
   layout, and it stays alive while hidden. MakiDesk's window switcher leaves
   the quake panel out, since it is toggled with its own shortcut; the helper's
   main window is still listed there.
+- **Hidden means not drawn.** Workspaces you are not looking at, a hidden
+  quake, a minimized window or an app that macOS has hidden stop rendering;
+  their shells keep running and consuming output, and drawing resumes when they
+  come back.
 - **While the terminal is in front.** MakiDesk suspends its other global
   shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in

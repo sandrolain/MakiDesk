@@ -360,6 +360,19 @@ Return key press. Selected text and its range come from
 snapshot and posts `valueChanged`. None of this reads or stores text beyond the
 screen snapshot in memory.
 
+Rendering follows what is actually on screen. `TerminalSurfaceView.setRendererVisible`
+forwards to `ghostty_surface_set_occlusion` — the C flag is **visible**, so
+`false` pauses the renderer — and the window controller recomputes it after a
+workspace switch, when the quake opens or closes and on
+`windowDidChangeOcclusionState` plus key/main transitions. Panes of unselected
+workspaces, a hidden quake, a minimized window and a hidden app stop drawing
+while the shells and their output processing continue.
+`TerminalRendererVisibility` in `MakiTerminalCore` holds the rule: an occlusion
+verdict is honoured only after the window has reported `.visible` once, a key
+window is always visible, and before that first report the ordinary on-screen
+state is trusted (virtual displays may never raise the bit). A surface created
+while the pane is off screen replays the flag on creation.
+
 The helper also ships `Contents/Resources/bin/makidesk`, a one-shot client for
 the same socket. `status working|waiting|done [--title …]` reads
 `MAKIDESK_WORKSPACE_ID`, sends one `agentStatus` frame and exits; the server
