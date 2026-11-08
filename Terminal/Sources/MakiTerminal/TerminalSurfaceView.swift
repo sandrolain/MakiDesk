@@ -684,13 +684,29 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
-    /// Whether closing the pane would end a running command. Ghostty already
-    /// tracks this from the PTY and its prompt marks; a configured SSH/tmux
-    /// session is the session itself, so it always asks.
+    /// Whether closing the pane would end a running command. The process tree
+    /// gives the precise answer when it is readable; Ghostty's own
+    /// `needs_confirm_quit` is the fallback, and a configured SSH/tmux session
+    /// always asks.
     func hasRunningCommand(configuredCommand: Bool) -> Bool {
         guard let surface else { return false }
-        if ghostty_surface_needs_confirm_quit(surface) { return true }
-        return configuredCommand
+        let raw = ghostty_surface_foreground_pid(surface)
+        let foreground: pid_t? = (raw > 1 && raw <= UInt64(Int32.max)) ? pid_t(raw) : nil
+        let baseline: pid_t? = foreground.flatMap { foreground in
+            TerminalProcessTree.baselinePID(
+                foreground: foreground,
+                helper: getpid(),
+                parent: TerminalProcessTree.parentPID(of:),
+                path: TerminalProcessTree.executablePath(of:)
+            )
+        }
+        let ghostty = ghostty_surface_needs_confirm_quit(surface)
+        return TerminalProcessTree.shouldConfirmClose(
+            configuredCommand: configuredCommand,
+            ghosttySaysConfirm: ghostty,
+            foreground: foreground,
+            baseline: baseline
+        )
     }
 
     private func readActiveScreenText() -> String? {

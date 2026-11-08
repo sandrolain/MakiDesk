@@ -383,6 +383,14 @@ final class TerminalWindowController: NSWindowController,
         saveWindowFrameNow()
     }
 
+    /// An alert (close confirmation or quit) took the keyboard; put it back in
+    /// the pane the user was using.
+    func restoreFocusAfterAlert() {
+        guard workspaces.indices.contains(selected) else { return }
+        let workspace = workspaces[selected]
+        focusPane(workspace.visibleZoomedPane ?? workspace.focusedPane)
+    }
+
     private func scheduleWindowFrameSave() {
         windowFrameTimer?.invalidate()
         let timer = Timer(timeInterval: 0.4, repeats: false) { [weak self] _ in
@@ -577,7 +585,13 @@ final class TerminalWindowController: NSWindowController,
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Close")
         alert.buttons.last?.hasDestructiveAction = true
-        return alert.runModal() == .alertSecondButtonReturn
+        let confirmed = alert.runModal() == .alertSecondButtonReturn
+        if confirmed == false {
+            // The alert takes key focus; put the keyboard back in the pane the
+            // user was working in instead of leaving it on the window.
+            focusPane(workspace.visibleZoomedPane ?? workspace.focusedPane)
+        }
+        return confirmed
     }
 
     private func hasRunningCommand(_ pane: PaneID,

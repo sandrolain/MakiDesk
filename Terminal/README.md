@@ -45,9 +45,11 @@ identity before the outer app.
   workspaces never restarts a shell.
 - **Closing safely:** `⌘W` closes the focused pane, the workspace when it has
   one pane, and hides the window when that is also the last workspace. A pane
-  that is not at a prompt, or that runs an SSH/tmux configured command, asks
-  for confirmation first (via `ghostty_surface_needs_confirm_quit`); the quake
-  is only hidden.
+  whose foreground process is deeper than its shell, or that runs an SSH/tmux
+  configured command, asks for confirmation first (`TerminalProcessTree`, with
+  `ghostty_surface_needs_confirm_quit` as the fallback; the parent walk uses
+  `sysctl` because `proc_pidinfo` refuses the setuid `login`); cancelling
+  restores the pane's keyboard focus. The quake is only hidden.
 - **Persistence:** `Terminal/workspaces.json` holds titles, split tree, ratios,
   selection, each pane's last directory and its command (SSH included); it is
   atomic and versioned, and a corrupt file is quarantined. Scrollback is not

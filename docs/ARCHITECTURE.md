@@ -299,11 +299,14 @@ binary nor rebuilds the helper. `MakiShared` is the only code both apps link: th
 message envelope, length-prefixed framing and the socket location. The workspace
 model and its persistence live in `MakiTerminalCore`, which is free of AppKit.
 `⌘W` closes the focused pane; with one pane it closes the workspace, and with
-one workspace it hides the window. `ghostty_surface_needs_confirm_quit` says
-whether the surface is not sitting at a prompt, and a pane whose session is a
-configured SSH/tmux command always counts; either case shows a Cancel-default
-confirmation before the pane or workspace is removed. The generated config no
-longer sets `confirm-close-surface = false`, so that answer is not suppressed.
+one workspace it hides the window. `TerminalProcessTree` compares the foreground process id with the pane's shell
+(the process below `login`, or the helper's direct child): a deeper process is
+a running command. Parent lookups use `sysctl(KERN_PROC_PID)` because
+`proc_pidinfo` refuses the setuid `login` wrapper. `ghostty_surface_needs_confirm_quit` is the fallback when the
+tree cannot be read, and a configured SSH/tmux session always counts; either
+case shows a Cancel-default confirmation before the pane or workspace is
+removed; cancelling puts the keyboard back in the pane. The generated config no longer sets `confirm-close-surface = false`, so
+the fallback is not suppressed.
 
 Closing the main window orders it out and switches the helper to `.accessory`:
 the surfaces stay alive, MakiDesk's ⌃⌥O calls `showMain` (which restores

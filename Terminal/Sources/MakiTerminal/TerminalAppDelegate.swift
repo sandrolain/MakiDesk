@@ -107,7 +107,12 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         if #available(macOS 11.0, *) {
             alert.buttons.last?.hasDestructiveAction = true
         }
-        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        let reply = alert.runModal()
+        if reply != .alertSecondButtonReturn {
+            terminal?.restoreFocusAfterAlert()
+            return .terminateCancel
+        }
+        return .terminateNow
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication,
