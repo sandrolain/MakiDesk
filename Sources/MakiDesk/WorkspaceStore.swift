@@ -2097,9 +2097,21 @@ final class WorkspaceStore {
         frameGenerations[key] = generation
         pendingFrameTargets[key] = adjusted
         MakiLog.index.notice("frame command window=\(key, privacy: .public) app=\(target.appName, privacy: .public) reason=\(reason, privacy: .public) requested=(\(Int(adjusted.minX)),\(Int(adjusted.minY)),\(Int(adjusted.width)),\(Int(adjusted.height))) generation=\(generation, privacy: .public)")
+        let sourceScreen = WindowController.isOnSomeScreen(previous)
+            ? WindowController.screen(forAXFrame: previous)
+            : nil
+        let destinationScreen = WindowController.screen(forAXFrame: adjusted)
+        let order = Self.frameWriteOrder(
+            for: adjusted,
+            sourceArea: sourceScreen.map { WindowController.axVisibleFrame(for: $0) })
+        let settlingDelays = Self.crossesScale(sourceScreen?.backingScaleFactor,
+                                               destinationScreen?.backingScaleFactor)
+            ? Self.crossScaleSettlingDelays
+            : Self.settlingDelays
         let verification = FrameVerification(
             wanted: adjusted, previous: previous, target: target, reason: reason,
-            key: key, generation: generation, allowWriteRetry: retryOnMismatch)
+            key: key, generation: generation, allowWriteRetry: retryOnMismatch,
+            settlingDelays: settlingDelays)
         let finish: @MainActor @Sendable () -> Void = { [weak self] in
             self?.verifyFrame(verification)
         }
@@ -2110,7 +2122,8 @@ final class WorkspaceStore {
             frameTimers[key]?.invalidate()
             frameTimers[key] = nil
             frameLastWritten[key] = nil
-            WindowController.setFrameAsync(adjusted, for: target.element, identity: key) {
+            WindowController.setFrameAsync(adjusted, for: target.element, identity: key,
+                                           order: order) {
                 WindowOutlineController.shared.refreshGeometry(for: target.element, frame: adjusted)
                 finish()
             }
@@ -2144,11 +2157,34 @@ final class WorkspaceStore {
     /// it was and the target. Two reads cover an app that applies the write a
     /// run loop later, without chasing a window that is still animating.
     private static let settlingDelays: [TimeInterval] = [0.12, 0.24]
+    /// A hop between a 1x and a 2x display makes the app redraw everything at
+    /// the new scale; its frame lands later than on a same-scale move.
+    private static let crossScaleSettlingDelays: [TimeInterval] = [0.3, 0.8]
     /// A size-first retry is a real write; give the app a short beat before
     /// judging its answer again.
     private static let sizeRetryDelay: TimeInterval = 0.15
     /// One more read when AX returned nothing. A failed read is not geometry.
     private static let readRetryDelay: TimeInterval = 0.12
+
+    /// The write order for one window. A window that is off-screen, or whose
+    /// target is bigger than the screen it stands on, moves first: a size write
+    /// there would be clamped by that screen. Everything else writes the size,
+    /// moves, and writes the size again, which recovers a clamped first write.
+    nonisolated static func frameWriteOrder(
+        for target: CGRect, sourceArea: CGRect?
+    ) -> WindowController.FrameWriteOrder {
+        guard let sourceArea else { return .positionThenSize }
+        if target.width > sourceArea.width + 1 || target.height > sourceArea.height + 1 {
+            return .positionThenSize
+        }
+        return .sizePositionSize
+    }
+
+    /// Whether a move crosses displays with different backing scales.
+    nonisolated static func crossesScale(_ source: CGFloat?, _ destination: CGFloat?) -> Bool {
+        guard let source, let destination else { return false }
+        return abs(source - destination) > 0.01
+    }
 
     /// One command's verification, carried across the re-reads. A value type
     /// so a superseded command cannot mutate the state of a newer one.
@@ -2164,6 +2200,9 @@ final class WorkspaceStore {
         /// False for commands that must never re-write a different frame, such
         /// as the screen-boundary fallback.
         let allowWriteRetry: Bool
+        /// The re-read schedule for this command; a cross-scale move gets more
+        /// time than a same-screen one.
+        let settlingDelays: [TimeInterval]
         var settlingReads = 0
         var readFailures = 0
         var writeRetried = false
@@ -2204,12 +2243,12 @@ final class WorkspaceStore {
             finishVerified(actual, state: state, rounded: true)
 
         case .settling:
-            guard state.settlingReads < Self.settlingDelays.count else {
+            guard state.settlingReads < state.settlingDelays.count else {
                 finishRefused(actual, state: state, mismatch: .settling)
                 return
             }
             var next = state
-            let delay = Self.settlingDelays[state.settlingReads]
+            let delay = state.settlingDelays[state.settlingReads]
             next.settlingReads += 1
 
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in

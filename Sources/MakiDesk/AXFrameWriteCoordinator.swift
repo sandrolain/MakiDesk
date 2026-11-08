@@ -61,6 +61,20 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
                     if frame.origin != previous?.origin {
                         try WindowController.setPosition(frame.origin, for: element)
                     }
+                case .sizePositionSize:
+                    let sizeChanged = frame.size != previous?.size
+                    let positionChanged = frame.origin != previous?.origin
+                    if sizeChanged {
+                        try WindowController.setSize(frame.size, for: element)
+                    }
+                    if positionChanged {
+                        try WindowController.setPosition(frame.origin, for: element)
+                        // The app may have clamped the size while it was still
+                        // on the old screen; re-assert it now that it has moved.
+                        if sizeChanged {
+                            try WindowController.setSize(frame.size, for: element)
+                        }
+                    }
                 }
             }
         },

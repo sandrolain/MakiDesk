@@ -188,7 +188,10 @@ All layout maths is pure and unit-tested:
   `FrameMismatch` classifies the readback: rounding is accepted, a size that
   did not move while the position landed gets one size-first retry, and a frame
   the app chose is reported once. `WindowSizeLimitMemory` keeps the floor and
-  the fixed length a refusal proved, for the rest of the session.
+  the fixed length a refusal proved, for the rest of the session. A write is
+  size → move → size unless the target is bigger than the source screen or the
+  window is off-screen, where it moves first; a hop between backing scales gets
+  a longer readback window.
 - A geometry notification updates the model only when no command is in flight
   for that window, or when the frame already matches the command's target.
   Animation steps and an app's own answer are left to the verification readback,

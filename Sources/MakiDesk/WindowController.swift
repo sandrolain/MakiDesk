@@ -7,6 +7,9 @@ enum WindowController {
     enum FrameWriteOrder: Equatable, Sendable {
         case positionThenSize
         case sizeThenPosition
+        /// Size, position, size again: the second size recovers a write the app
+        /// clamped while the window was still on the old screen.
+        case sizePositionSize
     }
     enum ShortcutAction: Equatable {
         case leftHalf, rightHalf, topHalf, bottomHalf
