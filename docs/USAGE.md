@@ -1432,8 +1432,10 @@ only; everything else works.
 the count. Quit the other app or change its shortcut.
 
 **A window refuses to resize.** Some apps (panels, dialogs, some Electron apps)
-do not expose a writable frame; MakiDesk reports it in the status line/HUD
-instead of leaving a hole. Note and Safari are retried specially.
+do not accept a frame. A size that differs only by the app's own rounding (a
+character cell, a title bar) is accepted silently; a real refusal is reported
+once, in the status line/HUD, instead of writing the same frame again. The floor
+that window showed is remembered for the rest of the session.
 
 **A window is on another Space.** macOS does not provide a public API to move a
 window between Spaces. MakiDesk only moves windows on the current desktop.

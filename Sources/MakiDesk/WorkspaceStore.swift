@@ -461,6 +461,7 @@ final class WorkspaceStore {
         WindowIndex.shared.onApplicationTerminated = { [weak self] pid in
             self?.iconCache[pid] = nil
             self?.recentFocusedWindowIDs.removeAll { $0.hasPrefix("\(pid)-") }
+            self?.sizeLimits.forget(pid: pid)
             AXEnhancedUIController.applicationDidTerminate(pid: pid)
         }
         startGlobalShortcuts()
@@ -2021,9 +2022,11 @@ final class WorkspaceStore {
     /// overlay and the on-screen feedback all move together. Every path —
     /// keyboard ladder, regions, auto layout and Ctrl+Opt+drag — uses this.
     ///
-    /// The write is verified and, if it did not stick, tried again (T27): some
-    /// apps impose a minimum size, take the new size a run loop later, or put
-    /// their own frame back while the un-minimise animation runs. A full-screen
+    /// The write is verified, but a difference is classified instead of being
+    /// blindly retried (`FrameMismatch`): an app that rounded its size is
+    /// accepted, an app that kept its size at the target position gets one
+    /// size-first retry, and an app that chose its own frame is reported once.
+    /// The floor it showed is remembered for the next command. A full-screen
     /// window is left alone: it has no frame of ours to set.
     func applyFrame(_ frame: CGRect, to target: WindowController.WindowInfo, reason: String,
                     animate: Bool = true, retryOnMismatch: Bool = true) {
@@ -2033,6 +2036,7 @@ final class WorkspaceStore {
         }
         contentAnalysisTask?.cancel()
         let adjusted = frame.integral
+        let previous = target.frame
         frameCommandEpoch &+= 1
         if let entry = matchingIndex(for: target) {
             windows[entry].x = adjusted.minX
@@ -2045,18 +2049,19 @@ final class WorkspaceStore {
         // recall, Ctrl+Opt+drag — so the arrangement a group restores is always
         // the last one seen.
         rememberArrangement(adjusted, for: target)
-        // One generation per window per command: a re-try that belongs to an
-        // older command is dropped instead of writing over a newer one, so a
-        // re-try can never make a window dance (T27).
+        // One generation per window per command: a re-read or a retry that
+        // belongs to an older command is dropped instead of writing over a
+        // newer one, so a command can never make a window dance (T27).
         let key = animationKey(for: target)
         let generation = (frameGenerations[key] ?? 0) + 1
         frameGenerations[key] = generation
         pendingFrameTargets[key] = adjusted
         MakiLog.index.notice("frame command window=\(key, privacy: .public) app=\(target.appName, privacy: .public) reason=\(reason, privacy: .public) requested=(\(Int(adjusted.minX)),\(Int(adjusted.minY)),\(Int(adjusted.width)),\(Int(adjusted.height))) generation=\(generation, privacy: .public)")
+        let verification = FrameVerification(
+            wanted: adjusted, previous: previous, target: target, reason: reason,
+            key: key, generation: generation, allowWriteRetry: retryOnMismatch)
         let finish: @MainActor @Sendable () -> Void = { [weak self] in
-            self?.verifyFrame(adjusted, target: target, reason: reason,
-                              key: key, generation: generation, attempt: 0,
-                              retryOnMismatch: retryOnMismatch)
+            self?.verifyFrame(verification)
         }
         if animate && effectiveAnimationsEnabled && target.pid != Self.ownPID {
             animateFrame(to: adjusted, element: target.element, key: key,
@@ -2067,14 +2072,7 @@ final class WorkspaceStore {
             frameLastWritten[key] = nil
             WindowController.setFrameAsync(adjusted, for: target.element, identity: key) {
                 WindowOutlineController.shared.refreshGeometry(for: target.element, frame: adjusted)
-                if retryOnMismatch {
-                    finish()
-                } else {
-                    // Give AX-backed apps a moment to publish the write before
-                    // reading their accepted frame. Arrow steps intentionally do
-                    // not retry a mismatch, which can fight an app's constraints.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: finish)
-                }
+                finish()
             }
         }
     }
@@ -2083,10 +2081,13 @@ final class WorkspaceStore {
     /// queue: AppKit services its own Accessibility writes on the main thread.
     private static let ownPID = ProcessInfo.processInfo.processIdentifier
 
-    /// Counts frame commands per window, so a re-try belonging to an older
-    /// command never writes over a newer one (T27).
+    /// Counts frame commands per window, so a re-read or retry belonging to an
+    /// older command never writes over a newer one (T27).
     @ObservationIgnored private var frameGenerations: [String: Int] = [:]
     @ObservationIgnored private var pendingFrameTargets: [String: CGRect] = [:]
+    /// Size floors and fixed lengths apps have shown. Session-only: a floor
+    /// depends on what the window is currently showing.
+    @ObservationIgnored private let sizeLimits = WindowSizeLimitMemory()
 
     private func targetWithPendingFrame(_ target: WindowController.WindowInfo) -> WindowController.WindowInfo {
         var updated = target
@@ -2099,103 +2100,196 @@ final class WorkspaceStore {
         pending ?? actual
     }
 
-    /// How long to wait before each re-try of a frame that did not stick (T27),
-    /// so a command settles in about half a second and never makes a window
-    /// dance: two re-tries, then the app is the constraint.
-    private static let frameRetries: [TimeInterval] = [0.15, 0.3]
+    /// How long to wait before re-reading a frame that is still between where
+    /// it was and the target. Two reads cover an app that applies the write a
+    /// run loop later, without chasing a window that is still animating.
+    private static let settlingDelays: [TimeInterval] = [0.12, 0.24]
+    /// A size-first retry is a real write; give the app a short beat before
+    /// judging its answer again.
+    private static let sizeRetryDelay: TimeInterval = 0.15
+    /// One more read when AX returned nothing. A failed read is not geometry.
+    private static let readRetryDelay: TimeInterval = 0.12
 
-    /// Beyond this the frame is not the one that was asked for; below it, the
-    /// couple of points some apps add are their own chrome (T27).
-    private static let frameTolerance: CGFloat = 2
+    /// One command's verification, carried across the re-reads. A value type
+    /// so a superseded command cannot mutate the state of a newer one.
+    private struct FrameVerification {
+        let wanted: CGRect
+        /// The frame before the command, as the model knew it. It is what tells
+        /// an app that ignored the write from one that chose its own size.
+        let previous: CGRect
+        let target: WindowController.WindowInfo
+        let reason: String
+        let key: String
+        let generation: Int
+        /// False for commands that must never re-write a different frame, such
+        /// as the screen-boundary fallback.
+        let allowWriteRetry: Bool
+        var settlingReads = 0
+        var readFailures = 0
+        var writeRetried = false
+    }
 
-    /// Checks that the frame stuck and, when it did not, writes it again —
-    /// through the opposite order the second time, and integral the third, which
-    /// is what an app that imposes a minimum or rounds the size needs. Only
-    /// after both re-tries does the feedback declare the constraint, with the
-    /// frame that was asked for and the one that is actually there.
-    private func verifyFrame(_ wanted: CGRect, target: WindowController.WindowInfo,
-                             reason: String, key: String, generation: Int, attempt: Int,
-                             retryOnMismatch: Bool = true) {
-        // A newer command owns this window now: this check is history.
-        guard frameGenerations[key] == generation else { return }
-        if target.pid == Self.ownPID {
+    /// Reads the frame the app accepted. A newer command owns the window now:
+    /// this check is history.
+    private func verifyFrame(_ state: FrameVerification) {
+        guard frameGenerations[state.key] == state.generation else { return }
+        if state.target.pid == Self.ownPID {
             // Reading our own window's frame runs AppKit in-process too, so it
             // stays on the main thread with the write it verifies.
-            applyVerification(WindowController.frame(of: target.element), wanted: wanted,
-                              target: target, reason: reason, key: key,
-                              generation: generation, attempt: attempt,
-                              retryOnMismatch: retryOnMismatch)
+            applyVerification(WindowController.frame(of: state.target.element), state: state)
             return
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let actual = WindowController.frame(of: target.element)
+            let actual = WindowController.frame(of: state.target.element)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.applyVerification(actual, wanted: wanted, target: target, reason: reason,
-                                       key: key, generation: generation, attempt: attempt,
-                                       retryOnMismatch: retryOnMismatch)
+                self.applyVerification(actual, state: state)
             }
         }
     }
 
-    private func applyVerification(_ actual: CGRect?, wanted: CGRect,
-                                   target: WindowController.WindowInfo, reason: String,
-                                   key: String, generation: Int, attempt: Int,
-                                   retryOnMismatch: Bool) {
-        guard frameGenerations[key] == generation else { return }
+    private func applyVerification(_ actual: CGRect?, state: FrameVerification) {
+        guard frameGenerations[state.key] == state.generation else { return }
         if let actual {
-            WindowIndex.shared.updateFrame(actual, for: target.element)
-            WindowOutlineController.shared.refreshGeometry(for: target.element, frame: actual)
+            WindowIndex.shared.updateFrame(actual, for: state.target.element)
+            WindowOutlineController.shared.refreshGeometry(for: state.target.element, frame: actual)
         }
-        if let actual, withinTolerance(actual, wanted) {
-            pendingFrameTargets[key] = nil
-            MakiLog.index.notice("frame verified window=\(key, privacy: .public) attempt=\(attempt, privacy: .public) actual=(\(Int(actual.minX)),\(Int(actual.minY)),\(Int(actual.width)),\(Int(actual.height)))")
-            status = "\(target.appName) · \(reason)"
-            showMiniMapIfEnabled(for: target, frame: wanted)
-            return
-        }
-        guard retryOnMismatch, attempt < Self.frameRetries.count else {
-            pendingFrameTargets[key] = nil
-            let asked = "\(Int(wanted.width))×\(Int(wanted.height))"
-            let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
-            let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
-            MakiLog.index.error("frame mismatch window=\(key, privacy: .public) requested=(\(Int(wanted.minX)),\(Int(wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got)) retries=\(attempt, privacy: .public)")
-            status = "⚠︎ \(target.appName) · asked \(asked), got \(got)"
-            HUDController.shared.show(HUDMessage.windowKeepsItsSize(
-                app: target.appName, asked: asked, got: got))
-            showMiniMapIfEnabled(for: target, frame: actual ?? wanted)
-            return
-        }
-        let delay = Self.frameRetries[attempt]
-        retryFrame(wanted, target: target, attempt: attempt, key: key) {
-            // The retry lands within a few tenths of a second and the store lives
-            // for the app: a weak capture here would only mix ownership with the
-            // strong one the callback already has.
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                self.verifyFrame(wanted, target: target, reason: reason,
-                                 key: key, generation: generation, attempt: attempt + 1,
-                                 retryOnMismatch: retryOnMismatch)
+
+        switch FrameMismatch.classify(wanted: state.wanted, previous: state.previous,
+                                      actual: actual) {
+        case .accepted:
+            finishVerified(actual, state: state, rounded: false)
+
+        case .rounded:
+            finishVerified(actual, state: state, rounded: true)
+
+        case .settling:
+            guard state.settlingReads < Self.settlingDelays.count else {
+                finishRefused(actual, state: state, mismatch: .settling)
+                return
             }
+            var next = state
+            let delay = Self.settlingDelays[state.settlingReads]
+            next.settlingReads += 1
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.verifyFrame(next)
+            }
+
+        case .sizeIgnored:
+            // One size-first retry can still help an app that refuses a size
+            // while it is being moved. Once the app has proved it keeps that
+            // length, another write would only repeat the resize.
+            if state.allowWriteRetry, state.writeRetried == false,
+               shouldRetrySizeFirst(actual, state: state) {
+                // Record only a fixed-length suspect here: the size has not
+                // moved yet, which may be a slow app rather than a floor. The
+                // retry's answer is the second observation that settles it.
+                noteSizeIgnored(actual, state: state)
+                var next = state
+                next.writeRetried = true
+                WindowController.setFrameAsync(state.wanted, for: state.target.element,
+                                               identity: state.key, order: .sizeThenPosition) {
+                    [weak self] in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.sizeRetryDelay) {
+                        self?.verifyFrame(next)
+                    }
+                }
+            } else {
+                finishRefused(actual, state: state, mismatch: .sizeIgnored)
+            }
+
+        case .unreadable:
+            guard state.readFailures < 1 else {
+                finishRefused(actual, state: state, mismatch: .unreadable)
+                return
+            }
+            var next = state
+            next.readFailures += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.readRetryDelay) { [weak self] in
+                self?.verifyFrame(next)
+            }
+
+        case .refused:
+            finishRefused(actual, state: state, mismatch: .refused)
         }
     }
 
-    /// The first re-try writes the size before the position: an app that refuses
-    /// a size while it is being moved accepts it on its own; the second writes
-    /// whole points (T27).
-    private func retryFrame(_ wanted: CGRect, target: WindowController.WindowInfo, attempt: Int,
-                            key: String, completion: @escaping @MainActor () -> Void) {
-        if attempt == 0 {
-            WindowController.setFrameAsync(wanted, for: target.element, identity: key,
-                                           order: .sizeThenPosition, completion: completion)
-        } else {
-            WindowController.setFrameAsync(wanted.integral, for: target.element,
-                                           identity: key, completion: completion)
+    /// The one retry is not worth it when the readback has already shown a
+    /// fixed length for this window, or when the requested size is below a
+    /// floor this window already proved.
+    private func shouldRetrySizeFirst(_ actual: CGRect?, state: FrameVerification) -> Bool {
+        guard let actual, let identity = sizeLimitIdentity(for: state.target) else { return true }
+        let limits = sizeLimits.limits(for: identity, bundleId: bundleID(for: state.target.pid))
+        if limits.isTooSmall(state.wanted.size, tolerance: FrameMismatch.sizeTolerance) {
+            return false
         }
+        return sizeLimits.knowsFixed(FixedAxis(axis: .width, length: actual.width),
+                                     identity: identity) == false
+            && sizeLimits.knowsFixed(FixedAxis(axis: .height, length: actual.height),
+                                     identity: identity) == false
     }
 
-    private func withinTolerance(_ a: CGRect, _ b: CGRect) -> Bool {
-        abs(a.minX - b.minX) <= Self.frameTolerance && abs(a.minY - b.minY) <= Self.frameTolerance
-            && abs(a.width - b.width) <= Self.frameTolerance && abs(a.height - b.height) <= Self.frameTolerance
+    /// Records a fixed-length suspect before the size-first retry. The minimum
+    /// itself is learned only from the retry's answer, so a slow app is not
+    /// mistaken for a floor after one unmoved read.
+    private func noteSizeIgnored(_ actual: CGRect?, state: FrameVerification) {
+        guard let actual, let identity = sizeLimitIdentity(for: state.target) else { return }
+        _ = sizeLimits.observeRefusal(
+            identity: identity, bundleId: bundleID(for: state.target.pid),
+            wanted: state.wanted, previous: state.previous, actual: actual,
+            recordMinimum: false)
+    }
+
+    private func finishVerified(_ actual: CGRect?, state: FrameVerification, rounded: Bool) {
+        pendingFrameTargets[state.key] = nil
+        let frame = actual ?? state.wanted
+        if let actual, let identity = sizeLimitIdentity(for: state.target) {
+            let changed = sizeLimits.observeAccepted(
+                identity: identity, bundleId: bundleID(for: state.target.pid),
+                actual: actual.size)
+            if changed { logSizeLimit(identity, action: "lowered") }
+        }
+        MakiLog.index.notice("frame verified window=\(state.key, privacy: .public) rounded=\(rounded, privacy: .public) actual=(\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width)),\(Int(frame.height)))")
+        status = "\(state.target.appName) · \(state.reason)"
+        showMiniMapIfEnabled(for: state.target, frame: frame)
+    }
+
+    private func finishRefused(_ actual: CGRect?, state: FrameVerification,
+                               mismatch: FrameMismatch) {
+        pendingFrameTargets[state.key] = nil
+        if let actual, let identity = sizeLimitIdentity(for: state.target) {
+            let learned = sizeLimits.observeRefusal(
+                identity: identity, bundleId: bundleID(for: state.target.pid),
+                wanted: state.wanted, previous: state.previous, actual: actual)
+            if learned { logSizeLimit(identity, action: "learned") }
+        }
+        let asked = "\(Int(state.wanted.width))×\(Int(state.wanted.height))"
+        let got = actual.map { "\(Int($0.width))×\(Int($0.height))" } ?? "nothing"
+        let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
+        MakiLog.index.error("frame mismatch window=\(state.key, privacy: .public) kind=\(String(describing: mismatch), privacy: .public) requested=(\(Int(state.wanted.minX)),\(Int(state.wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got))")
+        status = "⚠︎ \(state.target.appName) · asked \(asked), got \(got)"
+        HUDController.shared.show(HUDMessage.windowKeepsItsSize(
+            app: state.target.appName, asked: asked, got: got))
+        showMiniMapIfEnabled(for: state.target, frame: actual ?? state.wanted)
+    }
+
+    /// The identity the size memory and the frame queue share: the stable
+    /// system id, not the transient AX element.
+    private func sizeLimitIdentity(for target: WindowController.WindowInfo) -> String? {
+        if target.id.isEmpty == false { return target.id }
+        guard let index = matchingIndex(for: target) else { return nil }
+        return windows[index].systemID
+    }
+
+    private func bundleID(for pid: pid_t) -> String? {
+        NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+    }
+
+    private func logSizeLimit(_ identity: String, action: String) {
+        let limits = sizeLimits.limits(for: identity, bundleId: nil)
+        let fixed = limits.fixed.map { "\($0.axis.rawValue):\(Int($0.length))" } ?? "none"
+        MakiLog.index.notice("size limit \(action, privacy: .public) window=\(identity, privacy: .public) min=(\(Int(limits.minimum.width)),\(Int(limits.minimum.height))) fixed=\(fixed, privacy: .public)")
     }
 
     /// The identity the frame write coordinator uses for a model window. It

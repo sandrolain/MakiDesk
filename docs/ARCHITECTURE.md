@@ -174,6 +174,10 @@ All layout maths is pure and unit-tested:
   pure; all of its rules can be read off tests.
 - `WorkspaceStore.applyFrame` is the only path that writes a frame, so a layout,
   a drag, a recall and a manual move all remember the same arrangement.
+  `FrameMismatch` classifies the readback: rounding is accepted, a size that
+  did not move while the position landed gets one size-first retry, and a frame
+  the app chose is reported once. `WindowSizeLimitMemory` keeps the floor and
+  the fixed length a refusal proved, for the rest of the session.
 - `ArrowChord` is the two-arrow chord: a Carbon hot key carries one key, so the
   partner arrow's physical state (`CGEventSource.keyState`, no event tap and no
   extra permission) turns an ordinary step into the full span of that axis. The
