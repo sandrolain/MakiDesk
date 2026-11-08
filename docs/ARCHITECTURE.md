@@ -348,6 +348,18 @@ the helper prunes at launch and after each paste, and a paste whose encode
 finishes after the keyboard moved to another surface is dropped. Text paste
 still goes through Ghostty's `paste_from_clipboard`.
 
+The pane is also an accessibility text area. `TerminalSurfaceView` answers
+`AXValue` with the active screen read through `ghostty_surface_read_text`, and
+`TerminalAccessibilityText` in `MakiTerminalCore` caches that snapshot for half
+a second and remembers recently vended values. A client that writes back the
+screen it read plus its phrase therefore types only the phrase; a value that is
+not an edit is taken literally. A line break inside the text takes
+`ghostty_surface_text` (the paste path), while a trailing newline becomes a
+Return key press. Selected text and its range come from
+`ghostty_surface_read_selection`; after an insertion the helper invalidates the
+snapshot and posts `valueChanged`. None of this reads or stores text beyond the
+screen snapshot in memory.
+
 The helper also ships `Contents/Resources/bin/makidesk`, a one-shot client for
 the same socket. `status working|waiting|done [--title …]` reads
 `MAKIDESK_WORKSPACE_ID`, sends one `agentStatus` frame and exits; the server

@@ -231,7 +231,8 @@ open, and it restores the workspace layout and each shell's directory on the nex
 launch. `⌘F` searches the focused pane's scrollback and shows how many matches it
 found, and an image on the clipboard is pasted as a PNG file path. An opt-in
 switch in Settings adds Claude Code and Codex hooks, so the sidebar shows which
-workspace is working, waiting or done. The helper is embedded in the app bundle.
+workspace is working, waiting or done. VoiceOver reads the pane as a text area
+and dictation inserts at the cursor. The helper is embedded in the app bundle.
 
 ### Notices that stay readable
 

@@ -93,6 +93,11 @@ identity before the outer app.
   worker under `Terminal/pasted-images/` and its shell-quoted path is typed at
   the cursor; the files are pruned to the newest 100 and a week at launch and
   after each paste.
+- **Accessibility:** the pane is an `AX` text area whose value is the active
+  screen, with selected text and range; dictation and accessibility writes are
+  inserted at the cursor (multi-line as one paste, trailing newline as Return).
+  `TerminalAccessibilityText` in `MakiTerminalCore` caches the snapshot and
+  diffs a written value against what the client read.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
   IPC; it stays alive while hidden and is not part of the saved layout. The
   panel carries an Accessibility identifier, so MakiDesk's window switcher
@@ -106,7 +111,8 @@ identity before the outer app.
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling and links are the same kind of
   not-yet-verified surface; find runs through Ghostty's search and image paste
-  exists, but neither was exercised on screen.
+  exists, but neither was exercised on screen. The accessibility text area is
+  covered by pure tests, but VoiceOver and a dictation tool have not been tried.
 - Signing with the project identity and notarization for release, multi-display
   behaviour, energy and memory measurements.
 

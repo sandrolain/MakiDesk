@@ -445,6 +445,191 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
         performBindingAction(TerminalSearchNavigation.endAction)
     }
 
+    // MARK: - Accessibility
+
+    /// The pane is an editable text area for VoiceOver and dictation tools.
+    /// The value is the active screen, read in one cached snapshot; a write
+    /// from a client is diffed against what it read, so a tool that sends back
+    /// the whole screen plus its phrase types only the phrase.
+    private let accessibilityText = TerminalAccessibilityText()
+    private var accessibilityValueChangedWork: DispatchWorkItem?
+
+    override func isAccessibilityElement() -> Bool { true }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
+
+    override func accessibilityHelp() -> String? { "Terminal content area" }
+
+    override func accessibilityValue() -> Any? { accessibilityStringValue() }
+
+    override func accessibilityNumberOfCharacters() -> Int {
+        (accessibilityStringValue() as NSString).length
+    }
+
+    override func accessibilityVisibleCharacterRange() -> NSRange {
+        NSRange(location: 0, length: accessibilityNumberOfCharacters())
+    }
+
+    override func accessibilityLine(for index: Int) -> Int {
+        let content = accessibilityStringValue() as NSString
+        let end = min(max(index, 0), content.length)
+        var line = 0
+        for offset in 0..<end where content.character(at: offset) == 0x0A {
+            line += 1
+        }
+        return line
+    }
+
+    override func accessibilityString(for range: NSRange) -> String? {
+        let content = accessibilityStringValue() as NSString
+        guard range.location != NSNotFound,
+              range.location >= 0,
+              range.length >= 0,
+              NSMaxRange(range) <= content.length else { return nil }
+        return content.substring(with: range)
+    }
+
+    override func accessibilitySelectedTextRange() -> NSRange {
+        selectionSnapshot()?.range ?? NSRange(location: 0, length: 0)
+    }
+
+    override func accessibilitySelectedText() -> String? {
+        guard let selected = selectionSnapshot()?.string, selected.isEmpty == false else {
+            return nil
+        }
+        return selected
+    }
+
+    override func setAccessibilityValue(_ value: Any?) {
+        guard let content = Self.accessibilityCommittedString(value) else { return }
+        if Thread.isMainThread {
+            applyAccessibilityValue(content)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.applyAccessibilityValue(content)
+            }
+        }
+    }
+
+    private func applyAccessibilityValue(_ content: String) {
+        commitAccessibilityText(accessibilityText.insertedText(settingValue: content))
+        scheduleAccessibilityValueChanged()
+    }
+
+    /// Dictation tools that insert at the caret set the selected text instead
+    /// of the whole value; a terminal only accepts input at its cursor.
+    override func setAccessibilitySelectedText(_ text: String?) {
+        guard let text, text.isEmpty == false else { return }
+        if Thread.isMainThread {
+            applyAccessibilitySelectedText(text)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.applyAccessibilitySelectedText(text)
+            }
+        }
+    }
+
+    private func applyAccessibilitySelectedText(_ text: String) {
+        commitAccessibilityText(text)
+        scheduleAccessibilityValueChanged()
+    }
+
+    override func isAccessibilitySelectorAllowed(_ selector: Selector) -> Bool {
+        switch selector {
+        case #selector(setAccessibilityValue(_:)), #selector(setAccessibilitySelectedText(_:)):
+            return true
+        default:
+            return super.isAccessibilitySelectorAllowed(selector)
+        }
+    }
+
+    private func accessibilityStringValue() -> String {
+        accessibilityText.value { self.readActiveScreenText() ?? "" }
+    }
+
+    private static func accessibilityCommittedString(_ value: Any?) -> String? {
+        if let attributed = value as? NSAttributedString { return attributed.string }
+        if let string = value as? String { return string }
+        return nil
+    }
+
+    /// Types text at the cursor. A trailing newline becomes Return, the way a
+    /// dictation tool's "press enter" expects; text with a line break in the
+    /// middle takes the paste path so a bracketed-paste shell receives one
+    /// block instead of running each line.
+    private func commitAccessibilityText(_ content: String) {
+        guard let surface, content.isEmpty == false else { return }
+        let (body, returns) = TerminalAccessibilityText.splitTrailingLineBreaks(content)
+        if TerminalAccessibilityText.containsLineBreak(body) {
+            body.withCString { ghostty_surface_text(surface, $0, UInt(body.utf8.count)) }
+        } else if body.isEmpty == false {
+            body.withCString {
+                ghostty_surface_text_input(surface, $0, UInt(body.utf8.count))
+            }
+        }
+        for _ in 0..<returns {
+            sendReturnKey()
+        }
+    }
+
+    private func sendReturnKey() {
+        guard let surface else { return }
+        var key = ghostty_input_key_s()
+        key.action = GHOSTTY_ACTION_PRESS
+        key.keycode = 36
+        key.mods = GHOSTTY_MODS_NONE
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        key.unshifted_codepoint = 0
+        key.composing = false
+        key.text = nil
+        _ = ghostty_surface_key(surface, key)
+    }
+
+    /// Clients re-read the value after an insertion; invalidate first and
+    /// announce once the shell has had a moment to echo.
+    private func scheduleAccessibilityValueChanged() {
+        accessibilityValueChangedWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.accessibilityText.invalidate()
+            NSAccessibility.post(element: self, notification: .valueChanged)
+        }
+        accessibilityValueChangedWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func readActiveScreenText() -> String? {
+        guard let surface else { return nil }
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: GHOSTTY_POINT_ACTIVE,
+                                      coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_ACTIVE,
+                                          coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+            rectangle: false
+        )
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, selection, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let pointer = text.text, text.text_len > 0 else { return "" }
+        return String(decoding: Data(bytes: pointer, count: Int(text.text_len)), as: UTF8.self)
+    }
+
+    private func selectionSnapshot() -> (string: String, range: NSRange)? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        let selected: String
+        if let pointer = text.text, text.text_len > 0 {
+            selected = String(decoding: Data(bytes: pointer, count: Int(text.text_len)),
+                              as: UTF8.self)
+        } else {
+            selected = ""
+        }
+        return (selected, NSRange(location: Int(text.offset_start),
+                                  length: Int(text.offset_len)))
+    }
+
     // MARK: - NSTextInputClient
 
     func insertText(_ string: Any, replacementRange: NSRange) {

@@ -189,6 +189,12 @@ to MakiDesk. That is why the first launch can ask for access to folders such as
 request comes from the shell's configuration, not from MakiDesk or libghostty;
 starting the shell with `--no-rcs` avoids both in the development spike.
 
+The terminal pane is an accessibility text area: its value is the text on the
+active screen, kept in a half-second in-memory snapshot for VoiceOver and
+dictation tools. Accessibility writes are inserted into the shell at the cursor;
+selected text comes from the terminal's own selection. The snapshot is never
+written to disk and is dropped when the pane goes away.
+
 ## Clipboard
 
 The history is **text and images, in memory, and never persisted**. It keeps at

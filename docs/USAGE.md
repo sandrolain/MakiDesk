@@ -645,6 +645,13 @@ it running, so its shells keep working.
   its quoted path at the cursor — ready for an agent or a command that takes a
   file. Files older than a week or beyond the newest 100 are removed when the
   helper starts and after each paste; nothing leaves the Mac.
+- **VoiceOver and dictation.** The focused pane is an accessibility text area:
+  its value is the text on the active screen, with selected text and its range,
+  so VoiceOver can read the terminal while you move through it. A dictation or
+  accessibility tool that writes text inserts at the shell's cursor — one line
+  is typed, a multi-line value goes through the paste path as one block, and a
+  trailing newline presses Return. The value is a short cached snapshot and is
+  refreshed after an insertion.
 - **Notifications and attention.** A desktop notification sent by a program in
   the shell (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon,
   instead of a bare system alert. The workspace also gets a dot in the sidebar;
