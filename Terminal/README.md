@@ -63,6 +63,14 @@ identity before the outer app.
   and exports its path as `MAKIDESK_CLI` in each pane; quote it in the shell.
   A helper started before an update does not have the new variables: quit and
   reopen it.
+- **Automatic agent hooks:** `makidesk hooks install` (or the opt-in switch in
+  Settings ▸ Terminal ▸ Agents) merges five lifecycle handlers into
+  `~/.claude/settings.json`: `UserPromptSubmit` is working, a permission or
+  input notification is waiting, and `Stop`, `StopFailure` and `SessionEnd` are
+  done. `AgentHooks` in `MakiShared` owns the merge, the marker that identifies
+  MakiDesk's handlers, and the one-time `.makidesk-backup`; `uninstall` removes
+  only those handlers. The handlers call `makidesk hook`, which exits 0 and
+  prints nothing when the session is not inside a MakiDesk pane.
 - **Notifications and attention:** OSC 9/777 desktop notifications are
   forwarded over the socket (`attention`) and shown as MakiDesk notices; the
   workspace gets a dot in the sidebar, cleared by selecting it or returning to
@@ -91,8 +99,7 @@ identity before the outer app.
 
 ## What is not there yet
 
-- automatic agent hooks (the CLI exists, the hooks are left to the user);
-  tmux control mode (L3).
+- hooks for agents other than Claude Code; tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling and links are the same kind of
   not-yet-verified surface; find runs through Ghostty's search and image paste
@@ -121,8 +128,8 @@ GhosttyKit from upstream; the study lists this as a risk.
   tested without AppKit or Ghostty.
 - `MakiTerminal`: AppKit window, sidebar, split container, Ghostty host, IPC
   server.
-- `../Packages/MakiShared`: message envelope, framing and socket path, linked by
-  both apps.
+- `../Packages/MakiShared`: message envelope, framing and socket path, the
+  `makidesk` CLI path and the agent-hook merge, linked by both apps.
 
 ## A note on TCC and network prompts
 

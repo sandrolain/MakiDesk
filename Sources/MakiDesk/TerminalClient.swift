@@ -370,6 +370,13 @@ final class TerminalController {
         }
     }
 
+    /// The path installed agent hooks should call: only the stable symlink,
+    /// because it survives MakiDesk moving. Nil until the helper has run once,
+    /// since the helper recreates the link at launch.
+    var agentHookCommandPath: String? {
+        TerminalCLI.isAvailable() ? TerminalCLI.stableURL.path : nil
+    }
+
     /// Regenerates the theme document from the palette in force.
     func syncTheme() {
         let document = TerminalThemeDocument(palette: WorkspaceStore.shared.theme)

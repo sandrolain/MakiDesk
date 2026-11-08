@@ -348,10 +348,29 @@ the helper prunes at launch and after each paste, and a paste whose encode
 finishes after the keyboard moved to another surface is dropped. Text paste
 still goes through Ghostty's `paste_from_clipboard`.
 
-The helper also ships `Contents/Resources/bin/makidesk`, a one-shot status
-client. It reads `MAKIDESK_WORKSPACE_ID`, connects to the same socket, sends
-one `agentStatus` frame and exits; the server accepts it by executable name and
-only updates a sidebar dot. Panes receive `MAKIDESK_CLI` with its path.
+The helper also ships `Contents/Resources/bin/makidesk`, a one-shot client for
+the same socket. `status working|waiting|done [--title …]` reads
+`MAKIDESK_WORKSPACE_ID`, sends one `agentStatus` frame and exits; the server
+accepts it by executable name and only updates a sidebar dot. `hook` is the same
+message in a form that can never fail the caller — no pane, no helper or a
+malformed environment all end with exit code 0 and no output, because an agent
+hook must not block a prompt and `UserPromptSubmit` stdout would join the
+model's context. `hooks status|install|uninstall` manages the opt-in Claude Code
+hooks described below. Panes receive `MAKIDESK_CLI` with the stable link's path.
+
+`AgentHooks` in `MakiShared` owns the installation: it parses
+`~/.claude/settings.json` as a JSON object, leaves every key it does not own
+alone, and identifies its own handlers by the `hook` marker in their `args`, so
+a moved app can replace stale paths and removal never takes a user's handler
+with it. Five events map to the sidebar states — `UserPromptSubmit` →
+`working`, a `Notification` matcher (`permission_prompt`, the elicitation
+dialogs, `agent_needs_input`) → `waiting`, and `Stop`, `StopFailure` and
+`SessionEnd` → `done` — each as an exec-form command with the stable CLI path
+and a five-second timeout. The first modification copies the original file to
+`settings.json.makidesk-backup`; a file that is not valid JSON or whose `hooks`
+value is not an object is refused and left untouched. Settings ▸ Terminal ▸
+Agents reads that state off the main thread, performs the merge on a background
+task and shows the resulting event count.
 
 `TerminalController` watches `NSWorkspace.didActivateApplicationNotification`.
 While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`

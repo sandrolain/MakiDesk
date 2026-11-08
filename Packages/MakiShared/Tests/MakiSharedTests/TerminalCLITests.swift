@@ -1,5 +1,5 @@
 import XCTest
-@testable import MakiTerminalCore
+@testable import MakiShared
 
 final class TerminalCLITests: XCTestCase {
     private var directory: URL!

@@ -662,6 +662,19 @@ it running, so its shells keep working.
   one. Nothing is written to disk. **After updating MakiDesk, quit the terminal
   helper (⌘Q) and reopen it**: a helper that was already running keeps its old
   environment, and an existing pane does not gain the new variables.
+- **Automatic agent hooks.** **Settings ▸ Terminal ▸ Agents** switches on
+  lifecycle hooks for **Claude Code**: a submitted prompt marks the workspace as
+  working, a permission or input prompt as waiting, and a finished turn, an API
+  error or a closed session as done. It is off until you turn it on, and turning
+  it on merges five small handlers into `~/.claude/settings.json` — the rest of
+  the file is left alone and a one-time copy is kept as
+  `settings.json.makidesk-backup`. Turning it off removes only the handlers that
+  call `makidesk hook`. From a pane the same thing is
+  `"$MAKIDESK_CLI" hooks status|install|uninstall`. The hooks stay quiet outside
+  a MakiDesk pane: a session that did not inherit `MAKIDESK_WORKSPACE_ID`
+  (started elsewhere, or a tmux server started before the pane) reports nothing
+  rather than failing. Claude Code reads hooks when a session starts, so a
+  session that was already open may need a restart before its dot moves.
 - **tmux.** **New tmux Session** in the sidebar's **+** menu runs
   `tmux new-session -A -s makidesk-…`: it attaches to that workspace's session
   or creates it. Closing the pane detaches; the tmux server keeps the session,
@@ -675,15 +688,15 @@ it running, so its shells keep working.
   ssh's own. The command is saved with the layout, so a restored pane tries to
   reconnect.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
-  starts your login shell), the quake height (30–60% of the screen) and the SSH
-  profiles. The terminal, its sidebar and its title bar follow the MakiDesk
-  theme, and a change reaches the helper without a restart. Each theme brings
-  its own sixteen ANSI colours;
+  starts your login shell), the quake height (30–60% of the screen), the SSH
+  profiles and the opt-in Claude Code hooks. The terminal, its sidebar and its
+  title bar follow the MakiDesk theme, and a change reaches the helper without a
+  restart. Each theme brings its own sixteen ANSI colours;
   the named MakiDesk themes reuse the palette they were drawn from (Plum is
   Dracula, Arctic is Nord, Midnight is Tokyo Night, Caramel is Gruvbox,
   Graphite is One Dark).
-- **Not there yet.** automatic agent hooks (the CLI is manual), tabs inside a
-  pane, and a verified IME.
+- **Not there yet.** tabs inside a pane, hooks for agents other than Claude Code,
+  and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut

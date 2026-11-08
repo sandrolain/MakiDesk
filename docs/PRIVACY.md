@@ -121,6 +121,7 @@ All paths are under your user account:
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, last directory per pane | Until you delete it; a factory reset does not remove it |
 | Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
 | Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |
+| Claude Code hooks (opt-in) | `~/.claude/settings.json` gains five handlers; a one-time `settings.json.makidesk-backup` sits next to it | The handlers until you switch them off; the backup until you delete it |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
 | Clipboard history | RAM | Until MakiDesk quits |
@@ -167,6 +168,17 @@ PNG under `…/MakiDesk/Terminal/pasted-images/`, because a terminal can only se
 text: the quoted path is typed at the cursor instead. Files older than a week or
 past the newest 100 are removed when the helper starts and after each new paste.
 Nothing is sent anywhere.
+
+Claude Code hooks are **opt-in** and **local**. Only when you switch them on in
+Settings ▸ Terminal ▸ Agents does MakiDesk add five handlers to
+`~/.claude/settings.json`; the rest of that file is preserved, and the first
+change keeps a copy as `~/.claude/settings.json.makidesk-backup`. A handler runs
+the bundled `makidesk hook working|waiting|done`, which sends only the workspace
+id, the state and the fixed title to the local socket and exits; MakiDesk never
+reads the prompt, the transcript, the working directory or the model's output.
+A session outside a MakiDesk pane produces no message. Turning the switch off
+removes only the handlers that call `makidesk hook`; the backup is yours to
+keep or delete.
 
 The helper starts your login shell, so macOS attributes whatever that shell reads
 or connects to (shell startup files, tools it launches, `ssh`) to the helper, not

@@ -1,5 +1,4 @@
 import Foundation
-import MakiShared
 
 /// Keeps a stable path to the bundled `makidesk` CLI (F3 L2).
 ///
