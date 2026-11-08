@@ -246,6 +246,11 @@ line says when some did not fit. The keyboard ladder stops at that floor instead
 of asking for a size the app will refuse, and a half or quarter that is smaller
 than the floor is still reported rather than silently shrunk.
 
+A layout command reports once, after every window has answered: how many took
+their frame, how many kept their size, and whether any frames overlap, come
+closer than the gap or fall outside the display. A newer command replaces the
+waiting verdict.
+
 **Suggested layout.** Settings ▸ Layouts has *Ask before using the suggested
 layout*. With it on, `⌃⌥A` shows the advice and its reason and waits; running it
 again (or applying it from the menu) accepts. With it off, it applies at once.

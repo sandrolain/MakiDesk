@@ -174,6 +174,10 @@ All layout maths is pure and unit-tested:
   cannot fit; the spiral reduces its slot count; a treemap that cannot hold
   every minimum falls back to the constrained grid. A window that still cannot
   fit is left in place (a zero frame) and reported, never squeezed.
+- A layout command is applied as a set: `LayoutVerdict` waits for every window's
+  readback (bounded at two seconds) and reports placed, refused and unconfirmed
+  counts plus overlaps, gap erosions and frames outside the display once. A newer
+  command supersedes a waiting verdict instead of publishing a stale one.
 - A display transition is debounced on a fingerprint of the connected displays,
   their usable areas and their scales. The first notification saves every
   group's arrangement under the departing display key; the settle restores the

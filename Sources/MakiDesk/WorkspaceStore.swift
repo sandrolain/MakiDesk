@@ -2069,9 +2069,15 @@ final class WorkspaceStore {
     /// The floor it showed is remembered for the next command. A full-screen
     /// window is left alone: it has no frame of ours to set.
     func applyFrame(_ frame: CGRect, to target: WindowController.WindowInfo, reason: String,
-                    animate: Bool = true, retryOnMismatch: Bool = true) {
+                    animate: Bool = true, retryOnMismatch: Bool = true,
+                    partOfLayout: Bool = false,
+                    completion: (@MainActor (FrameOutcome) -> Void)? = nil) {
+        // A command that moves one window is a newer intention than a layout
+        // still collecting its answers; its verdict must not overwrite this.
+        if partOfLayout == false { cancelActiveLayoutRun() }
         guard !WindowController.isFullScreen(target.element) else {
             status = "\(target.appName) · full screen, left alone"
+            completion?(.refused(nil))
             return
         }
         contentAnalysisTask?.cancel()
@@ -2084,11 +2090,9 @@ final class WorkspaceStore {
             windows[entry].width = adjusted.width
             windows[entry].height = adjusted.height
         }
-        // Remember where every group holding this window is putting it (T15):
-        // this is the one path every move goes through — keyboard, regions, a
-        // recall, Ctrl+Opt+drag — so the arrangement a group restores is always
-        // the last one seen.
-        rememberArrangement(adjusted, for: target)
+        // The group arrangement is recorded after the readback, with the frame
+        // the app actually took. Recording the intended frame here would make a
+        // group remember a layout the screen never had.
         // One generation per window per command: a re-read or a retry that
         // belongs to an older command is dropped instead of writing over a
         // newer one, so a command can never make a window dance (T27).
@@ -2111,7 +2115,7 @@ final class WorkspaceStore {
         let verification = FrameVerification(
             wanted: adjusted, previous: previous, target: target, reason: reason,
             key: key, generation: generation, allowWriteRetry: retryOnMismatch,
-            settlingDelays: settlingDelays)
+            settlingDelays: settlingDelays, completion: completion)
         let finish: @MainActor @Sendable () -> Void = { [weak self] in
             self?.verifyFrame(verification)
         }
@@ -2203,6 +2207,9 @@ final class WorkspaceStore {
         /// The re-read schedule for this command; a cross-scale move gets more
         /// time than a same-screen one.
         let settlingDelays: [TimeInterval]
+        /// Called once when the command reaches a verdict. A superseded command
+        /// never calls it: the newer command owns the window.
+        let completion: (@MainActor (FrameOutcome) -> Void)?
         var settlingReads = 0
         var readFailures = 0
         var writeRetried = false
@@ -2331,7 +2338,11 @@ final class WorkspaceStore {
         }
         MakiLog.index.notice("frame verified window=\(state.key, privacy: .public) rounded=\(rounded, privacy: .public) actual=(\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width)),\(Int(frame.height)))")
         status = "\(state.target.appName) · \(state.reason)"
+        // The agreed frame is the arrangement a group should remember, not the
+        // one the command asked for (T15).
+        rememberArrangement(frame, for: state.target)
         showMiniMapIfEnabled(for: state.target, frame: frame)
+        state.completion?(.accepted(frame))
     }
 
     private func finishRefused(_ actual: CGRect?, state: FrameVerification,
@@ -2348,9 +2359,103 @@ final class WorkspaceStore {
         let actualOrigin = actual.map { "(\(Int($0.minX)),\(Int($0.minY)))" } ?? "unknown"
         MakiLog.index.error("frame mismatch window=\(state.key, privacy: .public) kind=\(String(describing: mismatch), privacy: .public) requested=(\(Int(state.wanted.minX)),\(Int(state.wanted.minY)),\(asked)) actual=(\(actualOrigin),\(got))")
         status = "⚠︎ \(state.target.appName) · asked \(asked), got \(got)"
+        // A refusal still leaves the window somewhere: remember where it is,
+        // not the frame it would not take.
+        if let actual { rememberArrangement(actual, for: state.target) }
         HUDController.shared.show(HUDMessage.windowKeepsItsSize(
             app: state.target.appName, asked: asked, got: got))
         showMiniMapIfEnabled(for: state.target, frame: actual ?? state.wanted)
+        state.completion?(.refused(actual))
+    }
+
+    // MARK: - Applying a layout as a set (H03)
+
+    /// One window of a layout command: the frame it should take, and the usable
+    /// area of the display it belongs to.
+    private struct LayoutTarget {
+        let window: WindowController.WindowInfo
+        let frame: CGRect
+        let area: CGRect
+    }
+
+    /// One command's writes in flight, waiting for every window to answer (or
+    /// for the deadline) before publishing a single verdict.
+    private struct LayoutRun {
+        let id: UUID
+        let targets: [LayoutTarget]
+        let gap: CGFloat
+        let completion: @MainActor (LayoutVerdict) -> Void
+        var outcomes: [String: FrameOutcome] = [:]
+        var deadline: DispatchWorkItem?
+    }
+
+    @ObservationIgnored private var activeLayoutRun: LayoutRun?
+
+    /// The most a layout command waits for its windows to answer. Each window
+    /// has its own verification; this is the outer bound, so a window that
+    /// never reports cannot hold the verdict forever.
+    private static let layoutVerdictDeadline: TimeInterval = 2.0
+
+    /// Applies a layout as one command: every frame is written, every answer is
+    /// collected, and the caller gets one verdict. A newer layout supersedes an
+    /// older one without publishing its half-finished verdict.
+    private func applyLayout(_ targets: [LayoutTarget], reason: String, gap: CGFloat,
+                             completion: @escaping @MainActor (LayoutVerdict) -> Void) {
+        activeLayoutRun?.deadline?.cancel()
+        activeLayoutRun = nil
+        guard targets.isEmpty == false else {
+            completion(LayoutVerdict())
+            return
+        }
+
+        let id = UUID()
+        let deadline = DispatchWorkItem { [weak self] in
+            self?.finishLayoutRun(id: id, timedOut: true)
+        }
+        activeLayoutRun = LayoutRun(id: id, targets: targets, gap: gap,
+                                    completion: completion, deadline: deadline)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.layoutVerdictDeadline,
+                                      execute: deadline)
+
+        for target in targets {
+            let key = animationKey(for: target.window)
+            applyFrame(target.frame, to: target.window, reason: reason,
+                       partOfLayout: true) { [weak self] outcome in
+                self?.recordLayoutOutcome(outcome, key: key, runID: id)
+            }
+        }
+    }
+
+    private func cancelActiveLayoutRun() {
+        guard let run = activeLayoutRun else { return }
+        run.deadline?.cancel()
+        activeLayoutRun = nil
+    }
+
+    private func recordLayoutOutcome(_ outcome: FrameOutcome, key: String, runID: UUID) {
+        guard var run = activeLayoutRun, run.id == runID else { return }
+        run.outcomes[key] = outcome
+        activeLayoutRun = run
+        if run.outcomes.count >= run.targets.count {
+            finishLayoutRun(id: runID, timedOut: false)
+        }
+    }
+
+    private func finishLayoutRun(id: UUID, timedOut: Bool) {
+        guard let run = activeLayoutRun, run.id == id else { return }
+        run.deadline?.cancel()
+        activeLayoutRun = nil
+        let evaluated = run.targets.map { target in
+            (intended: target.frame, area: target.area,
+             outcome: run.outcomes[animationKey(for: target.window)] ?? .timedOut)
+        }
+        let verdict = LayoutVerdict.evaluate(evaluated, gap: run.gap)
+        if timedOut {
+            MakiLog.index.notice("layout verdict deadline windows=\(run.targets.count, privacy: .public) answered=\(run.outcomes.count, privacy: .public)")
+        } else {
+            MakiLog.index.notice("layout verdict windows=\(run.targets.count, privacy: .public) placed=\(verdict.placed, privacy: .public) refused=\(verdict.refused, privacy: .public) overlaps=\(verdict.overlaps, privacy: .public) gaps=\(verdict.gapErosions, privacy: .public) escapes=\(verdict.escapes, privacy: .public)")
+        }
+        run.completion(verdict)
     }
 
     /// The identity the size memory and the frame queue share: the stable
@@ -4029,7 +4134,7 @@ final class WorkspaceStore {
             guard self.frameCommandEpoch == commandEpoch else { return }
             let scored = Self.byContentScore(candidates, scores: scores)
             Self.logContentOrder(scored, scores: scores, requested: requests.count)
-            var placed: [ActionableWindow] = []
+            var targetsForRun: [LayoutTarget] = []
             var unplaced = 0
             for group in self.layoutGroups(for: scored) {
                 let geometry = TilingEngine.layout(
@@ -4038,14 +4143,23 @@ final class WorkspaceStore {
                 unplaced += geometry.unplacedCount
                 for (index, frame) in geometry.frames.enumerated()
                     where TilingEngine.LayoutGeometry.isPlaced(frame) {
-                    self.applyFrame(frame, to: self.windowInfo(for: group.windows[index]),
-                                    reason: "auto layout (golden spiral)")
-                    placed.append(group.windows[index])
+                    targetsForRun.append(LayoutTarget(
+                        window: self.windowInfo(for: group.windows[index]),
+                        frame: frame, area: group.screen.area))
                 }
             }
             self.raiseToFront(scored)
-            if unplaced > 0 {
-                self.status = "Golden spiral placed \(placed.count) of \(scored.count) windows"
+            self.contentAnalysisTask = nil
+            let total = targetsForRun.count + unplaced
+            self.applyLayout(targetsForRun, reason: "auto layout (golden spiral)",
+                             gap: self.gap) { [weak self] verdict in
+                guard let self else { return }
+                guard verdict.isClean == false || unplaced > 0
+                    || verdict.placed < total else { return }
+                var text = "Golden spiral placed \(verdict.placed) of \(total) windows"
+                if verdict.isClean == false { text += " · \(verdict.summary)" }
+                if unplaced > 0 { text += " · \(unplaced) did not fit" }
+                self.status = text
             }
         }
     }
@@ -4183,12 +4297,16 @@ final class WorkspaceStore {
     private func apply(_ advice: LayoutAdvice, to set: ArrangeableSet) {
         let windows = set.windows
         guard !windows.isEmpty else { return }
+        // This command is the current work; a finished analysis must not cancel
+        // it when the per-window writes call `applyFrame`.
+        contentAnalysisTask = nil
         // The same advice, applied per display: the grid and the spiral fill
         // each screen's own area, and the content layout distributes each
         // screen's weights. A lead window only leads on the screen it is on.
         let groups = layoutGroups(for: windows)
         guard !groups.isEmpty else { return }
-        var placed: [ActionableWindow] = []
+        var targetsForRun: [LayoutTarget] = []
+        var placedWindows: [ActionableWindow] = []
         var unplacedCount = 0
         var usedFallback = false
 
@@ -4215,21 +4333,29 @@ final class WorkspaceStore {
             unplacedCount += geometry.unplacedCount
             for (index, frame) in geometry.frames.enumerated()
                 where TilingEngine.LayoutGeometry.isPlaced(frame) {
-                applyFrame(frame, to: windowInfo(for: ordered[index]),
-                           reason: "auto layout (\(preset.label.lowercased()))")
-                placed.append(ordered[index])
+                targetsForRun.append(LayoutTarget(
+                    window: windowInfo(for: ordered[index]),
+                    frame: frame, area: group.screen.area))
+                placedWindows.append(ordered[index])
             }
         }
-        raiseToFront(placed)
-        var reason = advice.reason
-        if unplacedCount > 0 {
-            reason += " · \(unplacedCount) did not fit"
-        } else if usedFallback {
-            reason += " · reduced to fit"
+        raiseToFront(placedWindows)
+        let total = targetsForRun.count + unplacedCount
+        let layoutLabel = advice.layout.label
+        applyLayout(targetsForRun, reason: "auto layout (\(layoutLabel.lowercased()))",
+                    gap: gap) { [weak self] verdict in
+            guard let self else { return }
+            var reason = advice.reason
+            if verdict.isClean == false { reason += " · \(verdict.summary)" }
+            if unplacedCount > 0 {
+                reason += " · \(unplacedCount) did not fit"
+            } else if usedFallback {
+                reason += " · reduced to fit"
+            }
+            self.status = "\(layoutLabel) · \(verdict.placed) of \(total) windows"
+            HUDController.shared.show(HUDMessage.layoutApplied(
+                layout: layoutLabel, summary: Self.layoutSummary(set), reason: reason))
         }
-        HUDController.shared.show(HUDMessage.layoutApplied(layout: advice.layout.label,
-                                                           summary: Self.layoutSummary(set),
-                                                           reason: reason))
     }
 
     /// Heaviest first, stable on the window id so the same set and weights give
@@ -4297,7 +4423,8 @@ final class WorkspaceStore {
             // One treemap per display: the weights are global, the area is the
             // screen each window is on, and the order is that screen's alone.
             let groups = self.layoutGroups(for: targets)
-            var placed: [ActionableWindow] = []
+            var targetsForRun: [LayoutTarget] = []
+            var placedWindows: [ActionableWindow] = []
             var unplaced = 0
             var usedFallback = false
             for group in groups {
@@ -4310,23 +4437,31 @@ final class WorkspaceStore {
                 unplaced += geometry.unplacedCount
                 for (index, frame) in geometry.frames.enumerated()
                     where TilingEngine.LayoutGeometry.isPlaced(frame) {
-                    self.applyFrame(frame, to: self.windowInfo(for: ordered[index]),
-                                    reason: "content layout")
-                    placed.append(ordered[index])
+                    targetsForRun.append(LayoutTarget(
+                        window: self.windowInfo(for: ordered[index]),
+                        frame: frame, area: group.screen.area))
+                    placedWindows.append(ordered[index])
                 }
             }
-            if !selection.isEmpty { self.raiseToFront(placed) }
-            var statusText = "Content layout: \(placed.count) windows"
-            if unplaced > 0 {
-                statusText += " · \(unplaced) did not fit"
-            } else if usedFallback {
-                statusText += " · reduced to fit"
-            }
-            self.status = statusText
-            HUDController.shared.show(HUDMessage.contentApplied(
-                summary: Self.layoutSummary(set)))
-            Self.logContentWeights(placed, weights: weights, scores: scores,
+            if !selection.isEmpty { self.raiseToFront(placedWindows) }
+            Self.logContentWeights(placedWindows, weights: weights, scores: scores,
                                    requested: requests.count)
+            self.contentAnalysisTask = nil
+            let total = targetsForRun.count + unplaced
+            self.applyLayout(targetsForRun, reason: "content layout",
+                             gap: self.gap) { [weak self] verdict in
+                guard let self else { return }
+                var text = "Content layout: \(verdict.placed) of \(total) windows"
+                if verdict.isClean == false { text += " · \(verdict.summary)" }
+                if unplaced > 0 {
+                    text += " · \(unplaced) did not fit"
+                } else if usedFallback {
+                    text += " · reduced to fit"
+                }
+                self.status = text
+                HUDController.shared.show(HUDMessage.contentApplied(
+                    summary: Self.layoutSummary(set)))
+            }
         }
     }
 
@@ -4393,7 +4528,8 @@ final class WorkspaceStore {
             HUDController.shared.show(HUDMessage.nothingToArrange)
             return
         }
-        var placed: [ActionableWindow] = []
+        var targetsForRun: [LayoutTarget] = []
+        var placedWindows: [ActionableWindow] = []
         var unplaced = 0
         var usedFallback = false
         for group in groups {
@@ -4406,19 +4542,26 @@ final class WorkspaceStore {
                 where TilingEngine.LayoutGeometry.isPlaced(frame) {
                 // *Tile* is the explicit way to re-dispose: the arrangement it
                 // just made is what a recall restores from now on (T15).
-                applyFrame(frame, to: windowInfo(for: group.windows[index]), reason: "tiled")
-                placed.append(group.windows[index])
+                targetsForRun.append(LayoutTarget(
+                    window: windowInfo(for: group.windows[index]),
+                    frame: frame, area: group.screen.area))
+                placedWindows.append(group.windows[index])
             }
         }
-        if !selection.isEmpty { raiseToFront(placed) }
-        var statusText = "Tiled \(placed.count) windows with \(Int(gap)) px gap"
-        if unplaced > 0 {
-            statusText += " · \(unplaced) did not fit"
-        } else if usedFallback {
-            statusText += " · reduced to fit"
+        if !selection.isEmpty { raiseToFront(placedWindows) }
+        let total = targetsForRun.count + unplaced
+        applyLayout(targetsForRun, reason: "tiled", gap: gap) { [weak self] verdict in
+            guard let self else { return }
+            var text = "Tiled \(verdict.placed) of \(total) windows with \(Int(gap)) px gap"
+            if verdict.isClean == false { text += " · \(verdict.summary)" }
+            if unplaced > 0 {
+                text += " · \(unplaced) did not fit"
+            } else if usedFallback {
+                text += " · reduced to fit"
+            }
+            self.status = text
+            HUDController.shared.show(HUDMessage.gridApplied(summary: Self.layoutSummary(set)))
         }
-        status = statusText
-        HUDController.shared.show(HUDMessage.gridApplied(summary: Self.layoutSummary(set)))
     }
 
     private func move(windowAt index: Int, to point: CGPoint) {
