@@ -2489,6 +2489,15 @@ final class WorkspaceStore {
             guard let tracked = elements[windows[index].id] else { return false }
             return CFEqual(tracked, element)
         }) else { return }
+        // A command in flight owns this window's geometry. An event that is not
+        // the frame the command asked for is an animation step or the app's own
+        // answer; the verification readback is the authority, so the model must
+        // not oscillate on it.
+        if let key = frameIdentity(for: windows[index]),
+           let pending = pendingFrameTargets[key],
+           FrameMismatch.isAtTarget(frame, target: pending) == false {
+            return
+        }
         windows[index].x = frame.minX
         windows[index].y = frame.minY
         windows[index].width = frame.width

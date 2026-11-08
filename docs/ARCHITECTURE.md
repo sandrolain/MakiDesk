@@ -189,6 +189,10 @@ All layout maths is pure and unit-tested:
   did not move while the position landed gets one size-first retry, and a frame
   the app chose is reported once. `WindowSizeLimitMemory` keeps the floor and
   the fixed length a refusal proved, for the rest of the session.
+- A geometry notification updates the model only when no command is in flight
+  for that window, or when the frame already matches the command's target.
+  Animation steps and an app's own answer are left to the verification readback,
+  so the model never oscillates on a frame the command did not ask for.
 - `ArrowChord` is the two-arrow chord: a Carbon hot key carries one key, so the
   partner arrow's physical state (`CGEventSource.keyState`, no event tap and no
   extra permission) turns an ordinary step into the full span of that axis. The

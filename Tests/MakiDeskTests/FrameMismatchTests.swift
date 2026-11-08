@@ -76,4 +76,13 @@ final class FrameMismatchTests: XCTestCase {
             wanted: wanted, previous: previous,
             actual: CGRect(x: 0, y: 0, width: 0, height: 0)), .unreadable)
     }
+
+    func testOnlyTheCommandTargetIsAdoptedFromANotification() {
+        XCTAssertTrue(FrameMismatch.isAtTarget(wanted, target: wanted))
+        XCTAssertTrue(FrameMismatch.isAtTarget(
+            CGRect(x: 201, y: 149, width: 799, height: 601), target: wanted))
+        XCTAssertFalse(FrameMismatch.isAtTarget(previous, target: wanted))
+        XCTAssertFalse(FrameMismatch.isAtTarget(
+            CGRect(x: 200, y: 150, width: 700, height: 600), target: wanted))
+    }
 }

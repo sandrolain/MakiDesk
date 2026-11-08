@@ -58,6 +58,17 @@ enum FrameMismatch: Equatable {
             && frame.width > 0 && frame.height > 0
     }
 
+    /// Whether a geometry notification is the frame a command asked for, within
+    /// the tolerance the readback accepts. An event that is not is an animation
+    /// step or the app's own answer: the command's readback owns the model.
+    static func isAtTarget(_ frame: CGRect, target: CGRect,
+                           tolerance: CGFloat = 2) -> Bool {
+        abs(frame.minX - target.minX) <= tolerance
+            && abs(frame.minY - target.minY) <= tolerance
+            && abs(frame.width - target.width) <= tolerance
+            && abs(frame.height - target.height) <= tolerance
+    }
+
     private static func matches(_ wanted: CGRect, _ actual: CGRect) -> Bool {
         distance(wanted, actual) <= positionTolerance
             && abs(wanted.width - actual.width) <= sizeTolerance
