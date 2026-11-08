@@ -1041,6 +1041,33 @@ final class TerminalWindowController: NSWindowController,
 
     // MARK: - Focus
 
+    @objc func focusPaneLeftAction(_ sender: Any?) { focusPane(in: .left) }
+    @objc func focusPaneRightAction(_ sender: Any?) { focusPane(in: .right) }
+    @objc func focusPaneUpAction(_ sender: Any?) { focusPane(in: .up) }
+    @objc func focusPaneDownAction(_ sender: Any?) { focusPane(in: .down) }
+
+    /// Keyboard focus between splits. The visible frames are read from the
+    /// live view hierarchy, so unequal splits and the real divider positions
+    /// are what the neighbour search sees.
+    private func focusPane(in direction: PaneFocusDirection) {
+        guard workspaces.indices.contains(selected) else { return }
+        var frames: [PaneID: CGRect] = [:]
+        for pane in workspaces[selected].paneIDs {
+            guard let host = paneViews[pane], host.window != nil else { continue }
+            let frame = host.convert(host.bounds, to: contentView)
+            if frame.width > 0, frame.height > 0 { frames[pane] = frame }
+        }
+        guard let target = TerminalPaneNavigation.neighbor(
+            of: workspaces[selected].focusedPane,
+            in: frames,
+            direction: direction
+        ) else {
+            NSSound.beep()
+            return
+        }
+        focusPane(target)
+    }
+
     private func focusPane(_ pane: PaneID) {
         guard selected < workspaces.count, workspaces[selected].contains(pane) else { return }
         if workspaces[selected].focus(pane) == false { return }

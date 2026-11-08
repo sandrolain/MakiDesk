@@ -89,6 +89,7 @@ identity before the outer app.
   `.regular` while its window is open; signing is inside-out.
 - **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
   Move Workspace Up `⌃⌘↑`, Move Workspace Down `⌃⌘↓`,
+  Focus Pane `⌘⌥←/→/↑/↓`,
   Close Pane `⌘W`, Close Workspace `⇧⌘W`, Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
   Show Quake in View.
 - **Find bar:** one per window, over the focused pane; the needle is sent to

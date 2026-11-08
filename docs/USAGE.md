@@ -621,7 +621,8 @@ it running, so its shells keep working.
   layout and the selected shell stays selected.
 - **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
   one; `⌘W` closes the pane and `⇧⌘W` the workspace. Every pane is a real shell
-  with its own scrollback, copy/paste, links and Option-as-Meta.
+  with its own scrollback, copy/paste, links and Option-as-Meta. `⌘⌥←`, `⌘⌥→`,
+  `⌘⌥↑` and `⌘⌥↓` move the focus between panes; at an edge the shortcut beeps.
 - **Restore.** Workspace titles, split trees, the selection, each pane's last
   directory and a pane's command (an SSH session, for instance) are saved in
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored

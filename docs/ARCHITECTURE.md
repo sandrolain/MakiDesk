@@ -312,7 +312,11 @@ looks for `dist/MakiDeskTerminal.app`, because it has no app bundle to nest into
 
 Inside the helper, a workspace is one sidebar row and one binary split tree of
 terminal panes; surfaces are reused across rebuilds, so switching workspaces
-never restarts a shell. A pane may carry a command instead of the login shell:
+never restarts a shell. Keyboard pane focus (`⌘⌥` arrows) reads each visible
+pane's frame from the live view hierarchy and asks
+`TerminalPaneNavigation.neighbor` in `MakiTerminalCore` for the closest centre
+in that direction, so unequal splits and divider positions are respected without
+walking the tree. A pane may carry a command instead of the login shell:
 an SSH profile in `settings.json` or the tmux preset becomes one, the sidebar's
 `+` menu starts a workspace with it, and the layout remembers it. Every pane
 receives `MAKIDESK_TERMINAL=1` and its workspace id through Ghostty's env-vars

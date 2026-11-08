@@ -192,6 +192,19 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         let viewItem = NSMenuItem()
         mainMenu.addItem(viewItem)
         let viewMenu = NSMenu(title: "View")
+        menu(viewMenu, "Focus Pane Left",
+             #selector(TerminalWindowController.focusPaneLeftAction(_:)),
+             "\u{F702}", [.option], target)
+        menu(viewMenu, "Focus Pane Right",
+             #selector(TerminalWindowController.focusPaneRightAction(_:)),
+             "\u{F703}", [.option], target)
+        menu(viewMenu, "Focus Pane Up",
+             #selector(TerminalWindowController.focusPaneUpAction(_:)),
+             "\u{F700}", [.option], target)
+        menu(viewMenu, "Focus Pane Down",
+             #selector(TerminalWindowController.focusPaneDownAction(_:)),
+             "\u{F701}", [.option], target)
+        viewMenu.addItem(.separator())
         menu(viewMenu, "Show Quake", #selector(TerminalWindowController.toggleQuake),
              "", [], target)
         viewItem.submenu = viewMenu
