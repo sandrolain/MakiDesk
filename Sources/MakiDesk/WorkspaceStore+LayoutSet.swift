@@ -57,6 +57,66 @@ extension WorkspaceStore {
         return set
     }
 
+    /// One screen a layout command may place windows on. `area` is the usable
+    /// frame in the same (AX, top-left) coordinates as `ActionableWindow.frame`.
+    struct LayoutScreen: Equatable {
+        let id: CGDirectDisplayID
+        let area: CGRect
+    }
+
+    /// The windows a layout command places together on one screen.
+    struct LayoutGroup {
+        let screen: LayoutScreen
+        var windows: [ActionableWindow]
+    }
+
+    /// Splits `windows` by the screen each one is on, preserving the input
+    /// order inside a group and the `screens` order across groups. A window
+    /// whose display is unknown — or no longer connected — falls back to the
+    /// screen it overlaps most, then to the first screen. Pure: the caller
+    /// supplies the display lookup, so this runs in tests without a desktop.
+    ///
+    /// `NSScreen.main` is deliberately not a fallback: a layout command must
+    /// not drag a window onto the focused display just because it is focused.
+    static func layoutGroups(
+        for windows: [ActionableWindow],
+        screens: [LayoutScreen],
+        displayID: (ActionableWindow) -> CGDirectDisplayID?
+    ) -> [LayoutGroup] {
+        guard !screens.isEmpty else { return [] }
+        var indexByID: [CGDirectDisplayID: Int] = [:]
+        for (index, screen) in screens.enumerated() { indexByID[screen.id] = index }
+
+        var buckets = [Int: [ActionableWindow]](minimumCapacity: screens.count)
+        for window in windows {
+            let index = displayID(window).flatMap { indexByID[$0] }
+                ?? fallbackScreenIndex(for: window, screens: screens)
+            buckets[index, default: []].append(window)
+        }
+        return screens.indices.compactMap { index in
+            guard let windows = buckets[index], windows.isEmpty == false else { return nil }
+            return LayoutGroup(screen: screens[index], windows: windows)
+        }
+    }
+
+    /// The screen whose usable area holds most of the window. Ties go to the
+    /// earlier screen; a window overlapping none goes to the first screen, so
+    /// the result is always deterministic.
+    private static func fallbackScreenIndex(for window: ActionableWindow,
+                                            screens: [LayoutScreen]) -> Int {
+        var best = 0
+        var bestArea: CGFloat = 0
+        for (index, screen) in screens.enumerated() {
+            let hit = screen.area.intersection(window.frame)
+            let area = hit.isNull ? 0 : hit.width * hit.height
+            if area > bestArea + 0.5 {
+                bestArea = area
+                best = index
+            }
+        }
+        return best
+    }
+
     /// One line saying how many windows a layout placed and, when that is fewer
     /// than what is in view, why: a window that is away stays away, a full-screen
     /// window cannot be given a frame of ours (T24).

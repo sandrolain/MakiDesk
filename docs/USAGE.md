@@ -232,6 +232,11 @@ When windows are ticked in the switcher, the command applies only to those;
 otherwise it applies to every window in view. The **selected windows** variants
 are in the menu.
 
+Every layout is applied **per display**: windows stay on the display they are
+on, and each display gets its own cells, spiral slots or treemap. The golden
+spiral's six-slot cap is per display too. A window can still be moved to another
+display with the arrow ladder, but a layout command never does it.
+
 **Suggested layout.** Settings ▸ Layouts has *Ask before using the suggested
 layout*. With it on, `⌃⌥A` shows the advice and its reason and waits; running it
 again (or applying it from the menu) accepts. With it off, it applies at once.

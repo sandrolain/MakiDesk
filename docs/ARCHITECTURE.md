@@ -164,6 +164,10 @@ All layout maths is pure and unit-tested:
   `fullSpan` (the ladder's full state on one axis, keeping the other),
   `gridFrames`, `goldenSpiralSlots` (capped at six) and
   `weightedFrames` (squarified treemap, deterministic, gap-inset).
+- `WorkspaceStore.layoutGroups` splits a layout command's windows by
+  `CGDirectDisplayID`; every preset is then computed in that display's own
+  usable area. A window whose display is unknown falls back to the screen it
+  overlaps most, not to whichever display happens to be focused.
 - `LayoutAdvisor` classifies windows by app/title (`WindowKind`), reads the
   content measure and chooses grid/spiral/content. `LayoutAdvisor.weights`
   combines the per-kind priors with `0.7 + 0.6 × score/median`. The advisor is
@@ -703,8 +707,10 @@ restore rule) and the shortcut catalogue. At the time of writing: **801 tests**.
 
 ## Known constraints
 
-- Layout commands act on the main screen; window moves follow the window's
-  screen. There is no multi-monitor layout command yet.
+- Layout commands act on each window's own display: the set is split by
+  display and each display is arranged in its own area, so a command never
+  pulls a window onto another monitor. There is still no command that lays out
+  several displays as one canvas or moves a window between them.
 - macOS has no public API to move a window between Spaces.
 - Accessibility support varies by app; some windows reject frames or expose no
   title. The app reports a refusal instead of silently leaving a gap.

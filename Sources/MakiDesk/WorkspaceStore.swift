@@ -2488,6 +2488,52 @@ final class WorkspaceStore {
     /// The windows a layout command arranges (T18).
     private func arrangeableWindows() -> [ActionableWindow] { arrangeableSet().windows }
 
+    /// The live screens a layout command may place windows on, in
+    /// `NSScreen.screens` order, with their usable areas in AX coordinates.
+    private func layoutScreens() -> [LayoutScreen] {
+        var seen = Set<CGDirectDisplayID>()
+        return NSScreen.screens.compactMap { screen in
+            guard let id = Self.displayID(of: screen), seen.insert(id).inserted else { return nil }
+            return LayoutScreen(id: id, area: WindowController.axVisibleFrame(for: screen))
+        }
+    }
+
+    /// The windows of a layout command, split by the display each one is on.
+    /// Every preset is applied per screen, in that screen's own area: a tile
+    /// never moves a window across displays just because another one is the
+    /// focused display (`NSScreen.main`).
+    private func layoutGroups(for windows: [ActionableWindow]) -> [LayoutGroup] {
+        Self.layoutGroups(for: windows, screens: layoutScreens()) { window in
+            self.layoutDisplayID(for: window)
+        }
+    }
+
+    /// The display holding most of a window, by usable area. `nil` when no
+    /// display holds it at all (an off-screen window), so the pure partition
+    /// can apply its own deterministic fallback instead of silently borrowing
+    /// the focused display.
+    private func layoutDisplayID(for window: ActionableWindow) -> CGDirectDisplayID? {
+        var bestID: CGDirectDisplayID?
+        var bestArea: CGFloat = 0
+        for screen in NSScreen.screens {
+            let hit = WindowController.axVisibleFrame(for: screen).intersection(window.frame)
+            let area = hit.isNull ? 0 : hit.width * hit.height
+            guard area >= 1, let id = Self.displayID(of: screen) else { continue }
+            if area > bestArea + 0.5 {
+                bestArea = area
+                bestID = id
+            }
+        }
+        return bestID
+    }
+
+    /// The stable identity of a screen, the only one that survives a reconnect
+    /// or a change of origin. `NSScreenNumber` is a `CGDirectDisplayID`.
+    static func displayID(of screen: NSScreen) -> CGDirectDisplayID? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
+            .uint32Value
+    }
+
     /// The app icon, looked up once per pid and cached (T3).
     private func icon(for pid: pid_t) -> NSImage? {
         if let cached = iconCache[pid] { return cached }
@@ -3596,17 +3642,14 @@ final class WorkspaceStore {
     /// visual content. The score comes from asynchronous, downscaled captures so
     /// the main thread is never blocked. The spiral is capped at
     /// `TilingEngine.maxGoldenSpiralSlots` so the last slots never become sliver
-    /// thin; any windows beyond the cap stay where they are.
+    /// thin; any windows beyond the cap stay where they are. Each display is
+    /// arranged in its own area, with its own cap.
     func autoLayout(selection: [ActionableWindow] = []) {
         if deferUntilFreshInventory({ [weak self] in guard let self else { return }; self.autoLayout(selection: selection) }) { return }
         clearPendingLayout()
         frameCommandEpoch &+= 1
-        let area = WindowController.axVisibleFrame(for: NSScreen.main)
         let candidates = selection.isEmpty ? arrangeableWindows() : validatedSelection(selection)
         guard !candidates.isEmpty else { return }
-        let slots = TilingEngine.goldenSpiralSlots(area: area, count: candidates.count)
-        guard !slots.isEmpty else { return }
-        let gapHalf = gap / 2
 
         let requests = candidates.compactMap { window -> WindowCapture.Request? in
             guard let id = window.windowID else { return nil }
@@ -3620,14 +3663,28 @@ final class WorkspaceStore {
             guard self.frameCommandEpoch == commandEpoch else { return }
             let scored = Self.byContentScore(candidates, scores: scores)
             Self.logContentOrder(scored, scores: scores, requested: requests.count)
-            for (index, position) in slots.enumerated() where index < scored.count {
-                let target = self.windowInfo(for: scored[index])
-                self.applyFrame(position.insetBy(dx: gapHalf, dy: gapHalf).integral,
-                                to: target, reason: "auto layout (golden spiral)")
+            let gapHalf = self.gap / 2
+            var placed: [ActionableWindow] = []
+            var skipped = 0
+            for group in self.layoutGroups(for: scored) {
+                let slots = TilingEngine.goldenSpiralSlots(area: group.screen.area,
+                                                           count: group.windows.count)
+                guard !slots.isEmpty else {
+                    skipped += group.windows.count
+                    continue
+                }
+                for (index, position) in slots.enumerated() where index < group.windows.count {
+                    let target = self.windowInfo(for: group.windows[index])
+                    self.applyFrame(position.insetBy(dx: gapHalf, dy: gapHalf).integral,
+                                    to: target, reason: "auto layout (golden spiral)")
+                    placed.append(group.windows[index])
+                }
+                skipped += max(0, group.windows.count - slots.count)
             }
             self.raiseToFront(scored)
-            if scored.count > slots.count {
-                self.status = "Golden spiral placed \(slots.count) of \(scored.count) windows (limit \(slots.count))"
+            if skipped > 0 {
+                self.status = "Golden spiral placed \(placed.count) of \(scored.count) windows "
+                    + "(limit \(TilingEngine.maxGoldenSpiralSlots) per display)"
             }
         }
     }
@@ -3765,27 +3822,39 @@ final class WorkspaceStore {
     private func apply(_ advice: LayoutAdvice, to set: ArrangeableSet) {
         let windows = set.windows
         guard !windows.isEmpty else { return }
-        let area = WindowController.axVisibleFrame(for: NSScreen.main)
-        var ordered = windows
-        let frames: [CGRect]
+        // The same advice, applied per display: the grid and the spiral fill
+        // each screen's own area, and the content layout distributes each
+        // screen's weights. A lead window only leads on the screen it is on.
+        let groups = layoutGroups(for: windows)
+        guard !groups.isEmpty else { return }
+        var placed: [ActionableWindow] = []
 
-        if advice.layout == .content, let weights = advice.weights {
-            ordered = Self.orderedByWeight(windows, weights: weights)
-            frames = TilingEngine.frames(for: .content, count: ordered.count, in: area, gap: gap,
-                                         weights: ordered.map { weights[$0.id] ?? 1 })
-        } else {
-            if let lead = advice.leadID, let index = windows.firstIndex(where: { $0.id == lead }) {
-                ordered.remove(at: index)
-                ordered.insert(windows[index], at: 0)
+        for group in groups {
+            var ordered = group.windows
+            let frames: [CGRect]
+
+            if advice.layout == .content, let weights = advice.weights {
+                ordered = Self.orderedByWeight(group.windows, weights: weights)
+                frames = TilingEngine.frames(for: .content, count: ordered.count,
+                                             in: group.screen.area, gap: gap,
+                                             weights: ordered.map { weights[$0.id] ?? 1 })
+            } else {
+                if let lead = advice.leadID,
+                   let index = ordered.firstIndex(where: { $0.id == lead }) {
+                    let window = ordered.remove(at: index)
+                    ordered.insert(window, at: 0)
+                }
+                frames = TilingEngine.frames(for: advice.layout, count: ordered.count,
+                                             in: group.screen.area, gap: gap)
             }
-            frames = TilingEngine.frames(for: advice.layout, count: windows.count, in: area, gap: gap)
+            guard !frames.isEmpty else { continue }
+            for (index, frame) in frames.enumerated() where index < ordered.count {
+                applyFrame(frame, to: windowInfo(for: ordered[index]),
+                           reason: "auto layout (\(advice.layout.label.lowercased()))")
+                placed.append(ordered[index])
+            }
         }
-        guard !frames.isEmpty else { return }
-        for (index, frame) in frames.enumerated() where index < ordered.count {
-            applyFrame(frame, to: windowInfo(for: ordered[index]),
-                       reason: "auto layout (\(advice.layout.label.lowercased()))")
-        }
-        raiseToFront(ordered)
+        raiseToFront(placed)
         HUDController.shared.show(HUDMessage.layoutApplied(layout: advice.layout.label,
                                                            summary: Self.layoutSummary(set),
                                                            reason: advice.reason))
@@ -3840,7 +3909,6 @@ final class WorkspaceStore {
             HUDController.shared.show(HUDMessage.contentNeedsThreeWindows)
             return
         }
-        let area = WindowController.axVisibleFrame(for: NSScreen.main)
         let requests = targets.compactMap { window -> WindowCapture.Request? in
             guard let id = window.windowID else { return nil }
             return WindowCapture.Request(key: window.id, windowID: id)
@@ -3854,19 +3922,27 @@ final class WorkspaceStore {
             guard self.frameCommandEpoch == commandEpoch else { return }
             let measure = ContentMeasure(scores: scores)
             let weights = LayoutAdvisor.weights(subjects, measure: measure, priors: self.layoutPriors)
-            let ordered = Self.orderedByWeight(targets, weights: weights)
-            let frames = TilingEngine.frames(for: .content, count: ordered.count, in: area, gap: self.gap,
-                                             weights: ordered.map { weights[$0.id] ?? 1 })
-            guard frames.count == ordered.count else { return }
-            for (index, window) in ordered.enumerated() {
-                self.applyFrame(frames[index], to: self.windowInfo(for: window),
-                                reason: "content layout")
+            // One treemap per display: the weights are global, the area is the
+            // screen each window is on, and the order is that screen's alone.
+            let groups = self.layoutGroups(for: targets)
+            var placed: [ActionableWindow] = []
+            for group in groups {
+                let ordered = Self.orderedByWeight(group.windows, weights: weights)
+                let frames = TilingEngine.frames(for: .content, count: ordered.count,
+                                                 in: group.screen.area, gap: self.gap,
+                                                 weights: ordered.map { weights[$0.id] ?? 1 })
+                guard frames.count == ordered.count else { continue }
+                for (index, window) in ordered.enumerated() {
+                    self.applyFrame(frames[index], to: self.windowInfo(for: window),
+                                    reason: "content layout")
+                    placed.append(window)
+                }
             }
-            if !selection.isEmpty { self.raiseToFront(ordered) }
-            self.status = "Content layout: \(ordered.count) windows"
+            if !selection.isEmpty { self.raiseToFront(placed) }
+            self.status = "Content layout: \(placed.count) windows"
             HUDController.shared.show(HUDMessage.contentApplied(
                 summary: Self.layoutSummary(set)))
-            Self.logContentWeights(ordered, weights: weights, scores: scores,
+            Self.logContentWeights(placed, weights: weights, scores: scores,
                                    requested: requests.count)
         }
     }
@@ -3920,21 +3996,33 @@ final class WorkspaceStore {
         // An explicit layout command settles the question: nothing the advisor
         // proposed is still waiting to be accepted.
         clearPendingLayout()
-        let area = WindowController.axVisibleFrame(for: NSScreen.main)
         let set = selection.isEmpty ? arrangeableSet() : ArrangeableSet(windows: validatedSelection(selection))
         let targets = set.windows
         guard !targets.isEmpty else {
             HUDController.shared.show(HUDMessage.nothingToArrange)
             return
         }
-        let frames = TilingEngine.frames(for: .grid, count: targets.count, in: area, gap: gap)
-        for (index, window) in targets.enumerated() where index < frames.count {
-            // *Tile* is the explicit way to re-dispose: the arrangement it just
-            // made is what a recall restores from now on (T15).
-            applyFrame(frames[index], to: windowInfo(for: window), reason: "tiled")
+        // One grid per display, in that display's own area. `NSScreen.main` is
+        // not the area: the command arranges the windows where they already
+        // are, it does not gather them onto the focused display.
+        let groups = layoutGroups(for: targets)
+        guard !groups.isEmpty else {
+            HUDController.shared.show(HUDMessage.nothingToArrange)
+            return
         }
-        if !selection.isEmpty { raiseToFront(targets) }
-        status = "Tiled \(min(targets.count, frames.count)) windows with \(Int(gap)) px gap"
+        var placed: [ActionableWindow] = []
+        for group in groups {
+            let frames = TilingEngine.frames(for: .grid, count: group.windows.count,
+                                             in: group.screen.area, gap: gap)
+            for (index, window) in group.windows.enumerated() where index < frames.count {
+                // *Tile* is the explicit way to re-dispose: the arrangement it
+                // just made is what a recall restores from now on (T15).
+                applyFrame(frames[index], to: windowInfo(for: window), reason: "tiled")
+                placed.append(window)
+            }
+        }
+        if !selection.isEmpty { raiseToFront(placed) }
+        status = "Tiled \(placed.count) windows with \(Int(gap)) px gap"
         HUDController.shared.show(HUDMessage.gridApplied(summary: Self.layoutSummary(set)))
     }
 
