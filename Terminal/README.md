@@ -114,6 +114,9 @@ identity before the outer app.
   Ghostty stops drawing while their shells keep running. The flag is
   recomputed after a workspace switch, on a quake toggle, on occlusion changes
   and on key/main transitions.
+- **Pointer:** Ghostty's mouse shape is honored (I-beam over the grid, hand
+  over a URL while ⌘ is held, resize cursors over the scrollbar), and `mouse-hide-while-typing`
+  hides the pointer until it moves.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
   IPC; it stays alive while hidden and is not part of the saved layout. It opens
   on the display under the pointer, using the display's visible frame

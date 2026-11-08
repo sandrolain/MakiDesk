@@ -21,6 +21,10 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     var shellCommand: String?
     /// Extra variables for the child shell, such as the workspace identity.
     var environment: [String: String] = [:]
+    /// Hide the pointer as soon as a key produces terminal input. Ghostty's
+    /// own `mouse-hide-while-typing` action is not emitted by this build, so
+    /// the view applies the setting directly.
+    var hidesMouseWhileTyping = false
     /// The needle of the last find session in this pane, so reopening the bar
     /// starts from it instead of empty.
     var lastSearchNeedle = ""
@@ -222,6 +226,61 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     // MARK: - Tracking and pointer
 
+    /// The cursor Ghostty asks for: text over the grid, a hand over a link,
+    /// resize arrows over a scrollbar. The default matches a terminal at rest.
+    private var mouseShape: ghostty_action_mouse_shape_e = GHOSTTY_MOUSE_SHAPE_TEXT
+
+    func updateMouseShape(_ shape: ghostty_action_mouse_shape_e) {
+        guard shape != mouseShape else { return }
+        mouseShape = shape
+        window?.invalidateCursorRects(for: self)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: Self.cursor(for: mouseShape))
+    }
+
+    private func hidePointerIfTyping() {
+        guard hidesMouseWhileTyping else { return }
+        NSCursor.setHiddenUntilMouseMoves(true)
+    }
+
+    private static func cursor(for shape: ghostty_action_mouse_shape_e) -> NSCursor {
+        switch shape {
+        case GHOSTTY_MOUSE_SHAPE_DEFAULT:
+            return .arrow
+        case GHOSTTY_MOUSE_SHAPE_TEXT:
+            return .iBeam
+        case GHOSTTY_MOUSE_SHAPE_VERTICAL_TEXT:
+            return .iBeamCursorForVerticalLayout
+        case GHOSTTY_MOUSE_SHAPE_POINTER:
+            return .pointingHand
+        case GHOSTTY_MOUSE_SHAPE_CROSSHAIR, GHOSTTY_MOUSE_SHAPE_CELL:
+            return .crosshair
+        case GHOSTTY_MOUSE_SHAPE_GRAB:
+            return .openHand
+        case GHOSTTY_MOUSE_SHAPE_GRABBING, GHOSTTY_MOUSE_SHAPE_MOVE:
+            return .closedHand
+        case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED, GHOSTTY_MOUSE_SHAPE_NO_DROP:
+            return .operationNotAllowed
+        case GHOSTTY_MOUSE_SHAPE_CONTEXT_MENU:
+            return .contextualMenu
+        case GHOSTTY_MOUSE_SHAPE_COPY:
+            return .dragCopy
+        case GHOSTTY_MOUSE_SHAPE_ALIAS:
+            return .dragLink
+        case GHOSTTY_MOUSE_SHAPE_W_RESIZE, GHOSTTY_MOUSE_SHAPE_E_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_EW_RESIZE, GHOSTTY_MOUSE_SHAPE_COL_RESIZE:
+            return .resizeLeftRight
+        case GHOSTTY_MOUSE_SHAPE_N_RESIZE, GHOSTTY_MOUSE_SHAPE_S_RESIZE,
+             GHOSTTY_MOUSE_SHAPE_NS_RESIZE, GHOSTTY_MOUSE_SHAPE_ROW_RESIZE:
+            return .resizeUpDown
+        default:
+            return .arrow
+        }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
@@ -298,6 +357,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     override func keyDown(with event: NSEvent) {
         guard let surface else { return }
+        hidePointerIfTyping()
         // Command belongs to the app menu (copy, paste, quit); AppKit runs the
         // key equivalents before this method, so reaching it means no menu row
         // matched.
@@ -651,6 +711,7 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
 
     func insertText(_ string: Any, replacementRange: NSRange) {
         guard let surface else { return }
+        hidePointerIfTyping()
         let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
         guard text.isEmpty == false else { return }
         if hasMarkedText() {

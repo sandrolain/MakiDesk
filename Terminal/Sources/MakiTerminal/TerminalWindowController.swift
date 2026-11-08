@@ -786,6 +786,7 @@ final class TerminalWindowController: NSWindowController,
         let surface = TerminalSurfaceView(frame: .zero)
         surface.paneID = pane
         surface.shellCommand = terminalSettings.shell
+        surface.hidesMouseWhileTyping = terminalSettings.hideMouseWhileTyping
         surface.environment["MAKIDESK_TERMINAL"] = "1"
         if let cliPath { surface.environment["MAKIDESK_CLI"] = cliPath }
         surface.environment["MAKIDESK_WORKSPACE_ID"] = workspace.id.uuidString
@@ -878,8 +879,10 @@ final class TerminalWindowController: NSWindowController,
         runtime.apply(settings: settings, theme: theme)
         for host in paneViews.values {
             host.surfaceView.shellCommand = settings.shell
+            host.surfaceView.hidesMouseWhileTyping = settings.hideMouseWhileTyping
         }
         quakeHost?.surfaceView.shellCommand = settings.shell
+        quakeHost?.surfaceView.hidesMouseWhileTyping = settings.hideMouseWhileTyping
     }
 
     var allSurfaces: [ghostty_surface_t] {
@@ -945,6 +948,7 @@ final class TerminalWindowController: NSWindowController,
             ? (workspaces[selected].command(for: pane) ?? terminalSettings.shell)
             : terminalSettings.shell
         surface.onFocus = { [weak self] in self?.focusPane(pane) }
+        surface.hidesMouseWhileTyping = terminalSettings.hideMouseWhileTyping
 
         surface.environment["MAKIDESK_TERMINAL"] = "1"
         if let cliPath { surface.environment["MAKIDESK_CLI"] = cliPath }

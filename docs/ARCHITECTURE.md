@@ -387,6 +387,12 @@ window is always visible, and before that first report the ordinary on-screen
 state is trusted (virtual displays may never raise the bit). A surface created
 while the pane is off screen replays the flag on creation.
 
+Ghostty's `MOUSE_SHAPE` and `MOUSE_VISIBILITY` actions are forwarded to the
+pane too: `resetCursorRects` uses the shape Ghostty asks for (an I-beam over the grid, a
+hand over a URL while ⌘ is held), and hiding the pointer uses
+`NSCursor.setHiddenUntilMouseMoves(true)` from the typing path, so the setting
+clears on the next movement rather than leaving a hidden cursor behind.
+
 A terminal bell still beeps, and `GhosttyRuntime.onBell` gives the controller
 the ringing surface: `markAttention` adds the workspace dot when that workspace
 is not the one in front. It shares the dot and its clearing rule with shell

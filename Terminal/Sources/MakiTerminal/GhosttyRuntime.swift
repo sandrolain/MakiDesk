@@ -188,6 +188,21 @@ final class GhosttyRuntime {
                 GhosttyRuntime.shared?.onDirectory?(view, directory)
             }
             return true
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            guard let view else { return true }
+            let shape = action.action.mouse_shape
+            DispatchQueue.main.async {
+                view.updateMouseShape(shape)
+            }
+            return true
+        case GHOSTTY_ACTION_MOUSE_VISIBILITY:
+            let mode = action.action.mouse_visibility
+            DispatchQueue.main.async {
+                // Hides until the user moves the pointer, which is exactly
+                // Ghostty's "hide while typing" contract.
+                NSCursor.setHiddenUntilMouseMoves(mode == GHOSTTY_MOUSE_HIDDEN)
+            }
+            return true
         case GHOSTTY_ACTION_RING_BELL:
             NSSound.beep()
             DispatchQueue.main.async {

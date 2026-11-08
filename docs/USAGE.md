@@ -668,6 +668,10 @@ it running, so its shells keep working.
   is typed, a multi-line value goes through the paste path as one block, and a
   trailing newline presses Return. The value is a short cached snapshot and is
   refreshed after an insertion.
+- **Links.** Plain URLs are recognized: hold `⌘` while hovering to see the
+  underline and the pointing hand, then `⌘`-click to open one in the default
+  app. OSC 8 hyperlinks behave the same way; file paths are not turned into
+  links.
 - **Notifications and attention.** A desktop notification sent by a program in
   the shell (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon,
   instead of a bare system alert. The workspace also gets a dot in the sidebar;
