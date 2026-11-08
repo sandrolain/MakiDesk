@@ -24,6 +24,8 @@ final class TerminalSettingsTests: XCTestCase {
         XCTAssertEqual(settings.cursorStyle, .block)
         XCTAssertTrue(settings.cursorBlink)
         XCTAssertNil(settings.scrollbackLimitMB)
+        XCTAssertTrue(settings.copyOnSelect)
+        XCTAssertFalse(settings.hideMouseWhileTyping)
     }
 
     func testAnOlderSettingsFileGainsTheNewDefaults() throws {
@@ -36,6 +38,8 @@ final class TerminalSettingsTests: XCTestCase {
         XCTAssertEqual(settings.cursorStyle, .block)
         XCTAssertTrue(settings.cursorBlink)
         XCTAssertNil(settings.scrollbackLimitMB)
+        XCTAssertTrue(settings.copyOnSelect)
+        XCTAssertFalse(settings.hideMouseWhileTyping)
     }
 
     func testCursorShapesAndScrollbackRoundTrip() {
@@ -47,6 +51,14 @@ final class TerminalSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.cursorStyle, .bar)
         XCTAssertFalse(decoded.cursorBlink)
         XCTAssertEqual(decoded.scrollbackLimitMB, 20)
+    }
+
+    func testSelectionAndPointerSettingsRoundTrip() {
+        let settings = TerminalSettingsDocument(copyOnSelect: false, hideMouseWhileTyping: true)
+        let data = try! JSONEncoder().encode(settings)
+        let decoded = try! JSONDecoder().decode(TerminalSettingsDocument.self, from: data)
+        XCTAssertFalse(decoded.copyOnSelect)
+        XCTAssertTrue(decoded.hideMouseWhileTyping)
     }
 
     func testNormalizationClampsTheScrollbackAndChecksTheShape() {

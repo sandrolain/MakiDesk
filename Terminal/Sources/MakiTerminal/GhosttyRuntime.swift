@@ -289,6 +289,8 @@ final class GhosttyRuntime {
             "font-size = \(settings.fontSize)",
             "cursor-style = \(settings.cursorStyle.rawValue)",
             "cursor-style-blink = \(settings.cursorBlink)",
+            "copy-on-select = \(settings.copyOnSelect)",
+            "mouse-hide-while-typing = \(settings.hideMouseWhileTyping)",
             // Ghostty's shell integration otherwise forces a bar at the prompt
             // and would hide the chosen shape there.
             "shell-integration-features = no-cursor",

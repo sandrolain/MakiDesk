@@ -147,6 +147,11 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
     /// Scrollback memory per pane, in megabytes; nil keeps Ghostty's default.
     /// A change applies to new panes only.
     public var scrollbackLimitMB: Int?
+    /// Selecting text copies it to the system clipboard (Ghostty's default on
+    /// macOS).
+    public var copyOnSelect: Bool
+    /// Hide the pointer as soon as typing starts.
+    public var hideMouseWhileTyping: Bool
     /// Saved SSH targets offered in the helper's sidebar.
     public var sshProfiles: [TerminalSSHProfile]
 
@@ -158,6 +163,8 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
                 cursorStyle: TerminalCursorStyle = .block,
                 cursorBlink: Bool = true,
                 scrollbackLimitMB: Int? = nil,
+                copyOnSelect: Bool = true,
+                hideMouseWhileTyping: Bool = false,
                 sshProfiles: [TerminalSSHProfile] = []) {
         self.version = version
         self.fontFamily = fontFamily
@@ -167,6 +174,8 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         self.cursorStyle = cursorStyle
         self.cursorBlink = cursorBlink
         self.scrollbackLimitMB = scrollbackLimitMB
+        self.copyOnSelect = copyOnSelect
+        self.hideMouseWhileTyping = hideMouseWhileTyping
         self.sshProfiles = sshProfiles
     }
 
@@ -185,6 +194,9 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
                                                     forKey: .cursorStyle) ?? .block
         cursorBlink = try container.decodeIfPresent(Bool.self, forKey: .cursorBlink) ?? true
         scrollbackLimitMB = try container.decodeIfPresent(Int.self, forKey: .scrollbackLimitMB)
+        copyOnSelect = try container.decodeIfPresent(Bool.self, forKey: .copyOnSelect) ?? true
+        hideMouseWhileTyping = try container.decodeIfPresent(Bool.self,
+                                                             forKey: .hideMouseWhileTyping) ?? false
         sshProfiles = try container.decodeIfPresent([TerminalSSHProfile].self,
                                                     forKey: .sshProfiles) ?? []
     }

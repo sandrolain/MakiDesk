@@ -55,7 +55,8 @@ identity before the outer app.
   not installed (common paths are checked before PATH). Panes also get
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
 - **Settings and theme:** `Terminal/settings.json` (font, cursor shape and
-  blink, scrollback size, shell command, quake height) and `Terminal/theme.json`
+  blink, scrollback size, selection copy, pointer hiding, shell command,
+  quake height) and `Terminal/theme.json`
   (MakiDesk palette plus the theme's sixteen ANSI colours, plus the
   surface/text/accent colours for the helper's own sidebar and title bar) are
   written by MakiDesk; the helper reloads them on `settingsChanged` and

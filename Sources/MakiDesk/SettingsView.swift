@@ -1137,6 +1137,20 @@ struct SettingsView: View {
                         Text(megabytes == 0 ? "Default" : "\(megabytes) MB").tag(megabytes)
                     }
                 }
+                Toggle("Copy text when selected", isOn: Binding(
+                    get: { TerminalController.shared.settings.copyOnSelect },
+                    set: { value in
+                        TerminalController.shared.updateSettings { $0.copyOnSelect = value }
+                    }
+                ))
+                Toggle("Hide the pointer while typing", isOn: Binding(
+                    get: { TerminalController.shared.settings.hideMouseWhileTyping },
+                    set: { value in
+                        TerminalController.shared.updateSettings {
+                            $0.hideMouseWhileTyping = value
+                        }
+                    }
+                ))
                 TextField("Shell command (empty: login shell)", text: Binding(
                     get: { TerminalController.shared.settings.shell ?? "" },
                     set: { value in
@@ -1161,7 +1175,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(theme.subtext)
                 }
-                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live; the scrollback limit is memory per pane and applies to new panes. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
+                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live, as do selection copy and pointer hiding; the scrollback limit is memory per pane and applies to new panes. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
             }
             agentHooksSection
             sshProfilesSection

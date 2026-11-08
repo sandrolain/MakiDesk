@@ -713,9 +713,9 @@ it running, so its shells keep working.
   ssh's own. The command is saved with the layout, so a restored pane tries to
   reconnect.
 - **Settings ▸ Terminal.** Font family and size, the cursor shape and blink,
-  the scrollback size per pane, the shell command (empty starts your login
-  shell), the quake height (30–60% of the screen), the SSH profiles and the
-  opt-in agent hooks. The terminal, its sidebar and its title bar follow the
+  the scrollback size per pane, copying selected text, hiding the pointer while
+  typing, the shell command (empty starts your login shell), the quake height
+  (30–60% of the screen), the SSH profiles and the opt-in agent hooks. The terminal, its sidebar and its title bar follow the
   MakiDesk theme, and a change reaches the helper without a restart; a new
   scrollback size applies to panes created afterwards. Each theme brings its
   own sixteen ANSI colours;
