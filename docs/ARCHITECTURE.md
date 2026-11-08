@@ -493,8 +493,11 @@ with tests) so an example is never rewritten, and the session's begin/end
 suspends the syntax highlighter (`NotesHighlighter.setSuspended`) and the
 automatic draft write, which then runs once for the whole rewrite.
 
-`NotesStore` restores a note's metadata first and loads its body on demand, so an
-unopened note has an empty placeholder editor for a moment. Text sent from the
+`NotesStore` restores metadata first on both the panel's asynchronous path and
+the synchronous action path (new note, open by id, external drop), and loads a
+body on demand, so an unopened note has an empty placeholder editor for a
+moment. The synchronous restore reads titles and the session only, never every
+body. Text sent from the
 shelf or OCR therefore becomes a **new note** (`NotesStore.addNote`): the draft
 the user has open is never mutated. The clipboard panel's paste fallback still
 inserts at the cursor through `NotesInsertionPolicy` / `NotesInsertionQueue`, so a

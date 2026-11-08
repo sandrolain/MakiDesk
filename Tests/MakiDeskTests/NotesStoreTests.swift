@@ -11,7 +11,17 @@ final class NotesStoreTests: XCTestCase {
         return url
     }
 
-    func testDraftSurvivesReloadWithoutSavingAnywhere() throws {
+    /// Restored notes are metadata-only; tests that assert a body load it on
+    /// demand, exactly as the editor does.
+    private func loadBodies(of store: NotesStore) async {
+        for note in store.notes where note.textLoaded == false {
+            await withCheckedContinuation { continuation in
+                store.loadTextAsync(for: note.id) { continuation.resume() }
+            }
+        }
+    }
+
+    func testDraftSurvivesReloadWithoutSavingAnywhere() async throws {
         let dir = try makeDirectory()
         let store = NotesStore(directory: dir)
         store.loadIfNeeded()
@@ -22,6 +32,7 @@ final class NotesStoreTests: XCTestCase {
 
         let reloaded = NotesStore(directory: dir)
         reloaded.loadIfNeeded()
+        await loadBodies(of: reloaded)
 
         XCTAssertEqual(reloaded.noteCount, 1)
         let restored = try XCTUnwrap(reloaded.note(id: note.id))
@@ -33,7 +44,25 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.previousRunWasClean)
     }
 
-    func testAddNoteCreatesANewNoteAndLeavesTheOpenOneAlone() throws {
+    func testSynchronousRestoreKeepsBodiesLazy() throws {
+        let directory = try makeDirectory()
+        let writer = NotesStore(directory: directory)
+        let note = writer.newNote()
+        writer.updateText("Title line\nbody that should not be read", for: note.id)
+        writer.flush()
+
+        let reader = NotesStore(directory: directory)
+        reader.loadIfNeeded()
+
+        let restored = try XCTUnwrap(reader.note(id: note.id))
+        XCTAssertFalse(restored.textLoaded)
+        XCTAssertEqual(restored.text, "")
+        XCTAssertEqual(restored.title, "Title line")
+        XCTAssertEqual(reader.openTabs, [note.id])
+        XCTAssertEqual(reader.selectedTab, note.id)
+    }
+
+    func testAddNoteCreatesANewNoteAndLeavesTheOpenOneAlone() async throws {
         let directory = try makeDirectory()
         let store = NotesStore(directory: directory)
         store.loadIfNeeded()
@@ -51,6 +80,7 @@ final class NotesStoreTests: XCTestCase {
         store.flush(cleanClose: true)
         let reopened = NotesStore(directory: directory)
         reopened.loadIfNeeded()
+        await loadBodies(of: reopened)
         XCTAssertEqual(reopened.note(id: added.id)?.text, "sent body")
         XCTAssertEqual(reopened.note(id: existing.id)?.text, "existing body")
     }
@@ -75,6 +105,7 @@ final class NotesStoreTests: XCTestCase {
         store.flush()
         let reopened = NotesStore(directory: directory)
         reopened.loadIfNeeded()
+        await loadBodies(of: reopened)
         XCTAssertEqual(reopened.note(id: note.id)?.text, "newer revision")
     }
 
@@ -255,7 +286,7 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.openTabs, [note.id])
     }
 
-    func testExternalFileIsADraftUntilSaved() throws {
+    func testExternalFileIsADraftUntilSaved() async throws {
         let dir = try makeDirectory()
         let file = dir.appendingPathComponent("outside.txt")
         try "original".write(to: file, atomically: true, encoding: .utf8)
@@ -277,6 +308,7 @@ final class NotesStoreTests: XCTestCase {
         // The draft also survives a restart, together with the link to the file.
         let reloaded = NotesStore(directory: dir.appendingPathComponent("Notes"))
         reloaded.loadIfNeeded()
+        await loadBodies(of: reloaded)
         let restored = try XCTUnwrap(reloaded.note(id: note.id))
         XCTAssertEqual(restored.text, "changed")
         XCTAssertEqual(restored.externalURL?.path, file.standardizedFileURL.path)
@@ -345,7 +377,7 @@ final class NotesStoreTests: XCTestCase {
 
     /// A body that cannot be read is a broken file, not a deleted note: the row
     /// stays, the status says so, and the next session write keeps its metadata.
-    func testANoteWhoseBodyCannotBeReadIsKept() throws {
+    func testANoteWhoseBodyCannotBeReadIsKept() async throws {
         let directory = try makeDirectory()
         let id = UUID()
         // A directory at the draft's path cannot be read as text at all.
@@ -358,8 +390,15 @@ final class NotesStoreTests: XCTestCase {
         store.loadIfNeeded()
 
         XCTAssertEqual(store.noteCount, 1)
-        let note = try XCTUnwrap(store.note(id: id))
+        var note = try XCTUnwrap(store.note(id: id))
         XCTAssertFalse(note.textLoaded)
+        XCTAssertFalse(note.textLoadFailed)
+        XCTAssertTrue(note.text.isEmpty)
+
+        let failed = expectation(description: "unreadable body reported")
+        store.loadTextAsync(for: id) { failed.fulfill() }
+        await fulfillment(of: [failed], timeout: 3)
+        note = try XCTUnwrap(store.note(id: id))
         XCTAssertTrue(note.textLoadFailed)
         XCTAssertTrue(note.text.isEmpty)
 
@@ -367,6 +406,12 @@ final class NotesStoreTests: XCTestCase {
         let reopened = NotesStore(directory: directory)
         reopened.loadIfNeeded()
         XCTAssertEqual(reopened.noteCount, 1)
+        let restored = try XCTUnwrap(reopened.note(id: id))
+        XCTAssertFalse(restored.textLoadFailed)
+
+        let failedAgain = expectation(description: "unreadable body still reported")
+        reopened.loadTextAsync(for: id) { failedAgain.fulfill() }
+        await fulfillment(of: [failedAgain], timeout: 3)
         XCTAssertTrue(reopened.note(id: id)?.textLoadFailed == true)
     }
 

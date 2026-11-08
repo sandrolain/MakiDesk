@@ -246,7 +246,13 @@ final class NotesStore {
     }
 
     private func load() {
-        apply(Self.readSnapshot(from: directory))
+        // The synchronous path is only used by an action that arrives before
+        // the panel's asynchronous restore (new note, open by id, an external
+        // drop). It reads metadata and titles, never every draft body: the
+        // editor loads the selected body on demand. This keeps N17's lazy
+        // restore on both paths.
+        apply(Self.readSnapshot(from: directory, readBodies: false,
+                                readExternalBaselines: false))
         didLoad = true
     }
 
