@@ -756,6 +756,10 @@ final class TerminalWindowController: NSWindowController,
         panel.backgroundColor = uiTheme.background
         panel.appearance = NSAppearance(named: uiTheme.isDark ? .darkAqua : .aqua)
         panel.hasShadow = true
+        // A title and an identifier for Accessibility; MakiDesk leaves this
+        // panel out of its window switcher by the identifier.
+        panel.title = "MakiDesk Quake"
+        panel.setAccessibilityIdentifier(TerminalIdentity.quakeAccessibilityIdentifier)
         panel.contentView = host
         quakePanel = panel
         return panel

@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
+import MakiShared
 
 enum WindowController {
     enum FrameWriteOrder: Equatable, Sendable {
@@ -224,6 +225,7 @@ enum WindowController {
                 let appOrder = orderByPID[pid] ?? []
                 let appNumbers = numbersByPID[pid] ?? []
                 let agent = app.activationPolicy != .regular
+                let appBundleIdentifier = app.bundleIdentifier
                 let appElement = AXUIElementCreateApplication(pid)
                 AXUIElementSetMessagingTimeout(appElement, 0.1)
                 let deadline = Date().addingTimeInterval(0.5)
@@ -262,6 +264,14 @@ enum WindowController {
                         return nil
                     }
                     if isDesktopWindow(element, frame: frame) { return nil }
+                    // The helper's quake panel is a borderless floating scratch
+                    // window, toggled with a shortcut, not something to switch
+                    // to or arrange; its AX identifier is set by the helper.
+                    let axIdentifier = attributeString(kAXIdentifierAttribute, of: element)
+                    if isTerminalQuakeWindow(bundleIdentifier: appBundleIdentifier,
+                                             identifier: axIdentifier) {
+                        return nil
+                    }
                     // A window of an app that is not `.regular` counts only when
                     // the window server shows it where windows live: Notification
                     // Center's panel floats at level 21 and its desktop widgets at
@@ -275,7 +285,7 @@ enum WindowController {
                     let cgID = windowNumber(for: frame, pid: pid, title: rawTitle, in: appOrder,
                                             used: &claimedScreenNumbers)
                     var identifier = stableID(pid: pid,
-                                              identifier: attributeString(kAXIdentifierAttribute, of: element),
+                                              identifier: axIdentifier,
                                               windowNumber: windowNumber(for: frame, pid: pid, title: rawTitle,
                                                                          in: appNumbers, used: &claimedNumbers),
                                               index: index)
@@ -350,6 +360,14 @@ enum WindowController {
     /// reordered — then the app-provided `AXIdentifier`, then the enumeration
     /// index, which is a last resort: it changes as soon as a sibling opens or
     /// closes, so it must not be the identity of a window Core Graphics knows.
+    /// Whether an Accessibility window is the terminal helper's quake panel.
+    /// Only the panel carries this identifier; the helper's main window stays
+    /// a normal entry in the switcher.
+    static func isTerminalQuakeWindow(bundleIdentifier: String?, identifier: String?) -> Bool {
+        bundleIdentifier == TerminalIdentity.bundleIdentifier
+            && identifier == TerminalIdentity.quakeAccessibilityIdentifier
+    }
+
     static func stableID(pid: pid_t, identifier: String?, windowNumber: CGWindowID?, index: Int) -> String {
         if let windowNumber {
             return "\(pid)-cg\(windowNumber)"

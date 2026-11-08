@@ -390,7 +390,7 @@ final class TerminalController {
 
     private func isTerminalHelper(_ app: NSRunningApplication?) -> Bool {
         guard let app else { return false }
-        if app.bundleIdentifier == "com.makidesk.app.terminal" { return true }
+        if app.bundleIdentifier == TerminalIdentity.bundleIdentifier { return true }
         return app.executableURL?.lastPathComponent == "MakiTerminal"
     }
 

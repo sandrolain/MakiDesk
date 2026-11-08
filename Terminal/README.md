@@ -83,7 +83,9 @@ identity before the outer app.
   the cursor; the files are pruned to the newest 100 and a week at launch and
   after each paste.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
-  IPC; it stays alive while hidden and is not part of the saved layout.
+  IPC; it stays alive while hidden and is not part of the saved layout. The
+  panel carries an Accessibility identifier, so MakiDesk's window switcher
+  leaves it out while the helper's main window stays listed.
 - **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
   other global rows (and the peek hold key) and keeps only `⌃⌥O` and `⌃⌥Q`.
 

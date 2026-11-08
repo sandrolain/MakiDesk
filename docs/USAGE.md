@@ -626,7 +626,9 @@ it running, so its shells keep working.
   on the next launch. Scrollback is not saved.
 - **Quake.** `⌃⌥Q` drops a scratch terminal from the top of the screen; the
   same key hides it. It is a separate session, not part of the saved workspace
-  layout, and it stays alive while hidden.
+  layout, and it stays alive while hidden. MakiDesk's window switcher leaves
+  the quake panel out, since it is toggled with its own shortcut; the helper's
+  main window is still listed there.
 - **While the terminal is in front.** MakiDesk suspends its other global
   shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in

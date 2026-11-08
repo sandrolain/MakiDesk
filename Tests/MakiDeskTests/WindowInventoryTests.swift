@@ -1,5 +1,6 @@
 import XCTest
 import ApplicationServices
+import MakiShared
 @testable import MakiDesk
 
 @MainActor
@@ -16,6 +17,19 @@ final class WindowInventoryTests: XCTestCase {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
         }
+    }
+
+    func testTheTerminalQuakePanelIsLeftOutOfTheSwitcher() {
+        XCTAssertTrue(WindowController.isTerminalQuakeWindow(
+            bundleIdentifier: TerminalIdentity.bundleIdentifier,
+            identifier: TerminalIdentity.quakeAccessibilityIdentifier))
+        XCTAssertFalse(WindowController.isTerminalQuakeWindow(
+            bundleIdentifier: TerminalIdentity.bundleIdentifier, identifier: nil))
+        XCTAssertFalse(WindowController.isTerminalQuakeWindow(
+            bundleIdentifier: "com.apple.Terminal",
+            identifier: TerminalIdentity.quakeAccessibilityIdentifier))
+        XCTAssertFalse(WindowController.isTerminalQuakeWindow(
+            bundleIdentifier: nil, identifier: nil))
     }
 
     func testInsertionBeforeKnownWindowCannotDuplicateItsFallbackID() {
