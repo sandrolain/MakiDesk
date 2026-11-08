@@ -27,6 +27,11 @@ final class GhosttyRuntime {
     /// A finished command, when the shell reports it (OSC 133). A failure or a
     /// long command marks its workspace even without a notification.
     var onCommandFinished: ((TerminalSurfaceView?, Int16, UInt64) -> Void)?
+    /// Find-bar lifecycle and counts, all reported by Ghostty's own search.
+    var onStartSearch: ((TerminalSurfaceView, String?) -> Void)?
+    var onEndSearch: ((TerminalSurfaceView) -> Void)?
+    var onSearchTotal: ((TerminalSurfaceView, Int?) -> Void)?
+    var onSearchSelected: ((TerminalSurfaceView, Int?) -> Void)?
 
     private var tickScheduled = false
     private var settings: TerminalSettingsDocument
@@ -209,6 +214,35 @@ final class GhosttyRuntime {
             guard let view else { return false }
             DispatchQueue.main.async {
                 GhosttyRuntime.shared?.onSurfaceClosed?(view)
+            }
+            return true
+        case GHOSTTY_ACTION_START_SEARCH:
+            guard let view else { return true }
+            let needle = action.action.start_search.needle.map { String(cString: $0) }
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onStartSearch?(view, needle)
+            }
+            return true
+        case GHOSTTY_ACTION_END_SEARCH:
+            guard let view else { return true }
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onEndSearch?(view)
+            }
+            return true
+        case GHOSTTY_ACTION_SEARCH_TOTAL:
+            guard let view else { return true }
+            let raw = action.action.search_total.total
+            let total: Int? = raw >= 0 ? Int(raw) : nil
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onSearchTotal?(view, total)
+            }
+            return true
+        case GHOSTTY_ACTION_SEARCH_SELECTED:
+            guard let view else { return true }
+            let raw = action.action.search_selected.selected
+            let selected: Int? = raw >= 0 ? Int(raw) : nil
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onSearchSelected?(view, selected)
             }
             return true
         case GHOSTTY_ACTION_QUIT, GHOSTTY_ACTION_CLOSE_ALL_WINDOWS:

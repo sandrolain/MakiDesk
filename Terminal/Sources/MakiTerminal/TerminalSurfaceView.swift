@@ -21,6 +21,9 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     var shellCommand: String?
     /// Extra variables for the child shell, such as the workspace identity.
     var environment: [String: String] = [:]
+    /// The needle of the last find session in this pane, so reopening the bar
+    /// starts from it instead of empty.
+    var lastSearchNeedle = ""
     private var isDetached = false
 
     private var markedText = NSMutableAttributedString()
@@ -354,22 +357,36 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
     // MARK: - Clipboard and menu
 
     @objc func copy(_ sender: Any?) {
-        performBinding("copy_to_clipboard")
+        performBindingAction("copy_to_clipboard")
     }
 
     @objc func paste(_ sender: Any?) {
-        performBinding("paste_from_clipboard")
+        performBindingAction("paste_from_clipboard")
     }
 
     @objc override func selectAll(_ sender: Any?) {
-        performBinding("select_all")
+        performBindingAction("select_all")
     }
 
-    private func performBinding(_ name: String) {
+    /// Runs a Ghostty binding action, such as the find-bar ones. The surface
+    /// reports results back through the runtime's action callback.
+    func performBindingAction(_ name: String) {
         guard let surface else { return }
         name.withCString {
             _ = ghostty_surface_binding_action(surface, $0, UInt(name.utf8.count))
         }
+    }
+
+    func performSearch(_ needle: String) {
+        performBindingAction(TerminalSearchNavigation.needleAction(needle))
+    }
+
+    func navigateSearch(_ direction: TerminalSearchNavigation) {
+        performBindingAction(direction.bindingAction)
+    }
+
+    func endSearch() {
+        performBindingAction(TerminalSearchNavigation.endAction)
     }
 
     // MARK: - NSTextInputClient

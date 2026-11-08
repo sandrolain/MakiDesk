@@ -51,6 +51,18 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
                                                      durationNanos: duration) else { return }
             self?.terminal?.markAttention(for: view)
         }
+        runtime.onStartSearch = { [weak controller] view, needle in
+            controller?.searchDidStart(for: view, needle: needle)
+        }
+        runtime.onEndSearch = { [weak controller] view in
+            controller?.searchDidEnd(for: view)
+        }
+        runtime.onSearchTotal = { [weak controller] view, total in
+            controller?.searchTotalDidChange(for: view, total: total)
+        }
+        runtime.onSearchSelected = { [weak controller] view, selected in
+            controller?.searchSelectedDidChange(for: view, selected: selected)
+        }
 
         installMenu(target: controller)
         controller.showWindow(nil)
@@ -153,6 +165,16 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Select All",
                          action: #selector(TerminalSurfaceView.selectAll(_:)),
                          keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        menu(editMenu, "Find…",
+             #selector(TerminalWindowController.showFindAction(_:)),
+             "f", [], target)
+        menu(editMenu, "Find Next",
+             #selector(TerminalWindowController.findNextAction(_:)),
+             "g", [], target)
+        menu(editMenu, "Find Previous",
+             #selector(TerminalWindowController.findPreviousAction(_:)),
+             "g", [.shift], target)
         editItem.submenu = editMenu
 
         let viewItem = NSMenuItem()

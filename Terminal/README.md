@@ -72,7 +72,12 @@ identity before the outer app.
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.
 - **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
-  Close Pane `⌘W`, Close Workspace `⇧⌘W`, Show Quake in View.
+  Close Pane `⌘W`, Close Workspace `⇧⌘W`, Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
+  Show Quake in View.
+- **Find bar:** one per window, over the focused pane; the needle is sent to
+  Ghostty as a `search:` binding action and the match total and selection come
+  back as surface actions. `Esc` ends the session and returns the keyboard to
+  the shell; each pane keeps its last needle for the run.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
   IPC; it stays alive while hidden and is not part of the saved layout.
 - **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
@@ -83,8 +88,9 @@ identity before the outer app.
 - automatic agent hooks (the CLI exists, the hooks are left to the user);
   tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
-  exercised. Drag selection, scrollback scrolling, search and links are the same
-  kind of not-yet-verified surface.
+  exercised. Drag selection, scrollback scrolling and links are the same kind of
+  not-yet-verified surface; find runs through Ghostty's search but was not
+  exercised on screen.
 - Signing with the project identity and notarization for release, multi-display
   behaviour, energy and memory measurements.
 

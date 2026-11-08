@@ -228,7 +228,8 @@ you can edit by hand. It is left out of screenshots and recordings.
 of workspaces and split panes. Because it is a separate app, quitting MakiDesk
 does not end its sessions; it appears in the Dock and ⌘Tab while its window is
 open, and it restores the workspace layout and each shell's directory on the next
-launch. The helper is embedded in the app bundle.
+launch. `⌘F` searches the focused pane's scrollback and shows how many matches it
+found. The helper is embedded in the app bundle.
 
 ### Notices that stay readable
 

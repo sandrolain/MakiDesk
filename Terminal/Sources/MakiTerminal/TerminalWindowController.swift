@@ -7,6 +7,7 @@ import MakiTerminalCore
 final class TerminalPaneHostView: NSView {
     let paneID: PaneID
     let surfaceView: TerminalSurfaceView
+    let findBar = TerminalFindBar()
     var accentColor: NSColor = .controlAccentColor
     var isFocused = false {
         didSet { updateBorder() }
@@ -25,6 +26,11 @@ final class TerminalPaneHostView: NSView {
             surfaceView.trailingAnchor.constraint(equalTo: trailingAnchor),
             surfaceView.topAnchor.constraint(equalTo: topAnchor),
             surfaceView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        addSubview(findBar)
+        NSLayoutConstraint.activate([
+            findBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            findBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
         ])
         updateBorder()
     }
@@ -147,6 +153,15 @@ final class TerminalWindowController: NSWindowController,
     /// Agent lifecycle per workspace, from the `makidesk` CLI; session only.
     private var agentStates: [UUID: AgentState] = [:]
     private var agentLabels: [UUID: String] = [:]
+
+    /// One find session per window: the surface Ghostty is searching and the
+    /// bar that collects the needle. Nil while the bar is closed.
+    private struct ActiveSearch {
+        let view: TerminalSurfaceView
+        let host: TerminalPaneHostView
+    }
+    private var activeSearch: ActiveSearch?
+    private var searchDebounce: Timer?
 
     private let splitView = NSSplitView()
     private let sidebar = NSView()
@@ -525,6 +540,150 @@ final class TerminalWindowController: NSWindowController,
         scheduleSave()
     }
 
+    // MARK: - Find
+
+    /// ⌘F: open the find bar for the focused pane, or refocus the open one.
+    @objc func showFindAction(_ sender: Any?) {
+        if let active = activeSearch, active.view === focusedSurfaceView {
+            active.host.findBar.focus()
+        } else {
+            showFind(for: focusedSurfaceView)
+        }
+    }
+
+    @objc func findNextAction(_ sender: Any?) {
+        navigateSearch(.next)
+    }
+
+    @objc func findPreviousAction(_ sender: Any?) {
+        navigateSearch(.previous)
+    }
+
+    private var focusedSurfaceView: TerminalSurfaceView? {
+        if quakeVisible, let host = quakeHost { return host.surfaceView }
+        guard selected < workspaces.count else { return nil }
+        return paneViews[workspaces[selected].focusedPane]?.surfaceView
+    }
+
+    private func host(for view: TerminalSurfaceView) -> TerminalPaneHostView? {
+        if quakeHost?.surfaceView === view { return quakeHost }
+        return paneViews.values.first { $0.surfaceView === view }
+    }
+
+    /// Opens the bar on `view`. Reopening on the surface already searching only
+    /// moves the keyboard back to the field, unless Ghostty supplied a new
+    /// needle (a `start_search` binding with a query).
+    func showFind(for view: TerminalSurfaceView?, needle: String? = nil) {
+        guard let view, let host = host(for: view) else { return }
+        if let active = activeSearch, active.view === view {
+            if let needle, needle.isEmpty == false, needle != host.findBar.needle {
+                host.findBar.begin(needle: needle)
+                view.lastSearchNeedle = needle
+                view.performSearch(needle)
+            }
+            return
+        }
+
+        closeSearch(restoreFocus: false)
+        let initial = needle ?? view.lastSearchNeedle
+        wire(host.findBar, to: view)
+        host.findBar.begin(needle: initial)
+        activeSearch = ActiveSearch(view: view, host: host)
+        if initial.isEmpty == false {
+            view.performSearch(initial)
+        }
+    }
+
+    /// Ghostty opened a search itself (a keybind or a query); mirror it in the
+    /// bar. Our own `search:` calls also come back here, hence the idempotency.
+    func searchDidStart(for view: TerminalSurfaceView, needle: String?) {
+        if let needle, needle.isEmpty == false {
+            showFind(for: view, needle: needle)
+        } else if let active = activeSearch, active.view === view {
+            active.host.findBar.focus()
+        } else {
+            showFind(for: view)
+        }
+    }
+
+    /// The engine ended the session (Escape inside a Ghostty binding, or a
+    /// surface close); hide the bar without asking it to end again.
+    func searchDidEnd(for view: TerminalSurfaceView) {
+        guard let active = activeSearch, active.view === view else { return }
+        searchDebounce?.invalidate()
+        searchDebounce = nil
+        active.host.findBar.finish()
+        activeSearch = nil
+    }
+
+    func searchTotalDidChange(for view: TerminalSurfaceView, total: Int?) {
+        guard let active = activeSearch, active.view === view else { return }
+        active.host.findBar.applyTotal(total)
+    }
+
+    func searchSelectedDidChange(for view: TerminalSurfaceView, selected: Int?) {
+        guard let active = activeSearch, active.view === view else { return }
+        active.host.findBar.applySelected(selected)
+    }
+
+    private func closeSearch(restoreFocus: Bool = true) {
+        searchDebounce?.invalidate()
+        searchDebounce = nil
+        guard let active = activeSearch else { return }
+        activeSearch = nil
+        active.view.lastSearchNeedle = active.host.findBar.needle
+        active.host.findBar.finish()
+        active.view.endSearch()
+        guard restoreFocus, active.view.surface != nil else { return }
+        if quakeVisible, active.view === quakeHost?.surfaceView {
+            quakePanel?.makeFirstResponder(active.view)
+        } else {
+            window?.makeFirstResponder(active.view)
+        }
+    }
+
+    private func wire(_ bar: TerminalFindBar, to view: TerminalSurfaceView) {
+        bar.onNeedleChange = { [weak self, weak view] text in
+            guard let self, let view else { return }
+            view.lastSearchNeedle = text
+            scheduleSearch(text, for: view)
+        }
+        bar.onNavigate = { [weak self] direction in
+            self?.navigateSearch(direction)
+        }
+        bar.onClose = { [weak self] in
+            self?.closeSearch()
+        }
+    }
+
+    /// Typing is cheap but the search is not; one delayed run per pause keeps a
+    /// long scrollback from being rescanned on every keystroke. The fired
+    /// closure checks again, so a superseded query cannot win.
+    private func scheduleSearch(_ needle: String, for view: TerminalSurfaceView) {
+        searchDebounce?.invalidate()
+        searchDebounce = nil
+        guard needle.isEmpty == false else {
+            view.performSearch("")
+            return
+        }
+        let timer = Timer(timeInterval: 0.12, repeats: false) { [weak self, weak view] _ in
+            guard let self, let view, let active = self.activeSearch,
+                  active.view === view,
+                  active.host.findBar.needle == needle else { return }
+            view.performSearch(needle)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        searchDebounce = timer
+    }
+
+    private func navigateSearch(_ direction: TerminalSearchNavigation) {
+        guard let active = activeSearch else {
+            showFind(for: focusedSurfaceView)
+            return
+        }
+        active.view.navigateSearch(direction)
+    }
+
     // MARK: - Quake
 
     @objc func toggleQuake() {
@@ -554,6 +713,9 @@ final class TerminalWindowController: NSWindowController,
     }
 
     private func closeQuake() {
+        if let quakeView = quakeHost?.surfaceView, activeSearch?.view === quakeView {
+            closeSearch(restoreFocus: false)
+        }
         quakeVisible = false
         quakePanel?.orderOut(nil)
         quakePanel = nil
@@ -574,6 +736,7 @@ final class TerminalWindowController: NSWindowController,
         surface.environment["MAKIDESK_WORKSPACE_ID"] = workspace.id.uuidString
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         host.accentColor = uiTheme.accent
+        host.findBar.apply(theme: uiTheme)
         quakeWorkspace = workspace
         quakeHost = host
         surface.attach(runtime: runtime)
@@ -621,10 +784,12 @@ final class TerminalWindowController: NSWindowController,
         tableView.reloadData()
         for host in paneViews.values {
             host.accentColor = uiTheme.accent
+            host.findBar.apply(theme: uiTheme)
             host.updateBorder()
         }
         if let quakeHost {
             quakeHost.accentColor = uiTheme.accent
+            quakeHost.findBar.apply(theme: uiTheme)
             quakeHost.updateBorder()
         }
     }
@@ -659,6 +824,10 @@ final class TerminalWindowController: NSWindowController,
 
     private func rebuildContent() {
         guard selected < workspaces.count else { return }
+        // A rebuild can move the searched surface into another tree (or remove
+        // it); one session per window stays cheaper and clearer than tracking
+        // it across workspaces.
+        closeSearch(restoreFocus: false)
         isBuilding = true
         currentRootView?.removeFromSuperview()
         let root = build(workspaces[selected].root, path: [])
@@ -713,6 +882,7 @@ final class TerminalWindowController: NSWindowController,
         }
         let host = TerminalPaneHostView(paneID: pane, surfaceView: surface)
         host.accentColor = uiTheme.accent
+        host.findBar.apply(theme: uiTheme)
         paneViews[pane] = host
         surface.attach(runtime: runtime)
         return host
@@ -720,6 +890,9 @@ final class TerminalWindowController: NSWindowController,
 
     private func disposePane(_ pane: PaneID) {
         guard let host = paneViews.removeValue(forKey: pane) else { return }
+        if activeSearch?.view === host.surfaceView {
+            closeSearch(restoreFocus: false)
+        }
         host.surfaceView.detach()
         host.removeFromSuperview()
     }

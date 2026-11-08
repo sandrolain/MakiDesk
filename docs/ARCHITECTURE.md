@@ -329,6 +329,14 @@ launches the helper; `⌃⌥Q` sends `toggleQuake`. The quake is a borderless
 `NSPanel` at the floating level with its own scratch workspace, kept alive while
 hidden and deliberately outside the saved layout.
 
+Search lives in the engine too: the find bar (`⌘F`, one per window) sends
+Ghostty `search:<needle>` and `navigate_search:next|previous` binding actions,
+and the `startSearch`/`endSearch`/`searchTotal`/`searchSelected` surface actions
+feed its count. The bar is an AppKit overlay inside the pane host, so it follows
+splits and the quake panel; the formatting and clamping of that state are a pure
+`TerminalSearchState` in `MakiTerminalCore`. A search session ends when the
+workspace is rebuilt, its pane closes or the bar is dismissed.
+
 The helper also ships `Contents/Resources/bin/makidesk`, a one-shot status
 client. It reads `MAKIDESK_WORKSPACE_ID`, connects to the same socket, sends
 one `agentStatus` frame and exits; the server accepts it by executable name and
@@ -347,8 +355,9 @@ Settings ▸ Terminal page, writes them on every edit and tells the helper
 `settingsChanged` through the socket after a short debounce; a theme change
 regenerates `theme.json` from `PaletteTheme` and sends `themeChanged`. The helper
 reloads both with `ghostty_app_update_config`, so an open terminal picks up the
-font and colours without a restart; the shell command applies to new panes. The
-ANSI sixteen colours are still a fixed set, independent of the palette.
+font and colours without a restart; the shell command applies to new panes. Each
+theme carries its own sixteen ANSI colours and the surface/text/accent colours
+for the helper's sidebar and title bar.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and

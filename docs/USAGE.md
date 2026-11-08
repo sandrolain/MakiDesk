@@ -631,6 +631,12 @@ it running, so its shells keep working.
   shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so you
   can always come back or hide the quake. The helper appears in the Dock and in
   ⌘Tab while its window is open.
+- **Find in the scrollback.** `⌘F` opens a find bar over the focused pane, or
+  puts the keyboard back in it. Typing searches as you go and the bar reports
+  the matches (`3 of 17`, or `No results`); `Return` or `⌘G` moves to the next
+  match, `⇧Return` or `⇧⌘G` to the previous one, and `Esc` closes the bar and
+  gives the keyboard back to the shell. The search covers Ghostty's scrollback
+  and is not saved; each pane remembers its last query while the helper runs.
 - **Notifications and attention.** A desktop notification sent by a program in
   the shell (OSC 9/777) appears as a MakiDesk notice, with the terminal's icon,
   instead of a bare system alert. The workspace also gets a dot in the sidebar;
