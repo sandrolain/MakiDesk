@@ -623,7 +623,9 @@ it running, so its shells keep working.
 - **Restore.** Workspace titles, split trees, the selection, each pane's last
   directory and a pane's command (an SSH session, for instance) are saved in
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
-  on the next launch. Scrollback is not saved.
+  on the next launch. The main window reopens at its last size and position
+  (`Terminal/window.json`) when enough of that frame still meets a display;
+  otherwise it is centered. Scrollback is not saved.
 - **Quake.** `⌃⌥Q` drops a scratch terminal from the top of the screen; the
   same key hides it. It appears on the display under the pointer, spans that
   display's visible frame and leaves the menu bar and Dock alone. It is a

@@ -321,8 +321,11 @@ the selection, each pane's last directory and its command are written to
 `Terminal/workspaces.json`, atomically and
 with the usual quarantine/version rules; scrollback is not persisted. Closing the
 last pane of the last workspace starts a fresh shell instead of leaving an empty
-window. The helper's surface callbacks forward title, cwd and close events to the
-window controller; the focused surface answers clipboard requests.
+window. The main window's frame is saved (debounced) to
+`Terminal/window.json` and restored only when at least a title-bar-sized part of
+it still meets a `visibleFrame`; an unplugged display therefore yields a
+centered window. The helper's surface callbacks forward title, cwd and close
+events to the window controller; the focused surface answers clipboard requests.
 
 `⌃⌥O` and the menu bar item call `TerminalController`, which sends `showMain` or
 launches the helper; `⌃⌥Q` sends `toggleQuake`. The quake is a borderless

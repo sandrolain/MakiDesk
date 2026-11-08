@@ -44,7 +44,9 @@ identity before the outer app.
 - **Persistence:** `Terminal/workspaces.json` holds titles, split tree, ratios,
   selection, each pane's last directory and its command (SSH included); it is
   atomic and versioned, and a corrupt file is quarantined. Scrollback is not
-  saved.
+  saved. `Terminal/window.json` holds the main window's frame; it is restored
+  only when a title-bar-sized part still meets a display, otherwise the window
+  is centered.
 - **SSH profiles:** settings.json entries become `ssh` command lines in a new
   workspace from the sidebar's + menu; keys and prompts stay with ssh.
 - **tmux:** a preset runs `tmux new-session -A -s makidesk-…`, reattaching to the

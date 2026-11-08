@@ -126,10 +126,12 @@ final class TerminalWindowController: NSWindowController,
                                       NSWindowDelegate {
     private let runtime: GhosttyRuntime
     private let layoutStore = TerminalLayoutStore()
+    private let windowStateStore = TerminalWindowStateStore()
     private var terminalSettings: TerminalSettingsDocument
     private var uiTheme = TerminalUITheme.fallback
     private var addButton: NSButton?
     private var saveTimer: Timer?
+    private var windowFrameTimer: Timer?
     private var workspaces: [TerminalWorkspace] = []
     private var selected = 0
     private var nextWorkspaceNumber = 1
@@ -184,7 +186,15 @@ final class TerminalWindowController: NSWindowController,
         window.minSize = NSSize(width: 560, height: 320)
         super.init(window: window)
         window.delegate = self
-        window.center()
+        if let saved = windowStateStore.load()?.frame,
+           let frame = TerminalWindowGeometry.restoredFrame(
+               saved,
+               screens: NSScreen.screens.map(\.visibleFrame)
+           ) {
+            window.setFrame(frame, display: false)
+        } else {
+            window.center()
+        }
         uiTheme = TerminalUITheme(document: TerminalThemeStore().load())
         buildInterface()
         applyUITheme()
@@ -329,6 +339,23 @@ final class TerminalWindowController: NSWindowController,
         saveTimer = nil
         let layout = TerminalLayout(workspaces: workspaces, selectedIndex: selected)
         _ = layoutStore.save(layout)
+        saveWindowFrameNow()
+    }
+
+    private func scheduleWindowFrameSave() {
+        windowFrameTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.4, repeats: false) { [weak self] _ in
+            self?.saveWindowFrameNow()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        windowFrameTimer = timer
+    }
+
+    private func saveWindowFrameNow() {
+        windowFrameTimer?.invalidate()
+        windowFrameTimer = nil
+        guard let window else { return }
+        _ = windowStateStore.save(TerminalWindowState(frame: window.frame))
     }
 
     @objc func closeWorkspaceAction(_ sender: Any?) {
@@ -952,6 +979,18 @@ final class TerminalWindowController: NSWindowController,
 
     func windowDidBecomeMain(_ notification: Notification) {
         updateRendererVisibility()
+    }
+
+    /// Only the main window's frame is remembered; the quake is placed fresh
+    /// on every show.
+    func windowDidMove(_ notification: Notification) {
+        guard let moved = notification.object as? NSWindow, moved === window else { return }
+        scheduleWindowFrameSave()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let resized = notification.object as? NSWindow, resized === window else { return }
+        scheduleWindowFrameSave()
     }
 
     /// A hidden window, a hidden app or a display that sleeps makes the whole
