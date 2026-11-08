@@ -118,7 +118,7 @@ All paths are under your user account:
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
-| Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, last directory per pane | Until you delete it; a factory reset does not remove it |
+| Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, zoomed pane, last directory per pane | Until you delete it; a factory reset does not remove it |
 | Terminal window frame | `…/MakiDesk/Terminal/window.json`: the helper's main window position and size | Until you delete it; a factory reset does not remove it |
 | Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, cursor, scrollback, selection copy, pointer hiding, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
 | Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |

@@ -223,6 +223,13 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
              #selector(TerminalWindowController.focusPaneDownAction(_:)),
              "\u{F701}", [.option], target)
         viewMenu.addItem(.separator())
+        menu(viewMenu, "Zoom Pane",
+             #selector(TerminalWindowController.toggleZoomAction(_:)),
+             "\r", [.shift], target)
+        menu(viewMenu, "Equalize Splits",
+             #selector(TerminalWindowController.equalizeSplitsAction(_:)),
+             "e", [.control], target)
+        viewMenu.addItem(.separator())
         menu(viewMenu, "Show Quake", #selector(TerminalWindowController.toggleQuake),
              "", [], target)
         viewItem.submenu = viewMenu

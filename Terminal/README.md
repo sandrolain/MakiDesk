@@ -91,7 +91,7 @@ identity before the outer app.
 - **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
   Workspace 1…9 `⌘1`…`⌘9`, Previous/Next Workspace `⌃⌘←`/`⌃⌘→`,
   Move Workspace Up `⌃⌘↑`, Move Workspace Down `⌃⌘↓`,
-  Focus Pane `⌘⌥←/→/↑/↓`,
+  Focus Pane `⌘⌥←/→/↑/↓`, Zoom Pane `⇧⌘↩`, Equalize Splits `⌃⌘E`,
   Close Pane `⌘W`, Close Workspace `⇧⌘W`, Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
   Show Quake in View.
 - **Find bar:** one per window, over the focused pane; the needle is sent to

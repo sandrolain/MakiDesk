@@ -159,4 +159,78 @@ final class TerminalWorkspaceTests: XCTestCase {
         let decoded = try JSONDecoder().decode(TerminalWorkspace.self, from: data)
         XCTAssertEqual(decoded, workspace)
     }
+
+    func testZoomTogglesTheFocusedPane() throws {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        let first = workspace.focusedPane
+        let second = try XCTUnwrap(workspace.split(first, orientation: .sideBySide))
+        XCTAssertNil(workspace.visibleZoomedPane)
+
+        workspace.toggleZoom()
+        XCTAssertEqual(workspace.visibleZoomedPane, second)
+
+        workspace.toggleZoom()
+        XCTAssertNil(workspace.visibleZoomedPane)
+    }
+
+    func testSplittingClearsTheZoom() throws {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        let first = workspace.focusedPane
+        _ = workspace.split(first, orientation: .sideBySide)
+        workspace.toggleZoom()
+        XCTAssertNotNil(workspace.visibleZoomedPane)
+
+        _ = workspace.split(workspace.focusedPane, orientation: .stacked)
+        XCTAssertNil(workspace.visibleZoomedPane)
+    }
+
+    func testClosingTheZoomedPaneClearsTheZoomButClosingAnotherKeepsIt() throws {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        let first = workspace.focusedPane
+        let second = try XCTUnwrap(workspace.split(first, orientation: .sideBySide))
+        let third = try XCTUnwrap(workspace.split(second, orientation: .sideBySide))
+        workspace.toggleZoom()
+
+        XCTAssertTrue(workspace.remove(first))
+        XCTAssertEqual(workspace.visibleZoomedPane, third)
+
+        XCTAssertTrue(workspace.remove(third))
+        XCTAssertNil(workspace.visibleZoomedPane)
+    }
+
+    func testAStaleZoomIsIgnored() {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        workspace.zoomedPane = PaneID()
+        XCTAssertNil(workspace.visibleZoomedPane)
+    }
+
+    func testEqualizePutsEveryDividerInTheMiddle() throws {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        let first = workspace.focusedPane
+        let second = try XCTUnwrap(workspace.split(first, orientation: .sideBySide))
+        _ = workspace.split(second, orientation: .stacked)
+        XCTAssertTrue(workspace.setRatio(0.2, at: []))
+        XCTAssertTrue(workspace.setRatio(0.8, at: [1]))
+
+        workspace.equalizeSplits()
+
+        guard case let .split(_, outer, _, nested) = workspace.root,
+              case let .split(_, inner, _, _) = nested else {
+            return XCTFail("expected two nested splits")
+        }
+        XCTAssertEqual(outer, 0.5, accuracy: 0.001)
+        XCTAssertEqual(inner, 0.5, accuracy: 0.001)
+    }
+
+    func testAnOlderWorkspaceWithoutAZoomStillDecodes() throws {
+        var workspace = TerminalWorkspace(title: "Workspace 1")
+        _ = workspace.split(workspace.focusedPane, orientation: .sideBySide)
+        let encoded = try JSONEncoder().encode(workspace)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        object.removeValue(forKey: "zoomedPane")
+        let old = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(TerminalWorkspace.self, from: old)
+        XCTAssertNil(decoded.zoomedPane)
+        XCTAssertEqual(decoded.paneCount, 2)
+    }
 }

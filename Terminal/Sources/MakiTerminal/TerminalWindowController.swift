@@ -467,6 +467,20 @@ final class TerminalWindowController: NSWindowController,
         scheduleSave()
     }
 
+    @objc func toggleZoomAction(_ sender: Any?) {
+        guard selected < workspaces.count else { return }
+        workspaces[selected].toggleZoom()
+        rebuildContent()
+        scheduleSave()
+    }
+
+    @objc func equalizeSplitsAction(_ sender: Any?) {
+        guard selected < workspaces.count else { return }
+        workspaces[selected].equalizeSplits()
+        rebuildContent()
+        scheduleSave()
+    }
+
     @objc func closePaneAction(_ sender: Any?) {
         closeFocusedPane()
     }
@@ -884,7 +898,9 @@ final class TerminalWindowController: NSWindowController,
         closeSearch(restoreFocus: false)
         isBuilding = true
         currentRootView?.removeFromSuperview()
-        let root = build(workspaces[selected].root, path: [])
+        let workspace = workspaces[selected]
+        let node = workspace.visibleZoomedPane.map(SplitNode.pane) ?? workspace.root
+        let root = build(node, path: [])
         root.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(root)
         NSLayoutConstraint.activate([
@@ -895,7 +911,7 @@ final class TerminalWindowController: NSWindowController,
         ])
         currentRootView = root
         updateFocusBorders()
-        focusPane(workspaces[selected].focusedPane)
+        focusPane(workspace.visibleZoomedPane ?? workspace.focusedPane)
         updateRendererVisibility()
         DispatchQueue.main.async { [weak self] in self?.isBuilding = false }
     }
@@ -1012,8 +1028,11 @@ final class TerminalWindowController: NSWindowController,
 
     private func updateRendererVisibility() {
         let mainVisible = isVisible(window, reported: &mainWindowReportedVisible)
-        let visiblePanes: Set<PaneID> = workspaces.indices.contains(selected)
-            ? Set(workspaces[selected].paneIDs) : []
+        var visiblePanes: Set<PaneID> = []
+        if workspaces.indices.contains(selected) {
+            let workspace = workspaces[selected]
+            visiblePanes = Set(workspace.visibleZoomedPane.map { [$0] } ?? workspace.paneIDs)
+        }
         for (pane, host) in paneViews {
             host.surfaceView.setRendererVisible(mainVisible && visiblePanes.contains(pane))
         }
@@ -1051,6 +1070,10 @@ final class TerminalWindowController: NSWindowController,
     /// are what the neighbour search sees.
     private func focusPane(in direction: PaneFocusDirection) {
         guard workspaces.indices.contains(selected) else { return }
+        guard workspaces[selected].visibleZoomedPane == nil else {
+            NSSound.beep()
+            return
+        }
         var frames: [PaneID: CGRect] = [:]
         for pane in workspaces[selected].paneIDs {
             guard let host = paneViews[pane], host.window != nil else { continue }

@@ -36,6 +36,9 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
     /// A command that runs instead of the login shell, keyed by pane id string.
     /// SSH sessions live here so a restore reconnects them.
     public var commands: [String: String]
+    /// The pane filling the workspace while the others are hidden, if any.
+    /// Optional so an older `workspaces.json` still decodes.
+    public var zoomedPane: PaneID?
 
     public init(id: UUID = UUID(),
                 title: String,
@@ -46,6 +49,7 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
         self.focusedPane = firstPane
         self.directories = [:]
         self.commands = [:]
+        self.zoomedPane = nil
     }
 
     // MARK: - Queries
@@ -60,6 +64,12 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
 
     public func contains(_ pane: PaneID) -> Bool {
         paneIDs.contains(pane)
+    }
+
+    /// The zoom in force, ignoring a stale value from a hand-edited file.
+    public var visibleZoomedPane: PaneID? {
+        guard let zoomedPane, contains(zoomedPane) else { return nil }
+        return zoomedPane
     }
 
     public func directory(for pane: PaneID) -> String? {
@@ -109,6 +119,8 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
         guard inserted else { return nil }
         root = updated
         focusedPane = newPane
+        // A new split must be visible; a zoom would hide it.
+        zoomedPane = nil
         return newPane
     }
 
@@ -121,6 +133,9 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
         root = updated
         if focusedPane == pane {
             focusedPane = paneIDs.first ?? PaneID()
+        }
+        if zoomedPane == pane {
+            zoomedPane = nil
         }
         directories[pane.description] = nil
         commands[pane.description] = nil
@@ -145,6 +160,16 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
         return true
     }
 
+    /// Fills the workspace with the focused pane, or restores the tree.
+    public mutating func toggleZoom() {
+        zoomedPane = visibleZoomedPane == nil ? focusedPane : nil
+    }
+
+    /// Puts every divider back in the middle.
+    public mutating func equalizeSplits() {
+        root = Self.equalized(root)
+    }
+
     // MARK: - Tree helpers
 
     private static func panes(in node: SplitNode) -> [PaneID] {
@@ -153,6 +178,16 @@ public struct TerminalWorkspace: Identifiable, Equatable, Codable, Sendable {
             return [id]
         case let .split(_, _, first, second):
             return panes(in: first) + panes(in: second)
+        }
+    }
+
+    private static func equalized(_ node: SplitNode) -> SplitNode {
+        switch node {
+        case .pane:
+            return node
+        case let .split(orientation, _, first, second):
+            return .split(orientation: orientation, ratio: 0.5,
+                          first: equalized(first), second: equalized(second))
         }
     }
 

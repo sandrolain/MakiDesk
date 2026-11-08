@@ -316,12 +316,15 @@ never restarts a shell. Keyboard pane focus (`⌘⌥` arrows) reads each visible
 pane's frame from the live view hierarchy and asks
 `TerminalPaneNavigation.neighbor` in `MakiTerminalCore` for the closest centre
 in that direction, so unequal splits and divider positions are respected without
-walking the tree. A pane may carry a command instead of the login shell:
+walking the tree. Zoom is a `zoomedPane` on the workspace: the rebuild shows
+that one pane, splitting clears it, and closing the zoomed pane clears it too;
+`equalizeSplits` rewrites every ratio to 0.5 in the tree. A pane may carry a command instead of the login shell:
 an SSH profile in `settings.json` or the tmux preset becomes one, the sidebar's
 `+` menu starts a workspace with it, and the layout remembers it. Every pane
 receives `MAKIDESK_TERMINAL=1` and its workspace id through Ghostty's env-vars
 field, so scripts can identify where they run. Workspace order, titles, split
-ratios, the selection, each pane's last directory and its command are written to
+ratios, the selection, the zoomed pane, each pane's last directory and its
+command are written to
 `Terminal/workspaces.json`, atomically and
 with the usual quarantine/version rules; scrollback is not persisted. Closing the
 last pane of the last workspace starts a fresh shell instead of leaving an empty
