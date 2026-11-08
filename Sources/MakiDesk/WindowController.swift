@@ -10,6 +10,11 @@ enum WindowController {
         /// Size, position, size again: the second size recovers a write the app
         /// clamped while the window was still on the old screen.
         case sizePositionSize
+        /// Move to a staging origin where the old size still fits, size it,
+        /// then move to the target and size it again. A window revealed from
+        /// off-screen would otherwise hang off the display before its first
+        /// size write could land.
+        case staged(staging: CGPoint)
     }
     enum ShortcutAction: Equatable {
         case leftHalf, rightHalf, topHalf, bottomHalf

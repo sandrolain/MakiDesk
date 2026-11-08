@@ -198,7 +198,9 @@ All layout maths is pure and unit-tested:
   the app chose is reported once. `WindowSizeLimitMemory` keeps the floor and
   the fixed length a refusal proved, for the rest of the session. A write is
   size → move → size unless the target is bigger than the source screen or the
-  window is off-screen, where it moves first; a hop between backing scales gets
+  window is off-screen, where it moves first; a window revealed from off-screen
+  whose old size would hang off the destination is staged at an origin where it
+  fits, then sized, then moved to the target. A hop between backing scales gets
   a longer readback window.
 - A geometry notification updates the model only when no command is in flight
   for that window, or when the frame already matches the command's target.

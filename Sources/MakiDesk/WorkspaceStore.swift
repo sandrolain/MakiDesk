@@ -2106,8 +2106,9 @@ final class WorkspaceStore {
             : nil
         let destinationScreen = WindowController.screen(forAXFrame: adjusted)
         let order = Self.frameWriteOrder(
-            for: adjusted,
-            sourceArea: sourceScreen.map { WindowController.axVisibleFrame(for: $0) })
+            for: adjusted, previous: previous,
+            sourceArea: sourceScreen.map { WindowController.axVisibleFrame(for: $0) },
+            destinationArea: destinationScreen.map { WindowController.axVisibleFrame(for: $0) })
         let settlingDelays = Self.crossesScale(sourceScreen?.backingScaleFactor,
                                                destinationScreen?.backingScaleFactor)
             ? Self.crossScaleSettlingDelays
@@ -2170,14 +2171,33 @@ final class WorkspaceStore {
     /// One more read when AX returned nothing. A failed read is not geometry.
     private static let readRetryDelay: TimeInterval = 0.12
 
-    /// The write order for one window. A window that is off-screen, or whose
-    /// target is bigger than the screen it stands on, moves first: a size write
-    /// there would be clamped by that screen. Everything else writes the size,
-    /// moves, and writes the size again, which recovers a clamped first write.
+    /// The write order for one window. A window that is off-screen may need a
+    /// staging origin: its old size at the target origin would hang off the
+    /// destination, and the app would clamp the first size write. Everything
+    /// else writes the size, moves, and writes the size again; a target bigger
+    /// than the source screen moves first, because a size write there would be
+    /// clamped by that screen.
     nonisolated static func frameWriteOrder(
-        for target: CGRect, sourceArea: CGRect?
+        for target: CGRect, previous: CGRect,
+        sourceArea: CGRect?, destinationArea: CGRect?
     ) -> WindowController.FrameWriteOrder {
-        guard let sourceArea else { return .positionThenSize }
+        guard let sourceArea else {
+            guard let destinationArea,
+                  previous.width <= destinationArea.width + 1,
+                  previous.height <= destinationArea.height + 1 else {
+                return .positionThenSize
+            }
+            let oldSizeAtTarget = CGRect(origin: target.origin, size: previous.size)
+            let reachable = destinationArea.insetBy(dx: -1, dy: -1)
+            guard reachable.contains(oldSizeAtTarget) == false else {
+                return .positionThenSize
+            }
+            let x = min(max(target.minX, destinationArea.minX),
+                        destinationArea.maxX - previous.width)
+            let y = min(max(target.minY, destinationArea.minY),
+                        destinationArea.maxY - previous.height)
+            return .staged(staging: CGPoint(x: x, y: y))
+        }
         if target.width > sourceArea.width + 1 || target.height > sourceArea.height + 1 {
             return .positionThenSize
         }

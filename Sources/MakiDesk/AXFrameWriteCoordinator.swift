@@ -75,6 +75,13 @@ final class AXFrameWriteCoordinator: @unchecked Sendable {
                             try WindowController.setSize(frame.size, for: element)
                         }
                     }
+                case let .staged(staging):
+                    // The old size does not fit at the target origin; give it a
+                    // place where it does, size it, then move it to the target.
+                    try WindowController.setPosition(staging, for: element)
+                    try WindowController.setSize(frame.size, for: element)
+                    try WindowController.setPosition(frame.origin, for: element)
+                    try WindowController.setSize(frame.size, for: element)
                 }
             }
         },
