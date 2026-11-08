@@ -74,6 +74,11 @@ enum AXEnhancedUIController {
             return
         }
 
+        // Every write below goes to the window element, which does not inherit
+        // the application element's timeout. Bound it here so a stalled app
+        // cannot hold the frame worker forever.
+        _ = AXUIElementSetMessagingTimeout(window, 0.1)
+
         try processLocks.withLock(for: pid) {
             let application = applicationElement(pid: pid)
             let wasEnabled = readEnhancedUI(application)
@@ -88,7 +93,11 @@ enum AXEnhancedUIController {
 
             defer {
                 if disabled && restore {
-                    _ = AXUIElementSetAttributeValue(application, enhancedUIAttribute, kCFBooleanTrue)
+                    let restored = AXUIElementSetAttributeValue(
+                        application, enhancedUIAttribute, kCFBooleanTrue)
+                    if restored != .success {
+                        MakiLog.index.error("enhanced UI restore failed pid=\(pid, privacy: .public) error=\(restored.rawValue, privacy: .public)")
+                    }
                 }
             }
             try operation()

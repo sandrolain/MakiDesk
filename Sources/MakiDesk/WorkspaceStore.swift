@@ -2625,7 +2625,7 @@ final class WorkspaceStore {
                                      element: AXUIElement, key: String,
                                      completion: (@MainActor @Sendable () -> Void)?) {
         let startTime = ProcessInfo.processInfo.systemUptime
-        let duration = 0.18
+        let duration = max(0.08, animationDuration)
         let handle = SendableAXElement(element: element)
         frameLastWritten[key] = start.integral
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
