@@ -1843,6 +1843,7 @@ final class WorkspaceStore {
         let visible = WindowController.axVisibleFrame(for: screen)
         let area = visible
         let current = tilingTarget.frame.insetBy(dx: -gapHalf, dy: -gapHalf)
+        let targetLimits = limits(for: target)
 
         // Both arrows of a pair, held at once with ⌃⌥: the full extent of that
         // axis, with the other dimension left as it is (S03).
@@ -1854,10 +1855,11 @@ final class WorkspaceStore {
             return
         }
 
-        if let outcome = ladderStep(action, area: area, current: current) {
-            // Arrow commands are discrete steps. Apply the final frame once,
-            // then use the bounded T27 verification retries if an app restores
-            // its old size asynchronously. A newer key press invalidates them.
+        if let outcome = ladderStep(action, area: area, current: current,
+                                    minimum: targetLimits.minimum) {
+            // Arrow commands are discrete steps. Apply the final frame once and
+            // let the bounded verification decide what the app accepted; a
+            // newer key press invalidates it.
             switch outcome {
             case .frame(let logical):
                 applyFrame(logical.insetBy(dx: gapHalf, dy: gapHalf).integral, to: target,
@@ -1900,19 +1902,24 @@ final class WorkspaceStore {
     private func ladderStep(
         _ action: WindowController.ShortcutAction,
         area: CGRect,
-        current: CGRect
+        current: CGRect,
+        minimum: CGSize
     ) -> LadderOutcome? {
         guard let (axis, direction) = CommandRouter.axisAndDirection(for: action) else { return nil }
         let orthogonal = orthogonalRange(of: current, axis: axis)
-        let states = TilingEngine.ladderRects(area: area, axis: axis, orthogonal: orthogonal)
-        let slot = TilingEngine.slot(of: current, area: area, axis: axis, states: states)
+        let states = TilingEngine.ladderRects(area: area, axis: axis, orthogonal: orthogonal,
+                                              minimum: minimum)
+        let slot = TilingEngine.slot(of: current, area: area, axis: axis, states: states,
+                                     minimumHeight: max(TilingEngine.minimumHeight,
+                                                        minimum.height))
         let next = slot.advanced(by: direction)
         switch next {
         case .beforeStart:
             switch axis {
             case .horizontal: return .screenBoundary(.left, fallback: states[0])
             case .vertical:
-                return .screenBoundary(.up, fallback: minHeightRect(area: area, orthogonal: orthogonal))
+                return .screenBoundary(.up, fallback: minHeightRect(
+                    area: area, orthogonal: orthogonal, minimum: minimum.height))
             }
         case .afterEnd:
             switch axis {
@@ -1986,8 +1993,9 @@ final class WorkspaceStore {
         return CGRect(x: x, y: y, width: width, height: height)
     }
 
-    private func minHeightRect(area: CGRect, orthogonal: ClosedRange<CGFloat>) -> CGRect {
-        let height = min(TilingEngine.minimumHeight, area.height)
+    private func minHeightRect(area: CGRect, orthogonal: ClosedRange<CGFloat>,
+                               minimum: CGFloat) -> CGRect {
+        let height = min(max(TilingEngine.minimumHeight, minimum), area.height)
         return CGRect(x: orthogonal.lowerBound, y: area.minY,
                       width: orthogonal.upperBound - orthogonal.lowerBound, height: height)
     }
@@ -2600,6 +2608,20 @@ final class WorkspaceStore {
         Self.layoutGroups(for: windows, screens: layoutScreens()) { window in
             self.layoutDisplayID(for: window)
         }
+    }
+
+    /// The size floors of a command's windows, in the same order. A window the
+    /// memory knows nothing about contributes no constraint.
+    private func layoutMinimums(for windows: [ActionableWindow]) -> [CGSize] {
+        windows.map { window in
+            sizeLimits.limits(for: window.id, bundleId: bundleID(for: window.pid)).minimum
+        }
+    }
+
+    /// What the size memory knows about a frame command's target.
+    private func limits(for target: WindowController.WindowInfo) -> WindowSizeLimits {
+        guard let identity = sizeLimitIdentity(for: target) else { return WindowSizeLimits() }
+        return sizeLimits.limits(for: identity, bundleId: bundleID(for: target.pid))
     }
 
     /// The display holding most of a window, by usable area. `nil` when no
@@ -3272,13 +3294,17 @@ final class WorkspaceStore {
         let windows = validatedSelection(requested)
         guard !windows.isEmpty else { return }
         let area = sceneArea(for: windows)
-        let frames = TilingEngine.frames(for: .grid, count: windows.count, in: area, gap: gap)
+        let geometry = TilingEngine.layout(.grid, count: windows.count, in: area, gap: gap,
+                                           minimums: layoutMinimums(for: windows))
         var resolved: [(ref: WindowRef, window: ActionableWindow)] = []
         var arrangement: [String: CGRect] = [:]
         for (index, window) in windows.enumerated() {
             let ref = WindowRef(identity: identity(for: window))
             resolved.append((ref, window))
-            if index < frames.count { arrangement[ref.id] = frames[index] }
+            if index < geometry.frames.count,
+               TilingEngine.LayoutGeometry.isPlaced(geometry.frames[index]) {
+                arrangement[ref.id] = geometry.frames[index]
+            }
         }
         rememberStepBack(moving: windows)
         if scene?.source != .adHoc { leaveScene() }
@@ -3757,28 +3783,23 @@ final class WorkspaceStore {
             guard self.frameCommandEpoch == commandEpoch else { return }
             let scored = Self.byContentScore(candidates, scores: scores)
             Self.logContentOrder(scored, scores: scores, requested: requests.count)
-            let gapHalf = self.gap / 2
             var placed: [ActionableWindow] = []
-            var skipped = 0
+            var unplaced = 0
             for group in self.layoutGroups(for: scored) {
-                let slots = TilingEngine.goldenSpiralSlots(area: group.screen.area,
-                                                           count: group.windows.count)
-                guard !slots.isEmpty else {
-                    skipped += group.windows.count
-                    continue
-                }
-                for (index, position) in slots.enumerated() where index < group.windows.count {
-                    let target = self.windowInfo(for: group.windows[index])
-                    self.applyFrame(position.insetBy(dx: gapHalf, dy: gapHalf).integral,
-                                    to: target, reason: "auto layout (golden spiral)")
+                let geometry = TilingEngine.layout(
+                    .goldenSpiral, count: group.windows.count, in: group.screen.area,
+                    gap: self.gap, minimums: self.layoutMinimums(for: group.windows))
+                unplaced += geometry.unplacedCount
+                for (index, frame) in geometry.frames.enumerated()
+                    where TilingEngine.LayoutGeometry.isPlaced(frame) {
+                    self.applyFrame(frame, to: self.windowInfo(for: group.windows[index]),
+                                    reason: "auto layout (golden spiral)")
                     placed.append(group.windows[index])
                 }
-                skipped += max(0, group.windows.count - slots.count)
             }
             self.raiseToFront(scored)
-            if skipped > 0 {
-                self.status = "Golden spiral placed \(placed.count) of \(scored.count) windows "
-                    + "(limit \(TilingEngine.maxGoldenSpiralSlots) per display)"
+            if unplaced > 0 {
+                self.status = "Golden spiral placed \(placed.count) of \(scored.count) windows"
             }
         }
     }
@@ -3922,36 +3943,47 @@ final class WorkspaceStore {
         let groups = layoutGroups(for: windows)
         guard !groups.isEmpty else { return }
         var placed: [ActionableWindow] = []
+        var unplacedCount = 0
+        var usedFallback = false
 
         for group in groups {
             var ordered = group.windows
-            let frames: [CGRect]
+            var weightsForOrder: [Double] = []
 
             if advice.layout == .content, let weights = advice.weights {
                 ordered = Self.orderedByWeight(group.windows, weights: weights)
-                frames = TilingEngine.frames(for: .content, count: ordered.count,
-                                             in: group.screen.area, gap: gap,
-                                             weights: ordered.map { weights[$0.id] ?? 1 })
-            } else {
-                if let lead = advice.leadID,
-                   let index = ordered.firstIndex(where: { $0.id == lead }) {
-                    let window = ordered.remove(at: index)
-                    ordered.insert(window, at: 0)
-                }
-                frames = TilingEngine.frames(for: advice.layout, count: ordered.count,
-                                             in: group.screen.area, gap: gap)
+                weightsForOrder = ordered.map { weights[$0.id] ?? 1 }
+            } else if let lead = advice.leadID,
+                      let index = ordered.firstIndex(where: { $0.id == lead }) {
+                let window = ordered.remove(at: index)
+                ordered.insert(window, at: 0)
             }
-            guard !frames.isEmpty else { continue }
-            for (index, frame) in frames.enumerated() where index < ordered.count {
+
+            let preset: LayoutPreset = advice.layout == .content && weightsForOrder.isEmpty
+                ? .grid
+                : advice.layout
+            let geometry = TilingEngine.layout(
+                preset, count: ordered.count, in: group.screen.area, gap: gap,
+                weights: weightsForOrder, minimums: layoutMinimums(for: ordered))
+            usedFallback = usedFallback || geometry.fallback
+            unplacedCount += geometry.unplacedCount
+            for (index, frame) in geometry.frames.enumerated()
+                where TilingEngine.LayoutGeometry.isPlaced(frame) {
                 applyFrame(frame, to: windowInfo(for: ordered[index]),
-                           reason: "auto layout (\(advice.layout.label.lowercased()))")
+                           reason: "auto layout (\(preset.label.lowercased()))")
                 placed.append(ordered[index])
             }
         }
         raiseToFront(placed)
+        var reason = advice.reason
+        if unplacedCount > 0 {
+            reason += " · \(unplacedCount) did not fit"
+        } else if usedFallback {
+            reason += " · reduced to fit"
+        }
         HUDController.shared.show(HUDMessage.layoutApplied(layout: advice.layout.label,
                                                            summary: Self.layoutSummary(set),
-                                                           reason: advice.reason))
+                                                           reason: reason))
     }
 
     /// Heaviest first, stable on the window id so the same set and weights give
@@ -4020,20 +4052,31 @@ final class WorkspaceStore {
             // screen each window is on, and the order is that screen's alone.
             let groups = self.layoutGroups(for: targets)
             var placed: [ActionableWindow] = []
+            var unplaced = 0
+            var usedFallback = false
             for group in groups {
                 let ordered = Self.orderedByWeight(group.windows, weights: weights)
-                let frames = TilingEngine.frames(for: .content, count: ordered.count,
-                                                 in: group.screen.area, gap: self.gap,
-                                                 weights: ordered.map { weights[$0.id] ?? 1 })
-                guard frames.count == ordered.count else { continue }
-                for (index, window) in ordered.enumerated() {
-                    self.applyFrame(frames[index], to: self.windowInfo(for: window),
+                let geometry = TilingEngine.layout(
+                    .content, count: ordered.count, in: group.screen.area, gap: self.gap,
+                    weights: ordered.map { weights[$0.id] ?? 1 },
+                    minimums: self.layoutMinimums(for: ordered))
+                usedFallback = usedFallback || geometry.fallback
+                unplaced += geometry.unplacedCount
+                for (index, frame) in geometry.frames.enumerated()
+                    where TilingEngine.LayoutGeometry.isPlaced(frame) {
+                    self.applyFrame(frame, to: self.windowInfo(for: ordered[index]),
                                     reason: "content layout")
-                    placed.append(window)
+                    placed.append(ordered[index])
                 }
             }
             if !selection.isEmpty { self.raiseToFront(placed) }
-            self.status = "Content layout: \(placed.count) windows"
+            var statusText = "Content layout: \(placed.count) windows"
+            if unplaced > 0 {
+                statusText += " · \(unplaced) did not fit"
+            } else if usedFallback {
+                statusText += " · reduced to fit"
+            }
+            self.status = statusText
             HUDController.shared.show(HUDMessage.contentApplied(
                 summary: Self.layoutSummary(set)))
             Self.logContentWeights(placed, weights: weights, scores: scores,
@@ -4105,18 +4148,30 @@ final class WorkspaceStore {
             return
         }
         var placed: [ActionableWindow] = []
+        var unplaced = 0
+        var usedFallback = false
         for group in groups {
-            let frames = TilingEngine.frames(for: .grid, count: group.windows.count,
-                                             in: group.screen.area, gap: gap)
-            for (index, window) in group.windows.enumerated() where index < frames.count {
+            let geometry = TilingEngine.layout(
+                .grid, count: group.windows.count, in: group.screen.area, gap: gap,
+                minimums: layoutMinimums(for: group.windows))
+            usedFallback = usedFallback || geometry.fallback
+            unplaced += geometry.unplacedCount
+            for (index, frame) in geometry.frames.enumerated()
+                where TilingEngine.LayoutGeometry.isPlaced(frame) {
                 // *Tile* is the explicit way to re-dispose: the arrangement it
                 // just made is what a recall restores from now on (T15).
-                applyFrame(frames[index], to: windowInfo(for: window), reason: "tiled")
-                placed.append(window)
+                applyFrame(frame, to: windowInfo(for: group.windows[index]), reason: "tiled")
+                placed.append(group.windows[index])
             }
         }
         if !selection.isEmpty { raiseToFront(placed) }
-        status = "Tiled \(placed.count) windows with \(Int(gap)) px gap"
+        var statusText = "Tiled \(placed.count) windows with \(Int(gap)) px gap"
+        if unplaced > 0 {
+            statusText += " · \(unplaced) did not fit"
+        } else if usedFallback {
+            statusText += " · reduced to fit"
+        }
+        status = statusText
         HUDController.shared.show(HUDMessage.gridApplied(summary: Self.layoutSummary(set)))
     }
 

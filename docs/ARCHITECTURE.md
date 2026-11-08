@@ -168,6 +168,11 @@ All layout maths is pure and unit-tested:
   `CGDirectDisplayID`; every preset is then computed in that display's own
   usable area. A window whose display is unknown falls back to the screen it
   overlaps most, not to whichever display happens to be focused.
+- `TilingEngine.layout` applies grid, spiral and treemap with per-window
+  minimums. The grid widens the column that holds a wide window and drops what
+  cannot fit; the spiral reduces its slot count; a treemap that cannot hold
+  every minimum falls back to the constrained grid. A window that still cannot
+  fit is left in place (a zero frame) and reported, never squeezed.
 - `LayoutAdvisor` classifies windows by app/title (`WindowKind`), reads the
   content measure and chooses grid/spiral/content. `LayoutAdvisor.weights`
   combines the per-kind priors with `0.7 + 0.6 × score/median`. The advisor is

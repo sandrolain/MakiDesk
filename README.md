@@ -45,7 +45,8 @@ shows (with Screen Recording), the kind of app and the window sizes, and says
 why it chose a layout. The content-weighted layout is a squarified treemap:
 areas follow a weight, not a fixed cell, and the seven app-kind weights are
 editable in Settings. Each display is arranged in its own area, so a layout
-never moves a window across monitors.
+never moves a window across monitors, and a window that cannot fit an app's own
+minimum size is left where it is instead of being squeezed.
 
 ### A pointer you can find
 

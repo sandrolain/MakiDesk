@@ -237,6 +237,12 @@ on, and each display gets its own cells, spiral slots or treemap. The golden
 spiral's six-slot cap is per display too. A window can still be moved to another
 display with the arrow ladder, but a layout command never does it.
 
+Layouts respect the size floor an app has already shown. A window that cannot
+fit a cell is left where it is, and the rest are placed without it; the status
+line says when some did not fit. The keyboard ladder stops at that floor instead
+of asking for a size the app will refuse, and a half or quarter that is smaller
+than the floor is still reported rather than silently shrunk.
+
 **Suggested layout.** Settings ▸ Layouts has *Ask before using the suggested
 layout*. With it on, `⌃⌥A` shows the advice and its reason and waits; running it
 again (or applying it from the menu) accepts. With it off, it applies at once.

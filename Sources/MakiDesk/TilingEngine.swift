@@ -155,18 +155,23 @@ enum TilingEngine {
 
     /// Ladder rects constrained to `orthogonal` (the window's current extent
     /// across the other axis), so horizontal steps only change x/width and
-    /// vertical steps only change y/height.
-    static func ladderRects(area: CGRect, axis: Axis, orthogonal: ClosedRange<CGFloat>) -> [CGRect] {
+    /// vertical steps only change y/height. A step that would go below a known
+    /// floor is raised to it: the seven states stay seven, and a window the app
+    /// will not shrink further simply stops moving instead of being asked for
+    /// an impossible size.
+    static func ladderRects(area: CGRect, axis: Axis,
+                            orthogonal: ClosedRange<CGFloat>,
+                            minimum: CGSize = .zero) -> [CGRect] {
         let low = orthogonal.lowerBound
         let span = orthogonal.upperBound - orthogonal.lowerBound
         return ladder.map { state in
             switch axis {
             case .horizontal:
-                let width = state.fraction * area.width
+                let width = min(max(state.fraction * area.width, minimum.width), area.width)
                 let x = state.anchor == .start ? area.minX : area.maxX - width
                 return CGRect(x: x, y: low, width: width, height: span)
             case .vertical:
-                let height = state.fraction * area.height
+                let height = min(max(state.fraction * area.height, minimum.height), area.height)
                 let y = state.anchor == .start ? area.minY : area.maxY - height
                 return CGRect(x: low, y: y, width: span, height: height)
             }
@@ -202,8 +207,11 @@ enum TilingEngine {
     }
 
     /// Where `rect` sits on the ladder for the given axis. Explicit and
-    /// testable, unlike the previous per-axis heuristic.
-    static func slot(of rect: CGRect, area: CGRect, axis: Axis, states: [CGRect]) -> LadderSlot {
+    /// testable, unlike the previous per-axis heuristic. `minimumHeight` is the
+    /// floor the ladder may not shrink below, so a window parked at the app's
+    /// own minimum still reads as the low end.
+    static func slot(of rect: CGRect, area: CGRect, axis: Axis, states: [CGRect],
+                     minimumHeight: CGFloat = TilingEngine.minimumHeight) -> LadderSlot {
         switch axis {
         case .horizontal:
             if rect.midX < area.minX { return .beforeStart }
@@ -291,24 +299,261 @@ enum TilingEngine {
         }
     }
 
+    /// One preset applied to an area, with what could not be placed.
+    ///
+    /// `frames` is aligned with the input order; an unplaced window keeps a
+    /// zero rect, so a caller can tell a deliberate omission from a frame at
+    /// the origin. `fallback` says the requested preset was replaced (a
+    /// treemap that could not hold a minimum becomes a grid).
+    struct LayoutGeometry: Equatable {
+        var frames: [CGRect] = []
+        var fallback = false
+
+        var unplacedCount: Int { frames.filter { Self.isPlaced($0) == false }.count }
+
+        static func isPlaced(_ frame: CGRect) -> Bool {
+            frame.width >= 1 && frame.height >= 1
+                && frame.minX.isFinite && frame.minY.isFinite
+        }
+    }
+
     /// The frames for laying `count` windows out with a preset. The grid leaves
     /// `gap` around and between cells; the golden spiral insets each slot by
     /// `gap/2`, exactly as the keyboard auto-layout applies it.
     static func frames(for preset: LayoutPreset, count: Int, in area: CGRect, gap: CGFloat,
                        weights: [Double] = []) -> [CGRect] {
+        layout(preset, count: count, in: area, gap: gap, weights: weights).frames
+    }
+
+    /// Applies a preset while honouring the size floors apps have shown.
+    ///
+    /// A window whose minimum cannot fit is left in place (a zero frame), and
+    /// the remaining windows are laid out without it; a grid loses windows from
+    /// the end, a spiral reduces its slot count, and a treemap that cannot hold
+    /// every minimum falls back to the constrained grid. Everything is pure and
+    /// deterministic, so the same limits always produce the same layout.
+    static func layout(_ preset: LayoutPreset, count: Int, in area: CGRect, gap: CGFloat,
+                       weights: [Double] = [], minimums: [CGSize] = []) -> LayoutGeometry {
+        guard count > 0 else { return LayoutGeometry() }
+        guard area.width > 1, area.height > 1 else {
+            return LayoutGeometry(frames: Array(repeating: .zero, count: count), fallback: true)
+        }
+        let limits = (0..<count).map { index in
+            index < minimums.count ? minimums[index] : .zero
+        }
         switch preset {
         case .grid:
-            return gridFrames(count: count, in: area, gap: gap)
+            return gridGeometry(count: count, in: area, gap: gap, minimums: limits)
         case .goldenSpiral:
-            return goldenSpiralSlots(area: area, count: count).map {
-                $0.insetBy(dx: gap / 2, dy: gap / 2).integral
-            }
+            return spiralGeometry(count: count, in: area, gap: gap, minimums: limits)
         case .content:
-            if weights.count == count {
-                return weightedFrames(weights: weights, in: area, gap: gap)
+            guard weights.count == count else {
+                return gridGeometry(count: count, in: area, gap: gap, minimums: limits)
             }
+            return contentGeometry(weights: weights, in: area, gap: gap,
+                                   minimums: limits)
+        }
+    }
+
+    /// Whether a frame can hold a window's known floor. A point of slack keeps
+    /// a rounded readback from turning a fitting cell into a refusal.
+    static func fits(_ frame: CGRect, minimum: CGSize, tolerance: CGFloat = 1) -> Bool {
+        (minimum.width <= 0 || frame.width + tolerance >= minimum.width)
+            && (minimum.height <= 0 || frame.height + tolerance >= minimum.height)
+    }
+
+    // MARK: - Constrained presets
+
+    /// The grid for `count` windows, or nil when the known floors cannot fit in
+    /// this area at all. Cells in one column share a width, so a wide window
+    /// widens its whole column; the leftover is then shared equally.
+    static func constrainedGrid(count: Int, in area: CGRect, gap: CGFloat,
+                                minimums: [CGSize]) -> [CGRect]? {
+        guard count > 0, area.width > 1, area.height > 1 else { return nil }
+        let active = minimums.prefix(count)
+        if active.allSatisfy({ $0 == .zero }) {
             return gridFrames(count: count, in: area, gap: gap)
         }
+
+        let screen = area.insetBy(dx: gap, dy: gap)
+        guard screen.width > 1, screen.height > 1 else { return nil }
+        let columns = max(1, Int(ceil(sqrt(Double(count)))))
+        let rows = Int(ceil(Double(count) / Double(columns)))
+        let totalGapX = gap * CGFloat(columns - 1)
+        let totalGapY = gap * CGFloat(rows - 1)
+        var columnWidths = Array(repeating: max(1, (screen.width - totalGapX) / CGFloat(columns)),
+                                 count: columns)
+        var rowHeights = Array(repeating: max(1, (screen.height - totalGapY) / CGFloat(rows)),
+                               count: rows)
+
+        // A floor belongs to every cell in its column and row, so one wide
+        // window widens its column; the room comes from columns that have no
+        // floor, never from another window's minimum.
+        var columnFloors = Array(repeating: CGFloat(1), count: columns)
+        var rowFloors = Array(repeating: CGFloat(1), count: rows)
+        for index in 0..<count {
+            let minimum = index < minimums.count ? minimums[index] : .zero
+            columnFloors[index % columns] = max(columnFloors[index % columns], minimum.width)
+            rowFloors[index / columns] = max(rowFloors[index / columns], minimum.height)
+        }
+
+        /// Raises a base length to its floors, takes any overshoot from the
+        /// columns or rows that have slack above their own floor, and shares
+        /// what is left. Returns false when even the floors do not fit.
+        func allocate(_ lengths: inout [CGFloat], floors: [CGFloat],
+                      available: CGFloat, gapTotal: CGFloat) -> Bool {
+            for index in lengths.indices {
+                lengths[index] = max(lengths[index], floors[index])
+            }
+            let required = lengths.reduce(0, +) + gapTotal
+            if required > available + 0.5 {
+                var deficit = required - available
+                let capacity = zip(lengths, floors).reduce(0.0) {
+                    $0 + max(0, $1.0 - $1.1)
+                }
+                guard capacity >= deficit - 0.5 else { return false }
+                for index in lengths.indices {
+                    let take = min(max(0, lengths[index] - floors[index]), deficit)
+                    lengths[index] -= take
+                    deficit -= take
+                    if deficit <= 0.5 { break }
+                }
+            }
+            let leftover = max(0, available - (lengths.reduce(0, +) + gapTotal))
+            if leftover > 0 {
+                let share = leftover / CGFloat(lengths.count)
+                for index in lengths.indices { lengths[index] += share }
+            }
+            return true
+        }
+
+        guard allocate(&columnWidths, floors: columnFloors,
+                       available: screen.width, gapTotal: totalGapX),
+              allocate(&rowHeights, floors: rowFloors,
+                       available: screen.height, gapTotal: totalGapY) else { return nil }
+
+        var xs: [CGFloat] = []
+        var x = screen.minX
+        for width in columnWidths {
+            xs.append(x)
+            x += width + gap
+        }
+        var ys: [CGFloat] = []
+        var y = screen.minY
+        for height in rowHeights {
+            ys.append(y)
+            y += height + gap
+        }
+
+        let frames = (0..<count).map { index in
+            CGRect(x: xs[index % columns], y: ys[index / columns],
+                   width: columnWidths[index % columns], height: rowHeights[index / columns])
+        }
+        guard zip(frames, minimums).allSatisfy({ fits($0, minimum: $1) }) else { return nil }
+        return frames
+    }
+
+    private static func gridGeometry(count: Int, in area: CGRect, gap: CGFloat,
+                                     minimums: [CGSize]) -> LayoutGeometry {
+        for fitting in stride(from: count, through: 1, by: -1) {
+            if let frames = constrainedGrid(count: fitting, in: area, gap: gap,
+                                            minimums: Array(minimums.prefix(fitting))) {
+                return LayoutGeometry(frames: frames + zeros(count - fitting),
+                                      fallback: fitting != count)
+            }
+        }
+        return LayoutGeometry(frames: zeros(count), fallback: true)
+    }
+
+    private static func spiralGeometry(count: Int, in area: CGRect, gap: CGFloat,
+                                       minimums: [CGSize]) -> LayoutGeometry {
+        let cap = min(count, maxGoldenSpiralSlots)
+        var fitting = cap
+        while fitting >= 1 {
+            let frames = goldenSpiralSlots(area: area, count: fitting).map {
+                $0.insetBy(dx: gap / 2, dy: gap / 2).integral
+            }
+            if frames.count == fitting,
+               zip(frames, minimums).allSatisfy({ fits($0, minimum: $1) }) {
+                return LayoutGeometry(frames: frames + zeros(count - fitting),
+                                      fallback: fitting != cap)
+            }
+            fitting -= 1
+        }
+        return LayoutGeometry(frames: zeros(count), fallback: true)
+    }
+
+    private static func contentGeometry(weights: [Double], in area: CGRect, gap: CGFloat,
+                                        minimums: [CGSize]) -> LayoutGeometry {
+        let count = weights.count
+        if let frames = weightedFramesFitting(weights: weights, in: area, gap: gap,
+                                              minimums: minimums) {
+            return LayoutGeometry(frames: frames)
+        }
+        // A treemap that cannot hold every minimum loses the lightest windows,
+        // which the caller sorts first. If even one is impossible, a constrained
+        // grid is the honest fallback: it still keeps the windows on screen.
+        var fitting = count
+        while fitting > 1 {
+            fitting -= 1
+            if let frames = weightedFramesFitting(
+                weights: Array(weights.prefix(fitting)), in: area, gap: gap,
+                minimums: Array(minimums.prefix(fitting))) {
+                return LayoutGeometry(frames: frames + zeros(count - fitting),
+                                      fallback: true)
+            }
+        }
+        var grid = gridGeometry(count: count, in: area, gap: gap, minimums: minimums)
+        grid.fallback = true
+        return grid
+    }
+
+    /// The treemap with per-window floors. Areas start proportional to the
+    /// weights; a window below its minimum area is raised to it, and the
+    /// deficit is taken proportionally from the windows above theirs. The
+    /// result is squarified, then checked on both axes, because enough area is
+    /// not the same as a wide enough slot.
+    private static func weightedFramesFitting(weights: [Double], in area: CGRect,
+                                              gap: CGFloat,
+                                              minimums: [CGSize]) -> [CGRect]? {
+        let count = weights.count
+        guard count > 0 else { return nil }
+        let totalArea = Double(area.width * area.height)
+        let minimumAreas = minimums.map { max(1.0, Double($0.width * $0.height)) }
+        guard minimumAreas.reduce(0, +) <= totalArea + 1 else { return nil }
+
+        let clean = weights.map { value -> Double in
+            value.isFinite && value > 0 ? value : 0.001
+        }
+        let totalWeight = clean.reduce(0, +)
+        guard totalWeight > 0 else { return nil }
+        var areas = clean.map { totalArea * $0 / totalWeight }
+
+        for _ in 0..<4 {
+            let deficit = (0..<count).reduce(0.0) { partial, index in
+                partial + max(0, minimumAreas[index] - areas[index])
+            }
+            if deficit <= 0.5 { break }
+            for index in 0..<count where areas[index] < minimumAreas[index] {
+                areas[index] = minimumAreas[index]
+            }
+            let above = (0..<count).reduce(0.0) { partial, index in
+                partial + max(0, areas[index] - minimumAreas[index])
+            }
+            guard above > 0.5 else { return nil }
+            for index in 0..<count where areas[index] > minimumAreas[index] {
+                areas[index] -= deficit * (areas[index] - minimumAreas[index]) / above
+            }
+        }
+
+        let frames = weightedFrames(weights: areas, in: area, gap: gap)
+        guard frames.count == count,
+              zip(frames, minimums).allSatisfy({ fits($0, minimum: $1) }) else { return nil }
+        return frames
+    }
+
+    private static func zeros(_ count: Int) -> [CGRect] {
+        Array(repeating: .zero, count: max(0, count))
     }
 
     /// The squarified treemap of Bruls, Huizing and van Wijk (2000): each
