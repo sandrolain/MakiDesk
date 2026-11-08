@@ -377,6 +377,15 @@ final class TerminalSurfaceView: NSView, NSTextInputClient {
             if ghostty_surface_key(surface, key) { return }
         }
 
+        // Control keys produce no text: without this branch AppKit's
+        // interpretKeyEvents swallows Ctrl+C, Ctrl+D, Ctrl+Z and the rest.
+        if event.modifierFlags.contains(.control) {
+            if hasMarkedText() { unmarkText() }
+            var key = ghosttyKey(event, action: action)
+            key.consumed_mods = GHOSTTY_MODS_NONE
+            if ghostty_surface_key(surface, key) { return }
+        }
+
         if isSpecialKey(event) {
             var key = ghosttyKey(event, action: action)
             key.consumed_mods = GHOSTTY_MODS_NONE
