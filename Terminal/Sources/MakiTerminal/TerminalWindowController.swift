@@ -1147,17 +1147,37 @@ final class TerminalWindowController: NSWindowController,
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        let row = tableView.selectedRow
-        guard row >= 0, row < workspaces.count, row != selected else { return }
+        selectWorkspace(at: tableView.selectedRow)
+    }
+
+    @objc func selectWorkspaceAction(_ sender: NSMenuItem) {
+        selectWorkspace(at: sender.tag)
+    }
+
+    @objc func previousWorkspaceAction(_ sender: Any?) {
+        guard let index = TerminalWorkspaceNavigation.cycledIndex(
+            from: selected, count: workspaces.count, delta: -1
+        ) else { return }
+        selectWorkspace(at: index)
+    }
+
+    @objc func nextWorkspaceAction(_ sender: Any?) {
+        guard let index = TerminalWorkspaceNavigation.cycledIndex(
+            from: selected, count: workspaces.count, delta: 1
+        ) else { return }
+        selectWorkspace(at: index)
+    }
+
+    private func selectWorkspace(at row: Int) {
+        guard workspaces.indices.contains(row), row != selected else { return }
         selected = row
         clearAttention(for: row)
-        if workspaces.indices.contains(row) {
-            let id = workspaces[row].id
-            if agentStates[id] == .done {
-                agentStates[id] = nil
-                agentLabels[id] = nil
-            }
+        let id = workspaces[row].id
+        if agentStates[id] == .done {
+            agentStates[id] = nil
+            agentLabels[id] = nil
         }
+        tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         rebuildContent()
         scheduleSave()
     }

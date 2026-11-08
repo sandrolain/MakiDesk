@@ -618,7 +618,9 @@ it running, so its shells keep working.
 - **Workspaces.** The sidebar lists them. **+** adds one, **−** closes the
   selected one, and the last one cannot be closed. `⌘T` adds a workspace too.
   Drag a row to reorder them, or use `⌃⌘↑` / `⌃⌘↓`; the order is saved with the
-  layout and the selected shell stays selected.
+  layout and the selected shell stays selected. `⌘1`…`⌘9` select a workspace
+  directly, and `⌃⌘←` / `⌃⌘→` step to the previous or next one, wrapping at
+  the ends.
 - **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
   one; `⌘W` closes the pane and `⇧⌘W` the workspace. Every pane is a real shell
   with its own scrollback, copy/paste, links and Option-as-Meta. `⌘⌥←`, `⌘⌥→`,

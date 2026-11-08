@@ -156,14 +156,32 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         menu(fileMenu, "Close Workspace",
              #selector(TerminalWindowController.closeWorkspaceAction(_:)),
              "w", [.shift], target)
-        fileMenu.addItem(.separator())
-        menu(fileMenu, "Move Workspace Up",
+        fileItem.submenu = fileMenu
+
+        let workspaceItem = NSMenuItem()
+        mainMenu.addItem(workspaceItem)
+        let workspaceMenu = NSMenu(title: "Workspace")
+        for index in 0..<9 {
+            let item = menu(workspaceMenu, "Workspace \(index + 1)",
+                            #selector(TerminalWindowController.selectWorkspaceAction(_:)),
+                            String(index + 1), [], target)
+            item.tag = index
+        }
+        workspaceMenu.addItem(.separator())
+        menu(workspaceMenu, "Previous Workspace",
+             #selector(TerminalWindowController.previousWorkspaceAction(_:)),
+             "\u{F702}", [.control], target)
+        menu(workspaceMenu, "Next Workspace",
+             #selector(TerminalWindowController.nextWorkspaceAction(_:)),
+             "\u{F703}", [.control], target)
+        workspaceMenu.addItem(.separator())
+        menu(workspaceMenu, "Move Workspace Up",
              #selector(TerminalWindowController.moveWorkspaceUpAction(_:)),
              "\u{F700}", [.control], target)
-        menu(fileMenu, "Move Workspace Down",
+        menu(workspaceMenu, "Move Workspace Down",
              #selector(TerminalWindowController.moveWorkspaceDownAction(_:)),
              "\u{F701}", [.control], target)
-        fileItem.submenu = fileMenu
+        workspaceItem.submenu = workspaceMenu
 
         let editItem = NSMenuItem()
         mainMenu.addItem(editItem)
@@ -212,15 +230,17 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = mainMenu
     }
 
+    @discardableResult
     private func menu(_ menu: NSMenu,
                       _ title: String,
                       _ action: Selector,
                       _ key: String,
                       _ modifiers: NSEvent.ModifierFlags,
-                      _ target: AnyObject) {
+                      _ target: AnyObject) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.keyEquivalentModifierMask = NSEvent.ModifierFlags.command.union(modifiers)
         item.target = target
         menu.addItem(item)
+        return item
     }
 }

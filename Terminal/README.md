@@ -88,6 +88,7 @@ identity before the outer app.
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.
 - **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
+  Workspace 1…9 `⌘1`…`⌘9`, Previous/Next Workspace `⌃⌘←`/`⌃⌘→`,
   Move Workspace Up `⌃⌘↑`, Move Workspace Down `⌃⌘↓`,
   Focus Pane `⌘⌥←/→/↑/↓`,
   Close Pane `⌘W`, Close Workspace `⇧⌘W`, Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
