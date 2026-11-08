@@ -327,7 +327,11 @@ window controller; the focused surface answers clipboard requests.
 `⌃⌥O` and the menu bar item call `TerminalController`, which sends `showMain` or
 launches the helper; `⌃⌥Q` sends `toggleQuake`. The quake is a borderless
 `NSPanel` at the floating level with its own scratch workspace, kept alive while
-hidden and deliberately outside the saved layout. It carries the Accessibility
+hidden and deliberately outside the saved layout. On each show it takes the
+visible frame of the display under the pointer (falling back to the helper's
+screen, then the main one) and is placed by the pure
+`TerminalQuakePlacement.frame`, so negative display origins and a short
+`visibleFrame` stay correct. It carries the Accessibility
 identifier `com.makidesk.terminal.quake`; `WindowController`'s discovery drops a
 helper window that reports it, so the quake never becomes a card in the switcher
 or a tiling target while the helper's main window stays a normal window.

@@ -625,10 +625,12 @@ it running, so its shells keep working.
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
   on the next launch. Scrollback is not saved.
 - **Quake.** `⌃⌥Q` drops a scratch terminal from the top of the screen; the
-  same key hides it. It is a separate session, not part of the saved workspace
-  layout, and it stays alive while hidden. MakiDesk's window switcher leaves
-  the quake panel out, since it is toggled with its own shortcut; the helper's
-  main window is still listed there.
+  same key hides it. It appears on the display under the pointer, spans that
+  display's visible frame and leaves the menu bar and Dock alone. It is a
+  separate session, not part of the saved workspace layout, and it stays alive
+  while hidden. MakiDesk's window switcher leaves the quake panel out, since it
+  is toggled with its own shortcut; the helper's main window is still listed
+  there.
 - **Hidden means not drawn.** Workspaces you are not looking at, a hidden
   quake, a minimized window or an app that macOS has hidden stop rendering;
   their shells keep running and consuming output, and drawing resumes when they

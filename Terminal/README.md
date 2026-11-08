@@ -107,9 +107,11 @@ identity before the outer app.
   recomputed after a workspace switch, on a quake toggle, on occlusion changes
   and on key/main transitions.
 - **Quake:** a borderless floating panel with its own scratch shell, toggled by
-  IPC; it stays alive while hidden and is not part of the saved layout. The
-  panel carries an Accessibility identifier, so MakiDesk's window switcher
-  leaves it out while the helper's main window stays listed.
+  IPC; it stays alive while hidden and is not part of the saved layout. It opens
+  on the display under the pointer, using the display's visible frame
+  (`TerminalQuakePlacement`). The panel carries an Accessibility identifier, so
+  MakiDesk's window switcher leaves it out while the helper's main window stays
+  listed.
 - **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
   other global rows (and the peek hold key) and keeps only `⌃⌥O` and `⌃⌥Q`.
 

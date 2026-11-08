@@ -773,13 +773,21 @@ final class TerminalWindowController: NSWindowController,
         return panel
     }
 
-    private func quakeFrame() -> NSRect {
-        guard let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else {
-            return NSRect(x: 0, y: 0, width: 1000, height: 420)
+    /// The display the pointer is on; if no frame reports it, the one the
+    /// helper's window is on, then the main one.
+    private func quakeScreen() -> NSScreen? {
+        let pointer = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) {
+            return screen
         }
-        let height = max(240, visible.height * terminalSettings.quakeHeightFraction)
-        return NSRect(x: visible.minX, y: visible.maxY - height,
-                      width: visible.width, height: height)
+        return window?.screen ?? NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func quakeFrame() -> NSRect {
+        let visible = quakeScreen()?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: 1000, height: 600)
+        return TerminalQuakePlacement.frame(in: visible,
+                                            heightFraction: terminalSettings.quakeHeightFraction)
     }
 
     // MARK: - Theme
