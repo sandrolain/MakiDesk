@@ -116,8 +116,11 @@ leave both on if you prefer. The macOS option lives in System Settings ▸ Deskt
 
 The **gap** setting (Settings ▸ Windows) is the space kept between tiled
 windows and at the screen edges. Layout commands act on the windows in view on
-the main screen; a window's own shortcuts follow the screen it is on. macOS
-does not let an app move a window to another Space, so MakiDesk never pretends
+each screen, one display at a time; a window's own shortcuts follow the screen
+it is on. Unplugging a monitor rescues its windows to a remaining screen without
+overwriting the group's layout; plugging it back restores the arrangement saved
+for that display set. macOS does not let an app move a window to another Space,
+so MakiDesk never pretends
 to.
 
 ## Focus border

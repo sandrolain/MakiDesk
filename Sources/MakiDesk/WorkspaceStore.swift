@@ -387,6 +387,25 @@ final class WorkspaceStore {
     @ObservationIgnored private var terminateObserver: NSObjectProtocol?
     @ObservationIgnored private var enhancedUIActivationObserver: NSObjectProtocol?
 
+    // MARK: - Display transitions
+
+    /// The display set the group arrangements currently belong to.
+    @ObservationIgnored private var currentDisplayKey = ""
+    /// True from the first screen notification until the desk has settled.
+    /// While it is true, a rescue move is never written back as an arrangement.
+    @ObservationIgnored private var displayTransitionActive = false
+    /// Group arrangements saved under a display key, so a monitor that comes
+    /// back gets the layout it had, not the pile-up left by its absence.
+    @ObservationIgnored private var displaySnapshots: [String: [Int: [String: CGRect]]] = [:]
+    @ObservationIgnored private var displaySnapshotOrder: [String] = []
+    @ObservationIgnored private var displaySettleWork: DispatchWorkItem?
+    @ObservationIgnored private var displayFingerprintAtSchedule = ""
+    @ObservationIgnored private var displaySettleAttempts = 0
+    @ObservationIgnored private var lastWakeAt = Date.distantPast
+    @ObservationIgnored private var lastSettledFingerprint = ""
+    @ObservationIgnored private var displayTransitionGeneration = 0
+    @ObservationIgnored private var wakeObserver: NSObjectProtocol?
+
     /// What is on screen, in use, as the one record the scene commands work
     /// from: leaving it, undoing back to it, sending one more window to the tray.
     /// A group is a saved thing; a scene is only what is in use now, so nothing
@@ -463,6 +482,19 @@ final class WorkspaceStore {
             self?.recentFocusedWindowIDs.removeAll { $0.hasPrefix("\(pid)-") }
             self?.sizeLimits.forget(pid: pid)
             AXEnhancedUIController.applicationDidTerminate(pid: pid)
+        }
+        // Which display set the saved arrangements belong to. Read once at
+        // start; a screen notification starts a transition from there.
+        if currentDisplayKey.isEmpty {
+            currentDisplayKey = DisplayLayoutIdentity.key(for: NSScreen.screens)
+            lastSettledFingerprint = DisplayFingerprint(screens: NSScreen.screens).signature
+        }
+        // A wake brings the displays back one at a time; a short settle would
+        // reconcile the one-screen desk in between.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lastWakeAt = Date() }
         }
         startGlobalShortcuts()
         checkTrust()
@@ -2645,7 +2677,7 @@ final class WorkspaceStore {
 
     /// The stable identity of a screen, the only one that survives a reconnect
     /// or a change of origin. `NSScreenNumber` is a `CGDirectDisplayID`.
-    static func displayID(of screen: NSScreen) -> CGDirectDisplayID? {
+    nonisolated static func displayID(of screen: NSScreen) -> CGDirectDisplayID? {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?
             .uint32Value
     }
@@ -2894,6 +2926,10 @@ final class WorkspaceStore {
     /// looks up, which survives a restart where a fresh system id would not.
     /// In memory only; the file follows on a short debounce.
     private func rememberArrangement(_ frame: CGRect, ref: WindowRef) {
+        // A display transition moves windows as a rescue, not as the arrangement
+        // the user chose. Writing those frames back would erase the layout the
+        // snapshot exists to bring back.
+        guard displayTransitionActive == false else { return }
         var changed = false
         for slot in groups.keys {
             guard var group = groups[slot],
@@ -2942,6 +2978,9 @@ final class WorkspaceStore {
     func flushArrangement() {
         arrangementFlushTimer?.invalidate()
         arrangementFlushTimer = nil
+        // Never persist a half-reconciled desk; the settle writes the restored
+        // arrangement once the transition is over.
+        guard displayTransitionActive == false else { return }
         guard arrangementDirty else { return }
         if groupStore.save(groups.values.sorted { $0.slot < $1.slot }) {
             arrangementDirty = false
@@ -3714,19 +3753,177 @@ final class WorkspaceStore {
 
     private func handleScreenChange() {
         hidePeek()
+        let fingerprint = DisplayFingerprint(screens: NSScreen.screens)
+        // A notification that changed nothing is a spurious fire, not a desk
+        // transition: the fingerprint includes the Dock and the menu bar.
+        if displayTransitionActive == false,
+           fingerprint.signature == lastSettledFingerprint {
+            return
+        }
+        // The first notification of a transition saves the departing layout
+        // before anything is rescued. Later notifications in the same
+        // transition only restart the settle window.
+        if displayTransitionActive == false {
+            snapshotLayoutForCurrentDisplays()
+            displayTransitionActive = true
+            displaySettleAttempts = 0
+            displayTransitionGeneration &+= 1
+        }
+        scheduleDisplaySettle(after: displaySettleDelay())
+    }
+
+    /// A normal display change settles in about a second; a wake takes longer
+    /// because macOS brings the panels back one at a time.
+    private func displaySettleDelay() -> TimeInterval {
+        Date().timeIntervalSince(lastWakeAt) < Self.wakeWindow
+            ? Self.wakeDisplaySettle
+            : Self.normalDisplaySettle
+    }
+
+    private func scheduleDisplaySettle(after delay: TimeInterval) {
+        displaySettleWork?.cancel()
+        displayFingerprintAtSchedule = DisplayFingerprint(screens: NSScreen.screens).signature
+        let work = DispatchWorkItem { [weak self] in self?.settleDisplayChange() }
+        displaySettleWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// Only a desk that has stopped changing is reconciled. A few reschedules
+    /// cover a wake that takes a moment; after that the last reading is used,
+    /// so a flickering panel cannot postpone the rescue forever.
+    private func settleDisplayChange() {
+        guard displayTransitionActive else { return }
+        let fingerprint = DisplayFingerprint(screens: NSScreen.screens)
+        if fingerprint.signature != displayFingerprintAtSchedule,
+           displaySettleAttempts < Self.maximumDisplaySettleAttempts {
+            displaySettleAttempts += 1
+            scheduleDisplaySettle(after: displaySettleDelay())
+            return
+        }
+        finishDisplayTransition(fingerprint)
+    }
+
+    private func finishDisplayTransition(_ fingerprint: DisplayFingerprint) {
+        let newKey = fingerprint.identity.key
+        let generation = displayTransitionGeneration
         WindowIndex.shared.refreshAsync { [weak self] discovered in
-            guard let self else { return }
+            guard let self, self.displayTransitionGeneration == generation else { return }
             self.rebuildModel(from: discovered, announce: false)
-            self.recallOffscreenWindows()
+            let previousKey = self.currentDisplayKey
+            let snapshot = newKey != previousKey ? self.displaySnapshots[newKey] : nil
+            let restored = snapshot.map { self.restoreGroups(from: $0) } ?? 0
+            // Anything still off-screen — a window of the display that went
+            // away, or one no group owns — is pulled back. Its rescue frame is
+            // never written back as the group's arrangement: the transition is
+            // still active while `recallOffscreenWindows` runs.
+            let recalled = self.recallOffscreenWindows()
+            // A new desk with no saved layout takes the rescued positions as
+            // its arrangement, so the old layout stays in its snapshot and
+            // this one can be saved in turn. A desk with a snapshot keeps it,
+            // even when none of its windows could be moved.
+            if snapshot == nil, newKey != previousKey {
+                self.adoptCurrentFramesAsArrangement()
+            }
+            self.currentDisplayKey = newKey
+            self.lastSettledFingerprint = fingerprint.signature
+            self.displayTransitionActive = false
+            if snapshot != nil || newKey != previousKey {
+                self.arrangementDirty = true
+            }
+            self.flushArrangement()
+            if restored > 0 {
+                self.status = "Layout restored for this display set"
+            } else if recalled > 0 {
+                self.status = "Recalled \(recalled) off-screen windows"
+            }
             if self.showMiniMap { self.showMiniMapIfEnabled() }
             WindowOutlineController.shared.refresh()
         }
     }
 
+    /// Saves every group's remembered frames under the display set they belong
+    /// to. Only arrangements are saved: a window standing somewhere arbitrary
+    /// is not a layout the user asked for.
+    private func snapshotLayoutForCurrentDisplays() {
+        guard currentDisplayKey.isEmpty == false else { return }
+        var snapshot: [Int: [String: CGRect]] = [:]
+        for (slot, group) in groups where group.frames.isEmpty == false {
+            snapshot[slot] = group.frames
+        }
+        guard snapshot.isEmpty == false else { return }
+        displaySnapshots[currentDisplayKey] = snapshot
+        if displaySnapshotOrder.contains(currentDisplayKey) == false {
+            displaySnapshotOrder.append(currentDisplayKey)
+        }
+        while displaySnapshotOrder.count > Self.maximumDisplaySnapshots {
+            let oldest = displaySnapshotOrder.removeFirst()
+            displaySnapshots.removeValue(forKey: oldest)
+        }
+    }
+
+    /// Puts a returning display set's groups back where they were. Only live,
+    /// normal windows are moved; a minimised member keeps its remembered frame
+    /// for the next recall.
+    private func restoreGroups(from snapshot: [Int: [String: CGRect]]) -> Int {
+        var restored = 0
+        for (slot, frames) in snapshot {
+            guard var group = groups[slot] else { continue }
+            group.frames = frames
+            groups[slot] = group
+            let (resolved, _) = resolveGroup(group)
+            for (ref, window) in resolved {
+                guard window.state == .normal, window.minimized == false,
+                      let saved = frames[ref.id] else { continue }
+                applyFrame(clampedToVisibleScreen(saved), to: windowInfo(for: window),
+                           reason: "display layout restored", animate: false)
+                restored += 1
+            }
+        }
+        return restored
+    }
+
+    /// A desk with no saved layout takes the frames its windows were rescued
+    /// to. The previous desk's arrangement is already in its own snapshot.
+    private func adoptCurrentFramesAsArrangement() {
+        for (slot, group) in groups {
+            var updated = group
+            for (index, window) in windows.enumerated() {
+                guard let ref = ref(forModelWindowAt: index),
+                      let member = group.members.firstIndex(where: { $0.matches(ref) })
+                else { continue }
+                let key = group.members[member].id
+                updated.frames[key] = CGRect(x: window.x, y: window.y,
+                                             width: window.width, height: window.height)
+            }
+            groups[slot] = updated
+        }
+    }
+
+    /// A saved frame belongs to the display set it was taken on. When the set
+    /// is back, this is the identity; when it is not, it keeps the window on
+    /// the screen it is on now and shrinks only if that screen is smaller.
+    private func clampedToVisibleScreen(_ frame: CGRect) -> CGRect {
+        let screen = WindowController.screen(forAXFrame: frame)
+        let area = WindowController.axVisibleFrame(for: screen)
+        let size = TilingEngine.sizeFitting(frame.size, in: area)
+        let x = min(max(frame.minX, area.minX), area.maxX - size.width)
+        let y = min(max(frame.minY, area.minY), area.maxY - size.height)
+        return CGRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    private static let normalDisplaySettle: TimeInterval = 1.5
+    private static let wakeDisplaySettle: TimeInterval = 5
+    private static let wakeWindow: TimeInterval = 20
+    private static let maximumDisplaySettleAttempts = 4
+    private static let maximumDisplaySnapshots = 8
+
     /// Pulls windows left on a detached monitor back into the primary screen.
-    func recallOffscreenWindows() {
+    /// Returns how many moved; during a display transition the rescue frames
+    /// are not remembered as the group's arrangement.
+    @discardableResult
+    func recallOffscreenWindows() -> Int {
         let visibleFrames = NSScreen.screens.map { WindowController.axVisibleFrame(for: $0) }
-        guard let primary = visibleFrames.first else { return }
+        guard let primary = visibleFrames.first else { return 0 }
         var moved = 0
         for index in windows.indices {
             let frame = CGRect(x: windows[index].x, y: windows[index].y,
@@ -3753,6 +3950,7 @@ final class WorkspaceStore {
             moved += 1
         }
         if moved > 0 { status = "Recalled \(moved) off-screen windows" }
+        return moved
     }
 
     // MARK: - Auto layout (golden spiral)

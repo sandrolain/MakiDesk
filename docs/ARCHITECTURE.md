@@ -41,6 +41,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `PointerEffect.swift`, `PointerEffectController.swift`, `PointerEffectSurface.swift` | Pointer pulse, five presentation styles and click ripple: pure trail/display rules; one click-through panel per display; no permission, no logged coordinates. |
 | `WindowCapture.swift` | ScreenCaptureKit previews and the edge-energy content measure. |
 | `TilingEngine.swift` | Pure geometry: ladders, halves, quarters, grid, golden spiral, squarified treemap. |
+| `DisplayLayoutIdentity.swift` | Pure display identity and settle fingerprint: which desk a saved layout belongs to, and whether it has stopped changing. |
 | `LayoutAdvisor.swift` | Pure advisor: window kinds, content measure, priors, suggested preset, reasons. |
 | `WindowPalette.swift` | `⌥⇥` / `⌥Space` switcher and search, preview cards, applications shelf, groups column, layout buttons. |
 | `InstalledApplications.swift` | Installed `.app` inventory and pure matching for the palette shelf; own worker queue, small in-memory cache. |
@@ -173,6 +174,11 @@ All layout maths is pure and unit-tested:
   cannot fit; the spiral reduces its slot count; a treemap that cannot hold
   every minimum falls back to the constrained grid. A window that still cannot
   fit is left in place (a zero frame) and reported, never squeezed.
+- A display transition is debounced on a fingerprint of the connected displays,
+  their usable areas and their scales. The first notification saves every
+  group's arrangement under the departing display key; the settle restores the
+  snapshot when that key returns. Rescue frames from a detached monitor are
+  never written back as the arrangement.
 - `LayoutAdvisor` classifies windows by app/title (`WindowKind`), reads the
   content measure and chooses grid/spiral/content. `LayoutAdvisor.weights`
   combines the per-kind priors with `0.7 + 0.6 × score/median`. The advisor is
