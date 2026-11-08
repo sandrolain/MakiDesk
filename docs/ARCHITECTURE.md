@@ -316,8 +316,8 @@ never restarts a shell. A pane may carry a command instead of the login shell:
 an SSH profile in `settings.json` or the tmux preset becomes one, the sidebar's
 `+` menu starts a workspace with it, and the layout remembers it. Every pane
 receives `MAKIDESK_TERMINAL=1` and its workspace id through Ghostty's env-vars
-field, so scripts can identify where they run. Workspace titles, split ratios,
-the selection, each pane's last directory and its command are written to
+field, so scripts can identify where they run. Workspace order, titles, split
+ratios, the selection, each pane's last directory and its command are written to
 `Terminal/workspaces.json`, atomically and
 with the usual quarantine/version rules; scrollback is not persisted. Closing the
 last pane of the last workspace starts a fresh shell instead of leaving an empty

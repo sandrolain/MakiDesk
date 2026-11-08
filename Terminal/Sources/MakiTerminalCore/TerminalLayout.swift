@@ -34,6 +34,24 @@ public struct TerminalLayout: Codable, Equatable, Sendable {
         guard workspaces.isEmpty == false else { return 0 }
         return min(max(selectedIndex, 0), workspaces.count - 1)
     }
+
+    /// Moves one workspace and keeps the selection on the same workspace, so a
+    /// drag in the sidebar never switches which shell is on screen.
+    public func movingWorkspace(from source: Int, to destination: Int) -> TerminalLayout {
+        guard workspaces.indices.contains(source),
+              workspaces.indices.contains(destination),
+              source != destination else { return self }
+        let selectedWorkspaceID = workspaces.indices.contains(selectedIndex)
+            ? workspaces[selectedIndex].id : nil
+        var copy = self
+        let workspace = copy.workspaces.remove(at: source)
+        copy.workspaces.insert(workspace, at: destination)
+        if let selectedWorkspaceID,
+           let index = copy.workspaces.firstIndex(where: { $0.id == selectedWorkspaceID }) {
+            copy.selectedIndex = index
+        }
+        return copy
+    }
 }
 
 /// Reads and writes `~/Library/Application Support/MakiDesk/Terminal/workspaces.json`

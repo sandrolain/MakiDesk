@@ -156,6 +156,13 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         menu(fileMenu, "Close Workspace",
              #selector(TerminalWindowController.closeWorkspaceAction(_:)),
              "w", [.shift], target)
+        fileMenu.addItem(.separator())
+        menu(fileMenu, "Move Workspace Up",
+             #selector(TerminalWindowController.moveWorkspaceUpAction(_:)),
+             "\u{F700}", [.control], target)
+        menu(fileMenu, "Move Workspace Down",
+             #selector(TerminalWindowController.moveWorkspaceDownAction(_:)),
+             "\u{F701}", [.control], target)
         fileItem.submenu = fileMenu
 
         let editItem = NSMenuItem()

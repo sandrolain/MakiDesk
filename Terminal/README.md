@@ -36,7 +36,8 @@ identity before the outer app.
 - **GhosttyKit engine:** a login shell in a PTY, Metal rendering, keyboard and
   `NSTextInputClient`, mouse, clipboard, Option-as-Meta, resize/reflow, title and
   cwd actions.
-- **Workspaces in a sidebar:** add/close, selection, drag-free for now; each
+- **Workspaces in a sidebar:** add/close, selection and drag to reorder
+  (`⌃⌘↑`/`⌃⌘↓` from the menu); each
   workspace owns a binary split tree.
 - **Splits:** side-by-side and stacked, draggable dividers, focus border, close
   pane, close workspace; surfaces are reused across rebuilds, so switching
@@ -87,6 +88,7 @@ identity before the outer app.
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.
 - **Menus:** New Workspace `⌘T`, New Split Right `⌘D`, New Split Down `⇧⌘D`,
+  Move Workspace Up `⌃⌘↑`, Move Workspace Down `⌃⌘↓`,
   Close Pane `⌘W`, Close Workspace `⇧⌘W`, Find `⌘F` (next `⌘G`, previous `⇧⌘G`),
   Show Quake in View.
 - **Find bar:** one per window, over the focused pane; the needle is sent to

@@ -171,6 +171,11 @@ final class TerminalWindowController: NSWindowController,
     private let tableView = NSTableView()
     private let closeButton = NSButton()
 
+    /// The sidebar's own drag type: a foreign string drop is ignored.
+    private static let workspaceDragType = NSPasteboard.PasteboardType(
+        "com.makidesk.terminal.workspace-row"
+    )
+
     init(runtime: GhosttyRuntime, settings: TerminalSettingsDocument) {
         self.runtime = runtime
         self.terminalSettings = settings
@@ -249,6 +254,8 @@ final class TerminalWindowController: NSWindowController,
         tableView.dataSource = self
         tableView.delegate = self
         tableView.backgroundColor = .clear
+        tableView.registerForDraggedTypes([Self.workspaceDragType])
+        tableView.setDraggingSourceOperationMask(.move, forLocal: true)
         scroll.drawsBackground = false
         scroll.documentView = tableView
 
@@ -1135,6 +1142,74 @@ final class TerminalWindowController: NSWindowController,
             tableView.selectRowIndexes(IndexSet(integer: selected),
                                        byExtendingSelection: false)
         }
+    }
+
+    // MARK: - Reordering
+
+    func tableView(_ tableView: NSTableView,
+                   pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+        guard workspaces.indices.contains(row) else { return nil }
+        let item = NSPasteboardItem()
+        item.setString(String(row), forType: Self.workspaceDragType)
+        return item
+    }
+
+    func tableView(_ tableView: NSTableView,
+                   validateDrop info: NSDraggingInfo,
+                   proposedRow row: Int,
+                   proposedDropOperation dropOperation: NSTableView.DropOperation)
+        -> NSDragOperation {
+        guard info.draggingSource as? NSTableView === tableView else { return [] }
+        tableView.setDropRow(row, dropOperation: .above)
+        return .move
+    }
+
+    func tableView(_ tableView: NSTableView,
+                   acceptDrop info: NSDraggingInfo,
+                   row: Int,
+                   dropOperation: NSTableView.DropOperation) -> Bool {
+        guard let raw = info.draggingPasteboard.string(forType: Self.workspaceDragType),
+              let source = Int(raw),
+              workspaces.indices.contains(source) else { return false }
+        // `row` is the insertion index before the source is removed; dropping
+        // below the source shifts the final index up by one.
+        var destination = row > source ? row - 1 : row
+        destination = min(max(destination, 0), workspaces.count - 1)
+        guard destination != source else { return false }
+        applyWorkspaceMove(from: source, to: destination)
+        return true
+    }
+
+    @objc func moveWorkspaceUpAction(_ sender: Any?) {
+        moveSelectedWorkspace(by: -1)
+    }
+
+    @objc func moveWorkspaceDownAction(_ sender: Any?) {
+        moveSelectedWorkspace(by: 1)
+    }
+
+    private func moveSelectedWorkspace(by delta: Int) {
+        let destination = selected + delta
+        guard workspaces.indices.contains(selected),
+              workspaces.indices.contains(destination) else { return }
+        applyWorkspaceMove(from: selected, to: destination)
+    }
+
+    /// Reorders the sidebar without switching the shell on screen: the moved
+    /// row and the selected row can be different.
+    private func applyWorkspaceMove(from source: Int, to destination: Int) {
+        guard workspaces.indices.contains(source),
+              workspaces.indices.contains(destination),
+              source != destination else { return }
+        let selectedID = workspaces.indices.contains(selected) ? workspaces[selected].id : nil
+        let moved = workspaces.remove(at: source)
+        workspaces.insert(moved, at: destination)
+        if let selectedID,
+           let index = workspaces.firstIndex(where: { $0.id == selectedID }) {
+            selected = index
+        }
+        reloadSidebar()
+        scheduleSave()
     }
 
     // MARK: - Split view
