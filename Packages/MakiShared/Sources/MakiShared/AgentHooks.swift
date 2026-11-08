@@ -14,21 +14,68 @@ import Foundation
 /// a one-time backup, and removal takes out only handlers that call
 /// `makidesk hook`. Nothing is written until the user asks for it.
 public enum AgentHooks {
-    /// A supported agent and where it keeps its settings.
+    /// A supported agent, where it keeps its settings and what its lifecycle
+    /// offers.
     public enum Agent: String, CaseIterable, Sendable {
-        case claudeCode
+        case claudeCode = "claude"
+        case codex
 
         public var displayName: String {
             switch self {
             case .claudeCode: return "Claude Code"
+            case .codex: return "Codex"
             }
         }
 
-        /// `~/.claude/settings.json`, the user-wide settings file.
+        /// The user-wide settings file the handlers live in.
         public var settingsURL: URL {
-            URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent(".claude", isDirectory: true)
-                .appendingPathComponent("settings.json")
+            let home = URL(fileURLWithPath: NSHomeDirectory())
+            switch self {
+            case .claudeCode:
+                return home.appendingPathComponent(".claude", isDirectory: true)
+                    .appendingPathComponent("settings.json")
+            case .codex:
+                return home.appendingPathComponent(".codex", isDirectory: true)
+                    .appendingPathComponent("hooks.json")
+            }
+        }
+
+        /// `SessionEnd` has a three-second ceiling in Codex; the local socket
+        /// answers in milliseconds, so the smaller timeout fits both.
+        public var hookTimeout: Int {
+            switch self {
+            case .claudeCode: return 5
+            case .codex: return 3
+            }
+        }
+
+        public var events: [Event] {
+            switch self {
+            case .claudeCode:
+                return [
+                    Event(name: "UserPromptSubmit", state: .working),
+                    Event(name: "Notification",
+                          matcher: "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+                          state: .waiting),
+                    Event(name: "Stop", state: .done),
+                    Event(name: "StopFailure", state: .done),
+                    Event(name: "SessionEnd", state: .done),
+                ]
+            case .codex:
+                // Codex has no notification event: PermissionRequest is the
+                // moment it is about to wait for the user, and PreModelRequest
+                // is the resume after approval, which clears the orange dot.
+                // Interrupt ends a turn without a Stop, so it must clear
+                // working too.
+                return [
+                    Event(name: "UserPromptSubmit", state: .working),
+                    Event(name: "PermissionRequest", state: .waiting),
+                    Event(name: "PreModelRequest", state: .working),
+                    Event(name: "Stop", state: .done),
+                    Event(name: "Interrupt", state: .done),
+                    Event(name: "SessionEnd", state: .done),
+                ]
+            }
         }
     }
 
@@ -53,18 +100,6 @@ public enum AgentHooks {
             self.state = state
         }
     }
-
-    /// `Notification` only fires on some types; the rest are informational.
-    /// `StopFailure` covers an API error, which ends the turn just like `Stop`.
-    public static let events: [Event] = [
-        Event(name: "UserPromptSubmit", state: .working),
-        Event(name: "Notification",
-              matcher: "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
-              state: .waiting),
-        Event(name: "Stop", state: .done),
-        Event(name: "StopFailure", state: .done),
-        Event(name: "SessionEnd", state: .done),
-    ]
 
     /// The first argument every installed handler passes to `makidesk`. It is
     /// how an installation is recognised: a moved app still has stale handlers
@@ -140,19 +175,22 @@ public enum AgentHooks {
     }
 
     /// Reads the installation state without modifying anything.
-    public static func status(in settingsURL: URL = Agent.claudeCode.settingsURL,
+    public static func status(for agent: Agent = .claudeCode,
+                              settingsURL: URL? = nil,
                               fileManager: FileManager = .default) -> Status {
+        let url = settingsURL ?? agent.settingsURL
+        let events = agent.events
         let expected = events.count
         do {
-            guard let root = try readRoot(settingsURL, fileManager: fileManager) else {
+            guard let root = try readRoot(url, fileManager: fileManager) else {
                 return Status(state: .absent, present: 0, expected: expected,
                               command: nil, problem: nil)
             }
-            let hooks = try hooksObject(in: root, path: settingsURL.path)
+            let hooks = try hooksObject(in: root, path: url.path)
             var present = 0
             var commands: Set<String> = []
             for event in events {
-                let groups = try groups(for: event.name, in: hooks, path: settingsURL.path)
+                let groups = try groups(for: event.name, in: hooks, path: url.path)
                 var found = false
                 for group in groups {
                     for handler in handlers(in: group) where
@@ -181,23 +219,26 @@ public enum AgentHooks {
     /// symlink under Application Support is the right choice: it survives an
     /// app that moves, so the hooks keep working after an update.
     @discardableResult
-    public static func install(into settingsURL: URL = Agent.claudeCode.settingsURL,
+    public static func install(for agent: Agent = .claudeCode,
                                command: String,
-                               title: String = Agent.claudeCode.displayName,
+                               settingsURL: URL? = nil,
                                fileManager: FileManager = .default) throws -> Result {
         guard command.hasPrefix("/") else {
             throw HookError.writeFailed("the hook command must be an absolute path")
         }
-        let original = try readRoot(settingsURL, fileManager: fileManager)
+        let url = settingsURL ?? agent.settingsURL
+        let original = try readRoot(url, fileManager: fileManager)
         var root = original ?? [:]
-        var hooks = try hooksObject(in: root, path: settingsURL.path)
+        var hooks = try hooksObject(in: root, path: url.path)
         pruneAll(&hooks)
 
-        for event in events {
-            var groups = try groups(for: event.name, in: hooks, path: settingsURL.path)
+        for event in agent.events {
+            var groups = try groups(for: event.name, in: hooks, path: url.path)
             var group: [String: Any] = [:]
             if let matcher = event.matcher { group["matcher"] = matcher }
-            group["hooks"] = [handler(for: event, command: command, title: title)]
+            group["hooks"] = [handler(for: event, command: command,
+                                      title: agent.displayName,
+                                      timeout: agent.hookTimeout)]
             groups.append(group)
             hooks[event.name] = groups
         }
@@ -206,8 +247,8 @@ public enum AgentHooks {
         guard changed(root, from: original) else {
             return Result(changed: false, backupURL: nil)
         }
-        let backup = try backUpIfNeeded(settingsURL, fileManager: fileManager)
-        try write(root, to: settingsURL, fileManager: fileManager)
+        let backup = try backUpIfNeeded(url, fileManager: fileManager)
+        try write(root, to: url, fileManager: fileManager)
         return Result(changed: true, backupURL: backup)
     }
 
@@ -215,9 +256,11 @@ public enum AgentHooks {
     /// event arrays that become empty. Other handlers and every other key in
     /// the file stay exactly as they were.
     @discardableResult
-    public static func uninstall(from settingsURL: URL = Agent.claudeCode.settingsURL,
+    public static func uninstall(from agent: Agent = .claudeCode,
+                                 settingsURL: URL? = nil,
                                  fileManager: FileManager = .default) throws -> Result {
-        guard let original = try readRoot(settingsURL, fileManager: fileManager) else {
+        let url = settingsURL ?? agent.settingsURL
+        guard let original = try readRoot(url, fileManager: fileManager) else {
             return Result(changed: false, backupURL: nil)
         }
         var root = original
@@ -225,7 +268,7 @@ public enum AgentHooks {
             return Result(changed: false, backupURL: nil)
         }
         guard var hooks = value as? [String: Any] else {
-            throw HookError.invalidHooks(settingsURL.path)
+            throw HookError.invalidHooks(url.path)
         }
         pruneAll(&hooks)
         if hooks.isEmpty {
@@ -236,20 +279,21 @@ public enum AgentHooks {
         guard changed(root, from: original) else {
             return Result(changed: false, backupURL: nil)
         }
-        let backup = try backUpIfNeeded(settingsURL, fileManager: fileManager)
-        try write(root, to: settingsURL, fileManager: fileManager)
-        return Result(changed: true, backupURL: backup)
+        // The one-time backup belongs to the first install; removal writes the
+        // file without replacing that copy.
+        try write(root, to: url, fileManager: fileManager)
+        return Result(changed: true, backupURL: nil)
     }
 
     // MARK: - JSON
 
     private static func handler(for event: Event, command: String,
-                                title: String) -> [String: Any] {
+                                title: String, timeout: Int) -> [String: Any] {
         [
             "type": "command",
             "command": command,
             "args": [markerArgument, event.state.rawValue, "--title", title],
-            "timeout": 5,
+            "timeout": timeout,
         ]
     }
 

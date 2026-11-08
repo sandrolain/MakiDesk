@@ -663,18 +663,23 @@ it running, so its shells keep working.
   helper (⌘Q) and reopen it**: a helper that was already running keeps its old
   environment, and an existing pane does not gain the new variables.
 - **Automatic agent hooks.** **Settings ▸ Terminal ▸ Agents** switches on
-  lifecycle hooks for **Claude Code**: a submitted prompt marks the workspace as
-  working, a permission or input prompt as waiting, and a finished turn, an API
-  error or a closed session as done. It is off until you turn it on, and turning
-  it on merges five small handlers into `~/.claude/settings.json` — the rest of
-  the file is left alone and a one-time copy is kept as
-  `settings.json.makidesk-backup`. Turning it off removes only the handlers that
-  call `makidesk hook`. From a pane the same thing is
-  `"$MAKIDESK_CLI" hooks status|install|uninstall`. The hooks stay quiet outside
-  a MakiDesk pane: a session that did not inherit `MAKIDESK_WORKSPACE_ID`
-  (started elsewhere, or a tmux server started before the pane) reports nothing
-  rather than failing. Claude Code reads hooks when a session starts, so a
-  session that was already open may need a restart before its dot moves.
+  lifecycle hooks for **Claude Code** and **Codex**: a submitted prompt marks
+  the workspace as working, a permission or input prompt as waiting, and a
+  finished turn, an interruption or a closed session as done. It is off until
+  you turn it on, and turning it on merges a few small handlers into that agent's
+  own settings — `~/.claude/settings.json` or `~/.codex/hooks.json` — leaving
+  the rest of the file alone and keeping a one-time copy as the file name plus
+  `.makidesk-backup`. Turning it off removes only the handlers that call
+  `makidesk hook`. From a pane the same thing is
+  `"$MAKIDESK_CLI" hooks status|install|uninstall [--agent claude|codex]`.
+  Codex asks you to review and trust new hooks once with `/hooks` before they
+  run. It also reads inline `[hooks]` tables from `config.toml`: MakiDesk only
+  writes `hooks.json` and leaves that file untouched, so an existing inline set
+  stays and Codex warns that the layer has both forms. The hooks stay quiet
+  outside a MakiDesk pane: a session that did not inherit `MAKIDESK_WORKSPACE_ID` (started elsewhere, or a tmux server started
+  before the pane) reports nothing rather than failing. Agents read hooks when
+  a session starts, so a session that was already open may need a restart before
+  its dot moves.
 - **tmux.** **New tmux Session** in the sidebar's **+** menu runs
   `tmux new-session -A -s makidesk-…`: it attaches to that workspace's session
   or creates it. Closing the pane detaches; the tmux server keeps the session,
@@ -689,14 +694,14 @@ it running, so its shells keep working.
   reconnect.
 - **Settings ▸ Terminal.** Font family and size, the shell command (empty
   starts your login shell), the quake height (30–60% of the screen), the SSH
-  profiles and the opt-in Claude Code hooks. The terminal, its sidebar and its
+  profiles and the opt-in agent hooks. The terminal, its sidebar and its
   title bar follow the MakiDesk theme, and a change reaches the helper without a
   restart. Each theme brings its own sixteen ANSI colours;
   the named MakiDesk themes reuse the palette they were drawn from (Plum is
   Dracula, Arctic is Nord, Midnight is Tokyo Night, Caramel is Gruvbox,
   Graphite is One Dark).
-- **Not there yet.** tabs inside a pane, hooks for agents other than Claude Code,
-  and a verified IME.
+- **Not there yet.** tabs inside a pane, hooks for agents other than Claude Code
+  and Codex, and a verified IME.
 
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut

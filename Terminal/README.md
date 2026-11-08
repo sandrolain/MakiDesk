@@ -63,14 +63,17 @@ identity before the outer app.
   and exports its path as `MAKIDESK_CLI` in each pane; quote it in the shell.
   A helper started before an update does not have the new variables: quit and
   reopen it.
-- **Automatic agent hooks:** `makidesk hooks install` (or the opt-in switch in
-  Settings ▸ Terminal ▸ Agents) merges five lifecycle handlers into
-  `~/.claude/settings.json`: `UserPromptSubmit` is working, a permission or
-  input notification is waiting, and `Stop`, `StopFailure` and `SessionEnd` are
-  done. `AgentHooks` in `MakiShared` owns the merge, the marker that identifies
-  MakiDesk's handlers, and the one-time `.makidesk-backup`; `uninstall` removes
-  only those handlers. The handlers call `makidesk hook`, which exits 0 and
-  prints nothing when the session is not inside a MakiDesk pane.
+- **Automatic agent hooks:** `makidesk hooks install` (or the opt-in switches in
+  Settings ▸ Terminal ▸ Agents) merges its lifecycle handlers into
+  `~/.claude/settings.json` or `~/.codex/hooks.json`. Claude Code reports
+  `UserPromptSubmit` as working, a permission or input notification as waiting,
+  and `Stop`, `StopFailure` and `SessionEnd` as done. Codex has no notification
+  event, so `PermissionRequest` is waiting, `PreModelRequest` returns to working
+  after the approval and `Interrupt` joins `Stop` and `SessionEnd` as done. `AgentHooks` in `MakiShared` owns the merge, the marker
+  that identifies MakiDesk's handlers, and the one-time `.makidesk-backup`;
+  `uninstall` removes only those handlers. The handlers call `makidesk hook`,
+  which exits 0 and prints nothing when the session is not inside a MakiDesk
+  pane. Codex asks the user to trust new hooks with `/hooks` first.
 - **Notifications and attention:** OSC 9/777 desktop notifications are
   forwarded over the socket (`attention`) and shown as MakiDesk notices; the
   workspace gets a dot in the sidebar, cleared by selecting it or returning to
@@ -99,7 +102,7 @@ identity before the outer app.
 
 ## What is not there yet
 
-- hooks for agents other than Claude Code; tmux control mode (L3).
+- hooks for agents other than Claude Code and Codex; tmux control mode (L3).
 - **IME composition** with a real input source; the code path exists and was not
   exercised. Drag selection, scrollback scrolling and links are the same kind of
   not-yet-verified surface; find runs through Ghostty's search and image paste

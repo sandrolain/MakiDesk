@@ -230,8 +230,8 @@ does not end its sessions; it appears in the Dock and ⌘Tab while its window is
 open, and it restores the workspace layout and each shell's directory on the next
 launch. `⌘F` searches the focused pane's scrollback and shows how many matches it
 found, and an image on the clipboard is pasted as a PNG file path. An opt-in
-switch in Settings adds Claude Code hooks, so the sidebar shows which workspace
-is working, waiting or done. The helper is embedded in the app bundle.
+switch in Settings adds Claude Code and Codex hooks, so the sidebar shows which
+workspace is working, waiting or done. The helper is embedded in the app bundle.
 
 ### Notices that stay readable
 

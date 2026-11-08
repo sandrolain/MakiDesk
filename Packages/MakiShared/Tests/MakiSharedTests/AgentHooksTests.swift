@@ -37,19 +37,19 @@ final class AgentHooksTests: XCTestCase {
     }
 
     func testInstallCreatesOneHandlerPerEvent() throws {
-        let result = try AgentHooks.install(into: settings, command: command)
+        let result = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         XCTAssertTrue(result.changed)
         XCTAssertNil(result.backupURL)
         let found = try handlers(in: object())
-        XCTAssertEqual(found.count, AgentHooks.events.count)
-        XCTAssertEqual(Set(found.map(\.event)), Set(AgentHooks.events.map(\.name)))
+        XCTAssertEqual(found.count, AgentHooks.Agent.claudeCode.events.count)
+        XCTAssertEqual(Set(found.map(\.event)), Set(AgentHooks.Agent.claudeCode.events.map(\.name)))
         for item in found {
             XCTAssertEqual(item.handler["type"] as? String, "command")
             XCTAssertEqual(item.handler["command"] as? String, command)
             XCTAssertEqual(item.handler["timeout"] as? Int, 5)
             let args = try XCTUnwrap(item.handler["args"] as? [String])
             XCTAssertEqual(args.first, AgentHooks.markerArgument)
-            let state = try XCTUnwrap(AgentHooks.events.first { $0.name == item.event }?.state)
+            let state = try XCTUnwrap(AgentHooks.Agent.claudeCode.events.first { $0.name == item.event }?.state)
             XCTAssertEqual(args[1], state.rawValue)
         }
         let notification = try XCTUnwrap(found.first { $0.event == "Notification" })
@@ -58,18 +58,54 @@ final class AgentHooksTests: XCTestCase {
         XCTAssertNil(stop.matcher)
     }
 
+    func testCodexHasItsOwnFileEventsAndTimeout() throws {
+        try Data(#"{"description":"My hooks"}"#.utf8).write(to: settings)
+        let result = try AgentHooks.install(for: .codex, command: command, settingsURL: settings)
+        XCTAssertTrue(result.changed)
+
+        var root = try object()
+        XCTAssertEqual(root["description"] as? String, "My hooks")
+        let found = try handlers(in: root)
+        XCTAssertEqual(found.count, 6)
+        XCTAssertEqual(Set(found.map(\.event)),
+                       ["UserPromptSubmit", "PermissionRequest", "PreModelRequest",
+                        "Stop", "Interrupt", "SessionEnd"])
+        XCTAssertNil(found.first { $0.event == "Notification" })
+        let waiting = try XCTUnwrap(found.first { $0.event == "PermissionRequest" })
+        XCTAssertEqual((waiting.handler["args"] as? [String])?[1], "waiting")
+        XCTAssertEqual(waiting.handler["timeout"] as? Int, 3)
+        XCTAssertEqual(waiting.handler["command"] as? String, command)
+        XCTAssertEqual((waiting.handler["args"] as? [String])?.last, "Codex")
+
+        XCTAssertEqual(AgentHooks.status(for: .codex, settingsURL: settings).state, .installed)
+        _ = try AgentHooks.uninstall(from: .codex, settingsURL: settings)
+        root = try object()
+        XCTAssertEqual(root["description"] as? String, "My hooks")
+        XCTAssertNil(root["hooks"])
+    }
+
+    func testCodexKeepsAnotherAgentsFileApart() throws {
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
+        let other = directory.appendingPathComponent("hooks.json")
+        _ = try AgentHooks.install(for: .codex, command: command, settingsURL: other)
+        _ = try AgentHooks.uninstall(from: .codex, settingsURL: other)
+        XCTAssertEqual(AgentHooks.status(for: .claudeCode, settingsURL: settings).state,
+                       .installed)
+        XCTAssertEqual(AgentHooks.status(for: .codex, settingsURL: other).state, .absent)
+    }
+
     func testInstallingTwiceChangesNothing() throws {
-        _ = try AgentHooks.install(into: settings, command: command)
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         let before = try Data(contentsOf: settings)
-        let second = try AgentHooks.install(into: settings, command: command)
+        let second = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         XCTAssertFalse(second.changed)
         XCTAssertEqual(try Data(contentsOf: settings), before)
     }
 
     func testAMovedCommandReplacesTheOldPath() throws {
-        _ = try AgentHooks.install(into: settings, command: command)
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         let moved = "/Applications/MakiDesk.app/Contents/Resources/bin/makidesk"
-        let result = try AgentHooks.install(into: settings, command: moved)
+        let result = try AgentHooks.install(for: .claudeCode, command: moved, settingsURL: settings)
         XCTAssertTrue(result.changed)
         let commands = Set(try handlers(in: object()).compactMap { $0.handler["command"] as? String })
         XCTAssertEqual(commands, [moved])
@@ -77,14 +113,14 @@ final class AgentHooksTests: XCTestCase {
 
     func testTheOriginalFileIsBackedUpOnce() throws {
         try Data(#"{"model":"opus","permissions":{"allow":["Bash"]}}"#.utf8).write(to: settings)
-        let first = try AgentHooks.install(into: settings, command: command)
+        let first = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         let backup = try XCTUnwrap(first.backupURL)
         XCTAssertEqual(backup, AgentHooks.backupURL(for: settings))
         XCTAssertEqual(try Data(contentsOf: backup),
                        Data(#"{"model":"opus","permissions":{"allow":["Bash"]}}"#.utf8))
 
-        _ = try AgentHooks.uninstall(from: settings)
-        let second = try AgentHooks.install(into: settings, command: command)
+        _ = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
+        let second = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         XCTAssertNil(second.backupURL)
         XCTAssertEqual(try Data(contentsOf: backup),
                        Data(#"{"model":"opus","permissions":{"allow":["Bash"]}}"#.utf8))
@@ -106,7 +142,7 @@ final class AgentHooksTests: XCTestCase {
         """
         try Data(original.utf8).write(to: settings)
 
-        _ = try AgentHooks.install(into: settings, command: command)
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
         var root = try object()
         XCTAssertEqual(root["model"] as? String, "opus")
         var stop = try XCTUnwrap((root["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])
@@ -114,7 +150,7 @@ final class AgentHooksTests: XCTestCase {
         XCTAssertTrue(stop.contains { ($0["hooks"] as? [[String: Any]])?
             .contains { $0["command"] as? String == "/usr/bin/true" } ?? false })
 
-        _ = try AgentHooks.uninstall(from: settings)
+        _ = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
         root = try object()
         XCTAssertEqual(root["model"] as? String, "opus")
         stop = try XCTUnwrap((root["hooks"] as? [String: Any])?["Stop"] as? [[String: Any]])
@@ -129,7 +165,7 @@ final class AgentHooksTests: XCTestCase {
         try Data("""
         {"hooks":{"SomeOldEvent":[{"hooks":[{"type":"command","command":"/x/makidesk","args":["hook","done"]}]}]}}
         """.utf8).write(to: settings)
-        let result = try AgentHooks.uninstall(from: settings)
+        let result = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
         XCTAssertTrue(result.changed)
         XCTAssertNil(try object()["hooks"])
     }
@@ -148,7 +184,7 @@ final class AgentHooksTests: XCTestCase {
         }
         """
         try Data(original.utf8).write(to: settings)
-        let result = try AgentHooks.uninstall(from: settings)
+        let result = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
         XCTAssertTrue(result.changed)
         let found = try handlers(in: object())
         XCTAssertEqual(found.count, 1)
@@ -156,29 +192,29 @@ final class AgentHooksTests: XCTestCase {
     }
 
     func testTheHooksKeyDisappearsWhenNothingIsLeft() throws {
-        _ = try AgentHooks.install(into: settings, command: command)
-        _ = try AgentHooks.uninstall(from: settings)
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
+        _ = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
         XCTAssertNil(try object()["hooks"])
     }
 
     func testUninstallOnAMissingFileIsANoOp() throws {
-        let result = try AgentHooks.uninstall(from: settings)
+        let result = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
         XCTAssertFalse(result.changed)
         XCTAssertFalse(FileManager.default.fileExists(atPath: settings.path))
     }
 
     func testStatusFollowsTheInstallation() throws {
-        XCTAssertEqual(AgentHooks.status(in: settings).state, .absent)
+        XCTAssertEqual(AgentHooks.status(for: .claudeCode, settingsURL: settings).state, .absent)
 
-        _ = try AgentHooks.install(into: settings, command: command)
-        var status = AgentHooks.status(in: settings)
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
+        var status = AgentHooks.status(for: .claudeCode, settingsURL: settings)
         XCTAssertEqual(status.state, .installed)
-        XCTAssertEqual(status.present, AgentHooks.events.count)
-        XCTAssertEqual(status.expected, AgentHooks.events.count)
+        XCTAssertEqual(status.present, AgentHooks.Agent.claudeCode.events.count)
+        XCTAssertEqual(status.expected, AgentHooks.Agent.claudeCode.events.count)
         XCTAssertEqual(status.command, command)
 
-        _ = try AgentHooks.uninstall(from: settings)
-        status = AgentHooks.status(in: settings)
+        _ = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
+        status = AgentHooks.status(for: .claudeCode, settingsURL: settings)
         XCTAssertEqual(status.state, .absent)
         XCTAssertEqual(status.present, 0)
     }
@@ -187,7 +223,7 @@ final class AgentHooksTests: XCTestCase {
         try Data("""
         {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/x/makidesk","args":["hook","done"]}]}]}}
         """.utf8).write(to: settings)
-        let status = AgentHooks.status(in: settings)
+        let status = AgentHooks.status(for: .claudeCode, settingsURL: settings)
         XCTAssertEqual(status.state, .partial)
         XCTAssertEqual(status.present, 1)
     }
@@ -195,18 +231,18 @@ final class AgentHooksTests: XCTestCase {
     func testInvalidJSONIsNeverOverwritten() throws {
         let broken = Data("{ not json".utf8)
         try broken.write(to: settings)
-        XCTAssertThrowsError(try AgentHooks.install(into: settings, command: command)) { error in
+        XCTAssertThrowsError(try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)) { error in
             XCTAssertEqual(error as? AgentHooks.HookError,
                            .invalidSettings(settings.path))
         }
         XCTAssertEqual(try Data(contentsOf: settings), broken)
-        XCTAssertEqual(AgentHooks.status(in: settings).state, .unreadable)
+        XCTAssertEqual(AgentHooks.status(for: .claudeCode, settingsURL: settings).state, .unreadable)
     }
 
     func testAMalformedHooksValueIsRefused() throws {
         let original = Data(#"{"hooks":"nope"}"#.utf8)
         try original.write(to: settings)
-        XCTAssertThrowsError(try AgentHooks.install(into: settings, command: command)) { error in
+        XCTAssertThrowsError(try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)) { error in
             XCTAssertEqual(error as? AgentHooks.HookError,
                            .invalidHooks(settings.path))
         }
@@ -214,7 +250,7 @@ final class AgentHooksTests: XCTestCase {
     }
 
     func testARelativeCommandIsRefused() {
-        XCTAssertThrowsError(try AgentHooks.install(into: settings, command: "bin/makidesk")) { error in
+        XCTAssertThrowsError(try AgentHooks.install(for: .claudeCode, command: "bin/makidesk", settingsURL: settings)) { error in
             guard case .writeFailed = error as? AgentHooks.HookError else {
                 return XCTFail("unexpected error: \(error)")
             }
@@ -223,9 +259,9 @@ final class AgentHooksTests: XCTestCase {
     }
 
     func testAConfigWithOnlyOurHooksRoundTrips() throws {
-        _ = try AgentHooks.install(into: settings, command: command)
-        _ = try AgentHooks.uninstall(from: settings)
-        let status = AgentHooks.status(in: settings)
+        _ = try AgentHooks.install(for: .claudeCode, command: command, settingsURL: settings)
+        _ = try AgentHooks.uninstall(from: .claudeCode, settingsURL: settings)
+        let status = AgentHooks.status(for: .claudeCode, settingsURL: settings)
         XCTAssertEqual(status.state, .absent)
         XCTAssertEqual(status.present, 0)
     }

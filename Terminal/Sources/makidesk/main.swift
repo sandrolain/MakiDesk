@@ -19,14 +19,15 @@ func fail(_ message: String, code: Int32 = 1) -> Never {
 let usage = """
 usage: makidesk status working|waiting|done [--workspace <uuid>] [--title <text>]
        makidesk hook working|waiting|done [--title <text>]
-       makidesk hooks status|install|uninstall [--settings <path>] [--command <path>]
+       makidesk hooks status|install|uninstall [--agent claude|codex] [--settings <path>] [--command <path>]
 
 status  reports an agent state; the workspace defaults to
         $MAKIDESK_WORKSPACE_ID, which the terminal sets in every pane.
 hook    is the quiet form used by installed agent hooks: same message, but it
         does nothing and exits 0 when there is no MakiDesk pane or helper.
 hooks   installs (or removes) MakiDesk's lifecycle hooks in a coding agent's
-        settings file. Nothing is installed until you ask.
+        settings file (Claude Code by default, or Codex). Nothing is installed
+        until you ask.
 """
 
 /// Sends one frame to the running helper. Returns false when the socket is
@@ -152,16 +153,17 @@ func commandPath(override: String?) -> String? {
     return FileManager.default.isExecutableFile(atPath: running.path) ? running.path : nil
 }
 
-func describe(_ status: AgentHooks.Status, settings: URL) -> String {
+func describe(_ status: AgentHooks.Status, agent: AgentHooks.Agent,
+              settings: URL) -> String {
     switch status.state {
     case .absent:
-        return "\(AgentHooks.Agent.claudeCode.displayName) hooks: not installed"
+        return "\(agent.displayName) hooks: not installed (\(settings.path))"
     case .partial:
-        return "\(AgentHooks.Agent.claudeCode.displayName) hooks: \(status.present) of \(status.expected) events installed"
+        return "\(agent.displayName) hooks: \(status.present) of \(status.expected) events installed"
     case .installed:
-        return "\(AgentHooks.Agent.claudeCode.displayName) hooks: installed (\(status.present) events) at \(status.command ?? "an unknown path")"
+        return "\(agent.displayName) hooks: installed (\(status.present) events) at \(status.command ?? "an unknown path")"
     case .unreadable:
-        return "\(AgentHooks.Agent.claudeCode.displayName) hooks: cannot read \(settings.path) — \(status.problem ?? "unknown error")"
+        return "\(agent.displayName) hooks: cannot read \(settings.path) — \(status.problem ?? "unknown error")"
     }
 }
 
@@ -170,11 +172,20 @@ func runHooks(_ arguments: ArraySlice<String>) -> Never {
         print(usage)
         exit(2)
     }
-    var settings = AgentHooks.Agent.claudeCode.settingsURL
+    var agent = AgentHooks.Agent.claudeCode
+    var settings: URL?
     var override: String?
     var index = arguments.startIndex + 1
     while index < arguments.endIndex {
         switch arguments[index] {
+        case "--agent":
+            index += 1
+            guard index < arguments.endIndex else { fail("--agent needs a value", code: 2) }
+            guard let parsed = AgentHooks.Agent(rawValue: arguments[index])
+                    ?? (arguments[index] == "claude-code" ? .claudeCode : nil) else {
+                fail("unknown agent '\(arguments[index])'; expected claude or codex", code: 2)
+            }
+            agent = parsed
         case "--settings":
             index += 1
             guard index < arguments.endIndex else { fail("--settings needs a value", code: 2) }
@@ -188,24 +199,26 @@ func runHooks(_ arguments: ArraySlice<String>) -> Never {
         }
         index += 1
     }
+    let url = settings ?? agent.settingsURL
 
     switch action {
     case "status":
-        print(describe(AgentHooks.status(in: settings), settings: settings))
+        let status = AgentHooks.status(for: agent, settingsURL: url)
+        print(describe(status, agent: agent, settings: url))
         exit(0)
     case "install":
         guard let path = commandPath(override: override) else {
             fail("the makidesk CLI is not available; open the terminal once and retry")
         }
         do {
-            let result = try AgentHooks.install(into: settings, command: path)
+            let result = try AgentHooks.install(for: agent, command: path, settingsURL: url)
             if result.changed {
-                print("Installed \(AgentHooks.events.count) hooks in \(settings.path)")
+                print("Installed \(agent.events.count) \(agent.displayName) hooks in \(url.path)")
                 if let backup = result.backupURL {
                     print("Kept the previous file at \(backup.path)")
                 }
             } else {
-                print("Hooks already installed in \(settings.path)")
+                print("\(agent.displayName) hooks already installed in \(url.path)")
             }
             exit(0)
         } catch {
@@ -213,14 +226,14 @@ func runHooks(_ arguments: ArraySlice<String>) -> Never {
         }
     case "uninstall":
         do {
-            let result = try AgentHooks.uninstall(from: settings)
+            let result = try AgentHooks.uninstall(from: agent, settingsURL: url)
             if result.changed {
-                print("Removed MakiDesk hooks from \(settings.path)")
+                print("Removed MakiDesk hooks from \(url.path)")
                 if let backup = result.backupURL {
                     print("Kept the previous file at \(backup.path)")
                 }
             } else {
-                print("No MakiDesk hooks in \(settings.path)")
+                print("No MakiDesk hooks in \(url.path)")
             }
             exit(0)
         } catch {

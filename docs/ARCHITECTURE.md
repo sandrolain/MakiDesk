@@ -358,19 +358,24 @@ hook must not block a prompt and `UserPromptSubmit` stdout would join the
 model's context. `hooks status|install|uninstall` manages the opt-in Claude Code
 hooks described below. Panes receive `MAKIDESK_CLI` with the stable link's path.
 
-`AgentHooks` in `MakiShared` owns the installation: it parses
-`~/.claude/settings.json` as a JSON object, leaves every key it does not own
-alone, and identifies its own handlers by the `hook` marker in their `args`, so
-a moved app can replace stale paths and removal never takes a user's handler
-with it. Five events map to the sidebar states — `UserPromptSubmit` →
-`working`, a `Notification` matcher (`permission_prompt`, the elicitation
-dialogs, `agent_needs_input`) → `waiting`, and `Stop`, `StopFailure` and
-`SessionEnd` → `done` — each as an exec-form command with the stable CLI path
-and a five-second timeout. The first modification copies the original file to
-`settings.json.makidesk-backup`; a file that is not valid JSON or whose `hooks`
-value is not an object is refused and left untouched. Settings ▸ Terminal ▸
-Agents reads that state off the main thread, performs the merge on a background
-task and shows the resulting event count.
+`AgentHooks` in `MakiShared` owns the installation for **Claude Code** and
+**Codex**: it parses the agent's settings file as a JSON object
+(`~/.claude/settings.json` or `~/.codex/hooks.json`), leaves every key it does
+not own alone, and identifies its own handlers by the `hook` marker in their
+`args`, so a moved app can replace stale paths and removal never takes a user's
+handler with it. Claude Code maps `UserPromptSubmit` → `working`, a
+`Notification` matcher (`permission_prompt`, the elicitation dialogs,
+`agent_needs_input`) → `waiting`, and `Stop`, `StopFailure` and `SessionEnd` →
+`done`. Codex has no notification event, so `PermissionRequest` is `waiting`,
+`PreModelRequest` returns to `working` once the approval is answered, and
+`Interrupt` joins `Stop` and `SessionEnd` as `done`; its `SessionEnd` ceiling
+makes the handler timeout three seconds instead of five. Each is an exec-form
+command with the stable CLI path. The first install copies the original file to
+`<name>.makidesk-backup`; a file that is not valid JSON or whose `hooks` value
+is not an object is refused and left untouched. Codex reviews non-managed hooks
+before their first run, so its rows say to trust them with `/hooks`. Settings ▸
+Terminal ▸ Agents gives each agent a row that reads that state off the main
+thread and performs the merge on a background task.
 
 `TerminalController` watches `NSWorkspace.didActivateApplicationNotification`.
 While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`

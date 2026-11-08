@@ -194,11 +194,6 @@ struct SettingsView: View {
     @State private var notificationsPage: NotificationsPage = .placement
     @State private var showResetConfirmation = false
     @State private var excludedAppsText = ""
-    @State private var agentHooksStatus = AgentHooks.Status(state: .absent, present: 0,
-                                                           expected: AgentHooks.events.count,
-                                                           command: nil, problem: nil)
-    @State private var agentHooksError: String?
-    @State private var agentHooksBusy = false
     /// Owned here, not by the section, so switching sections does not throw
     /// away a draft.
     @StateObject private var dropzoneEditor = DropzoneEditorModel()
@@ -1135,100 +1130,17 @@ struct SettingsView: View {
             agentHooksSection
             sshProfilesSection
         }
-        .task { await refreshAgentHooks() }
     }
 
-    /// Opt-in automation of the sidebar's agent dot (F3 L2). The switch writes
-    /// to the agent's own settings file, so it says so, and it does not exist
-    /// to surprise anyone: nothing happens until it is turned on here.
-    @ViewBuilder
+    /// Opt-in automation of the sidebar's agent dot (F3 L2). Each switch writes
+    /// to that agent's own settings file, so the row says which one, and
+    /// nothing happens until it is turned on here.
     private var agentHooksSection: some View {
         SettingsSection("Agents") {
-            Toggle("Report Claude Code activity to the sidebar", isOn: Binding(
-                get: { agentHooksStatus.state == .installed },
-                set: { setAgentHooks($0) }
-            ))
-            .disabled(agentHooksBusy || agentHooksStatus.state == .unreadable)
-
-            HStack(spacing: 8) {
-                if agentHooksBusy {
-                    ProgressView().controlSize(.small)
-                }
-                Text(agentHooksDetail)
-                    .font(.caption)
-                    .foregroundStyle(theme.subtext)
-                Spacer(minLength: 0)
-                Button("Reveal settings") {
-                    let url = AgentHooks.Agent.claudeCode.settingsURL
-                    let folder = url.deletingLastPathComponent()
-                    if FileManager.default.fileExists(atPath: url.path) {
-                        NSWorkspace.shared.activateFileViewerSelecting([url])
-                    } else if FileManager.default.fileExists(atPath: folder.path) {
-                        NSWorkspace.shared.open(folder)
-                    }
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
+            ForEach(AgentHooks.Agent.allCases, id: \.self) { agent in
+                AgentHookRow(agent: agent)
             }
-            if let agentHooksError {
-                Text(agentHooksError)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-            caption("On: five small hooks in ~/.claude/settings.json report working, waiting and done for a session started in a MakiDesk pane. The file is merged, not replaced, a one-time backup is kept next to it as settings.json.makidesk-backup, and removing the hooks takes out only the ones MakiDesk added. Nothing is written until you switch this on.")
-        }
-    }
-
-    private var agentHooksDetail: String {
-        let status = agentHooksStatus
-        switch status.state {
-        case .absent:
-            return "Not installed."
-        case .partial:
-            return "\(status.present) of \(status.expected) events installed."
-        case .installed:
-            return "Installed (\(status.present) events) at \(status.command ?? "an unknown path")."
-        case .unreadable:
-            return status.problem ?? "The settings file cannot be read."
-        }
-    }
-
-    @MainActor
-    private func refreshAgentHooks() async {
-        let url = AgentHooks.Agent.claudeCode.settingsURL
-        let status = await Task.detached(priority: .utility) {
-            AgentHooks.status(in: url)
-        }.value
-        agentHooksStatus = status
-    }
-
-    @MainActor
-    private func setAgentHooks(_ installed: Bool) {
-        guard agentHooksBusy == false else { return }
-        let url = AgentHooks.Agent.claudeCode.settingsURL
-        let command = TerminalController.shared.agentHookCommandPath
-        if installed, command == nil {
-            agentHooksError = "Open the terminal once, then try again: the hooks call the makidesk command the helper installs at launch."
-            return
-        }
-        agentHooksBusy = true
-        agentHooksError = nil
-        Task { @MainActor in
-            let failure: String? = await Task.detached(priority: .userInitiated) {
-                do {
-                    if installed {
-                        _ = try AgentHooks.install(into: url, command: command ?? "")
-                    } else {
-                        _ = try AgentHooks.uninstall(from: url)
-                    }
-                    return nil
-                } catch {
-                    return error.localizedDescription
-                }
-            }.value
-            agentHooksBusy = false
-            agentHooksError = failure
-            await refreshAgentHooks()
+            caption("On: a few small hooks report working, waiting and done for an agent session started in a MakiDesk pane. The file is merged, not replaced, a one-time backup is kept next to it as its name plus .makidesk-backup, and removing the hooks takes out only the ones MakiDesk added. Codex asks you to review and trust new hooks once with /hooks before they run. Nothing is written until you switch this on.")
         }
     }
 
@@ -1502,6 +1414,119 @@ struct SettingsView: View {
 /// A themed replacement for the grouped `Form` boxes: a title, a card in the
 /// theme surface colour and the rows inside it. It keeps the native controls
 /// (switches, popups, sliders) and only paints around them.
+/// One agent in Settings ▸ Terminal ▸ Agents: its state, its switch and the
+/// file it writes. Each row owns its asynchronous read and merge so the two
+/// agents cannot block each other or the main thread.
+private struct AgentHookRow: View {
+    let agent: AgentHooks.Agent
+
+    @Environment(\.paletteTheme) private var theme
+    @State private var status: AgentHooks.Status
+    @State private var error: String?
+    @State private var busy = false
+
+    init(agent: AgentHooks.Agent) {
+        self.agent = agent
+        _status = State(initialValue: AgentHooks.Status(
+            state: .absent, present: 0, expected: agent.events.count,
+            command: nil, problem: nil))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Report \(agent.displayName) activity to the sidebar", isOn: Binding(
+                get: { status.state == .installed },
+                set: { setHooks($0) }
+            ))
+            .disabled(busy || status.state == .unreadable)
+
+            HStack(spacing: 8) {
+                if busy {
+                    ProgressView().controlSize(.small)
+                }
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(theme.subtext)
+                Spacer(minLength: 0)
+                Button("Reveal settings") { reveal() }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+            }
+            if let error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .task { await refresh() }
+    }
+
+    private var file: String {
+        (agent.settingsURL.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    private var detail: String {
+        switch status.state {
+        case .absent:
+            return "Not installed: \(file)"
+        case .partial:
+            return "\(status.present) of \(status.expected) events installed in \(file)"
+        case .installed:
+            return "Installed (\(status.present) events) at \(status.command ?? "an unknown path")"
+        case .unreadable:
+            return status.problem ?? "The settings file cannot be read."
+        }
+    }
+
+    private func reveal() {
+        let url = agent.settingsURL
+        let folder = url.deletingLastPathComponent()
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else if FileManager.default.fileExists(atPath: folder.path) {
+            NSWorkspace.shared.open(folder)
+        }
+    }
+
+    @MainActor
+    private func refresh() async {
+        let agent = agent
+        status = await Task.detached(priority: .utility) {
+            AgentHooks.status(for: agent)
+        }.value
+    }
+
+    @MainActor
+    private func setHooks(_ installed: Bool) {
+        guard busy == false else { return }
+        let agent = agent
+        let command = TerminalController.shared.agentHookCommandPath
+        if installed, command == nil {
+            error = "Open the terminal once, then try again: the hooks call the makidesk command the helper installs at launch."
+            return
+        }
+        busy = true
+        error = nil
+        Task { @MainActor in
+            let failure: String? = await Task.detached(priority: .userInitiated) {
+                do {
+                    if installed {
+                        _ = try AgentHooks.install(for: agent, command: command ?? "")
+                    } else {
+                        _ = try AgentHooks.uninstall(from: agent)
+                    }
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            busy = false
+            error = failure
+            await refresh()
+        }
+    }
+}
+
 struct SettingsSection<Content: View>: View {
     @Environment(\.paletteTheme) private var theme
 
