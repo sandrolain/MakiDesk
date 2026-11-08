@@ -83,8 +83,9 @@ identity before the outer app.
 - **Notifications and attention:** OSC 9/777 desktop notifications are
   forwarded over the socket (`attention`) and shown as MakiDesk notices; the
   workspace gets a dot in the sidebar, cleared by selecting it or returning to
-  the window. A failed or long command (OSC 133) marks it too. Nothing is
-  written to disk.
+  the window. A failed or long command (OSC 133) marks it too. A terminal bell
+  beeps and marks its workspace when that workspace is not in front. Nothing
+  is written to disk.
 - **Two-app boundary:** `MakiShared` (framing and messages) and a Unix socket
   (`0600`) with a handshake, peer pid check, retries and notices. The helper is
   `.regular` while its window is open; signing is inside-out.

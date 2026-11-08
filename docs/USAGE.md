@@ -673,8 +673,9 @@ it running, so its shells keep working.
   instead of a bare system alert. The workspace also gets a dot in the sidebar;
   selecting it, or bringing the window back, clears the dot. A command that
   fails or runs for two seconds or more leaves the same dot when the shell
-  reports command boundaries (OSC 133). If MakiDesk is not running, the HUD
-  notice is simply skipped.
+  reports command boundaries (OSC 133). A terminal bell beeps; if the workspace that
+  rang is not in front, it gets the dot too. If MakiDesk is
+  not running, the HUD notice is simply skipped.
 - **Agent status.** The helper ships a tiny `makidesk` CLI, exposed as
   `$MAKIDESK_CLI` (a stable link at
   `~/Library/Application Support/MakiDesk/Terminal/bin/makidesk`). A hook or

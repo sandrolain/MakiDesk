@@ -387,6 +387,11 @@ window is always visible, and before that first report the ordinary on-screen
 state is trusted (virtual displays may never raise the bit). A surface created
 while the pane is off screen replays the flag on creation.
 
+A terminal bell still beeps, and `GhosttyRuntime.onBell` gives the controller
+the ringing surface: `markAttention` adds the workspace dot when that workspace
+is not the one in front. It shares the dot and its clearing rule with shell
+notifications and a failed or long command.
+
 The helper also ships `Contents/Resources/bin/makidesk`, a one-shot client for
 the same socket. `status working|waiting|done [--title …]` reads
 `MAKIDESK_WORKSPACE_ID`, sends one `agentStatus` frame and exits; the server

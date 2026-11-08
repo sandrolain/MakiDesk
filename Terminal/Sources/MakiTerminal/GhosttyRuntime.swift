@@ -24,6 +24,9 @@ final class GhosttyRuntime {
     /// A desktop notification from the shell (OSC 9/777), forwarded to
     /// MakiDesk's notices and to the workspace's attention mark.
     var onNotification: ((TerminalSurfaceView?, String, String) -> Void)?
+    /// A terminal bell. The helper beeps and marks the workspace when the
+    /// ringing pane is not the one in front.
+    var onBell: ((TerminalSurfaceView?) -> Void)?
     /// A finished command, when the shell reports it (OSC 133). A failure or a
     /// long command marks its workspace even without a notification.
     var onCommandFinished: ((TerminalSurfaceView?, Int16, UInt64) -> Void)?
@@ -187,6 +190,9 @@ final class GhosttyRuntime {
             return true
         case GHOSTTY_ACTION_RING_BELL:
             NSSound.beep()
+            DispatchQueue.main.async {
+                GhosttyRuntime.shared?.onBell?(view)
+            }
             return true
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
             let notification = action.action.desktop_notification

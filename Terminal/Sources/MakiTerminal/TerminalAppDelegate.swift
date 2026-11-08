@@ -51,6 +51,9 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
             self?.server?.sendAttention(title: title, detail: body)
             self?.terminal?.markAttention(for: view)
         }
+        runtime.onBell = { [weak self] view in
+            self?.terminal?.markAttention(for: view)
+        }
         runtime.onCommandFinished = { [weak self] view, code, duration in
             guard CommandAttention.deservesAttention(exitCode: code,
                                                      durationNanos: duration) else { return }
