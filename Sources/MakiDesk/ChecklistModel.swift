@@ -81,6 +81,18 @@ struct Checklist: Equatable, Sendable {
         return true
     }
 
+    /// Drops one item at another's slot, for a mouse drag: the dragged item
+    /// takes the row it was dropped on and the row it covered steps aside.
+    @discardableResult
+    mutating func move(_ id: UUID, to index: Int) -> Bool {
+        guard let from = items.firstIndex(where: { $0.id == id }),
+              from != index,
+              items.indices.contains(index) else { return false }
+        let item = items.remove(at: from)
+        items.insert(item, at: min(index, items.count))
+        return true
+    }
+
     /// Takes the ticked items away and says how many went.
     @discardableResult
     mutating func clearCompleted() -> Int {
@@ -98,6 +110,12 @@ struct Checklist: Equatable, Sendable {
     }
 
     var isFull: Bool { items.count >= Self.maxItems }
+
+    /// The whole list as plain text, one item per line, in the visible order:
+    /// what the card's Copy action puts on the clipboard.
+    var copyText: String {
+        items.map(\.text).joined(separator: "\n")
+    }
 
     /// Trims the ends, keeps the line breaks the user typed, drops the ones
     /// that only add blank space, and caps the length.

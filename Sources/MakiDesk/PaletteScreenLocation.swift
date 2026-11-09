@@ -9,7 +9,7 @@ enum PaletteScreenLocation: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .focusedWindow: return "Focused window"
+        case .focusedWindow: return "Active display"
         case .mouse: return "Mouse pointer"
         }
     }
@@ -25,19 +25,24 @@ enum PaletteScreenLocation: String, CaseIterable, Identifiable {
     }
 
     /// The display this choice means, with the palette's fallback. One rule for
-    /// the notices, the checklist and the countdown card.
+    /// the notices, the checklist, the countdown card and the panels that open
+    /// on demand: the last display that saw a window focus or the pointer.
     @MainActor
     func targetScreen() -> NSScreen? {
         let screens = NSScreen.screens
         guard screens.isEmpty == false else { return nil }
-        let focusedID = NSScreen.main.flatMap(Self.displayID)
-        let focusedIndex = focusedID.flatMap { id in
-            screens.firstIndex { Self.displayID($0) == id }
+        if self == .mouse {
+            let focusedID = NSScreen.main.flatMap(Self.displayID)
+            let focusedIndex = focusedID.flatMap { id in
+                screens.firstIndex { Self.displayID($0) == id }
+            }
+            let index = screenIndex(frames: screens.map(\.frame),
+                                    focusedIndex: focusedIndex,
+                                    mouse: NSEvent.mouseLocation)
+            return index.map { screens[$0] }
         }
-        let index = screenIndex(frames: screens.map(\.frame),
-                                focusedIndex: focusedIndex,
-                                mouse: NSEvent.mouseLocation)
-        return index.map { screens[$0] } ?? NSScreen.main ?? screens.first
+        if let tracked = ActiveDisplayTracker.shared.currentScreen { return tracked }
+        return NSScreen.main ?? screens.first
     }
 
     static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {

@@ -96,6 +96,36 @@ final class ChecklistTests: XCTestCase {
         XCTAssertEqual(list.items.map(\.text), ["one", "two"])
     }
 
+    func testDraggingLandsOnTheDroppedRow() {
+        var list = Checklist()
+        list.add("one")
+        list.add("two")
+        list.add("three")
+        list.add("four")
+        let first = list.items[0].id
+        let third = list.items[2].id
+        // Down: the item takes the row it was dropped on, not one past it.
+        XCTAssertTrue(list.move(first, to: 2))
+        XCTAssertEqual(list.items.map(\.text), ["two", "three", "one", "four"])
+        // Up: the same rule in the other direction.
+        let last = list.items[3].id
+        XCTAssertTrue(list.move(last, to: 0))
+        XCTAssertEqual(list.items.map(\.text), ["four", "two", "three", "one"])
+        // Dropping on itself or outside the list changes nothing.
+        XCTAssertFalse(list.move(last, to: 0))
+        XCTAssertFalse(list.move(last, to: 99))
+        XCTAssertEqual(list.items.map(\.text), ["four", "two", "three", "one"])
+    }
+
+    func testTheWholeListCopiesAsPlainLines() {
+        var list = Checklist()
+        list.add("one")
+        list.add("two\nwith a second line")
+        list.add("three")
+        XCTAssertEqual(list.copyText, "one\ntwo\nwith a second line\nthree")
+        XCTAssertEqual(Checklist().copyText, "")
+    }
+
     func testRemovingOneItemLeavesTheRest() {
         var list = Checklist()
         list.add("one")

@@ -28,6 +28,7 @@ final class TimerController {
     private var layoutWork: DispatchWorkItem?
     private var revealWork: DispatchWorkItem?
     private var started = false
+    private var activeDisplayToken: UUID?
     private let store = TimerStore()
 
     private init() {}
@@ -45,6 +46,9 @@ final class TimerController {
         guard !started else { return }
         started = true
         observeMenus()
+        activeDisplayToken = ActiveDisplayTracker.shared.addObserver { [weak self] _ in
+            self?.scheduleLayout()
+        }
         applySettings()
         restore()
     }
@@ -53,6 +57,10 @@ final class TimerController {
     func shutdown() {
         guard started else { return }
         store.flush(board.timers)
+        if let activeDisplayToken {
+            ActiveDisplayTracker.shared.removeObserver(activeDisplayToken)
+            self.activeDisplayToken = nil
+        }
         for observer in menuObservers { NotificationCenter.default.removeObserver(observer) }
         menuObservers.removeAll()
     }

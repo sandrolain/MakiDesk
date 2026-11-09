@@ -44,9 +44,13 @@ through Accessibility.
    shortcuts below from any app.
 
 Windows opened by a shortcut or the menu — Notes, Screenshots, Keyboard
-Shortcuts, Notification History — appear on the display where the focused
-window is. If they were last used on another display, they open centered on
-the active one; otherwise they keep their last position.
+Shortcuts, Notification History — appear on the active display. The cards that
+stay on screen (checklist, countdowns, mini map) and the panels that open on
+demand (switcher, search, notices) follow the **active display** too: the
+monitor of the last window focus or pointer move, so moving to a display and
+clicking or pointing there is enough to bring them along. If they were last
+used on another display, they open centered on the active one; otherwise they
+keep their last position.
 
 The permissions are standard macOS TCC permissions: MakiDesk cannot grant them
 itself, and you can revoke them at any time in **System Settings ▸ Privacy &
@@ -463,15 +467,26 @@ value: pointing at the card or typing in it brings it to 100% until the pointer
 leaves, so it can stay faint in the corner and become readable the moment you
 use it.
 
-- Type an item and press Return; click the circle to tick it (the text gets a
-  line through), the arrows to move it and the ✕ to delete it. **Clear
-  completed** takes every ticked item away. Items hold up to 200 characters and
-  keep the line breaks you type; the list stops at 50.
-- Ticking does not take the keyboard from the app you are in: the card only
-  takes the keys when you click the add field, and `Esc` gives them straight
-  back. The card is as big as its content — height follows the list — and
-  nothing outside it is covered, so clicks on the app under it still reach the
-  app.
+- Type an item and press Return; the add field appears only while the card has
+  the keys, so the resting card keeps a single line of height. Click anywhere on
+  the list to take the keys and open it. Click the circle to tick an item (the
+  text gets a line through), drag the row itself to reorder it, and the ✕ on the
+  row to delete it. When something is ticked, the trash appears in the add row
+  and clears only the completed items. Items hold up to 200 characters and keep
+  the line breaks you type; the list stops at 50.
+- The text of an item can be copied from its right-click menu with **Copy
+  Item**, or the whole list at once with **Copy All Items**. Dragging a row onto
+  another moves it to that slot, and the same moves are in the row's context
+  menu and in the VoiceOver actions.
+- Ticking does not take the keyboard from the app you are in: clicking the list
+  does, and `Esc` closes the card (or hides it with `⌃⌥L`, the menu or the
+  toolbar). The keys go back to the app you came from. The card is as big as its
+  content — height follows the list — and nothing outside it is covered, so
+  clicks on the app under it still reach the app.
+- The card follows the **active display**, like the countdown card, the mini map,
+  the switcher and the search box: it opens on the monitor of the last window
+  focus or pointer move and moves there when that changes. The corner in
+  **Settings ▸ Panels** is kept on whichever display is active.
 - The mini-map keeps out of the card's way: when both belong in the same
   corner, the map appears below the card instead of on top of it.
 - The items are written to `~/Library/Application Support/MakiDesk/checklist.json`
@@ -504,9 +519,11 @@ named after what it is (`25m`, `8:30`).
   card, so the menu keeps still while it is open.
 - The card sits in the corner chosen in **Settings ▸ Panels ▸ Timers**, on the
   same edge margin as a tiled window, above the other apps and clear of the
-  checklist. It is not clickable: bringing the pointer near makes it fade away,
-  and it comes back once the pointer is well clear of it, so it never covers
-  what you are reading. Pause, resume and delete from the timers menu.
+  checklist. It follows the active display (the last window focus or pointer
+  move), like the checklist and the mini map. It is not clickable: bringing the
+  pointer near makes it fade away, and it comes back once the pointer is well
+  clear of it, so it never covers what you are reading. Pause, resume and delete
+  from the timers menu.
 - When a timer runs out it posts a notice that stays until you click it away,
   even if the card was hidden, and plays a system sound. The notice offers **5
   more minutes** as a one-click action. **Settings ▸ Panels ▸
@@ -1184,7 +1201,7 @@ Notices appear on the display and in the corner chosen in
 - A notice can carry **actions**: the timer's *Time's up* offers **5 more
   minutes**, and using an action closes the notice.
 - **Settings ▸ Notifications** sets placement (bottom or top, centre or right),
-  the display (focused window or pointer), the base duration, the text size
+  the display (active display or pointer), the base duration, the text size
   (the icon, padding and corners grow with it), compact mode, the VoiceOver
   announcement, sticky errors and whether to keep a history. One **Preview**
   button per state shows it with the current placement, size and theme; the
@@ -1216,7 +1233,9 @@ first one.
   and display), the window switcher/search appearance (including the groups
   column and its announcements), the utility bar (pointer reveal, height,
   labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
-  macOS saves, and text recognition quality and correction.
+  macOS saves, and text recognition quality and correction. The display choice
+  *Active display* is the monitor of the last window focus or pointer move;
+  *Mouse pointer* pins a card to wherever the pointer is at that moment.
 - **Terminal** — font family and size, shell command, quake height and SSH
   profiles; the terminal follows the theme chosen in Panels ▸ Look and applies
   changes without a restart.

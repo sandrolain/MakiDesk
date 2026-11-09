@@ -1,3 +1,4 @@
+import CoreGraphics
 import XCTest
 @testable import MakiDesk
 
@@ -40,5 +41,26 @@ final class PaletteScreenLocationTests: XCTestCase {
         for location in PaletteScreenLocation.allCases {
             XCTAssertNil(location.screenIndex(frames: [], focusedIndex: 0, mouse: .zero))
         }
+    }
+
+    func testTheNewestOfFocusAndPointerChoosesTheDisplay() {
+        let first: CGDirectDisplayID = 1
+        let second: CGDirectDisplayID = 2
+        let start = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(ActiveDisplaySelection.mostRecent(
+            focusID: first, focusAt: start,
+            mouseID: second, mouseAt: start.addingTimeInterval(1)), second)
+        XCTAssertEqual(ActiveDisplaySelection.mostRecent(
+            focusID: first, focusAt: start.addingTimeInterval(2),
+            mouseID: second, mouseAt: start.addingTimeInterval(1)), first)
+        XCTAssertEqual(ActiveDisplaySelection.mostRecent(
+            focusID: nil, focusAt: .distantPast,
+            mouseID: second, mouseAt: start), second)
+        XCTAssertEqual(ActiveDisplaySelection.mostRecent(
+            focusID: first, focusAt: start,
+            mouseID: nil, mouseAt: .distantPast), first)
+        XCTAssertNil(ActiveDisplaySelection.mostRecent(
+            focusID: nil, focusAt: .distantPast,
+            mouseID: nil, mouseAt: .distantPast))
     }
 }

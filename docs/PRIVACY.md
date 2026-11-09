@@ -52,6 +52,11 @@ identity asks again. A Developer ID-signed public release behaves best here.
   times a second to decide whether the pointer is resting in the strip under the
   menu bar and whether it is still on the open bar. Nothing is recorded or
   logged, and the sampling stops the moment the feature is turned off.
+- **The pointer position**, from a global mouse-move monitor, to know which
+  display is active: the cards and panels that follow the last window focus or
+  pointer move need the display, not the coordinates. Only the display changes
+  are remembered in memory; the position is never recorded, logged or written,
+  and it is not used for anything else.
 - **The pointer position**, while the pointer effects are in use: read once for
   `⌃⌥⇧P`, and through the same global mouse events while a presentation effect
   is on, to place a transparent panel around the pointer. It is used in memory

@@ -1765,12 +1765,7 @@ final class WindowPalette {
     }
 
     private func selectPresentationScreen(_ location: PaletteScreenLocation) {
-        let screens = NSScreen.screens
-        let focusedID = NSScreen.main.flatMap(Self.displayID)
-        let focusedIndex = focusedID.flatMap { id in screens.firstIndex { Self.displayID($0) == id } }
-        let index = location.screenIndex(frames: screens.map(\.frame),
-                                         focusedIndex: focusedIndex, mouse: NSEvent.mouseLocation)
-        presentationDisplayID = index.flatMap { Self.displayID(screens[$0]) }
+        presentationDisplayID = location.targetScreen().flatMap(Self.displayID)
     }
 
     private var presentationScreen: NSScreen? {

@@ -25,7 +25,8 @@ final class MiniMapController {
     ) {
         let store = WorkspaceStore.shared
         let maximumSize = NSScreen.screens.count > 1 ? Self.multiDisplaySize : Self.baseSize
-        let visible = NSScreen.main?.visibleFrame ?? CGRect(origin: .zero, size: maximumSize)
+        let visible = ActiveDisplayTracker.shared.currentScreen?.visibleFrame
+            ?? CGRect(origin: .zero, size: maximumSize)
         let screenFrames = NSScreen.screens.map { WindowController.flip($0.frame) }
         let screenUnion = screenFrames.dropFirst().reduce(screenFrames.first ?? .zero) { $0.union($1) }
         let bounds = screenUnion.isEmpty
@@ -127,7 +128,7 @@ final class MiniMapController {
     /// Places the panel at the configured screen position, stepping aside when
     /// the checklist card is already in that corner.
     private func place(_ panel: NSPanel) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = ActiveDisplayTracker.shared.currentScreen else { return }
         let frame = CornerPlacement.frame(
             size: panel.frame.size,
             position: WorkspaceStore.shared.miniMapPosition,

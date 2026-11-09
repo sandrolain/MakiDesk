@@ -51,6 +51,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `WindowScene.swift`, `WorkspaceStore` (focus) | Scene/focus state, send-away and undo. |
 | `PeekController.swift`, `PeekPanel.swift` | Designated-window overlay and hold state machine. |
 | `HUDController.swift` | Small passive feedback panel. |
+| `ActiveDisplay.swift` | Which display the cards and on-demand panels follow: the newest window focus or pointer move, with a pure newest-wins rule. |
 | `MiniMapController.swift` | Transient real-window overview overlay. |
 | `CornerPlacement.swift` | Pure corner rule shared by the mini map and the timer card: keep the corner, step aside for the checklist, stay on the display. |
 | `ChecklistModel.swift`, `ChecklistPanel.swift` | Checklist card: items, rules and persistence; the always-on panel. |
@@ -609,13 +610,17 @@ fallback; both stop with the last timer.
 panel at the floating level, in every space, sized to its content and placed in
 a corner by `ChecklistSettings.frame` (the same corner arithmetic the notices
 use). `Checklist` holds the items and their rules — trim, 200 characters per
-item, 50 items, one-step moves, clear completed — and `ChecklistFile` writes
-them atomically to `checklist.json` from a serial queue, setting an unreadable
-file aside as `.bak`. Ticking never activates MakiDesk; the panel takes the keys
-only when the add field is clicked, and `PanelFocusReturn` gives them back on
-hide or on `Esc`. The card is SwiftUI in an `NSHostingView` and the controller
-re-measures it after each change, so the list grows and shrinks with its
-content.
+item, 50 items, one-step and whole-row drag-to-slot moves, clear completed, the
+plain-text copy — and `ChecklistFile` writes them atomically to `checklist.json`
+from a serial queue, setting an unreadable file aside as `.bak`. Ticking never
+activates MakiDesk; clicking the list takes the keys and shows the add field, and
+`Esc` closes the card, with `PanelFocusReturn` giving the keys back. The add
+field exists only while the card is key, which keeps the resting height to one
+line of list. `ActiveDisplayTracker` reports the display of the newest window
+focus or pointer move; the card listens and re-places itself, and the switcher,
+search, notices and mini map ask the same tracker when they open. The card is
+SwiftUI in an `NSHostingView` and the controller re-measures it after each
+change, so the list grows and shrinks with its content.
 
 ## Pointer effects
 

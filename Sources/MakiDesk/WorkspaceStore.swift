@@ -445,6 +445,7 @@ final class WorkspaceStore {
         guard shortcutManager == nil else { return }
         loadGroups()
         loadBarConfiguration()
+        ActiveDisplayTracker.shared.start()
         WindowIndex.shared.start()
         WindowOutlineController.shared.start()
         FocusDimController.shared.start()
@@ -2846,6 +2847,7 @@ final class WorkspaceStore {
 
     private func recordFrontmostWindowFocus(_ frontmost: WindowController.Frontmost) {
         guard case let .window(focused) = frontmost else { return }
+        ActiveDisplayTracker.shared.noteFocus(frame: focused.frame)
         let snapshot = WindowIndex.shared.snapshot(includeMinimized: true)
         let known = snapshot.first(where: { CFEqual($0.element, focused.element) })
             ?? snapshot.first(where: {

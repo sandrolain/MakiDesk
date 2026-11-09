@@ -70,10 +70,17 @@ final class ChecklistStore {
         changed()
     }
 
+    func move(_ id: UUID, to index: Int) {
+        guard checklist.move(id, to: index) else { return }
+        changed()
+    }
+
     func clearCompleted() {
         guard checklist.clearCompleted() > 0 else { return }
         changed()
     }
+
+    var copyText: String { checklist.copyText }
 
     /// Writes now instead of after the debounce, without waiting: for a hide.
     func flushAsync() {
@@ -111,6 +118,14 @@ final class ChecklistStore {
     }
 }
 
+/// The card's live state: whether it has the keys. The add field is only shown
+/// while it does, which is what keeps the resting card one line shorter.
+@Observable
+@MainActor
+final class ChecklistInteraction {
+    var isKey = false
+}
+
 /// Owns the checklist panel: one small, always-available card, shown and hidden
 /// with `⌃⌥L` or the menu (T59).
 @MainActor
@@ -119,8 +134,10 @@ final class ChecklistController: NSObject, NSWindowDelegate {
 
     private var window: ChecklistPanel?
     private let store = ChecklistStore.shared
+    private let interaction = ChecklistInteraction()
     private let focusReturn = PanelFocusReturn()
     private var refreshWork: DispatchWorkItem?
+    private var activeDisplayToken: UUID?
     /// The pointer is over the card, or the card has the keys: either way it
     /// shows at full opacity while it is being used (T59).
     private var hovering = false
@@ -143,6 +160,10 @@ final class ChecklistController: NSObject, NSWindowDelegate {
         guard !started else { return }
         started = true
         store.onChange = { [weak self] in self?.scheduleRefresh() }
+        activeDisplayToken = ActiveDisplayTracker.shared.addObserver { [weak self] _ in
+            guard let self, self.isVisible else { return }
+            self.scheduleRefresh()
+        }
         applySettings()
     }
 
@@ -169,16 +190,10 @@ final class ChecklistController: NSObject, NSWindowDelegate {
         guard let window, window.isVisible else { return }
         let restore = focusReturn.takeRestoreAction(ownsKeyboard: window.isKeyWindow)
         hovering = false
+        interaction.isKey = false
         store.flushAsync()
         window.orderOut(nil)
         restore?()
-    }
-
-    /// Esc while typing in the add field: the panel stays, the keys go back to
-    /// the app the user came from.
-    func endEditing() {
-        guard let window, window.isKeyWindow else { return }
-        focusReturn.takeRestoreAction(ownsKeyboard: true)?()
     }
 
     /// The add field has the cursor: typing needs MakiDesk active. The keys are
@@ -196,12 +211,14 @@ final class ChecklistController: NSObject, NSWindowDelegate {
 
     private func build() {
         let width = CGFloat(WorkspaceStore.shared.checklistWidth)
-        let hosting = ChecklistHostingView(rootView: ChecklistView(store: store))
+        let hosting = ChecklistHostingView(rootView: ChecklistView(store: store,
+                                                                   interaction: interaction))
         hosting.onHover = { [weak self] inside in
             guard let self, self.hovering != inside else { return }
             self.hovering = inside
             self.updateAppearance()
         }
+        hosting.onFocusRequest = { [weak self] in self?.beginEditing() }
         let panel = ChecklistPanel(
             contentRect: NSRect(x: 0, y: 0, width: width, height: 240),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -223,6 +240,8 @@ final class ChecklistController: NSObject, NSWindowDelegate {
         // capture: it never enters a screenshot, a recording or a share.
         panel.sharingType = .none
         panel.delegate = self
+        // Esc closes the card wherever the keys are, including the add field.
+        panel.onCancel = { WorkspaceStore.shared.updateChecklistVisible(false) }
         window = panel
         refresh()
     }
@@ -298,7 +317,9 @@ final class ChecklistController: NSObject, NSWindowDelegate {
     /// turn later that a field editor is what holds them.
     func windowDidBecomeKey(_ notification: Notification) {
         guard let window, notification.object as? NSWindow === window else { return }
+        interaction.isKey = true
         updateAppearance()
+        scheduleRefresh()
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window,
                   window.isKeyWindow, !NSApp.isActive,
@@ -309,7 +330,9 @@ final class ChecklistController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         guard let window, notification.object as? NSWindow === window else { return }
+        interaction.isKey = false
         updateAppearance()
+        scheduleRefresh()
     }
 }
 
@@ -326,10 +349,33 @@ private final class ChecklistPanel: FloatingPanel {
 /// so the card can turn solid while it is being read.
 private final class ChecklistHostingView<Content: View>: NSHostingView<Content> {
     var onHover: ((Bool) -> Void)?
+    var onFocusRequest: (() -> Void)?
     private var tracking: NSTrackingArea?
+    private var pressPoint: CGPoint?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    /// A click on the list takes the keys, which is also what shows the add
+    /// field. It waits for the release so a drag from the row can start without
+    /// resizing the card under the pointer. The tick box and the row's delete
+    /// stay outside this area, so using them never activates MakiDesk.
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        pressPoint = (point.x > 28 && point.x < bounds.width - 28) ? point : nil
+        super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if let start = pressPoint {
+            let end = convert(event.locationInWindow, from: nil)
+            if hypot(end.x - start.x, end.y - start.y) < 3 {
+                onFocusRequest?()
+            }
+        }
+        pressPoint = nil
+        super.mouseUp(with: event)
     }
 
     override func updateTrackingAreas() {
@@ -355,10 +401,12 @@ private final class ChecklistHostingView<Content: View>: NSHostingView<Content> 
     }
 }
 
-/// The card itself: a short list, an add field and the count. Nothing is
+/// The card itself: a short list and, only while the card has the keys, the
+/// add field with the clear-completed control in the same row. Nothing is
 /// interpreted, so a line is a line.
 private struct ChecklistView: View {
     let store: ChecklistStore
+    let interaction: ChecklistInteraction
     @State private var draft = ""
     @FocusState private var adding: Bool
 
@@ -371,45 +419,37 @@ private struct ChecklistView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            header
-
+        VStack(alignment: .leading, spacing: 4) {
             if store.items.isEmpty {
-                Text("Nothing to do.")
-                    .font(.system(size: 12))
+                Text("No items.")
+                    .font(.system(size: 11.5))
                     .foregroundStyle(theme.subtext)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 2)
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 1) {
-                        ForEach(store.items) { item in
-                            ChecklistRow(item: item, theme: theme, store: store)
+                        ForEach(Array(store.items.enumerated()), id: \.element.id) { index, item in
+                            ChecklistRow(item: item, index: index,
+                                         theme: theme, store: store)
                         }
                     }
                 }
                 .frame(maxHeight: 420)
             }
 
-            addRow
-
-            if store.completed > 0 {
-                Button("Clear completed (\(store.completed))") {
-                    store.clearCompleted()
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 11))
-                .foregroundStyle(theme.subtext)
-                .help("Takes every ticked item away")
-            }
-            // The limit note stays even when there is something to clear: a
-            // full list with ticked items is exactly when both matter.
             if store.isFull {
                 Text("\(Checklist.maxItems) items is the limit.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(theme.subtext)
             }
+
+            // The field is the tallest part of the card: it exists only
+            // while the card has the keys, so the resting card is compact.
+            if interaction.isKey {
+                addRow
+            }
         }
-        .padding(11)
+        .padding(8)
         .frame(width: width, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -421,36 +461,15 @@ private struct ChecklistView: View {
         )
         // The card is the interactive part: outside it there is nothing to
         // click, so the app under the panel keeps its own clicks.
-        .onExitCommand { ChecklistController.shared.endEditing() }
-    }
-
-    private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checklist")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(theme.accent)
-            Text("Checklist")
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(theme.text)
-            Spacer(minLength: 4)
-            Text("\(store.remaining) left")
-                .font(.system(size: 11))
-                .foregroundStyle(theme.subtext)
-                .help(store.completed > 0
-                      ? "\(store.completed) done · ⌃⌥L hides the checklist"
-                      : "⌃⌥L hides the checklist")
-            Button {
-                WorkspaceStore.shared.updateChecklistVisible(false)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(theme.subtext)
-                    .frame(width: 16, height: 16)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Hide the checklist")
-            .help("Hide the checklist (⌃⌥L brings it back)")
+        .onExitCommand { WorkspaceStore.shared.updateChecklistVisible(false) }
+        .onChange(of: interaction.isKey) { _, isKey in
+            if isKey == false { adding = false }
+        }
+        .contextMenu {
+            Button("Copy All Items") { copyChecklistText(store.copyText) }
+                .disabled(store.items.isEmpty)
+            Divider()
+            Button("Hide Checklist") { WorkspaceStore.shared.updateChecklistVisible(false) }
         }
     }
 
@@ -467,6 +486,7 @@ private struct ChecklistView: View {
                         .fill(theme.background.opacity(0.55))
                 )
                 .focused($adding)
+                .onExitCommand { WorkspaceStore.shared.updateChecklistVisible(false) }
                 .onChange(of: adding) { _, focused in
                     if focused { ChecklistController.shared.beginEditing() }
                 }
@@ -483,8 +503,22 @@ private struct ChecklistView: View {
             .buttonStyle(.plain)
             .disabled(!canAdd)
             .accessibilityLabel("Add the item")
+            // Same row as the add field, and only while the card has the keys:
+            // it clears the ticked items, never the whole list.
+            if store.completed > 0 {
+                Button(action: store.clearCompleted) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.subtext)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Clear completed items (\(store.completed))")
+                .accessibilityLabel("Clear completed items")
+            }
         }
-        .padding(.top, 2)
+        .padding(.top, 1)
     }
 
     private func add() {
@@ -493,13 +527,17 @@ private struct ChecklistView: View {
     }
 }
 
-/// One line: the box, the text and the three small controls. Reordering is two
-/// buttons rather than a drag, so it works with the keyboard and VoiceOver.
+/// One line: the box, the text and, while the pointer is over it, the delete.
+/// The whole row is the drag handle: dragging it moves the item to the row it
+/// is dropped on, and the context menu and VoiceOver actions do the same
+/// without a mouse.
 private struct ChecklistRow: View {
     let item: ChecklistItem
+    let index: Int
     let theme: PaletteTheme
     let store: ChecklistStore
     @State private var hovering = false
+    @State private var dropTargeted = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -526,16 +564,48 @@ private struct ChecklistRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityHidden(true)
 
-            HStack(spacing: 1) {
-                icon("chevron.up", "Move up") { store.move(item.id, by: -1) }
-                icon("chevron.down", "Move down") { store.move(item.id, by: 1) }
-                icon("xmark", "Delete") { store.remove(item.id) }
-            }
-            .opacity(hovering ? 1 : 0.35)
+            icon("xmark", "Delete") { store.remove(item.id) }
+                .opacity(hovering ? 1 : 0.4)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 1.5)
+        .padding(.horizontal, 2)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(dropTargeted ? theme.accent.opacity(0.16) : .clear)
+        )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .draggable(item.id.uuidString) {
+            Text(item.text)
+                .font(.system(size: 12.5))
+                .foregroundStyle(theme.text)
+                .lineLimit(2)
+                .padding(6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(theme.surface)
+                )
+        }
+        .dropDestination(for: String.self) { payloads, _ in
+            guard let raw = payloads.first,
+                  let id = UUID(uuidString: raw) else { return false }
+            store.move(id, to: index)
+            return true
+        } isTargeted: { dropTargeted = $0 }
+        .contextMenu {
+            Button("Copy Item") { copyChecklistText(item.text) }
+            Button("Copy All Items") { copyChecklistText(store.copyText) }
+            Divider()
+            Button("Move Up") { store.move(item.id, by: -1) }
+                .disabled(index == 0)
+            Button("Move Down") { store.move(item.id, by: 1) }
+                .disabled(index == store.items.count - 1)
+            Divider()
+            Button("Delete", role: .destructive) { store.remove(item.id) }
+        }
+        .accessibilityAction(named: "Move up") { store.move(item.id, by: -1) }
+        .accessibilityAction(named: "Move down") { store.move(item.id, by: 1) }
+        .accessibilityAction(named: "Delete") { store.remove(item.id) }
     }
 
     private func icon(_ symbol: String, _ help: String,
@@ -551,4 +621,13 @@ private struct ChecklistRow: View {
         .help(help)
         .accessibilityLabel("\(help): \(item.text)")
     }
+}
+
+/// Copies text from the checklist. Kept here so the row, the card menu and the
+/// keyboard all put the same plain text on the pasteboard.
+private func copyChecklistText(_ text: String) {
+    guard text.isEmpty == false else { return }
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    pasteboard.setString(text, forType: .string)
 }
