@@ -19,6 +19,7 @@ enum MakiType {
     /// Dense supporting text.
     static let body = Font.system(size: 11.5)
     static let bodyMedium = Font.system(size: 11.5, weight: .medium)
+    static let bodyStrong = Font.system(size: 11.5, weight: .semibold)
 
     /// Reading size for card and list content.
     static let content = Font.system(size: 13)

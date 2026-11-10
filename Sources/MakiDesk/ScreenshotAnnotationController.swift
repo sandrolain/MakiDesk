@@ -441,7 +441,7 @@ private struct AnnotationEditorView: View {
                     .tint(theme.accent)
                 Button("Cancel") { cropRect = nil }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11))
+                    .font(MakiType.body)
                     .foregroundStyle(theme.subtext)
             }
             .padding(.horizontal, 7)
@@ -458,7 +458,7 @@ private struct AnnotationEditorView: View {
     private func textField(at point: CGPoint) -> some View {
         TextField("Text", text: $textDraft)
             .textFieldStyle(.plain)
-            .font(.system(size: 13, weight: .bold))
+            .font(MakiType.contentStrong)
             .foregroundStyle(theme.text)
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
@@ -540,7 +540,7 @@ private struct AnnotationEditorView: View {
 
             Button("Cancel", action: onCancel)
                 .buttonStyle(.plain)
-                .font(.system(size: 12))
+                .font(MakiType.body)
                 .foregroundStyle(theme.subtext)
                 .keyboardShortcut(.cancelAction)
                 .help("Esc — nothing is saved")

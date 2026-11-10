@@ -79,7 +79,7 @@ extension DropzoneDetailView {
             }
             if let previewText {
                 Text(previewText)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(MakiType.meta.monospaced())
                     .textSelection(.enabled)
                     .foregroundStyle(theme.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -107,7 +107,7 @@ extension DropzoneDetailView {
                         appendPlaceholder(placeholder)
                     } label: {
                         Text("{\(placeholder.rawValue)}")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(MakiType.meta.monospaced())
                             .foregroundStyle(theme.accent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)

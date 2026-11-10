@@ -96,10 +96,10 @@ struct DropzoneSettingsView: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Dropzones")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(MakiType.section)
                     .foregroundStyle(theme.text)
                 Text("Commands run on what you drop on the shelf strip.")
-                    .font(.caption)
+                    .font(MakiType.caption)
                     .foregroundStyle(theme.subtext)
             }
             Spacer()
@@ -182,7 +182,7 @@ struct DropzoneSettingsView: View {
             if let onClose {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(MakiType.microStrong)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(theme.subtext)
@@ -216,10 +216,10 @@ struct DropzoneSettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text("Zones")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(MakiType.contentStrong)
                     .foregroundStyle(theme.text)
                 Text("\(model.zones.count)/\(DropzoneStore.maximumZones)")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(MakiType.meta.monospaced())
                     .foregroundStyle(theme.subtext)
                 Spacer()
                 Button { model.add() } label: {

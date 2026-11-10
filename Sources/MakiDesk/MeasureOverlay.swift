@@ -212,7 +212,7 @@ private struct MeasureBadgeView: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(measurement.lines(unit).enumerated()), id: \.offset) { _, line in
                 Text(line)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .font(MakiType.bodyMedium.monospaced())
             }
             HStack(spacing: 10) {
                 Spacer(minLength: 0)
@@ -225,7 +225,7 @@ private struct MeasureBadgeView: View {
                 }
                 .help("Dismiss this measurement")
             }
-            .font(.system(size: 10.5, weight: .medium))
+            .font(MakiType.metaMedium)
             .buttonStyle(.plain)
             .foregroundStyle(.white.opacity(0.9))
         }
