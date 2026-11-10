@@ -225,7 +225,11 @@ struct DropzoneSettingsView: View {
                 Button { model.add() } label: {
                     Image(systemName: "plus")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control,
+                               isEnabled: model.canEdit
+                                   && model.zones.count < DropzoneStore.maximumZones)
                 .help("Add a dropzone")
                 .disabled(!model.canEdit || model.zones.count >= DropzoneStore.maximumZones)
             }

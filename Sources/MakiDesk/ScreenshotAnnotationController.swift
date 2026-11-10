@@ -440,7 +440,9 @@ private struct AnnotationEditorView: View {
                     .controlSize(.small)
                     .tint(theme.accent)
                 Button("Cancel") { cropRect = nil }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MakiActionButtonStyle())
+                    .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                                   radius: MakiRadius.control)
                     .font(MakiType.body)
                     .foregroundStyle(theme.subtext)
             }
@@ -491,7 +493,10 @@ private struct AnnotationEditorView: View {
                         )
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control,
+                               isEnabled: model.tool != tool)
                 .help(tool.title)
                 .accessibilityLabel(tool.title)
                 .accessibilityAddTraits(model.tool == tool ? .isSelected : [])
@@ -533,13 +538,17 @@ private struct AnnotationEditorView: View {
                     .frame(width: 24, height: 22)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MakiActionButtonStyle())
+            .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                           radius: MakiRadius.control)
             .disabled(model.marks.isEmpty)
             .help("Undo the last mark")
             .accessibilityLabel("Undo")
 
             Button("Cancel", action: onCancel)
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control)
                 .font(MakiType.body)
                 .foregroundStyle(theme.subtext)
                 .keyboardShortcut(.cancelAction)
