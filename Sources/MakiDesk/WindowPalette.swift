@@ -2309,6 +2309,16 @@ struct PaletteView: View {
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 8)
             .fill(isSelected ? model.theme.surfaceSelected : Color.clear))
+        .overlay(alignment: .leading) {
+            // Same second cue as the Settings sidebar: the selected group is
+            // also filled, so the accent is never the only signal.
+            if isSelected {
+                Capsule()
+                    .fill(model.theme.accent)
+                    .frame(width: 3, height: 18)
+                    .padding(.leading, 2)
+            }
+        }
         .padding(.horizontal, 6)
         .help("\(row.displayName) — click to edit its members, then Recall")
     }

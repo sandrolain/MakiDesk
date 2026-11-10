@@ -546,7 +546,7 @@ private struct ChecklistRow: View {
             .help(item.done ? "Mark as not done" : "Mark as done")
 
             Text(item.text)
-                .font(.system(size: 12.5))
+                .font(.system(size: 13))
                 .foregroundStyle(item.done ? theme.subtext : theme.text)
                 .strikethrough(item.done, color: theme.subtext)
                 .lineLimit(2)

@@ -490,7 +490,7 @@ private struct ClipboardRow: View {
                 .frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.preview)
-                    .font(.system(size: 12.5))
+                    .font(.system(size: 13))
                     .foregroundStyle(theme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)

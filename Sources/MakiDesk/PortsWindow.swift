@@ -195,7 +195,7 @@ struct PortsView: View {
                 .frame(width: 58, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(port.name)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(theme.text)
                     .lineLimit(1)
                 Text("pid \(port.pid) · \(port.addresses.joined(separator: ", "))")
