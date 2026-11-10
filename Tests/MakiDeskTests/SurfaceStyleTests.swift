@@ -48,13 +48,37 @@ final class SurfaceStyleTests: XCTestCase {
         let surface = try XCTUnwrap(NSColor(theme.surface).usingColorSpace(.sRGB))
         let background = try XCTUnwrap(NSColor(theme.background).usingColorSpace(.sRGB))
 
-        func luminance(_ color: NSColor) -> CGFloat {
-            0.2126 * color.redComponent
-                + 0.7152 * color.greenComponent
-                + 0.0722 * color.blueComponent
-        }
-
         XCTAssertGreaterThan(luminance(raised), luminance(surface))
         XCTAssertGreaterThan(luminance(raised), luminance(background) + 0.02)
+    }
+
+    /// The lift must not quietly trade away readability in palettes that are
+    /// already close to the contrast floor.
+    func testRaisedSurfaceKeepsTheThemesTextContrast() throws {
+        for theme in PaletteTheme.all where theme.followsSystemAppearance == false {
+            let text = try XCTUnwrap(NSColor(theme.text).usingColorSpace(.sRGB))
+            let surface = try XCTUnwrap(NSColor(theme.surface).usingColorSpace(.sRGB))
+            let raised = try XCTUnwrap(NSColor(theme.raisedSurface).usingColorSpace(.sRGB))
+
+            let before = contrast(text, surface)
+            let after = contrast(text, raised)
+            XCTAssertGreaterThanOrEqual(after, min(4.5, before) - 0.02,
+                                        "\(theme.id) lost text contrast on cards")
+        }
+    }
+
+    private func contrast(_ a: NSColor, _ b: NSColor) -> CGFloat {
+        let first = luminance(a)
+        let second = luminance(b)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+
+    private func luminance(_ color: NSColor) -> CGFloat {
+        func linear(_ value: CGFloat) -> CGFloat {
+            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(color.redComponent)
+            + 0.7152 * linear(color.greenComponent)
+            + 0.0722 * linear(color.blueComponent)
     }
 }

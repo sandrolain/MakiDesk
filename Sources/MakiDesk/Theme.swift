@@ -41,22 +41,57 @@ struct PaletteTheme: Identifiable, Equatable {
     }
 
     /// The blend happens once per theme, not once per card.
+    ///
+    /// The lift stops before it would take the theme's own text below a
+    /// readable contrast. SynthWave 84 has plenty of headroom and keeps the
+    /// full lift; low-contrast palettes (Solarized, Graphite) get a smaller
+    /// one, or none, rather than trading legibility for depth.
     private static func raised(surface: Color, text: Color) -> Color {
-        guard let base = NSColor(surface).usingColorSpace(.sRGB),
-              let tint = NSColor(text).usingColorSpace(.sRGB) else { return surface }
-        let baseLuminance = 0.2126 * base.redComponent
-            + 0.7152 * base.greenComponent
-            + 0.0722 * base.blueComponent
-        let tintLuminance = 0.2126 * tint.redComponent
-            + 0.7152 * tint.greenComponent
-            + 0.0722 * tint.blueComponent
+        guard let baseColor = NSColor(surface).usingColorSpace(.sRGB),
+              let textColor = NSColor(text).usingColorSpace(.sRGB) else {
+            return surface
+        }
+        let base: RGB = (baseColor.redComponent, baseColor.greenComponent,
+                         baseColor.blueComponent)
+        let tint: RGB = (textColor.redComponent, textColor.greenComponent,
+                         textColor.blueComponent)
         // Toward light in dark palettes, toward shade in light ones.
-        let amount: CGFloat = tintLuminance > baseLuminance ? 0.07 : 0.05
-        return Color(
-            red: base.redComponent + (tint.redComponent - base.redComponent) * amount,
-            green: base.greenComponent + (tint.greenComponent - base.greenComponent) * amount,
-            blue: base.blueComponent + (tint.blueComponent - base.blueComponent) * amount
-        )
+        let target: CGFloat = relativeLuminance(tint) > relativeLuminance(base)
+            ? 0.07
+            : 0.05
+        let floor = min(4.5, contrast(base, tint))
+        var amount = target
+        while amount > 0 {
+            let candidate = blended(base, toward: tint, amount: amount)
+            if contrast(candidate, tint) >= floor - 0.01 { break }
+            amount = max(0, amount - 0.005)
+        }
+        let result = blended(base, toward: tint, amount: amount)
+        return Color(red: result.red, green: result.green, blue: result.blue)
+    }
+
+    private typealias RGB = (red: CGFloat, green: CGFloat, blue: CGFloat)
+
+    private static func relativeLuminance(_ color: RGB) -> CGFloat {
+        func linear(_ value: CGFloat) -> CGFloat {
+            value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(color.red)
+            + 0.7152 * linear(color.green)
+            + 0.0722 * linear(color.blue)
+    }
+
+    private static func contrast(_ a: RGB, _ b: RGB) -> CGFloat {
+        let first = relativeLuminance(a)
+        let second = relativeLuminance(b)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+    }
+
+    private static func blended(_ base: RGB, toward tint: RGB,
+                                amount: CGFloat) -> RGB {
+        (base.red + (tint.red - base.red) * amount,
+         base.green + (tint.green - base.green) * amount,
+         base.blue + (tint.blue - base.blue) * amount)
     }
 
     static let all: [PaletteTheme] = [

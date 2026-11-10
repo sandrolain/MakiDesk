@@ -1262,8 +1262,8 @@ the app, Notes included, instead of leaving them system blue.
 the floating command box and timer field follow the desktop, while the
 checklist and the countdown card stay solid so their text remains readable.
 Every custom palette is painted with its exact colours; when a palette's card
-and window colours are very close, the cards take a slightly lifted tone derived
-from the same palette. **Reduce Transparency**
+and window colours are very close and the text keeps enough contrast, the cards
+take a slightly lifted tone derived from the same palette. **Reduce Transparency**
 turns any material into a solid surface.
 **Reset to defaults** asks whether groups, notes, clipboard history and
 dropzones should go too; settings always reset.

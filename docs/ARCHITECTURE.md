@@ -279,7 +279,10 @@ the opaque fallback are what let the app keep a macOS 14 deployment target.
 `PaletteTheme.raisedSurface` mixes a small amount of the theme's text colour
 into `surface` for cards: several palettes keep surface and background within a
 few RGB steps, and the derived tone gives those cards an edge without leaving
-the palette. The System theme returns its semantic surface instead.
+the palette. The blend is capped so the theme's primary text keeps at least its
+own contrast floor (4.5:1 where the palette allows it); low-contrast palettes
+receive a smaller lift rather than a less readable one. The System theme
+returns its semantic surface instead.
 
 `ThemedTextCursor` keeps the caret and the selection on the theme accent for
 every editable control. They all edit through AppKit's shared field editor, an
