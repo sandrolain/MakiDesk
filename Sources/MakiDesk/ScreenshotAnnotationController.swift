@@ -331,7 +331,7 @@ private struct AnnotationEditorView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(theme.surface)
+                .fill(theme.raisedSurface)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
