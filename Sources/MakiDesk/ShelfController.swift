@@ -687,8 +687,10 @@ final class ShelfController: NSObject, NSWindowDelegate,
         footerSeparator?.wantsLayer = true
         headerSeparator?.layer?.backgroundColor = NSColor(theme.border).withAlphaComponent(0.6).cgColor
         footerSeparator?.layer?.backgroundColor = NSColor(theme.border).withAlphaComponent(0.6).cgColor
-        headerBar?.layer?.backgroundColor = NSColor(theme.background).cgColor
-        footerBar?.layer?.backgroundColor = NSColor(theme.background).cgColor
+        headerBar?.layer?.backgroundColor =
+            NSColor(theme.raisedSurface).withAlphaComponent(0.35).cgColor
+        footerBar?.layer?.backgroundColor =
+            NSColor(theme.raisedSurface).withAlphaComponent(0.35).cgColor
 
         if let titleLabel = headerBar?.subviews.first as? NSTextField {
             titleLabel.textColor = NSColor(theme.text)
@@ -2421,7 +2423,7 @@ final class ShelfDragHandle: NSView {
 
     func apply(theme: PaletteTheme) {
         self.theme = theme
-        layer?.backgroundColor = NSColor(theme.surface).cgColor
+        layer?.backgroundColor = NSColor(theme.raisedSurface).cgColor
         label.textColor = NSColor(theme.text)
         icon.contentTintColor = NSColor(theme.accent)
     }
