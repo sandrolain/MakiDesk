@@ -694,10 +694,12 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     func applyTheme() {
         let themeID = Settings.string(.themeID) ?? ""
-        theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
+        let palette = PaletteTheme.named(themeID)
+        theme = NotesSyntaxTheme(theme: palette)
         let background = theme.background
-        let sidebarColor = background.blended(withFraction: 0.05,
-                                              of: background.luminance < 0.5 ? .white : .black) ?? background
+        // The same raised tone the panels use, instead of a local blend: the
+        // Notes sidebar and toolbar then match Settings and the switcher.
+        let sidebarColor = NSColor(palette.raisedSurface)
 
         root.wantsLayer = true
         root.layer?.backgroundColor = background.cgColor
