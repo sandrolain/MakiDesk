@@ -289,11 +289,11 @@ struct SettingsView: View {
             .background {
                 if selected {
                     RoundedRectangle(cornerRadius: MakiRadius.field)
-                        .fill(theme.surfaceSelected)
+                        .fill(theme.selectionSurface)
                         .matchedGeometryEffect(id: "settings-section", in: sidebarSelection)
                 } else if hoveredTab == tab {
                     RoundedRectangle(cornerRadius: MakiRadius.field)
-                        .fill(theme.surfaceSelected.opacity(0.45))
+                        .fill(theme.selectionSurface.opacity(0.45))
                 }
             }
             .overlay(alignment: .leading) {
@@ -338,12 +338,17 @@ struct SettingsView: View {
                         .padding(.vertical, 4)
                         .background(
                             RoundedRectangle(cornerRadius: MakiRadius.control)
-                                .fill(selected ? theme.surfaceSelected : Color.clear)
+                                .fill(selected ? theme.selectionSurface : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MakiRadius.control)
+                                .strokeBorder(selected ? theme.accent.opacity(0.55) : Color.clear,
+                                              lineWidth: 1)
                         )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                radius: MakiRadius.control,
                                isEnabled: !selected)
                 .accessibilityAddTraits(selected ? .isSelected : [])
@@ -1435,7 +1440,7 @@ struct SettingsView: View {
                     .monospacedDigit()
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(Capsule().fill(theme.surfaceSelected))
+                    .background(Capsule().fill(theme.selectionSurface))
             }
             caption("The figure includes the space macOS can purge, so it matches Finder and Storage settings; the System menu also shows the strict count. It is read once a minute, and the label holds still while the menu is open, so the menu cannot close under the pointer. At 0 GB the warning is off. When free space falls below the threshold the label turns orange and one warning a day offers Storage settings.")
         }

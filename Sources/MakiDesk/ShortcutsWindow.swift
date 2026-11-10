@@ -303,7 +303,7 @@ struct ShortcutsView: View {
                         apply(store.restoreAllShortcuts())
                     }
                     .buttonStyle(MakiActionButtonStyle())
-                    .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                    .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                    radius: MakiRadius.control)
                     .font(MakiType.bodyMedium)
                     .foregroundStyle(theme.accent)

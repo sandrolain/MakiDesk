@@ -402,7 +402,7 @@ final class ShelfDropzoneTileView: NSView {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
                                 xRadius: 11, yRadius: 11)
         let active = isHovered || isHighlighted
-        let fill = active ? NSColor(theme.surfaceSelected) : NSColor(theme.surface)
+        let fill = active ? NSColor(theme.selectionSurface) : NSColor(theme.surface)
         fill.withAlphaComponent(active ? 0.95 : 0.55).setFill()
         path.fill()
         let stroke = active ? NSColor(theme.accent) : NSColor(theme.border)

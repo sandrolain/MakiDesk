@@ -224,21 +224,21 @@ struct NotificationHistoryView: View {
                 .foregroundStyle(theme.subtext.opacity(0.8))
             Button("Clear") { hud.clearHistory() }
                 .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(hud.history.isEmpty ? theme.subtext.opacity(0.4) : theme.subtext)
                 .disabled(hud.history.isEmpty)
             Button("Copy") { copyCurrent() }
                 .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(current == nil ? theme.subtext.opacity(0.4) : theme.text)
                 .disabled(current == nil)
             Button("Close") { onClose() }
                 .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(theme.subtext)
@@ -348,7 +348,7 @@ private struct NotificationHistoryRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: MakiRadius.row)
-            .fill(selected ? theme.surfaceSelected
+            .fill(selected ? theme.selectionSurface
                   : theme.raisedSurface.opacity(hovering ? 0.9 : 0.6)))
         .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))

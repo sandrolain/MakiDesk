@@ -23,6 +23,15 @@ struct PaletteTheme: Identifiable, Equatable {
     /// which is dynamic and must not be resolved at construction time.
     let raisedSurface: Color
 
+    /// The fill for a selected control or row.
+    ///
+    /// Custom palettes can put `surfaceSelected` and the raised card tone so
+    /// close that a selected tab disappears into its bar (SynthWave 84 does
+    /// this). The selection is shifted toward the accent, but only as far as
+    /// the theme's text keeps its contrast; low-contrast palettes get the
+    /// shift the accent allows and rely on the accent border for the rest.
+    let selectionSurface: Color
+
     init(id: String, name: String, background: Color, surface: Color,
          surfaceSelected: Color, text: Color, subtext: Color, accent: Color,
          border: Color) {
@@ -38,6 +47,10 @@ struct PaletteTheme: Identifiable, Equatable {
         self.raisedSurface = id == "system"
             ? surface
             : Self.raised(surface: surface, text: text)
+        self.selectionSurface = id == "system"
+            ? surfaceSelected
+            : Self.selected(surface: surfaceSelected, accent: accent,
+                            text: text)
     }
 
     /// The blend happens once per theme, not once per card.
@@ -65,6 +78,32 @@ struct PaletteTheme: Identifiable, Equatable {
             let candidate = blended(base, toward: tint, amount: amount)
             if contrast(candidate, tint) >= floor - 0.01 { break }
             amount = max(0, amount - 0.005)
+        }
+        let result = blended(base, toward: tint, amount: amount)
+        return Color(red: result.red, green: result.green, blue: result.blue)
+    }
+
+    /// The selection keeps the theme's own text readable: the accent shift is
+    /// stepped back until the primary text still meets its contrast floor.
+    private static func selected(surface: Color, accent: Color,
+                                 text: Color) -> Color {
+        guard let baseColor = NSColor(surface).usingColorSpace(.sRGB),
+              let accentColor = NSColor(accent).usingColorSpace(.sRGB),
+              let textColor = NSColor(text).usingColorSpace(.sRGB) else {
+            return surface
+        }
+        let base: RGB = (baseColor.redComponent, baseColor.greenComponent,
+                         baseColor.blueComponent)
+        let tint: RGB = (accentColor.redComponent, accentColor.greenComponent,
+                         accentColor.blueComponent)
+        let label: RGB = (textColor.redComponent, textColor.greenComponent,
+                          textColor.blueComponent)
+        let floor = min(4.5, contrast(base, label))
+        var amount: CGFloat = 0.25
+        while amount > 0 {
+            let candidate = blended(base, toward: tint, amount: amount)
+            if contrast(candidate, label) >= floor - 0.01 { break }
+            amount = max(0, amount - 0.05)
         }
         let result = blended(base, toward: tint, amount: amount)
         return Color(red: result.red, green: result.green, blue: result.blue)

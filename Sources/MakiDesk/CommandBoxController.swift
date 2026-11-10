@@ -293,9 +293,9 @@ private struct CommandBoxView: View {
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: MakiRadius.row)
-                .fill(selected ? theme.surfaceSelected : Color.clear)
+                .fill(selected ? theme.selectionSurface : Color.clear)
         )
-        .makiHoverWash(theme.surfaceSelected.opacity(0.3),
+        .makiHoverWash(theme.selectionSurface.opacity(0.3),
                        radius: MakiRadius.row, isEnabled: !selected)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)

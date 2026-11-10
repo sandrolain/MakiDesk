@@ -116,7 +116,7 @@ struct DropzoneSymbolPickerView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(RoundedRectangle(cornerRadius: MakiRadius.row)
                                     .fill(selected == name
-                                          ? theme.surfaceSelected
+                                          ? theme.selectionSurface
                                           : theme.raisedSurface.opacity(0.45)))
                                 .contentShape(Rectangle())
                             }
@@ -180,11 +180,11 @@ struct DropzoneEmojiPickerView: View {
                             Text(value)
                                 .font(.system(size: 21))
                                 .frame(width: 30, height: 30)
-                                .background(RoundedRectangle(cornerRadius: 6)
+                                .background(RoundedRectangle(cornerRadius: MakiRadius.control)
                                     .fill(selected == value
-                                          ? theme.surfaceSelected
+                                          ? theme.selectionSurface
                                           : Color.clear))
-                                .overlay(RoundedRectangle(cornerRadius: 6)
+                                .overlay(RoundedRectangle(cornerRadius: MakiRadius.control)
                                     .stroke(selected == value ? theme.accent : Color.clear,
                                             lineWidth: 1))
                         }

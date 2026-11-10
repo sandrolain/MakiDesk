@@ -284,6 +284,12 @@ own contrast floor (4.5:1 where the palette allows it); low-contrast palettes
 receive a smaller lift rather than a less readable one. The System theme
 returns its semantic surface instead.
 
+`PaletteTheme.selectionSurface` starts from `surfaceSelected` and shifts it
+toward the theme accent, so a selected tab or bar control cannot disappear into
+a raised card tone (SynthWave 84 needed this). The shift is stepped back until
+the theme's text keeps its contrast; when the palette cannot spare any, the
+accent border and the selected row's second cue carry the state.
+
 `Typography.swift` holds the small fixed type scale the panels share: `micro`,
 `meta`, `body`, `content`, `title`, `reading`, `section` and `caption`, with the
 weights the chrome needs. Surfaces whose text scales with their own metrics — the

@@ -111,7 +111,7 @@ extension DropzoneDetailView {
                             .foregroundStyle(theme.accent)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(Capsule().fill(theme.surfaceSelected))
+                            .background(Capsule().fill(theme.selectionSurface))
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)

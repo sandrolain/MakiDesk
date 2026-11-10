@@ -441,7 +441,7 @@ private struct AnnotationEditorView: View {
                     .tint(theme.accent)
                 Button("Cancel") { cropRect = nil }
                     .buttonStyle(MakiActionButtonStyle())
-                    .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                    .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                    radius: MakiRadius.control)
                     .font(MakiType.body)
                     .foregroundStyle(theme.subtext)
@@ -489,12 +489,12 @@ private struct AnnotationEditorView: View {
                         .frame(width: 26, height: 22)
                         .background(
                             RoundedRectangle(cornerRadius: MakiRadius.control)
-                                .fill(model.tool == tool ? theme.surfaceSelected : Color.clear)
+                                .fill(model.tool == tool ? theme.selectionSurface : Color.clear)
                         )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                radius: MakiRadius.control,
                                isEnabled: model.tool != tool)
                 .help(tool.title)
@@ -539,7 +539,7 @@ private struct AnnotationEditorView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(MakiActionButtonStyle())
-            .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+            .makiHoverWash(theme.selectionSurface.opacity(0.35),
                            radius: MakiRadius.control)
             .disabled(model.marks.isEmpty)
             .help("Undo the last mark")
@@ -547,7 +547,7 @@ private struct AnnotationEditorView: View {
 
             Button("Cancel", action: onCancel)
                 .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                .makiHoverWash(theme.selectionSurface.opacity(0.35),
                                radius: MakiRadius.control)
                 .font(MakiType.body)
                 .foregroundStyle(theme.subtext)

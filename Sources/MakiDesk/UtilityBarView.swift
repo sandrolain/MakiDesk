@@ -133,7 +133,7 @@ struct UtilityBarView: View {
                         .foregroundStyle(theme.text)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 0.5)
-                        .background(Capsule().fill(theme.surfaceSelected))
+                        .background(Capsule().fill(theme.selectionSurface))
                 }
             }
             .padding(.horizontal, 6)
@@ -224,7 +224,7 @@ struct UtilityBarView: View {
 
     private func background(for item: BarItem) -> Color {
         if hovered == item.id || (model.isKeyboardDriven && selected == item.id) {
-            return theme.surfaceSelected
+            return theme.selectionSurface
         }
         return .clear
     }

@@ -2165,7 +2165,7 @@ struct PaletteView: View {
         .padding(.horizontal, 9 * scale)
         .padding(.vertical, 6 * scale)
         .background(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
-            .fill(selected ? model.theme.surfaceSelected : model.theme.raisedSurface))
+            .fill(selected ? model.theme.selectionSurface : model.theme.raisedSurface))
         .overlay(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
             .stroke(selected ? model.theme.accent : model.theme.border,
                     lineWidth: selected ? 2 : 1))
@@ -2208,7 +2208,7 @@ struct PaletteView: View {
         .padding(.horizontal, 9 * scale)
         .padding(.vertical, 6 * scale)
         .background(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
-            .fill(selected ? model.theme.surfaceSelected : model.theme.raisedSurface))
+            .fill(selected ? model.theme.selectionSurface : model.theme.raisedSurface))
         .overlay(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
             .stroke(selected ? model.theme.accent : model.theme.border,
                     lineWidth: selected ? 2 : 1))
@@ -2308,7 +2308,7 @@ struct PaletteView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: MakiRadius.row)
-            .fill(isSelected ? model.theme.surfaceSelected : Color.clear))
+            .fill(isSelected ? model.theme.selectionSurface : Color.clear))
         .overlay(alignment: .leading) {
             // Same second cue as the Settings sidebar: the selected group is
             // also filled, so the accent is never the only signal.
@@ -2319,7 +2319,7 @@ struct PaletteView: View {
                     .padding(.leading, 2)
             }
         }
-        .makiHoverWash(model.theme.surfaceSelected.opacity(0.3),
+        .makiHoverWash(model.theme.selectionSurface.opacity(0.3),
                        radius: MakiRadius.row, isEnabled: !isSelected)
         .padding(.horizontal, 6)
         .help("\(row.displayName) — click to edit its members, then Recall")

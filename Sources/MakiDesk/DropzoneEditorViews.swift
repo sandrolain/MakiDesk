@@ -129,7 +129,7 @@ struct DropzoneListRow: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MakiRadius.row)
-            .fill(selected ? theme.surfaceSelected
+            .fill(selected ? theme.selectionSurface
                   : theme.raisedSurface.opacity(hovering ? 0.9 : 0.6)))
         .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(selected ? theme.accent.opacity(0.6) : theme.border.opacity(0.45), lineWidth: 1))

@@ -423,7 +423,7 @@ struct ClipboardView: View {
                 if let entry = model.selectedEntry { onShelf(entry) }
             }
             .buttonStyle(MakiActionButtonStyle())
-            .makiHoverWash(model.theme.surfaceSelected.opacity(0.35),
+            .makiHoverWash(model.theme.selectionSurface.opacity(0.35),
                            radius: MakiRadius.control)
             .font(MakiType.metaMedium)
             .foregroundStyle(model.selectedEntry == nil
@@ -446,7 +446,7 @@ struct ClipboardView: View {
                     .foregroundStyle(model.theme.subtext.opacity(0.5))
                 Button("Clear All…") { confirmsClearAll = true }
                     .buttonStyle(MakiActionButtonStyle())
-                    .makiHoverWash(model.theme.surfaceSelected.opacity(0.35),
+                    .makiHoverWash(model.theme.selectionSurface.opacity(0.35),
                                    radius: MakiRadius.control)
                     .font(MakiType.metaMedium)
                     .foregroundStyle(model.theme.subtext)
@@ -515,7 +515,7 @@ private struct ClipboardRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: MakiRadius.row)
-            .fill(selected ? theme.surfaceSelected
+            .fill(selected ? theme.selectionSurface
                   : theme.raisedSurface.opacity(hovered ? 1 : 0.6)))
         .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))

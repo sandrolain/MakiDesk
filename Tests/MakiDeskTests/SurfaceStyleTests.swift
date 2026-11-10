@@ -67,6 +67,32 @@ final class SurfaceStyleTests: XCTestCase {
         }
     }
 
+    /// SynthWave 84's selection used to sit almost on top of the raised card
+    /// tone: the accent shift is what makes the selected tab and bar control
+    /// readable as selected.
+    func testSelectionSurfaceSeparatesFromTheRaisedTone() throws {
+        let theme = PaletteTheme.named("synthwave-84")
+        let selection = try XCTUnwrap(NSColor(theme.selectionSurface).usingColorSpace(.sRGB))
+        let raised = try XCTUnwrap(NSColor(theme.raisedSurface).usingColorSpace(.sRGB))
+        let text = try XCTUnwrap(NSColor(theme.text).usingColorSpace(.sRGB))
+
+        XCTAssertGreaterThan(contrast(selection, raised), 1.25)
+        XCTAssertGreaterThanOrEqual(contrast(text, selection), 4.5)
+    }
+
+    func testSelectionSurfaceKeepsTheThemesTextContrast() throws {
+        for theme in PaletteTheme.all where theme.followsSystemAppearance == false {
+            let text = try XCTUnwrap(NSColor(theme.text).usingColorSpace(.sRGB))
+            let selected = try XCTUnwrap(NSColor(theme.surfaceSelected).usingColorSpace(.sRGB))
+            let shifted = try XCTUnwrap(NSColor(theme.selectionSurface).usingColorSpace(.sRGB))
+
+            let before = contrast(text, selected)
+            let after = contrast(text, shifted)
+            XCTAssertGreaterThanOrEqual(after, min(4.5, before) - 0.02,
+                                        "\(theme.id) lost text contrast on selection")
+        }
+    }
+
     private func contrast(_ a: NSColor, _ b: NSColor) -> CGFloat {
         let first = luminance(a)
         let second = luminance(b)

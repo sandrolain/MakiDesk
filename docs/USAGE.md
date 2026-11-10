@@ -1263,8 +1263,10 @@ the floating command box and timer field follow the desktop, while the
 checklist and the countdown card stay solid so their text remains readable.
 Every custom palette is painted with its exact colours; when a palette's card
 and window colours are very close and the text keeps enough contrast, the cards
-take a slightly lifted tone derived from the same palette. **Reduce Transparency**
-turns any material into a solid surface.
+take a slightly lifted tone derived from the same palette. The selected control
+or tab receives a small shift toward the theme accent, so it stays distinct
+from the raised cards even in palettes where the two used to match.
+**Reduce Transparency** turns any material into a solid surface.
 **Reset to defaults** asks whether groups, notes, clipboard history and
 dropzones should go too; settings always reset.
 
