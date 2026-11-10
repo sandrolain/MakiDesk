@@ -1843,7 +1843,7 @@ struct PaletteView: View {
             if model.showsGroups {
                 groupsColumn
                 Rectangle()
-                    .fill(model.theme.surface.opacity(0.8))
+                    .fill(model.theme.border.opacity(0.5))
                     .frame(width: 1)
             }
             VStack(spacing: 0) {
@@ -2005,13 +2005,17 @@ struct PaletteView: View {
                 }
             }
             Rectangle()
-                .fill(model.theme.surface.opacity(0.8))
+                .fill(model.theme.border.opacity(0.5))
                 .frame(width: 1)
             actionsColumn
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: model.metrics.panelCornerRadius)
             .fill(model.theme.background.opacity(model.opacity)))
+        // The side columns now paint their own tone: clip the content so
+        // their square corners cannot cover the panel's rounded ones.
+        .clipShape(RoundedRectangle(cornerRadius: model.metrics.panelCornerRadius,
+                                    style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: model.metrics.panelCornerRadius)
             .stroke(model.theme.border, lineWidth: 1))
         .onChange(of: model.query) { _, _ in
@@ -2154,7 +2158,7 @@ struct PaletteView: View {
         .padding(.horizontal, 9 * scale)
         .padding(.vertical, 6 * scale)
         .background(RoundedRectangle(cornerRadius: 9 * scale)
-            .fill(selected ? model.theme.surfaceSelected : model.theme.surface))
+            .fill(selected ? model.theme.surfaceSelected : model.theme.raisedSurface))
         .overlay(RoundedRectangle(cornerRadius: 9 * scale)
             .stroke(selected ? model.theme.accent : model.theme.border,
                     lineWidth: selected ? 2 : 1))
@@ -2197,7 +2201,7 @@ struct PaletteView: View {
         .padding(.horizontal, 9 * scale)
         .padding(.vertical, 6 * scale)
         .background(RoundedRectangle(cornerRadius: 9 * scale)
-            .fill(selected ? model.theme.surfaceSelected : model.theme.surface))
+            .fill(selected ? model.theme.surfaceSelected : model.theme.raisedSurface))
         .overlay(RoundedRectangle(cornerRadius: 9 * scale)
             .stroke(selected ? model.theme.accent : model.theme.border,
                     lineWidth: selected ? 2 : 1))
@@ -2244,6 +2248,7 @@ struct PaletteView: View {
         }
         .frame(width: PaletteLayoutEngine.groupColumnWidth, alignment: .top)
         .frame(maxHeight: .infinity)
+        .background(model.theme.raisedSurface.opacity(0.45))
     }
 
     private func groupRow(_ row: PaletteGroupRow) -> some View {
@@ -2296,7 +2301,7 @@ struct PaletteView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 8)
-            .fill(isSelected ? model.theme.surface : Color.clear))
+            .fill(isSelected ? model.theme.surfaceSelected : Color.clear))
         .padding(.horizontal, 6)
         .help("\(row.displayName) — click to edit its members, then Recall")
     }
@@ -2364,6 +2369,7 @@ struct PaletteView: View {
         }
         .frame(width: model.metrics.actionColumnWidth, alignment: .top)
         .frame(maxHeight: .infinity)
+        .background(model.theme.raisedSurface.opacity(0.35))
     }
 
     /// The keys of the mode in force, one per row. The hints are decorative for
