@@ -405,7 +405,7 @@ private struct HUDView: View {
         }
         .background(
             RoundedRectangle(cornerRadius: type.cornerRadius, style: .continuous)
-                .fill(theme.surface)
+                .fill(theme.raisedSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: type.cornerRadius, style: .continuous)
                         .strokeBorder(borderColor, lineWidth: 1)

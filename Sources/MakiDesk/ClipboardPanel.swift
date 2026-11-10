@@ -463,7 +463,7 @@ struct ClipboardView: View {
                 .foregroundStyle(model.theme.text)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4).fill(model.theme.surface))
+                .background(RoundedRectangle(cornerRadius: 4).fill(model.theme.raisedSurface))
                 .overlay(RoundedRectangle(cornerRadius: 4)
                     .stroke(model.theme.border.opacity(0.7), lineWidth: 1))
             Text(label)
@@ -508,7 +508,8 @@ private struct ClipboardRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(RoundedRectangle(cornerRadius: 7)
-            .fill(selected ? theme.surfaceSelected : theme.surface.opacity(hovered ? 0.9 : 0.5)))
+            .fill(selected ? theme.surfaceSelected
+                  : theme.raisedSurface.opacity(hovered ? 1 : 0.6)))
         .overlay(RoundedRectangle(cornerRadius: 7)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))
         .contentShape(Rectangle())

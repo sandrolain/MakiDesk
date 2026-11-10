@@ -110,7 +110,7 @@ private struct PeekView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(theme.surface)
+                .fill(theme.raisedSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)

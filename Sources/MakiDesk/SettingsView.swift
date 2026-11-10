@@ -190,6 +190,7 @@ struct SettingsView: View {
     /// The highlight slides between sidebar rows (T58). Respects the app's
     /// animations switch and macOS Reduce Motion through the store.
     @Namespace private var sidebarSelection
+    @State private var hoveredTab: SettingsTab?
     @State private var generalPage: GeneralPage = .permissions
     @State private var windowsPage: WindowsPage = .placement
     @State private var panelsPage: PanelsPage = .shelf
@@ -290,6 +291,9 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: MakiRadius.field)
                         .fill(theme.surfaceSelected)
                         .matchedGeometryEffect(id: "settings-section", in: sidebarSelection)
+                } else if hoveredTab == tab {
+                    RoundedRectangle(cornerRadius: MakiRadius.field)
+                        .fill(theme.surfaceSelected.opacity(0.45))
                 }
             }
             .overlay(alignment: .leading) {
@@ -305,6 +309,10 @@ struct SettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { inside in
+            if inside { hoveredTab = tab }
+            else if hoveredTab == tab { hoveredTab = nil }
+        }
         .accessibilityLabel(tab.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .help(tab.title)
