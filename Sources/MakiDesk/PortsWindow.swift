@@ -145,6 +145,7 @@ struct PortsView: View {
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 10)
+        .background(theme.raisedSurface.opacity(0.35))
     }
 
     private var searchField: some View {
@@ -160,7 +161,7 @@ struct PortsView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.surface))
+        .makiField(theme: theme, focused: searchFocused)
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
     }
@@ -214,7 +215,7 @@ struct PortsView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.surface.opacity(0.55)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface))
     }
 
     private func status(_ text: String, color: Color? = nil) -> some View {

@@ -289,7 +289,7 @@ struct DropzoneSettingsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.surface.opacity(0.5)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface.opacity(0.5)))
         .overlay(RoundedRectangle(cornerRadius: 8)
             .stroke(theme.border.opacity(0.45), lineWidth: 1))
     }

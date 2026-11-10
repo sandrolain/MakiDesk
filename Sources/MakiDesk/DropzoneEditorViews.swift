@@ -128,7 +128,7 @@ struct DropzoneListRow: View {
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 7)
-            .fill(selected ? theme.surfaceSelected : theme.surface.opacity(0.5)))
+            .fill(selected ? theme.surfaceSelected : theme.raisedSurface.opacity(0.6)))
         .overlay(RoundedRectangle(cornerRadius: 7)
             .stroke(selected ? theme.accent.opacity(0.6) : theme.border.opacity(0.45), lineWidth: 1))
         .contentShape(Rectangle())
@@ -427,7 +427,7 @@ struct DropzonePresetPicker: View {
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 7).fill(theme.surface.opacity(0.5)))
+        .background(RoundedRectangle(cornerRadius: 7).fill(theme.raisedSurface.opacity(0.6)))
         .overlay(RoundedRectangle(cornerRadius: 7)
             .stroke(theme.border.opacity(0.45), lineWidth: 1))
         .contentShape(Rectangle())
