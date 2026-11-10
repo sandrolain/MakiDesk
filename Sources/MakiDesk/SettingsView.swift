@@ -226,7 +226,7 @@ struct SettingsView: View {
                idealWidth: 900,
                minHeight: Self.minimumSize.height,
                idealHeight: 740)
-        .background(theme.background)
+        .makiSurface(.window, theme: theme, fill: theme.background)
         .preferredColorScheme(theme.followsSystemAppearance ? nil : (theme.isDark ? .dark : .light))
         .tint(theme.accent)
         .environment(\.paletteTheme, theme)

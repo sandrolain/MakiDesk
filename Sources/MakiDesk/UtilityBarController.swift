@@ -313,13 +313,6 @@ final class UtilityBarController {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.screenChanged() }
         })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .makiDeskThemeChanged, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.panel?.backgroundColor = NSColor(WorkspaceStore.shared.theme.background)
-            }
-        })
     }
 
     private func screenChanged() {
@@ -377,8 +370,11 @@ final class UtilityBarController {
         panel.isReleasedWhenClosed = false
         panel.hasShadow = true
         panel.animationBehavior = .none
-        panel.isOpaque = true
-        panel.backgroundColor = NSColor(WorkspaceStore.shared.theme.background)
+        // The view paints the bar, and in the System theme that may be a
+        // material or Liquid Glass: the window has to let the desktop show
+        // through instead of painting an opaque theme colour behind it.
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.worksWhenModal = true
         panel.isFloatingPanel = true
         panel.sharingType = .none

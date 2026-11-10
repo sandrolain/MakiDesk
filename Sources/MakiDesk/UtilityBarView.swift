@@ -43,10 +43,7 @@ struct UtilityBarView: View {
             }
             .padding(.horizontal, 8)
             .frame(width: proxy.size.width, height: model.height)
-            .background(theme.surface)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(theme.border.opacity(0.75)).frame(height: 1)
-            }
+            .makiSurface(.chrome, theme: theme, fill: theme.surface)
             .onAppear {
                 width = proxy.size.width
                 focusIfNeeded()
@@ -142,12 +139,12 @@ struct UtilityBarView: View {
             .padding(.horizontal, 6)
             .frame(height: controlHeight)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: MakiRadius.control)
                     .fill(background(for: item))
             )
             .overlay {
                 if model.isKeyboardDriven, selected == item.id {
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: MakiRadius.control)
                         .strokeBorder(theme.accent.opacity(0.9), lineWidth: 1)
                 }
             }
@@ -184,7 +181,8 @@ struct UtilityBarView: View {
             }
             .padding(.horizontal, 5)
             .frame(height: controlHeight)
-            .background(RoundedRectangle(cornerRadius: 6).fill(background(for: item)))
+            .background(RoundedRectangle(cornerRadius: MakiRadius.control)
+                .fill(background(for: item)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

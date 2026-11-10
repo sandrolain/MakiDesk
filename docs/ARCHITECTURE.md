@@ -268,6 +268,15 @@ have one switch and one duration in Settings; macOS Reduce Motion always wins.
 The keyboard reference is a plain data catalogue (`ShortcutCatalog`) rendered by
 a searchable window.
 
+`SurfaceStyle.swift` names the app's surface roles — window, chrome, floating
+panel, passive card and overlay — and the recipe each one follows: corner
+radius, border, and whether the system may supply the fill. `makiSurface`
+chooses the native path only for the System theme with Reduce Transparency off;
+custom palettes and passive/overlay cards keep the theme fill. On macOS 26 and
+later chrome and floating panels use `glassEffect` (Liquid Glass), with `.bar`
+and `.regularMaterial` as the macOS 14–25 fallback; the availability check and
+the opaque fallback are what let the app keep a macOS 14 deployment target.
+
 `ThemedTextCursor` keeps the caret and the selection on the theme accent for
 every editable control. They all edit through AppKit's shared field editor, an
 `NSTextView` that posts `NSText.didBeginEditingNotification`, so one observer

@@ -622,6 +622,11 @@ it, and leaves no room behind.
   clicks elsewhere and display changes — close it with the pin, `⌃⌥B` or the menu.
   The bar still takes no space from windows — it is drawn over the top of the
   screen, never reserved.
+- **How it is drawn.** With the **System** theme the bar borrows the system
+  material — Liquid Glass on macOS 26 and later — so it follows the desktop
+  underneath. Every custom palette keeps its own solid colour. **Reduce
+  Transparency** always gives a solid bar, and **Increase Contrast** strengthens
+  its edge.
 - **From the keyboard.** `⌃⌥B` gives the bar the keyboard and draws a
   selection; `→`/`←` (or `↑`/`↓`) move it, **Return** runs the choice, and
   **Esc** closes and gives the keyboard back.
@@ -1253,6 +1258,11 @@ palette theme — background, cards, accent and a matching light or dark
 appearance for the native controls — and takes keyboard focus when it opens.
 The theme accent also paints the text caret and the selection in every field of
 the app, Notes included, instead of leaving them system blue.
+**System** may use native materials where they add depth: the utility bar and
+the floating command box and timer field follow the desktop, while the
+checklist and the countdown card stay solid so their text remains readable.
+Every custom palette is painted with its exact colours. **Reduce Transparency**
+turns any material into a solid surface.
 **Reset to defaults** asks whether groups, notes, clipboard history and
 dropzones should go too; settings always reset.
 

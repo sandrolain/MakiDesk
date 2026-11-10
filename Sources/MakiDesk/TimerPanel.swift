@@ -490,14 +490,7 @@ private struct TimerOverlayView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .frame(width: 230, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(theme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(theme.border.opacity(0.6), lineWidth: 1)
-                )
-        )
+        .makiSurface(.overlay, theme: theme, fill: theme.surface)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Timers")
         .accessibilityValue(controller.timers.map {
@@ -635,7 +628,7 @@ private struct TimerInputView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    RoundedRectangle(cornerRadius: MakiRadius.field, style: .continuous)
                         .fill(theme.background.opacity(0.55))
                 )
                 .accessibilityLabel("Timer length or time of day")
@@ -648,7 +641,7 @@ private struct TimerInputView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    RoundedRectangle(cornerRadius: MakiRadius.field, style: .continuous)
                         .fill(theme.background.opacity(0.55))
                 )
                 .accessibilityLabel("Timer label, optional")
@@ -660,14 +653,7 @@ private struct TimerInputView: View {
         }
         .padding(12)
         .frame(width: 420, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(theme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(theme.border.opacity(0.6), lineWidth: 1)
-                )
-        )
+        .makiSurface(.floatingPanel, theme: theme, fill: theme.surface)
         .onExitCommand { TimerInputController.shared.hide() }
         .onAppear {
             DispatchQueue.main.async {
