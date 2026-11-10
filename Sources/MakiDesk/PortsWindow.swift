@@ -140,7 +140,7 @@ struct PortsView: View {
                 .foregroundStyle(theme.accent)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 6).fill(theme.surface))
+                .background(RoundedRectangle(cornerRadius: MakiRadius.control).fill(theme.surface))
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -211,11 +211,11 @@ struct PortsView: View {
                 .foregroundStyle(Color(nsColor: .systemRed))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: 6).fill(theme.surface))
+                .background(RoundedRectangle(cornerRadius: MakiRadius.control).fill(theme.surface))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface))
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(theme.raisedSurface))
     }
 
     private func status(_ text: String, color: Color? = nil) -> some View {

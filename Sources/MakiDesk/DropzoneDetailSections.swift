@@ -267,8 +267,8 @@ extension DropzoneDetailView {
                     .scrollContentBackground(.hidden)
                     .padding(5)
                     .frame(height: 64)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(theme.background.opacity(0.55)))
-                    .overlay(RoundedRectangle(cornerRadius: 5)
+                    .background(RoundedRectangle(cornerRadius: MakiRadius.field).fill(theme.background.opacity(0.55)))
+                    .overlay(RoundedRectangle(cornerRadius: MakiRadius.field)
                         .stroke(theme.border.opacity(0.55), lineWidth: 1))
                 if let environmentWarning {
                     Text(environmentWarning)

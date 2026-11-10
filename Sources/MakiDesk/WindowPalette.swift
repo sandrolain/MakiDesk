@@ -2164,9 +2164,9 @@ struct PaletteView: View {
         }
         .padding(.horizontal, 9 * scale)
         .padding(.vertical, 6 * scale)
-        .background(RoundedRectangle(cornerRadius: 9 * scale)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
             .fill(selected ? model.theme.surfaceSelected : model.theme.raisedSurface))
-        .overlay(RoundedRectangle(cornerRadius: 9 * scale)
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
             .stroke(selected ? model.theme.accent : model.theme.border,
                     lineWidth: selected ? 2 : 1))
         .contentShape(Rectangle())
@@ -2207,9 +2207,9 @@ struct PaletteView: View {
         }
         .padding(.horizontal, 9 * scale)
         .padding(.vertical, 6 * scale)
-        .background(RoundedRectangle(cornerRadius: 9 * scale)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
             .fill(selected ? model.theme.surfaceSelected : model.theme.raisedSurface))
-        .overlay(RoundedRectangle(cornerRadius: 9 * scale)
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row * scale)
             .stroke(selected ? model.theme.accent : model.theme.border,
                     lineWidth: selected ? 2 : 1))
         .contentShape(Rectangle())
@@ -2307,7 +2307,7 @@ struct PaletteView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 8)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row)
             .fill(isSelected ? model.theme.surfaceSelected : Color.clear))
         .overlay(alignment: .leading) {
             // Same second cue as the Settings sidebar: the selected group is
@@ -2332,7 +2332,7 @@ struct PaletteView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.surface))
+            .background(RoundedRectangle(cornerRadius: MakiRadius.control).fill(model.theme.surface))
             .foregroundStyle(title == "Confirm" ? Color.red : model.theme.text)
         }
         .buttonStyle(.plain)
@@ -2415,7 +2415,7 @@ struct PaletteView: View {
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1.5)
                 .frame(minWidth: 34, alignment: .center)
-                .background(RoundedRectangle(cornerRadius: 5).fill(model.theme.surface))
+                .background(RoundedRectangle(cornerRadius: MakiRadius.keycap).fill(model.theme.surface))
                 .foregroundStyle(model.theme.text)
             if compact == false {
                 Text(label)
@@ -2476,7 +2476,7 @@ struct PaletteView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: compact ? .center : .leading)
-            .background(RoundedRectangle(cornerRadius: 6).fill(model.theme.surface))
+            .background(RoundedRectangle(cornerRadius: MakiRadius.control).fill(model.theme.surface))
             .foregroundStyle(model.theme.text)
             .contentShape(Rectangle())
         }
@@ -2634,9 +2634,9 @@ private struct PaletteCard: View {
             .frame(width: metrics.thumbnailWidth, alignment: .leading)
         }
         .padding(10 * (metrics.fontSize / 12))
-        .background(RoundedRectangle(cornerRadius: 14)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.panel)
             .fill(selected ? theme.surfaceSelected : (tinted ? appTint.opacity(0.10) : theme.raisedSurface)))
-        .overlay(RoundedRectangle(cornerRadius: 14)
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.panel)
             .stroke(selected ? theme.accent : (layoutSelected ? theme.border : (tinted ? appTint.opacity(theme.isDark ? 0.82 : 0.42) : .clear)),
                     lineWidth: selected ? 3 : 2))
     }
@@ -2683,8 +2683,8 @@ private struct PaletteCard: View {
                         .font(.system(size: metrics.badgeSymbolSize + 1, weight: .bold).monospacedDigit())
                         .foregroundStyle(editing ? theme.background : theme.text)
                         .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(editing ? theme.accent : theme.surface, in: RoundedRectangle(cornerRadius: 5))
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(theme.border, lineWidth: 1))
+                        .background(editing ? theme.accent : theme.surface, in: RoundedRectangle(cornerRadius: MakiRadius.field))
+                        .overlay(RoundedRectangle(cornerRadius: MakiRadius.field).stroke(theme.border, lineWidth: 1))
                 }
             }
             .padding(7)

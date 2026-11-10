@@ -339,8 +339,8 @@ struct ShortcutsView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 7).fill(theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 7)
+            .background(RoundedRectangle(cornerRadius: MakiRadius.field).fill(theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: MakiRadius.field)
                 .stroke(searchFocused ? theme.accent.opacity(0.8) : theme.border, lineWidth: 1))
 
             if let recordingTitle {
@@ -494,8 +494,8 @@ struct ShortcutsView: View {
                 .foregroundStyle(tint)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 5).fill(theme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 5)
+                .background(RoundedRectangle(cornerRadius: MakiRadius.keycap).fill(theme.surface))
+                .overlay(RoundedRectangle(cornerRadius: MakiRadius.keycap)
                     .stroke(recording ? theme.accent : theme.border, lineWidth: 1))
                 .fixedSize()
         }
@@ -537,8 +537,8 @@ struct ShortcutsView: View {
             .foregroundStyle(theme.text)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 5).fill(theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 5)
+            .background(RoundedRectangle(cornerRadius: MakiRadius.keycap).fill(theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: MakiRadius.keycap)
                 .stroke(theme.border, lineWidth: 1))
             .textSelection(.enabled)
     }

@@ -292,7 +292,7 @@ private struct CommandBoxView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: MakiRadius.row)
                 .fill(selected ? theme.surfaceSelected : Color.clear)
         )
         .contentShape(Rectangle())

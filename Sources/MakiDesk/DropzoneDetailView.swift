@@ -95,7 +95,7 @@ struct DropzoneDetailView: View {
             HStack(alignment: .center, spacing: 12) {
                 DropzoneGlyph(icon: zone.icon, size: 36)
                     .padding(7)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(theme.surfaceSelected))
+                    .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(theme.surfaceSelected))
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("Name", text: $zone.name)
                         .font(MakiType.subtitle)

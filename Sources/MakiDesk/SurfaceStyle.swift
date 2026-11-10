@@ -23,8 +23,11 @@ enum MakiSurfaceRole: CaseIterable {
 /// The radii the app is allowed to use. Small controls, fields, cards and
 /// panels were each being given a different number by each caller.
 enum MakiRadius {
+    static let chip: CGFloat = 4
+    static let keycap: CGFloat = 5
     static let control: CGFloat = 6
     static let field: CGFloat = 7
+    static let row: CGFloat = 8
     static let card: CGFloat = 12
     static let panel: CGFloat = 14
 }

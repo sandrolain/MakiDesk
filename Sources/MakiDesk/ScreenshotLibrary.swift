@@ -1207,11 +1207,11 @@ private struct ScreenshotCard: View {
         .padding(8 * scale)
         .frame(width: width, height: 190 * scale, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: MakiRadius.card)
                 .fill(model.selectedPaths.contains(file.path) ? Color.accentColor.opacity(0.16) : Color(nsColor: .controlBackgroundColor).opacity(0.55))
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: MakiRadius.card)
                 .stroke(model.selectedPaths.contains(file.path) ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: model.selectedPaths.contains(file.path) ? 2 : 1)
         }
     }

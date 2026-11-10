@@ -109,10 +109,10 @@ private struct PeekView: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: MakiRadius.panel, style: .continuous)
                 .fill(theme.raisedSurface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    RoundedRectangle(cornerRadius: MakiRadius.panel, style: .continuous)
                         .strokeBorder(theme.border, lineWidth: 1)
                 )
         )
@@ -137,9 +137,9 @@ private struct PeekView: View {
             }
         }
         .frame(width: imageSize.width, height: imageSize.height)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: MakiRadius.row, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: MakiRadius.row, style: .continuous)
                 .strokeBorder(theme.border, lineWidth: 1)
         )
     }

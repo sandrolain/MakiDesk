@@ -189,8 +189,8 @@ struct DropzoneSettingsView: View {
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 7).fill(tint.opacity(0.12)))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(tint.opacity(0.35), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(tint.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row).stroke(tint.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: - Sidebar
@@ -289,8 +289,8 @@ struct DropzoneSettingsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface.opacity(0.5)))
-        .overlay(RoundedRectangle(cornerRadius: 8)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(theme.raisedSurface.opacity(0.5)))
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(theme.border.opacity(0.45), lineWidth: 1))
     }
 

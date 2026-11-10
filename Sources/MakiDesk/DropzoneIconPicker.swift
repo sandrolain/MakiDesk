@@ -114,7 +114,7 @@ struct DropzoneSymbolPickerView: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(RoundedRectangle(cornerRadius: 5)
+                                .background(RoundedRectangle(cornerRadius: MakiRadius.row)
                                     .fill(selected == name
                                           ? theme.surfaceSelected
                                           : theme.raisedSurface.opacity(0.45)))

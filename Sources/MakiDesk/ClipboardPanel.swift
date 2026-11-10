@@ -332,10 +332,10 @@ struct ClipboardView: View {
             footer
         }
         .frame(width: 560, height: 420)
-        .background(RoundedRectangle(cornerRadius: 14)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.panel)
             .fill(model.theme.background.opacity(model.opacity)))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14)
+        .clipShape(RoundedRectangle(cornerRadius: MakiRadius.panel, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.panel)
             .stroke(model.theme.border.opacity(0.8), lineWidth: 1))
         .confirmationDialog("Clear everything, including pinned items?",
                             isPresented: $confirmsClearAll) {
@@ -466,8 +466,8 @@ struct ClipboardView: View {
                 .foregroundStyle(model.theme.text)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4).fill(model.theme.raisedSurface))
-                .overlay(RoundedRectangle(cornerRadius: 4)
+                .background(RoundedRectangle(cornerRadius: MakiRadius.keycap).fill(model.theme.raisedSurface))
+                .overlay(RoundedRectangle(cornerRadius: MakiRadius.keycap)
                     .stroke(model.theme.border.opacity(0.7), lineWidth: 1))
             Text(label)
                 .font(.system(size: 10))
@@ -510,10 +510,10 @@ private struct ClipboardRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 7)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row)
             .fill(selected ? theme.surfaceSelected
                   : theme.raisedSurface.opacity(hovered ? 1 : 0.6)))
-        .overlay(RoundedRectangle(cornerRadius: 7)
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
@@ -527,11 +527,11 @@ private struct ClipboardRow: View {
     private var leading: some View {
         switch entry.previewKind {
         case let .color(color):
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: MakiRadius.chip)
                 .fill(Color(red: Double(color.red) / 255,
                             green: Double(color.green) / 255,
                             blue: Double(color.blue) / 255))
-                .overlay(RoundedRectangle(cornerRadius: 4)
+                .overlay(RoundedRectangle(cornerRadius: MakiRadius.chip)
                     .stroke(theme.border.opacity(0.9), lineWidth: 1))
                 .frame(width: 16, height: 16)
                 .help("Colour \(color.hex)")
@@ -539,14 +539,14 @@ private struct ClipboardRow: View {
         case let .image(url):
             ClipboardThumbnail(url: url)
                 .frame(width: 22, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: MakiRadius.chip))
                 .help(url.lastPathComponent)
         case let .storedImage(image):
             Image(decorative: image.thumbnail, scale: 1)
                 .resizable()
                 .scaledToFill()
                 .frame(width: 22, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: MakiRadius.chip))
                 .help(entry.detail)
         case .text:
             Image(systemName: "text.alignleft")

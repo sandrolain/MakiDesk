@@ -249,8 +249,8 @@ struct NotificationHistoryView: View {
                 .foregroundStyle(theme.text)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4).fill(theme.surface))
-                .overlay(RoundedRectangle(cornerRadius: 4)
+                .background(RoundedRectangle(cornerRadius: MakiRadius.keycap).fill(theme.surface))
+                .overlay(RoundedRectangle(cornerRadius: MakiRadius.keycap)
                     .stroke(theme.border.opacity(0.7), lineWidth: 1))
             Text(label)
                 .font(MakiType.meta)
@@ -341,10 +341,10 @@ private struct NotificationHistoryRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 7)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row)
             .fill(selected ? theme.surfaceSelected
                   : theme.raisedSurface.opacity(hovering ? 0.9 : 0.6)))
-        .overlay(RoundedRectangle(cornerRadius: 7)
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }

@@ -337,7 +337,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: MakiRadius.control)
                                 .fill(selected ? theme.surfaceSelected : Color.clear)
                         )
                         .contentShape(Rectangle())
@@ -348,8 +348,8 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(3)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface))
-        .overlay(RoundedRectangle(cornerRadius: 8)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(theme.raisedSurface))
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(theme.border.opacity(0.6), lineWidth: 1))
         .animation(selectionAnimation, value: selection.wrappedValue)
     }

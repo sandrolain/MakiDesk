@@ -330,12 +330,12 @@ private struct AnnotationEditorView: View {
             toolbar
         }
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: MakiRadius.card, style: .continuous)
                 .fill(theme.raisedSurface)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: MakiRadius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: MakiRadius.card, style: .continuous)
                 .strokeBorder(theme.border.opacity(0.6), lineWidth: 1)
         )
         .onExitCommand(perform: escape)
@@ -446,8 +446,8 @@ private struct AnnotationEditorView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 6).fill(theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 6)
+            .background(RoundedRectangle(cornerRadius: MakiRadius.control).fill(theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: MakiRadius.control)
                 .strokeBorder(theme.border.opacity(0.6), lineWidth: 1))
             .position(x: min(max(rect.midX, 80), max(80, imageSize.width - 80)),
                       y: rect.minY < 44 ? rect.minY + 22 : rect.minY - 22)
@@ -463,8 +463,8 @@ private struct AnnotationEditorView: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
             .frame(width: 240)
-            .background(RoundedRectangle(cornerRadius: 6).fill(theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.accent, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: MakiRadius.control).fill(theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: MakiRadius.control).strokeBorder(theme.accent, lineWidth: 1))
             .focused($textFocused)
             .onAppear { textFocused = true }
             .onSubmit(commitText)
@@ -486,7 +486,7 @@ private struct AnnotationEditorView: View {
                         .foregroundStyle(model.tool == tool ? theme.text : theme.subtext)
                         .frame(width: 26, height: 22)
                         .background(
-                            RoundedRectangle(cornerRadius: 5)
+                            RoundedRectangle(cornerRadius: MakiRadius.control)
                                 .fill(model.tool == tool ? theme.surfaceSelected : Color.clear)
                         )
                         .contentShape(Rectangle())

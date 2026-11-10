@@ -125,13 +125,13 @@ struct DropzoneListRow: View {
                 .disabled(!canEdit)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 7)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row)
             .fill(selected ? theme.surfaceSelected
                   : theme.raisedSurface.opacity(hovering ? 0.9 : 0.6)))
-        .overlay(RoundedRectangle(cornerRadius: 7)
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(selected ? theme.accent.opacity(0.6) : theme.border.opacity(0.45), lineWidth: 1))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -185,8 +185,8 @@ struct DropzoneTestResultView: View {
                     .foregroundStyle(theme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(theme.background.opacity(0.55)))
-                    .overlay(RoundedRectangle(cornerRadius: 7)
+                    .background(RoundedRectangle(cornerRadius: MakiRadius.field).fill(theme.background.opacity(0.55)))
+                    .overlay(RoundedRectangle(cornerRadius: MakiRadius.field)
                         .stroke(theme.border.opacity(0.5), lineWidth: 1))
             }
             .frame(minHeight: 180, maxHeight: 300)
@@ -430,8 +430,8 @@ struct DropzonePresetPicker: View {
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 7).fill(theme.raisedSurface.opacity(0.6)))
-        .overlay(RoundedRectangle(cornerRadius: 7)
+        .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(theme.raisedSurface.opacity(0.6)))
+        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
             .stroke(theme.border.opacity(0.45), lineWidth: 1))
         .contentShape(Rectangle())
     }

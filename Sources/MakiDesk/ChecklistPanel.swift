@@ -560,7 +560,7 @@ private struct ChecklistRow: View {
         .padding(.vertical, 1.5)
         .padding(.horizontal, 2)
         .background(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            RoundedRectangle(cornerRadius: MakiRadius.keycap, style: .continuous)
                 .fill(dropTargeted ? theme.accent.opacity(0.16) : .clear)
         )
         .contentShape(Rectangle())
