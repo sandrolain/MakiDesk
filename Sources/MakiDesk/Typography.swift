@@ -31,6 +31,9 @@ enum MakiType {
     /// The slightly larger body used by Settings, whose small print is long.
     static let reading = Font.system(size: 14)
 
+    /// A sub-section header inside Settings.
+    static let subtitle = Font.system(size: 14, weight: .semibold)
+
     /// A Settings group header.
     static let section = Font.system(size: 15, weight: .semibold)
 

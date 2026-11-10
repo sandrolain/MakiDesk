@@ -100,14 +100,14 @@ struct DropzoneSymbolPickerView: View {
                                         .frame(width: 22)
                                         .foregroundStyle(theme.text)
                                     Text(name)
-                                        .font(.system(size: 11))
+                                        .font(MakiType.body)
                                         .foregroundStyle(theme.text)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
                                     Spacer(minLength: 4)
                                     if selected == name {
                                         Image(systemName: "checkmark")
-                                            .font(.system(size: 10, weight: .semibold))
+                                            .font(MakiType.microStrong)
                                             .foregroundStyle(theme.accent)
                                     }
                                 }
@@ -117,7 +117,7 @@ struct DropzoneSymbolPickerView: View {
                                 .background(RoundedRectangle(cornerRadius: 5)
                                     .fill(selected == name
                                           ? theme.surfaceSelected
-                                          : theme.surface.opacity(0.35)))
+                                          : theme.raisedSurface.opacity(0.45)))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -129,7 +129,7 @@ struct DropzoneSymbolPickerView: View {
             }
 
             Text("\(filtered.count) symbols")
-                .font(.caption2)
+                .font(MakiType.micro)
                 .foregroundStyle(theme.subtext)
         }
         .padding(14)

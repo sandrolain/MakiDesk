@@ -88,21 +88,21 @@ private struct NotesRewriteView: View {
             Divider().overlay(theme.border.opacity(0.6))
             footer
         }
-        .background(theme.surface)
+        .background(theme.raisedSurface)
         .onExitCommand(perform: onCancel)
     }
 
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: controller.action.symbol)
-                .font(.system(size: 13, weight: .semibold))
+                .font(MakiType.contentStrong)
                 .foregroundStyle(theme.accent)
             Text(controller.action.title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(MakiType.title)
                 .foregroundStyle(theme.text)
             Spacer()
             Text(status)
-                .font(.system(size: 11))
+                .font(MakiType.body)
                 .foregroundStyle(theme.subtext)
         }
         .padding(.horizontal, 14)
@@ -112,7 +112,7 @@ private struct NotesRewriteView: View {
     private var preview: some View {
         ScrollView {
             Text(controller.preview.isEmpty ? placeholder : controller.preview)
-                .font(.system(size: 12, design: .monospaced))
+                .font(MakiType.content.monospaced())
                 .foregroundStyle(controller.preview.isEmpty ? theme.subtext : theme.text)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)

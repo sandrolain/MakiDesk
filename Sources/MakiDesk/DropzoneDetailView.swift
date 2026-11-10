@@ -98,7 +98,7 @@ struct DropzoneDetailView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(theme.surfaceSelected))
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("Name", text: $zone.name)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(MakiType.subtitle)
                     Toggle("Enabled", isOn: $zone.enabled)
                         .toggleStyle(.checkbox)
                         .help("Disabled zones stay in the list but do not appear in the strip.")
@@ -252,9 +252,9 @@ struct DropzoneDetailView: View {
                         HStack(spacing: 4) {
                             Image(systemName: isUTISelected(preset.uti)
                                   ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 10))
+                                .font(MakiType.micro)
                             Text(preset.label)
-                                .font(.system(size: 11))
+                                .font(MakiType.body)
                             Spacer(minLength: 0)
                         }
                         .foregroundStyle(isUTISelected(preset.uti) ? theme.accent : theme.text)
@@ -265,7 +265,7 @@ struct DropzoneDetailView: View {
                 }
             }
             TextField("public.image, com.adobe.pdf", text: $utiText)
-                .font(.system(.caption, design: .monospaced))
+                .font(MakiType.body.monospaced())
             caption("Files only; empty means any type. Separate UTIs with commas.")
 
             Picker("When only some items fit", selection: $zone.accepts.match) {

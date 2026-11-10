@@ -80,22 +80,22 @@ struct DropzoneListRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Text(zone.name.isEmpty ? "Untitled" : zone.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(MakiType.contentMedium)
                         .foregroundStyle(zone.enabled ? theme.text : theme.subtext)
                         .lineLimit(1)
                     if zone.issues().isEmpty == false {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 9))
+                            .font(MakiType.micro)
                             .foregroundStyle(.orange)
                     }
                     if zone.requiresConfirmation {
                         Image(systemName: "lock.shield")
-                            .font(.system(size: 9))
+                            .font(MakiType.micro)
                             .foregroundStyle(theme.subtext)
                     }
                 }
                 Text(commandSummary)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(MakiType.meta.monospaced())
                     .foregroundStyle(theme.subtext)
                     .lineLimit(2)
             }
@@ -115,7 +115,7 @@ struct DropzoneListRow: View {
                     Button("Delete…", role: .destructive, action: onDelete).disabled(!canEdit)
                 } label: {
                     Image(systemName: "ellipsis")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(MakiType.microStrong)
                         .foregroundStyle(theme.subtext)
                 }
                 .menuStyle(.borderlessButton)
@@ -177,7 +177,7 @@ struct DropzoneTestResultView: View {
             }
             ScrollView {
                 Text(result.message)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(MakiType.body.monospaced())
                     .textSelection(.enabled)
                     .foregroundStyle(theme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -273,14 +273,14 @@ struct DropzoneShortcutPicker: View {
                                 } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: "bolt.fill")
-                                            .font(.system(size: 10))
+                                            .font(MakiType.micro)
                                             .foregroundStyle(theme.accent)
                                         Text(shortcut.name)
                                             .foregroundStyle(theme.text)
                                             .lineLimit(1)
                                         Spacer()
                                         Text(shortcut.id.prefix(8))
-                                            .font(.system(size: 9, design: .monospaced))
+                                            .font(MakiType.micro.monospaced())
                                             .foregroundStyle(theme.subtext)
                                     }
                                     .padding(.horizontal, 8)
@@ -352,7 +352,7 @@ struct DropzonePresetPicker: View {
                         let presets = presets(in: category)
                         if presets.isEmpty == false {
                             Text(category.rawValue)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(MakiType.metaStrong)
                                 .foregroundStyle(theme.subtext)
                                 .padding(.top, 2)
                             ForEach(presets) { preset in
@@ -400,26 +400,26 @@ struct DropzonePresetPicker: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(preset.name)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(MakiType.contentStrong)
                         .foregroundStyle(theme.text)
                     Spacer()
                     Text("Apply")
-                        .font(.caption)
+                        .font(MakiType.meta)
                         .foregroundStyle(theme.accent)
                 }
                 Text(preset.summary)
-                    .font(.caption)
+                    .font(MakiType.caption)
                     .foregroundStyle(theme.subtext)
                     .fixedSize(horizontal: false, vertical: true)
                 Text((preset.mode == .shell ? "zsh: " : "") + preset.line)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(MakiType.meta.monospaced())
                     .foregroundStyle(theme.subtext)
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .help(preset.line)
                 if let expected = preset.expectedOutput {
                     Text("Checks \(expected)")
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(MakiType.micro.monospaced())
                         .foregroundStyle(theme.accent.opacity(0.9))
                         .lineLimit(1)
                 }
