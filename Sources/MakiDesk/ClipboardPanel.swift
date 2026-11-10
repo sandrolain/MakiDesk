@@ -334,6 +334,7 @@ struct ClipboardView: View {
         .frame(width: 560, height: 420)
         .background(RoundedRectangle(cornerRadius: 14)
             .fill(model.theme.background.opacity(model.opacity)))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14)
             .stroke(model.theme.border.opacity(0.8), lineWidth: 1))
         .confirmationDialog("Clear everything, including pinned items?",
@@ -366,6 +367,7 @@ struct ClipboardView: View {
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 10)
+        .background(model.theme.raisedSurface.opacity(0.35))
     }
 
     private var list: some View {
@@ -454,6 +456,7 @@ struct ClipboardView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .background(model.theme.raisedSurface.opacity(0.35))
     }
 
     private func hint(_ key: String, _ label: String) -> some View {

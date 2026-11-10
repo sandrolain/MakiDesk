@@ -1470,6 +1470,9 @@ struct SettingsView: View {
         Text(text)
             .font(.system(size: 12.5))
             .foregroundStyle(theme.subtext)
+            // Settings carries long explanations; a little leading keeps
+            // them readable without making the window taller by a screen.
+            .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)
     }
 

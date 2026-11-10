@@ -1894,6 +1894,13 @@ struct PaletteView: View {
                     Spacer()
                 }
                 .padding(.vertical, 14)
+                // A toolbar hairline: the field is chrome, the grid below is
+                // content, and the two should not read as one block.
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(model.theme.border.opacity(0.35))
+                        .frame(height: 1)
+                }
 
                 if model.mode == .search {
                     applicationShelf
