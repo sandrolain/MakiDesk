@@ -75,6 +75,26 @@ extension HUDMessage {
                    detail: "Quit the terminal and open it again.")
     }
 
+    // MARK: - Docker
+
+    static func dockerNotInstalled() -> HUDMessage {
+        HUDMessage(title: "Docker helper not found",
+                   symbol: "shippingbox",
+                   detail: "Build it with task docker:bundle.")
+    }
+
+    static func dockerDidNotAnswer() -> HUDMessage {
+        HUDMessage(title: "The Docker window did not answer",
+                   symbol: "exclamationmark.triangle.fill",
+                   detail: "Try again; the helper may have stopped.")
+    }
+
+    static func dockerVersionMismatch() -> HUDMessage {
+        HUDMessage(title: "Docker helper version mismatch",
+                   symbol: "exclamationmark.triangle.fill",
+                   detail: "Quit the Docker window and open it again.")
+    }
+
     // MARK: - Text recognition
 
     static func textCopied(size: String, preview: String,

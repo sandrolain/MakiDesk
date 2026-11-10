@@ -613,26 +613,37 @@ final class WorkspaceStore {
         WindowOutlineController.shared.applySettings()
     }
 
-    /// The helper is frontmost: keep only its own two keys alive so the shell
-    /// can receive everything else. Called by `TerminalController`'s workspace
-    /// observer.
+    /// An auxiliary helper is frontmost: keep only its own keys alive so the
+    /// helper can receive everything else. Called by `TerminalController` and
+    /// `DockerController`'s workspace observers.
     private var terminalIsFrontmost = false
+    private var dockerIsFrontmost = false
 
     func setTerminalFrontmost(_ frontmost: Bool) {
         terminalIsFrontmost = frontmost
-        var keeping: Set<String> = ["app.terminal", "app.terminalQuake"]
+        applyAuxiliaryShortcutSuspension()
+    }
+
+    func setDockerFrontmost(_ frontmost: Bool) {
+        dockerIsFrontmost = frontmost
+        applyAuxiliaryShortcutSuspension()
+    }
+
+    private func applyAuxiliaryShortcutSuspension() {
+        var keeping: Set<String> = ["app.terminal", "app.terminalQuake", "app.docker"]
         let defaults = UserDefaults.standard
         let keepsWindowRows = (defaults.object(forKey: SettingsKey.keepTerminalWindowShortcuts.rawValue)
             as? Bool) ?? true
         if keepsWindowRows {
             keeping.formUnion(ShortcutDefinitions.windowShortcutIDs)
         }
-        shortcutManager?.setSuspended(frontmost, keeping: keeping)
+        shortcutManager?.setSuspended(terminalIsFrontmost || dockerIsFrontmost,
+                                      keeping: keeping)
     }
 
-    /// Re-applies the terminal suspension after the preference changes.
+    /// Re-applies the auxiliary suspension after the preference changes.
     func refreshTerminalShortcutSuspension() {
-        setTerminalFrontmost(terminalIsFrontmost)
+        applyAuxiliaryShortcutSuspension()
     }
 
     func openAccessibilitySettings() { WindowController.openAccessibilitySettings() }
@@ -1036,6 +1047,7 @@ final class WorkspaceStore {
         // The terminal follows the palette too; write theme.json and tell a
         // running helper to reload it.
         TerminalController.shared.themeDidChange()
+        DockerController.shared.themeDidChange()
     }
 
     func updateOverlayScale(_ value: Double) {
@@ -1741,6 +1753,9 @@ final class WorkspaceStore {
             return
         case .toggleTerminalQuake:
             TerminalController.shared.toggleQuake()
+            return
+        case .openDocker:
+            DockerController.shared.open()
             return
         case .newTimer:
             TimerInputController.shared.show()

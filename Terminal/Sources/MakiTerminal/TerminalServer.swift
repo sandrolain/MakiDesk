@@ -28,6 +28,7 @@ final class TerminalIPCServer {
     var onSettingsChanged: (() -> Void)?
     var onThemeChanged: (() -> Void)?
     var onAgentStatus: ((UUID, AgentState, String?) -> Void)?
+    var onDockerExec: ((String, String, String?) -> Void)?
     var onPeerConnected: (() -> Void)?
 
     init(socketURL: URL = TerminalSocketLocation.socketURL) {
@@ -230,6 +231,15 @@ final class TerminalIPCServer {
                   let state = message.body?.agentState else { return }
             DispatchQueue.main.async { [weak self] in
                 self?.onAgentStatus?(id, state, message.body?.message)
+            }
+        case .dockerExec:
+            guard let containerID = message.body?.containerID,
+                  let shell = message.body?.shell,
+                  DockerExecValidation.isValidContainerID(containerID),
+                  DockerExecValidation.isValidShell(shell) else { return }
+            let title = message.body?.title
+            DispatchQueue.main.async { [weak self] in
+                self?.onDockerExec?(containerID, shell, title)
             }
         case .welcome, .pong, .state, .attention, .openSettings,
              .settingsRequested, .willTerminate:

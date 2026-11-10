@@ -70,6 +70,11 @@ identity before the outer app.
   written by MakiDesk; the helper reloads them on `settingsChanged` and
   `themeChanged`. The generated config disables Ghostty's shell-integration
   cursor so the chosen shape shows at the prompt.
+- **Container terminal:** a typed `dockerExec` message from MakiDesk opens a
+  workspace running `docker exec -it <container> <shell>`; the container
+  reference and the shell are validated, and the command is saved with the
+  layout like an SSH session. The Docker helper never connects to the terminal
+  socket directly; MakiDesk relays the request.
 - **Agent status CLI:** `Contents/Resources/bin/makidesk status working`,
   `waiting` or `done` connects to the helper socket, reads
   `MAKIDESK_WORKSPACE_ID` and only updates a sidebar dot. The helper recreates a

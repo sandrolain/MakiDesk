@@ -1,0 +1,515 @@
+import AppKit
+import SwiftUI
+import MakiDockerCore
+
+struct DockerRootView: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        NavigationSplitView {
+            DockerSidebarView(store: store)
+        } content: {
+            Group {
+                switch store.section {
+                case .containers:
+                    DockerContainersView(store: store)
+                case .images:
+                    DockerImagesView(store: store)
+                case .volumes:
+                    DockerVolumesView(store: store)
+                case .networks:
+                    DockerNetworksView(store: store)
+                case .cleanup:
+                    DockerCleanupView(store: store)
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 300, ideal: 430, max: 700)
+        } detail: {
+            DockerDetailPane(store: store)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 430)
+        }
+        .background(store.theme.background)
+        .searchable(text: $store.search, placement: .toolbar,
+                    prompt: "Search \(store.section.title.lowercased())")
+        .toolbar { toolbar }
+        .sheet(isPresented: $store.isSettingsPresented) {
+            DockerSettingsView(store: store)
+        }
+        .alert("Docker", isPresented: Binding(
+            get: { store.actionError != nil },
+            set: { if $0 == false { store.actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { store.actionError = nil }
+        } message: {
+            Text(store.actionError ?? "")
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            if store.isRefreshing {
+                ProgressView().controlSize(.small)
+            }
+            Button {
+                store.refreshNow()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .help("Refresh now (⌘R)")
+
+            Toggle(isOn: $store.autoRefresh) {
+                Label("Auto refresh", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .toggleStyle(.button)
+            .help("Refresh while the window is visible")
+
+            Menu {
+                ForEach(store.contexts) { context in
+                    Button {
+                        store.selectContext(context.name)
+                    } label: {
+                        if context.name == store.currentContext {
+                            Label(context.name, systemImage: "checkmark")
+                        } else {
+                            Text(context.name)
+                        }
+                    }
+                }
+                if store.contexts.isEmpty == false {
+                    Divider()
+                    Button("Use the current context") { store.selectContext(nil) }
+                }
+            } label: {
+                Label(store.currentContext ?? "Context", systemImage: "server.rack")
+            }
+            .help("Docker context")
+
+            Button {
+                store.isSettingsPresented = true
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .help("Docker settings")
+        }
+    }
+}
+
+struct DockerSidebarView: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        List(selection: $store.section) {
+            Section("Docker") {
+                ForEach(DockerSection.allCases) { section in
+                    Label {
+                        HStack(spacing: 8) {
+                            Text(section.title)
+                            Spacer(minLength: 6)
+                            Text(count(for: section))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(store.theme.subtext)
+                        }
+                    } icon: {
+                        Image(systemName: section.icon)
+                    }
+                    .tag(section)
+                }
+            }
+            Section("Context") {
+                if store.contexts.isEmpty {
+                    Text(store.currentContext ?? "No context")
+                        .foregroundStyle(store.theme.subtext)
+                } else {
+                    ForEach(store.contexts) { context in
+                        Button {
+                            store.selectContext(context.name)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(context.name == store.currentContext
+                                          ? store.theme.accent : store.theme.border)
+                                    .frame(width: 6, height: 6)
+                                Text(context.name)
+                                    .lineLimit(1)
+                                Spacer()
+                                if context.isRemote {
+                                    Image(systemName: "network")
+                                        .font(.caption2)
+                                        .foregroundStyle(store.theme.subtext)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .help(context.endpoint)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom) {
+            DockerConnectionFooter(store: store)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(store.theme.surface.opacity(0.6))
+        }
+    }
+
+    private func count(for section: DockerSection) -> String {
+        switch section {
+        case .containers: return "\(store.containers.count)"
+        case .images: return "\(store.images.count)"
+        case .volumes: return "\(store.volumes.count)"
+        case .networks: return "\(store.networks.count)"
+        case .cleanup: return store.diskUsage.reclaimableBytes > 0
+            ? DockerFormatting.size(store.diskUsage.reclaimableBytes) : "—"
+        }
+    }
+}
+
+struct DockerConnectionFooter: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(statusTitle)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                Text(store.currentContext ?? "docker")
+                    .font(.caption2)
+                    .foregroundStyle(store.theme.subtext)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .foregroundStyle(store.theme.text)
+    }
+
+    private var statusTitle: String {
+        switch store.connection {
+        case .locating: return "Looking for Docker…"
+        case let .ready(version): return version.isEmpty ? "Connected" : "Engine \(version)"
+        case .failed: return "Docker unavailable"
+        }
+    }
+
+    private var statusColor: Color {
+        switch store.connection {
+        case .locating: return .orange
+        case .ready: return .green
+        case .failed: return .red
+        }
+    }
+}
+
+struct DockerContainersView: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            DockerSectionHeader(
+                title: "Containers",
+                subtitle: "\(store.containers.filter(\.isRunning).count) running · \(store.containers.count) total",
+                store: store
+            )
+            Divider().overlay(store.theme.border)
+            if store.connection.failure != nil, store.containers.isEmpty {
+                DockerConnectionProblem(store: store)
+            } else if store.filteredGroups.isEmpty {
+                DockerEmptyView(
+                    icon: "shippingbox",
+                    title: store.containers.isEmpty ? "No containers" : "No containers match",
+                    detail: store.containers.isEmpty
+                        ? "Start a container or a Compose project to see it here."
+                        : "Change the search or show stopped containers."
+                )
+            } else {
+                List(selection: $store.selectedContainerID) {
+                    ForEach(store.filteredGroups) { group in
+                        Section {
+                            ForEach(group.containers) { container in
+                                DockerContainerRow(store: store, container: container)
+                                    .tag(container.id)
+                                    .contextMenu {
+                                        containerMenu(store: store, container: container)
+                                    }
+                            }
+                        } header: {
+                            DockerGroupHeader(store: store, group: group)
+                        }
+                    }
+                }
+                .listStyle(.inset)
+                .scrollContentBackground(.hidden)
+            }
+        }
+        .background(store.theme.background)
+    }
+
+    @ViewBuilder
+    private func containerMenu(store: DockerStore, container: DockerContainer) -> some View {
+        if container.isPaused {
+            Button("Resume") { store.perform(.unpause, on: container) }
+            Button("Stop") { store.perform(.stop, on: container) }
+            Button("Restart") { store.perform(.restart, on: container) }
+        } else if container.isRunning {
+            Button("Stop") { store.perform(.stop, on: container) }
+            Button("Restart") { store.perform(.restart, on: container) }
+            Button("Pause") { store.perform(.pause, on: container) }
+        } else {
+            Button("Start") { store.perform(.start, on: container) }
+        }
+        Button("Terminal") { store.openTerminal(for: container) }
+            .disabled(container.isRunning == false)
+        Divider()
+        Button("Copy container ID") { store.copyToPasteboard(container.id) }
+        Button("Copy name") { store.copyToPasteboard(container.name) }
+        Divider()
+        Button("Kill", role: .destructive) { store.perform(.kill, on: container) }
+        Button("Delete", role: .destructive) { store.perform(.remove, on: container) }
+    }
+}
+
+struct DockerSectionHeader: View {
+    let title: String
+    let subtitle: String
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(store.theme.text)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(store.theme.subtext)
+            }
+            Spacer()
+            if store.isActionRunning {
+                ProgressView().controlSize(.small)
+                Text(store.actionLabel)
+                    .font(.caption)
+                    .foregroundStyle(store.theme.subtext)
+                    .lineLimit(1)
+            }
+            if let message = store.lastError {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .help(message)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(store.theme.surface.opacity(0.45))
+    }
+}
+
+struct DockerContainerRow: View {
+    @Bindable var store: DockerStore
+    let container: DockerContainer
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(container.name)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(store.theme.text)
+                        .lineLimit(1)
+                    if container.compose?.oneOff == true {
+                        DockerBadge(text: "one-off", tone: .neutral, theme: store.theme)
+                    }
+                    if container.health == .unhealthy {
+                        DockerBadge(text: "unhealthy", tone: .warning, theme: store.theme)
+                    } else if container.health == .healthy {
+                        DockerBadge(text: "healthy", tone: .success, theme: store.theme)
+                    }
+                }
+                Text(container.image)
+                    .font(.caption)
+                    .foregroundStyle(store.theme.subtext)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(container.state.label)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(statusColor)
+                if container.displayPorts != "—" {
+                    Text(container.displayPorts)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(store.theme.subtext)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(container.name), \(container.state.label), \(container.image)")
+    }
+
+    private var statusColor: Color {
+        switch container.state {
+        case .running: return .green
+        case .paused: return .orange
+        case .restarting: return .blue
+        case .exited, .dead: return .secondary
+        case .created: return .teal
+        case .removing: return .orange
+        case .unknown: return .secondary
+        }
+    }
+}
+
+struct DockerGroupHeader: View {
+    @Bindable var store: DockerStore
+    let group: DockerContainerGroup
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: group.isStandalone ? "shippingbox" : "square.stack.3d.up")
+                .font(.caption)
+                .foregroundStyle(store.theme.subtext)
+            Text(group.name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(store.theme.text)
+            Text("\(group.runningCount)/\(group.totalCount)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(store.theme.subtext)
+            Spacer()
+            if group.compose != nil {
+                Menu {
+                    Button("Start project") { store.performCompose(.start, on: group) }
+                    Button("Stop project") { store.performCompose(.stop, on: group) }
+                    Button("Restart project") { store.performCompose(.restart, on: group) }
+                    Divider()
+                    Button("Down", role: .destructive) { store.performCompose(.down, on: group) }
+                    Button("Down and remove volumes", role: .destructive) {
+                        store.performCompose(.downVolumes, on: group)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.caption)
+                        .foregroundStyle(store.theme.subtext)
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(group.canRunCompose == false)
+                .help(group.canRunCompose
+                      ? "Project actions"
+                      : "The Compose file or working directory is not available")
+            }
+        }
+        .textCase(nil)
+        .padding(.vertical, 2)
+    }
+}
+
+struct DockerConnectionProblem: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.orange)
+            Text("Docker is not available")
+                .font(.headline)
+                .foregroundStyle(store.theme.text)
+            Text(store.connection.failure ?? "The Docker daemon did not answer.")
+                .font(.callout)
+                .foregroundStyle(store.theme.subtext)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .frame(maxWidth: 420)
+            HStack(spacing: 8) {
+                Button("Retry") { store.reconnect() }
+                    .buttonStyle(.borderedProminent)
+                Button("Open Docker Desktop") { openDockerDesktop() }
+                    .disabled(dockerDesktopInstalled == false)
+                Button("Settings") { store.isSettingsPresented = true }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(28)
+    }
+
+    private var dockerDesktopInstalled: Bool {
+        ["com.docker.docker", "com.orbstack.OrbStack", "io.rancherdesktop.app"]
+            .contains { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil }
+    }
+
+    private func openDockerDesktop() {
+        let bundleIDs = ["com.docker.docker", "com.orbstack.OrbStack", "io.rancherdesktop.app"]
+        for id in bundleIDs {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                NSWorkspace.shared.openApplication(at: url,
+                                                    configuration: NSWorkspace.OpenConfiguration())
+                return
+            }
+        }
+    }
+}
+
+struct DockerEmptyView: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.headline)
+            Text(detail)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 360)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(28)
+    }
+}
+
+struct DockerBadge: View {
+    let text: String
+    let tone: Tone
+    let theme: DockerUITheme
+
+    enum Tone {
+        case neutral, success, warning, danger
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .foregroundStyle(foreground)
+            .background(background, in: Capsule())
+    }
+
+    private var foreground: Color {
+        switch tone {
+        case .neutral: return theme.subtext
+        case .success: return .green
+        case .warning: return .orange
+        case .danger: return .red
+        }
+    }
+
+    private var background: Color {
+        foreground.opacity(0.12)
+    }
+}

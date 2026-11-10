@@ -58,6 +58,28 @@ tasks:
     cmds:
       - open dist/MakiDeskTerminal.app
 
+  docker:build:
+    desc: Build the Docker helper
+    cmds:
+      - swift build --package-path Docker
+
+  docker:bundle:
+    desc: Build and bundle the Docker helper in dist/MakiDeskDocker.app
+    cmds:
+      - sh scripts/bundle-docker.sh
+
+  docker:release:
+    desc: Build and bundle the Docker helper with the release configuration
+    cmds:
+      - sh scripts/bundle-docker.sh release
+
+  docker:run:
+    desc: Launch the bundled Docker helper
+    deps:
+      - docker:bundle
+    cmds:
+      - open dist/MakiDeskDocker.app
+
   release:
     desc: Compile optimized release target
     cmds:
@@ -68,6 +90,7 @@ tasks:
     deps:
       - release
       - terminal:release
+      - docker:release
     cmds:
       - mkdir -p "{{.APP_BUNDLE}}/Contents/MacOS" "{{.APP_BUNDLE}}/Contents/Resources"
       - cp "{{.RELEASE_BIN}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
@@ -77,6 +100,8 @@ tasks:
       - mkdir -p "{{.APP_BUNDLE}}/Contents/Applications"
       - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskTerminal.app"
       - cp -R "{{.ROOT_DIR}}/dist/MakiDeskTerminal.app" "{{.APP_BUNDLE}}/Contents/Applications/"
+      - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskDocker.app"
+      - cp -R "{{.ROOT_DIR}}/dist/MakiDeskDocker.app" "{{.APP_BUNDLE}}/Contents/Applications/"
 
   cert:
     desc: Create a stable self-signed signing identity (run once)
@@ -110,14 +135,21 @@ tasks:
         CERT_NAME="MakiDesk Local Signing"
         KEYCHAIN="$HOME/Library/Keychains/makidesk-signing.keychain-db"
         HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskTerminal.app"
+        DOCKER_HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskDocker.app"
         if security find-identity -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$CERT_NAME"; then
           security unlock-keychain -p makidesk "$KEYCHAIN"
+          if [ -d "$DOCKER_HELPER" ]; then
+            codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$DOCKER_HELPER"
+          fi
           if [ -d "$HELPER" ]; then
             codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$HELPER"
           fi
           codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "{{.APP_BUNDLE}}"
           echo "Signed with '$CERT_NAME' — Accessibility permission survives rebuilds."
         else
+          if [ -d "$DOCKER_HELPER" ]; then
+            codesign --force --sign - -r='designated => identifier "com.makidesk.app.docker"' "$DOCKER_HELPER"
+          fi
           if [ -d "$HELPER" ]; then
             codesign --force --sign - -r='designated => identifier "com.makidesk.app.terminal"' "$HELPER"
           fi

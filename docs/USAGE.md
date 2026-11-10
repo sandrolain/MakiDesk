@@ -18,6 +18,8 @@ through Accessibility.
 - [Timers](#timers)
 - [Opening applications](#opening-applications)
 - [Command box](#command-box)
+- [Terminal](#terminal)
+- [Docker](#docker)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
@@ -610,8 +612,8 @@ it, and leaves no room behind.
   item does the same, and the command box has `utility bar`, `bar show`,
   `bar hide` and `bar pin`.
 - **What is on it.** On the left the everyday panels and tools — Notes,
-  Clipboard, Shelf, Timer, the command box, the Terminal and its Quake, then
-  screenshots, text from the screen, colour, measure and the Ports window. The Timer button carries the
+  Clipboard, Shelf, Timer, the command box, the Terminal and its Quake, Docker,
+  then screenshots, text from the screen, colour, measure and the Ports window. The Timer button carries the
   nearest running countdown as a badge, so one Timer is both the command and the
   figure. In the middle the presentation toggles — focus
   border, focus dim, mini map — lit in the accent while on. On the right the
@@ -799,6 +801,60 @@ it running, so its shells keep working.
 The helper is embedded when the app is bundled (`task bundle`); a development
 `swift run` looks for `dist/MakiDeskTerminal.app`. If it is missing, the shortcut
 says so in a notice instead of failing silently.
+
+## Docker
+
+`⌃⌥E`, or **Docker** in the menu bar's menu, opens **MakiDesk Docker**, a native
+window over the Docker CLI. It is a client, not a container engine: Docker
+Desktop, OrbStack, colima or Docker Engine must already be installed and
+reachable through the usual `docker` command.
+
+- **Containers.** The list groups containers by Compose project and puts
+  containers without a project under **Standalone**. Each group shows how many
+  are running, and its `⋯` menu starts, stops, restarts or brings down the
+  project when its Compose files are still on disk. A container row has its
+  state, image, ports and health; the context menu starts, stops, restarts,
+  pauses, kills or deletes it, copies its ID or opens a terminal. The detail
+  pane has **Overview**, **Logs**, **Stats** and **Inspect**. Running containers
+  are never removed by a prune.
+- **Images, volumes, networks.** Each section lists the resource with the size,
+  usage and Compose project where available. Remove asks first, and a resource
+  still in use is left alone. Network and volume details show who is connected.
+- **Logs and stats.** Logs stream with `docker logs --follow`; **Follow** and
+  **Timestamps** restart the stream, the field filters the lines already
+  received, and the buffer is bounded (20,000 lines by default) so a chatty
+  container cannot grow memory without limit. **Stats** polls only while the tab
+  is visible and the container is running.
+- **Terminal.** **Terminal** opens a workspace in **MakiDesk Terminal** running
+  `docker exec -it <container> <shell>`. The shell defaults to `sh` and can be
+  changed in the Docker window's settings. MakiDesk must be running to relay the
+  request; if it is not, the window offers to copy the command instead. The
+  terminal workspace is saved like any other terminal session.
+- **Cleanup.** The **Cleanup** section shows what is reclaimable for containers,
+  images, volumes, networks and build cache. **Prune** runs
+  `docker system prune` and keeps tagged images and volumes; **Prune all** runs
+  `docker system prune --all --volumes` and also removes unused named volumes.
+  Both ask first, and **Prune all** asks a second time before deleting volumes.
+  The preview is an estimate: Docker has no dry-run for `system prune`.
+- **Contexts and permissions.** The current Docker context is shown in the
+  sidebar and can be changed for this window from the toolbar without running
+  `docker context use`. A remote context is marked; every destructive
+  confirmation names the context and the host. The app needs no new TCC
+  permission: it reads the Docker socket through the CLI with your user
+  account, and never opens a network server of its own.
+- **Docker missing or stopped.** The window stays open and explains the problem,
+  with **Retry**, **Open Docker Desktop** when it is installed, and a **Choose
+  the docker executable** field in settings. A development `swift run` looks
+  for `dist/MakiDeskDocker.app`; the bundled app carries the helper in
+  `Contents/Applications/`.
+- **Settings.** Refresh interval, stats interval, default shell, confirmation
+  of destructive actions, showing stopped containers, log tail and buffer, the
+  Docker executable and the context. The window frame and settings stay local;
+  filters and column choices are not persisted yet. The theme follows the
+  MakiDesk palette.
+
+The helper is embedded when the app is bundled (`task bundle`). To try it
+alone, run `task docker:run`.
 
 ## Clipboard history
 
@@ -1446,6 +1502,7 @@ The table below is generated from the app's own table, with
 | Utility bar | `⌃⌥B` | Window |
 | Terminal | `⌃⌥O` | Window |
 | Terminal quake | `⌃⌥Q` | Window |
+| Docker | `⌃⌥E` | Window |
 
 <!-- shortcuts:end -->
 

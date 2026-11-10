@@ -7,6 +7,7 @@ titles, previews, notes, clipboard contents, recognized text or files anywhere.
 - [Permissions](#permissions)
 - [What is read](#what-is-read)
 - [What is stored](#what-is-stored)
+- [Docker](#docker)
 - [Clipboard](#clipboard)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
@@ -127,6 +128,9 @@ All paths are under your user account:
 | Terminal window frame | `…/MakiDesk/Terminal/window.json`: the helper's main window position and size | Until you delete it; a factory reset does not remove it |
 | Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, cursor, scrollback, selection copy, pointer hiding, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
 | Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |
+| Docker window state | `…/MakiDesk/Docker/window.json`: the helper's window position and size | Until you delete it |
+| Docker settings | `…/MakiDesk/Docker/settings.json`: refresh/stats intervals, default shell, confirmation and log preferences, optional docker path and context | Until you delete it |
+| Docker theme | `…/MakiDesk/Docker/theme.json`: the MakiDesk palette colours | Until you delete it |
 | Claude Code and Codex hooks (opt-in) | `~/.claude/settings.json` or `~/.codex/hooks.json` gains five handlers; a one-time `<name>.makidesk-backup` sits next to it | The handlers until you switch them off; the backup until you delete it |
 | Preferences | `UserDefaults` (theme, layout weights, shelf shake, screenshot folder/view, animations, switcher settings, utility bar on/height/labels, disk label and CPU watch, date of the last disk warning) | Until reset |
 | Timers | `…/MakiDesk/timers.json` | Until you delete them; a factory reset leaves them |
@@ -200,6 +204,34 @@ active screen, kept in a half-second in-memory snapshot for VoiceOver and
 dictation tools. Accessibility writes are inserted into the shell at the cursor;
 selected text comes from the terminal's own selection. The snapshot is never
 written to disk and is dropped when the pane goes away.
+
+## Docker
+
+The Docker window is a separate helper app (`com.makidesk.app.docker`). It talks
+to the Docker daemon only through the `docker` CLI, using the user's own
+`DOCKER_HOST`, context and `~/.docker` configuration; it does not open a network
+server, does not listen on a port and sends nothing anywhere. MakiDesk and the
+helper meet on
+`~/Library/Application Support/MakiDesk/Docker/docker-control.sock` (`0600` in a
+`0700` directory); the helper rejects a peer that is not MakiDesk.
+
+Docker access is privilege-equivalent: the socket can control containers and
+host resources. The helper never executes a command received over IPC. The one
+cross-app request, **Terminal**, carries a validated container reference and an
+allow-listed shell; the terminal composes `docker exec -it` itself. Container
+environment variables and log contents can contain secrets. They are shown only
+in the window, environment values are hidden behind an explicit **Reveal**, and
+neither is written to disk or to a log. **Copy** is an explicit user action.
+Docker names, images, volumes, networks, Compose paths and disk usage are read to
+render the window; they are not sent anywhere.
+
+The helper stores only its window frame, local preferences and the theme. It
+does not persist logs, inspect output, environment values, container IDs or
+command output. A remote Docker context is marked in the window and every
+destructive confirmation names the context and endpoint; the app never runs
+`docker context use` on your behalf. No new TCC permission is requested:
+Accessibility, Screen Recording and Full Disk Access are not needed for this
+window.
 
 ## Clipboard
 

@@ -356,5 +356,8 @@ enum ShortcutDefinitions {
         def("app.terminalQuake", "Terminal quake", section: "App", key: kVK_ANSI_Q,
             action: .toggleTerminalQuake,
             note: "Drops a scratch terminal from the top of the screen; the same key hides it."),
+        def("app.docker", "Docker", section: "App", key: kVK_ANSI_E,
+            action: .openDocker,
+            note: "Opens the native Docker window: containers, images, volumes, networks and cleanup."),
     ]
 }

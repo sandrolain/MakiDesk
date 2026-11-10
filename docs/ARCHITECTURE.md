@@ -25,9 +25,10 @@ never draws a separate desktop or mirrors their content as a workspace.
 - Panels are `NSPanel`s or `NSWindow`s with `NSHostingView`/AppKit content:
   the window switcher, notes, clipboard, shelf, shortcuts reference, HUD,
   overlay and peek. Settings is the SwiftUI scene.
-- There is one process. State lives in `WorkspaceStore` (windows, groups,
-  scenes, settings), `NotesStore`, `ClipboardHistory`, `ShelfController` and
-  `SystemMonitor` (disk space and CPU readings).
+- MakiDesk is one process; the terminal and Docker windows are separate helper
+  apps. State lives in `WorkspaceStore` (windows, groups, scenes, settings),
+  `NotesStore`, `ClipboardHistory`, `ShelfController`, `SystemMonitor` and
+  Docker's `DockerStore` in its own process.
 
 ## Modules
 
@@ -88,6 +89,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `UtilityBarController.swift`, `UtilityBarView.swift` | The utility bar's panel and lifecycle: pointer reveal with a 10 Hz sample while enabled, pin, overflow menu, keyboard session, capture exclusion. |
 | `BarReveal.swift`, `BarLayout.swift`, `BarItemCatalog.swift`, `BarConfiguration.swift`, `UtilityBarModel.swift` | Pure rules for when the bar opens and retreats, what fits, which commands it offers, the hand-editable buttons file, and the info text; no AppKit or Accessibility I/O. |
 | `TerminalClient.swift` | The MakiDesk side of the terminal helper: launch, one Unix-socket connection, handshake, retries and notices; no socket work on the main thread. |
+| `DockerClient.swift` | The MakiDesk side of the Docker helper: launch, one socket, handshake, theme notifications and the `openExec` bridge to the terminal. |
+| `Docker/` | The separate `MakiDockerCore`/`MakiDeskDocker` package: CLI JSON models and parsers, Compose grouping, prune plan, window, logs/stats/inspect and settings. |
 | `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
 | `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
 | `LegacyMigration.swift` | One-time migration from the project's previous name. |
@@ -533,6 +536,61 @@ so the chosen shape is not replaced by a bar at the prompt. Each theme carries
 its own sixteen ANSI colours and the surface/text/accent colours for the
 helper's sidebar and title bar.
 
+### The Docker helper (F4)
+
+Docker is a second helper app, `MakiDeskDocker.app`, nested in
+`Contents/Applications/` with bundle id `com.makidesk.app.docker`. It is
+`.regular` while its window is open and `.accessory` when hidden. It lives in
+the separate `Docker/` SwiftPM package: `MakiDockerCore` owns the models,
+parsing, Compose grouping, command builders, prune plan and log buffer, while
+`MakiDeskDocker` owns AppKit/SwiftUI. The core is Foundation-only apart from the
+shared exec validation, so the parsers and the prune policy are unit-tested
+without a daemon. The root package does not build the helper.
+
+The data path is deliberately CLI-first. `DockerCLI` runs `docker` with
+`Process`, passing arguments as an array (never a shell string), forwarding
+`--context`, reading both pipes on a worker, and enforcing a timeout with a
+TERM-then-KILL escalation. `DockerReader` turns the JSON into values: `docker ps
+-a --no-trunc --size --format` with isolated `.Label` fields for the Compose
+project, `docker images`, `docker volume ls`, `docker network ls` plus one
+`network inspect`, and `docker system df -v --format '{{json .}}'`. Labels are
+never parsed from the comma-separated `Labels` string. Actions are the normal
+CLI verbs (`start`, `stop --time 10`, `restart`, `pause`, `unpause`, `kill`,
+`rm`, `compose ...`) with the project directory and every `-f` file taken from
+the container labels. A missing file disables the group action instead of
+inventing a project.
+
+MakiDesk talks to the helper over
+`~/Library/Application Support/MakiDesk/Docker/docker-control.sock` (`0600` in a
+`0700` directory), with the same four-byte length prefix plus JSON as the
+terminal and a closed `DockerMessage` set. `DockerClient` launches the helper on
+demand, keeps one connection, retries the handshake, and reports failures in a
+notice. The helper accepts one client and checks the peer bundle id. MakiDesk
+sends `showMain`, `hideMain`, `themeChanged` and `quit`; the helper sends
+`openExec` when the user asks for a container terminal. `openExec` carries only
+a validated container reference and an allow-listed shell, never a command line.
+MakiDesk relays it to `TerminalController`, which sends the typed `dockerExec`
+kind to the terminal helper; `TerminalWindowController.openDockerExec` composes
+`docker exec -it <id> <shell>` with `DockerExecValidation.command` and creates a
+workspace whose command is persisted like an SSH profile. This keeps the
+terminal's one-client invariant: the Docker helper never connects to the
+terminal socket.
+
+`DockerStore` is the main-actor view model. Reads are sequential and publish each
+list as it arrives, so the first paint does not wait for disk usage; a generation
+check discards a superseded result, and the refresh task exists only while the
+window is visible and the app is active. Logs are a separate `DockerLogStream`
+process with a bounded `DockerLogBuffer`; stats poll only while their tab is
+visible. Prune uses `docker system prune` for the basic action and
+`docker system prune --all --volumes` for "prune all", with the preview computed
+from the inventory because Docker has no dry-run. The helper writes
+`Docker/window.json` and `Docker/settings.json`; MakiDesk writes
+`Docker/theme.json`. `DockerController` watches activation to
+suspend MakiDesk's global shortcuts while the helper is frontmost, mirroring the
+terminal. `Taskfile` builds and bundles it with `docker:build`,
+`docker:bundle`, `docker:release` and `docker:run`; `bundle` copies it beside the
+terminal helper and `sign` signs the Docker helper before the outer app.
+
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and
 announces only a fresh image, with Shelf and Copy text as actions. Its policy —
@@ -759,7 +817,10 @@ grid, spiral, treemap), the advisor and weights, group/scene logic, window
 identity, content scores, the palette geometry, notes persistence and external
 drafts, grammar compilation, clipboard history, shelf shake and shelf item
 behaviour, focus-border placement, timers (formats, deadlines, the launch
-restore rule) and the shortcut catalogue. At the time of writing: **801 tests**.
+restore rule) and the shortcut catalogue. `swift test --package-path Docker`
+covers the Docker CLI runner, JSON parsers, Compose grouping, prune policy,
+exec validation and log buffer. At the time of writing: **1194 tests** in the
+main target.
 
 ## Design notes
 

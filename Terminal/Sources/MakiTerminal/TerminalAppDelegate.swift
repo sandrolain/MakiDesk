@@ -133,6 +133,12 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         server.onAgentStatus = { [weak self] id, state, label in
             self?.terminal?.setAgentState(state, forWorkspaceID: id, label: label)
         }
+        server.onDockerExec = { [weak self] containerID, shell, title in
+            self?.terminal?.openDockerExec(containerID: containerID,
+                                           shell: shell,
+                                           title: title)
+            self?.showMain()
+        }
         server.onQuit = { NSApp.terminate(nil) }
         server.start { started in
             guard started == false else { return }

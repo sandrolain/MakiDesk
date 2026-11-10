@@ -21,16 +21,16 @@ final class TerminalClient {
     private var isLaunching = false
     /// Commands issued before the helper answered. They are sent after
     /// `welcome`, never dropped because the launch was slow.
-    private var pending: [TerminalMessage.Kind] = []
+    private var pending: [TerminalMessage] = []
 
     // MARK: - Commands
 
     func open() {
-        enqueue(.showMain)
+        enqueue(TerminalMessage(kind: .showMain))
     }
 
-    func send(_ kind: TerminalMessage.Kind) {
-        enqueue(kind)
+    func send(_ kind: TerminalMessage.Kind, body: TerminalMessage.Body? = nil) {
+        enqueue(TerminalMessage(kind: kind, body: body))
     }
 
     /// For file-backed changes (theme, settings): tell a helper that is already
@@ -42,14 +42,14 @@ final class TerminalClient {
         }
     }
 
-    private func enqueue(_ kind: TerminalMessage.Kind) {
+    private func enqueue(_ message: TerminalMessage) {
         queue.async { [weak self] in
             guard let self else { return }
             if self.fd >= 0 {
-                self.sendLocked(TerminalMessage(kind: kind))
+                self.sendLocked(message)
                 return
             }
-            self.pending.append(kind)
+            self.pending.append(message)
             self.startLocked()
         }
     }
@@ -198,7 +198,7 @@ final class TerminalClient {
             if queued.isEmpty {
                 sendLocked(TerminalMessage(kind: .showMain))
             } else {
-                for kind in queued { sendLocked(TerminalMessage(kind: kind)) }
+                for message in queued { sendLocked(message) }
             }
             // A helper that outlived a previous MakiDesk may hold stale
             // settings and colours: one reload reads both files.
@@ -216,7 +216,8 @@ final class TerminalClient {
                 SettingsController.shared.show(tab: .terminal)
             }
         case .ping, .pong, .state, .settingsRequested,
-             .settingsChanged, .themeChanged, .agentStatus, .willTerminate:
+             .settingsChanged, .themeChanged, .agentStatus, .willTerminate,
+             .dockerExec:
             break
         case .hello, .showMain, .hideMain, .toggleQuake, .quit:
             break
@@ -335,6 +336,18 @@ final class TerminalController {
 
     func toggleQuake() {
         client.send(.toggleQuake)
+    }
+
+    /// Opens a terminal workspace running `docker exec -it` in a container.
+    /// The message carries a typed container reference and an allow-listed
+    /// shell; the terminal composes the command itself.
+    func openDockerExec(containerID: String, shell: String, title: String?) {
+        guard DockerExecValidation.isValidContainerID(containerID),
+              DockerExecValidation.isValidShell(shell) else {
+            return
+        }
+        client.send(.dockerExec,
+                    body: .init(containerID: containerID, shell: shell, title: title))
     }
 
     /// The window-shortcut preference changed; register or release the rows

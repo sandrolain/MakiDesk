@@ -239,6 +239,16 @@ switch in Settings adds Claude Code and Codex hooks, so the sidebar shows which
 workspace is working, waiting or done. VoiceOver reads the pane as a text area
 and dictation inserts at the cursor. The helper is embedded in the app bundle.
 
+### Docker without the desktop app
+
+`⌃⌥E` opens **MakiDesk Docker**, a native window over the Docker CLI. Containers
+are grouped by Compose project, with start/stop/restart/delete and a terminal
+that opens in MakiDesk Terminal; images, volumes and networks show their size and
+usage; logs and stats update while you watch them. **Cleanup** previews what a
+prune would reclaim and separates the safe prune from the one that also removes
+unused volumes. It is a client for Docker Desktop, OrbStack, colima or Docker
+Engine, not a replacement engine, and it asks for no new permission.
+
 ### Notices that stay readable
 
 Results are reported by a small, themed notice. Its state tints the icon and

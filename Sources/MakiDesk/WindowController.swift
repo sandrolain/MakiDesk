@@ -78,6 +78,8 @@ enum WindowController {
         case openTerminal
         /// Show or hide the terminal helper's quake panel (F1).
         case toggleTerminalQuake
+        /// Open the Docker helper window (F4).
+        case openDocker
         /// Open the field that starts a timer (T61).
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).

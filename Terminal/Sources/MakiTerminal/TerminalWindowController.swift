@@ -495,6 +495,24 @@ final class TerminalWindowController: NSWindowController,
         scheduleSave()
     }
 
+    /// Opens a new workspace running the container's shell. The Docker helper
+    /// sends only a container reference and an allow-listed shell; the command
+    /// is composed here, with quoting, and is persisted like an SSH session.
+    func openDockerExec(containerID: String, shell: String, title: String?) {
+        guard let command = DockerExecValidation.command(containerID: containerID,
+                                                         shell: shell) else {
+            NSSound.beep()
+            return
+        }
+        var workspace = TerminalWorkspace(title: title ?? "Docker")
+        workspace.setCommand(command, for: workspace.focusedPane)
+        workspaces.append(workspace)
+        selected = workspaces.count - 1
+        reloadSidebar()
+        rebuildContent()
+        scheduleSave()
+    }
+
     @objc func splitRightAction(_ sender: Any?) {
         splitFocusedPane(orientation: .sideBySide)
     }

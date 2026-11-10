@@ -36,6 +36,8 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         case agentStatus
         case openSettings
         case willTerminate
+        /// Ask the terminal to open a pane running `docker exec -it`.
+        case dockerExec
     }
 
     public struct Body: Codable, Equatable, Sendable {
@@ -51,6 +53,11 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         public var page: String?
         public var workspaceID: String?
         public var agentState: AgentState?
+        /// A container reference and an allow-listed shell for `dockerExec`.
+        public var containerID: String?
+        public var shell: String?
+        /// A short label for the workspace opened by `dockerExec`.
+        public var title: String?
 
         public init(protocolVersion: Int? = nil,
                     appVersion: String? = nil,
@@ -63,7 +70,10 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
                     quakeVisible: Bool? = nil,
                     page: String? = nil,
                     workspaceID: String? = nil,
-                    agentState: AgentState? = nil) {
+                    agentState: AgentState? = nil,
+                    containerID: String? = nil,
+                    shell: String? = nil,
+                    title: String? = nil) {
             self.protocolVersion = protocolVersion
             self.appVersion = appVersion
             self.build = build
@@ -76,6 +86,9 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
             self.page = page
             self.workspaceID = workspaceID
             self.agentState = agentState
+            self.containerID = containerID
+            self.shell = shell
+            self.title = title
         }
     }
 

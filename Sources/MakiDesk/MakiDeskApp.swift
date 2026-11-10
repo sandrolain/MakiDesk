@@ -35,6 +35,7 @@ struct MakiDeskApp: App {
         SystemMonitor.shared.start()
         UtilityBarController.shared.start()
         TerminalController.shared.start()
+        DockerController.shared.start()
     }
 
     /// A menu item whose shortcut text sits after the title. The menu has no
@@ -116,6 +117,9 @@ struct MakiDeskApp: App {
             menuButton("Terminal Quake", keys: shortcutKeys(.toggleTerminalQuake),
                        icon: "rectangle.topthird.inset.filled") {
                 TerminalController.shared.toggleQuake()
+            }
+            menuButton("Docker", keys: shortcutKeys(.openDocker), icon: "shippingbox") {
+                DockerController.shared.open()
             }
             Menu {
                 // No remaining time in these titles: a title that changed every
