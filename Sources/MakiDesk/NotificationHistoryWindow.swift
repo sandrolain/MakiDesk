@@ -303,6 +303,7 @@ private struct NotificationHistoryRow: View {
     let notice: HUDNotice
     let selected: Bool
     let theme: PaletteTheme
+    @State private var hovering = false
 
     private var tint: Color {
         switch notice.kind {
@@ -342,10 +343,11 @@ private struct NotificationHistoryRow: View {
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 7)
             .fill(selected ? theme.surfaceSelected
-                  : theme.raisedSurface.opacity(0.6)))
+                  : theme.raisedSurface.opacity(hovering ? 0.9 : 0.6)))
         .overlay(RoundedRectangle(cornerRadius: 7)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))
         .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(notice.kind.label)
         .accessibilityValue([notice.text, notice.detail].compactMap { $0 }.joined(separator: ". "))

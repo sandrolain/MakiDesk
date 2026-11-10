@@ -61,6 +61,7 @@ struct DropzoneGlyph: View {
 /// the less frequent actions so the narrow sidebar stays readable.
 struct DropzoneListRow: View {
     @Environment(\.paletteTheme) private var theme
+    @State private var hovering = false
 
     @Binding var zone: DropzoneConfig
     let selected: Bool
@@ -128,10 +129,12 @@ struct DropzoneListRow: View {
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 7)
-            .fill(selected ? theme.surfaceSelected : theme.raisedSurface.opacity(0.6)))
+            .fill(selected ? theme.surfaceSelected
+                  : theme.raisedSurface.opacity(hovering ? 0.9 : 0.6)))
         .overlay(RoundedRectangle(cornerRadius: 7)
             .stroke(selected ? theme.accent.opacity(0.6) : theme.border.opacity(0.45), lineWidth: 1))
         .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .onTapGesture(perform: onSelect)
         .help(commandSummary)
     }
