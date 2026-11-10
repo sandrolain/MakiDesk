@@ -267,7 +267,7 @@ private struct CommandBoxView: View {
             .padding(.bottom, 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .makiSurface(.floatingPanel, theme: theme, fill: theme.surface)
+        .makiSurface(.floatingPanel, theme: theme, fill: theme.raisedSurface)
         .clipShape(RoundedRectangle(cornerRadius: MakiRadius.panel, style: .continuous))
         .onChange(of: model.text) { _, _ in
             model.selection = 0

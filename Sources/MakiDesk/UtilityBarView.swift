@@ -43,7 +43,7 @@ struct UtilityBarView: View {
             }
             .padding(.horizontal, 8)
             .frame(width: proxy.size.width, height: model.height)
-            .makiSurface(.chrome, theme: theme, fill: theme.surface)
+            .makiSurface(.chrome, theme: theme, fill: theme.raisedSurface)
             .onAppear {
                 width = proxy.size.width
                 focusIfNeeded()

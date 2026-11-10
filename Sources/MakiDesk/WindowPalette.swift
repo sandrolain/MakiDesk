@@ -1878,7 +1878,18 @@ struct PaletteView: View {
                         if model.mode != .search { onFocusSearch() }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(model.theme.surface))
+                    .background(
+                        RoundedRectangle(cornerRadius: MakiRadius.card, style: .continuous)
+                            .fill(model.theme.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: MakiRadius.card, style: .continuous)
+                            .strokeBorder(
+                                model.mode == .search
+                                    ? model.theme.accent.opacity(0.55)
+                                    : model.theme.border.opacity(0.5),
+                                lineWidth: 1)
+                    )
                     .opacity(model.mode == .search ? 1 : 0.7)
                     Spacer()
                 }
@@ -2601,7 +2612,7 @@ private struct PaletteCard: View {
         }
         .padding(10 * (metrics.fontSize / 12))
         .background(RoundedRectangle(cornerRadius: 14)
-            .fill(selected ? theme.surfaceSelected : (tinted ? appTint.opacity(0.10) : theme.surface)))
+            .fill(selected ? theme.surfaceSelected : (tinted ? appTint.opacity(0.10) : theme.raisedSurface)))
         .overlay(RoundedRectangle(cornerRadius: 14)
             .stroke(selected ? theme.accent : (layoutSelected ? theme.border : (tinted ? appTint.opacity(theme.isDark ? 0.82 : 0.42) : .clear)),
                     lineWidth: selected ? 3 : 2))

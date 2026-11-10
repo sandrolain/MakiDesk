@@ -274,9 +274,10 @@ and Settings with a sidebar — General, Windows, Layouts, Panels, Notifications
 Groups, System and Dropzones — whose longer pages split into a strip of
 sub-sections. The System theme borrows macOS materials for the utility bar and
 floating cards (Liquid Glass on macOS 26 and later), stays solid under Reduce
-Transparency, and custom themes keep their exact colours. Utility windows open
-on the display where the focused window is, and recenter when they were last
-used on another one.
+Transparency, and custom themes keep their exact colours while deriving a
+slightly lifted card tone when surface and background are close. Utility
+windows open on the display where the focused window is, and recenter when they
+were last used on another one.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="MakiDesk settings" width="39%">

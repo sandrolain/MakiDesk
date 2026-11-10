@@ -85,6 +85,19 @@ extension View {
         modifier(MakiSurfaceModifier(role: role, theme: theme, fill: fill,
                                      borderOpacity: borderOpacity))
     }
+
+    /// The inset surface of a text field: the shared field radius and a
+    /// hairline that keeps the control visible against a card, with the
+    /// accent when the field owns the keyboard.
+    func makiField(theme: PaletteTheme, focused: Bool = false) -> some View {
+        let shape = RoundedRectangle(cornerRadius: MakiRadius.field,
+                                     style: .continuous)
+        let border = focused
+            ? theme.accent.opacity(0.8)
+            : theme.border.opacity(0.45)
+        return background(shape.fill(theme.background.opacity(0.55)))
+            .overlay(shape.strokeBorder(border, lineWidth: 1))
+    }
 }
 
 private struct MakiSurfaceModifier: ViewModifier {

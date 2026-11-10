@@ -276,6 +276,10 @@ custom palettes and passive/overlay cards keep the theme fill. On macOS 26 and
 later chrome and floating panels use `glassEffect` (Liquid Glass), with `.bar`
 and `.regularMaterial` as the macOS 14–25 fallback; the availability check and
 the opaque fallback are what let the app keep a macOS 14 deployment target.
+`PaletteTheme.raisedSurface` mixes a small amount of the theme's text colour
+into `surface` for cards: several palettes keep surface and background within a
+few RGB steps, and the derived tone gives those cards an edge without leaving
+the palette. The System theme returns its semantic surface instead.
 
 `ThemedTextCursor` keeps the caret and the selection on the theme accent for
 every editable control. They all edit through AppKit's shared field editor, an

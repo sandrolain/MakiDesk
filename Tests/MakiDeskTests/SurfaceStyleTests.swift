@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import MakiDesk
 
@@ -37,5 +38,23 @@ final class SurfaceStyleTests: XCTestCase {
                        MakiRadius.card)
         XCTAssertEqual(MakiSurfaceRecipe.forRole(.floatingPanel).cornerRadius,
                        MakiRadius.panel)
+    }
+
+    /// SynthWave 84 keeps surface and background a few RGB steps apart: the
+    /// derived card tone is what keeps a card visible there.
+    func testRaisedSurfaceLiftsCardsInAClosePalette() throws {
+        let theme = PaletteTheme.named("synthwave-84")
+        let raised = try XCTUnwrap(NSColor(theme.raisedSurface).usingColorSpace(.sRGB))
+        let surface = try XCTUnwrap(NSColor(theme.surface).usingColorSpace(.sRGB))
+        let background = try XCTUnwrap(NSColor(theme.background).usingColorSpace(.sRGB))
+
+        func luminance(_ color: NSColor) -> CGFloat {
+            0.2126 * color.redComponent
+                + 0.7152 * color.greenComponent
+                + 0.0722 * color.blueComponent
+        }
+
+        XCTAssertGreaterThan(luminance(raised), luminance(surface))
+        XCTAssertGreaterThan(luminance(raised), luminance(background) + 0.02)
     }
 }

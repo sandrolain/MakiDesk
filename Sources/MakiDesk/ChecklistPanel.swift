@@ -451,7 +451,7 @@ private struct ChecklistView: View {
         }
         .padding(8)
         .frame(width: width, alignment: .leading)
-        .makiSurface(.passiveCard, theme: theme, fill: theme.surface)
+        .makiSurface(.passiveCard, theme: theme, fill: theme.raisedSurface)
         // The card is the interactive part: outside it there is nothing to
         // click, so the app under the panel keeps its own clicks.
         .onExitCommand { WorkspaceStore.shared.updateChecklistVisible(false) }
@@ -474,10 +474,7 @@ private struct ChecklistView: View {
                 .foregroundStyle(theme.text)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: MakiRadius.field, style: .continuous)
-                        .fill(theme.background.opacity(0.55))
-                )
+                .makiField(theme: theme, focused: adding)
                 .focused($adding)
                 .onExitCommand { WorkspaceStore.shared.updateChecklistVisible(false) }
                 .onChange(of: adding) { _, focused in

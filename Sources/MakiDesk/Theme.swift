@@ -13,6 +13,52 @@ struct PaletteTheme: Identifiable, Equatable {
     let accent: Color
     let border: Color
 
+    /// A card surface one step above `surface`.
+    ///
+    /// Some palettes put `surface` and `background` very close together
+    /// (SynthWave 84 is one), so a card painted with `surface` disappears into
+    /// the window. Mixing a little of the theme's text colour into the surface
+    /// lifts it in dark themes and deepens it in light ones without inventing a
+    /// colour outside the palette. The System theme keeps its semantic surface,
+    /// which is dynamic and must not be resolved at construction time.
+    let raisedSurface: Color
+
+    init(id: String, name: String, background: Color, surface: Color,
+         surfaceSelected: Color, text: Color, subtext: Color, accent: Color,
+         border: Color) {
+        self.id = id
+        self.name = name
+        self.background = background
+        self.surface = surface
+        self.surfaceSelected = surfaceSelected
+        self.text = text
+        self.subtext = subtext
+        self.accent = accent
+        self.border = border
+        self.raisedSurface = id == "system"
+            ? surface
+            : Self.raised(surface: surface, text: text)
+    }
+
+    /// The blend happens once per theme, not once per card.
+    private static func raised(surface: Color, text: Color) -> Color {
+        guard let base = NSColor(surface).usingColorSpace(.sRGB),
+              let tint = NSColor(text).usingColorSpace(.sRGB) else { return surface }
+        let baseLuminance = 0.2126 * base.redComponent
+            + 0.7152 * base.greenComponent
+            + 0.0722 * base.blueComponent
+        let tintLuminance = 0.2126 * tint.redComponent
+            + 0.7152 * tint.greenComponent
+            + 0.0722 * tint.blueComponent
+        // Toward light in dark palettes, toward shade in light ones.
+        let amount: CGFloat = tintLuminance > baseLuminance ? 0.07 : 0.05
+        return Color(
+            red: base.redComponent + (tint.redComponent - base.redComponent) * amount,
+            green: base.greenComponent + (tint.greenComponent - base.greenComponent) * amount,
+            blue: base.blueComponent + (tint.blueComponent - base.blueComponent) * amount
+        )
+    }
+
     static let all: [PaletteTheme] = [
         PaletteTheme(id: "mocha", name: "Mocha",
                      background: .hex(0x1E1E2E), surface: .hex(0x313244), surfaceSelected: .hex(0x45475A),

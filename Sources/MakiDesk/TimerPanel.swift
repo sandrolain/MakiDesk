@@ -490,7 +490,7 @@ private struct TimerOverlayView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .frame(width: 230, alignment: .leading)
-        .makiSurface(.overlay, theme: theme, fill: theme.surface)
+        .makiSurface(.overlay, theme: theme, fill: theme.raisedSurface)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Timers")
         .accessibilityValue(controller.timers.map {
@@ -627,10 +627,7 @@ private struct TimerInputView: View {
                 .onSubmit { TimerInputController.shared.submit() }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: MakiRadius.field, style: .continuous)
-                        .fill(theme.background.opacity(0.55))
-                )
+                .makiField(theme: theme, focused: typing)
                 .accessibilityLabel("Timer length or time of day")
             TextField("Label (optional) — Tea, Focus, Stand up…", text: $model.label)
                 .textFieldStyle(.plain)
@@ -640,10 +637,7 @@ private struct TimerInputView: View {
                 .onSubmit { TimerInputController.shared.submit() }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: MakiRadius.field, style: .continuous)
-                        .fill(theme.background.opacity(0.55))
-                )
+                .makiField(theme: theme, focused: labeling)
                 .accessibilityLabel("Timer label, optional")
             Text(model.error ?? TimerInputModel.hint)
                 .font(.system(size: 10.5))
@@ -653,7 +647,7 @@ private struct TimerInputView: View {
         }
         .padding(12)
         .frame(width: 420, alignment: .leading)
-        .makiSurface(.floatingPanel, theme: theme, fill: theme.surface)
+        .makiSurface(.floatingPanel, theme: theme, fill: theme.raisedSurface)
         .onExitCommand { TimerInputController.shared.hide() }
         .onAppear {
             DispatchQueue.main.async {

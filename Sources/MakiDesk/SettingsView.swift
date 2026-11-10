@@ -261,6 +261,9 @@ struct SettingsView: View {
             .animation(selectionAnimation, value: settingsTab)
         }
         .frame(width: Self.sidebarWidth)
+        // A slightly lifted column, like the native sidebars: the content
+        // area keeps the window background, the navigation does not.
+        .background(theme.raisedSurface.opacity(0.55))
     }
 
     private func sidebarRow(_ tab: SettingsTab) -> some View {
@@ -284,9 +287,19 @@ struct SettingsView: View {
             .padding(.vertical, 8)
             .background {
                 if selected {
-                    RoundedRectangle(cornerRadius: 7)
+                    RoundedRectangle(cornerRadius: MakiRadius.field)
                         .fill(theme.surfaceSelected)
                         .matchedGeometryEffect(id: "settings-section", in: sidebarSelection)
+                }
+            }
+            .overlay(alignment: .leading) {
+                // The accent is a second cue, not the only one: the row is
+                // also filled and bold, so colour is never the sole signal.
+                if selected {
+                    Capsule()
+                        .fill(theme.accent)
+                        .frame(width: 3, height: 17)
+                        .padding(.leading, 2)
                 }
             }
             .contentShape(Rectangle())
@@ -327,7 +340,7 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .padding(3)
-        .background(RoundedRectangle(cornerRadius: 8).fill(theme.surface))
+        .background(RoundedRectangle(cornerRadius: 8).fill(theme.raisedSurface))
         .overlay(RoundedRectangle(cornerRadius: 8)
             .stroke(theme.border.opacity(0.6), lineWidth: 1))
         .animation(selectionAnimation, value: selection.wrappedValue)
@@ -1608,11 +1621,10 @@ struct SettingsSection<Content: View>: View {
             VStack(alignment: .leading, spacing: 9) {
                 content
             }
-            .padding(14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10).fill(theme.surface.opacity(0.55)))
-            .overlay(RoundedRectangle(cornerRadius: 10)
-                .stroke(theme.border.opacity(0.55), lineWidth: 1))
+            .makiSurface(.passiveCard, theme: theme,
+                         fill: theme.raisedSurface)
         }
     }
 }
