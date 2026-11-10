@@ -132,7 +132,7 @@ struct NotificationHistoryView: View {
                     .foregroundStyle(theme.text)
                 Spacer()
                 Text(hud.history.count == 1 ? "1 item" : "\(hud.history.count) items")
-                    .font(.caption)
+                    .font(MakiType.caption)
                     .foregroundStyle(theme.subtext)
             }
             HStack(spacing: 6) {
@@ -141,7 +141,7 @@ struct NotificationHistoryView: View {
                     .foregroundStyle(theme.subtext)
                 TextField("Search notifications", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(MakiType.content)
                     .focused($searchFocused)
                     .onSubmit { copyCurrent() }
                 if query.isEmpty == false {
@@ -156,9 +156,7 @@ struct NotificationHistoryView: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 7).fill(theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(theme.border.opacity(0.7), lineWidth: 1))
+            .makiField(theme: theme, focused: searchFocused)
         }
         .padding(.horizontal, 20)
         .padding(.top, 16)
@@ -168,7 +166,7 @@ struct NotificationHistoryView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: 6) {
                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, notice in
                         NotificationHistoryRow(notice: notice,
                                                selected: isSelected(notice, index: index),
@@ -185,7 +183,7 @@ struct NotificationHistoryView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.vertical, 12)
             }
             .onChange(of: selectedID) { _, id in
                 guard let id else { return }
@@ -202,12 +200,12 @@ struct NotificationHistoryView: View {
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(theme.subtext)
             Text(query.isEmpty ? "No notifications yet" : "No matching notifications")
-                .font(.system(size: 12.5, weight: .medium))
+                .font(MakiType.contentMedium)
                 .foregroundStyle(theme.text)
             Text(query.isEmpty
                  ? "Notices appear here while MakiDesk is open; nothing is saved to disk."
                  : "Try another word or clear the search.")
-                .font(.system(size: 11))
+                .font(MakiType.body)
                 .foregroundStyle(theme.subtext)
                 .multilineTextAlignment(.center)
         }
@@ -222,21 +220,21 @@ struct NotificationHistoryView: View {
             hint("esc", "close")
             Spacer()
             Text("In memory only")
-                .font(.system(size: 10))
+                .font(MakiType.meta)
                 .foregroundStyle(theme.subtext.opacity(0.8))
             Button("Clear") { hud.clearHistory() }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(MakiType.metaMedium)
                 .foregroundStyle(hud.history.isEmpty ? theme.subtext.opacity(0.4) : theme.subtext)
                 .disabled(hud.history.isEmpty)
             Button("Copy") { copyCurrent() }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(MakiType.metaMedium)
                 .foregroundStyle(current == nil ? theme.subtext.opacity(0.4) : theme.text)
                 .disabled(current == nil)
             Button("Close") { onClose() }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(MakiType.metaMedium)
                 .foregroundStyle(theme.subtext)
                 .keyboardShortcut(.cancelAction)
         }
@@ -247,7 +245,7 @@ struct NotificationHistoryView: View {
     private func hint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 4) {
             Text(key)
-                .font(.system(size: 10, weight: .semibold))
+                .font(MakiType.metaStrong)
                 .foregroundStyle(theme.text)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -255,7 +253,7 @@ struct NotificationHistoryView: View {
                 .overlay(RoundedRectangle(cornerRadius: 4)
                     .stroke(theme.border.opacity(0.7), lineWidth: 1))
             Text(label)
-                .font(.system(size: 10))
+                .font(MakiType.meta)
                 .foregroundStyle(theme.subtext)
         }
     }
@@ -324,18 +322,18 @@ private struct NotificationHistoryRow: View {
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 3) {
                 Text(notice.text)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(MakiType.contentMedium)
                     .foregroundStyle(theme.text)
                     .lineLimit(2)
                 if let detail = notice.detail, detail.isEmpty == false {
                     Text(detail)
-                        .font(.system(size: 10.5, design: .monospaced))
+                        .font(MakiType.meta.monospaced())
                         .foregroundStyle(theme.subtext)
                         .lineLimit(2)
                         .truncationMode(.tail)
                 }
                 Text(notice.date.formatted(date: .abbreviated, time: .standard))
-                    .font(.system(size: 9.5))
+                    .font(MakiType.micro)
                     .foregroundStyle(theme.subtext.opacity(0.8))
             }
             Spacer(minLength: 0)
@@ -343,7 +341,8 @@ private struct NotificationHistoryRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 7)
-            .fill(selected ? theme.surfaceSelected : theme.surface.opacity(0.45)))
+            .fill(selected ? theme.surfaceSelected
+                  : theme.raisedSurface.opacity(0.6)))
         .overlay(RoundedRectangle(cornerRadius: 7)
             .stroke(selected ? theme.accent.opacity(0.75) : .clear, lineWidth: 1))
         .contentShape(Rectangle())

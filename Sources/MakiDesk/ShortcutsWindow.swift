@@ -303,7 +303,7 @@ struct ShortcutsView: View {
                         apply(store.restoreAllShortcuts())
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(MakiType.bodyMedium)
                     .foregroundStyle(theme.accent)
                     .help("Put every shortcut back to its default")
                 }
@@ -345,12 +345,12 @@ struct ShortcutsView: View {
 
             if let recordingTitle {
                 Text("Press the new combination for “\(recordingTitle)” · Esc cancels · ⌫ turns it off")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(MakiType.bodyMedium)
                     .foregroundStyle(theme.accent)
                     .fixedSize(horizontal: false, vertical: true)
             } else if let message {
                 Text(message)
-                    .font(.system(size: 11))
+                    .font(MakiType.body)
                     .foregroundStyle(Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -362,7 +362,7 @@ struct ShortcutsView: View {
 
             if let warning = fileWarning {
                 Text(warning)
-                    .font(.system(size: 11))
+                    .font(MakiType.body)
                     .foregroundStyle(Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -402,10 +402,10 @@ struct ShortcutsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(section.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(MakiType.title)
                     .foregroundStyle(theme.text)
                 Text(section.scope)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(MakiType.microMedium)
                     .foregroundStyle(theme.subtext)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -424,8 +424,9 @@ struct ShortcutsView: View {
                     }
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 8).fill(theme.surface.opacity(0.5)))
-            .overlay(RoundedRectangle(cornerRadius: 8)
+            .background(RoundedRectangle(cornerRadius: MakiRadius.card)
+                .fill(theme.raisedSurface.opacity(0.6)))
+            .overlay(RoundedRectangle(cornerRadius: MakiRadius.card)
                 .stroke(theme.border.opacity(0.6), lineWidth: 1))
 
             if let note = section.note {
@@ -441,17 +442,17 @@ struct ShortcutsView: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.system(size: 12.5))
+                    .font(MakiType.content)
                     .foregroundStyle(theme.text)
                 if recordingID == item.identifier, let family = item.family {
                     // The family is a convention: say which one this row
                     // belongs to while the keys are being recorded (S02).
                     Text(family.label)
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(MakiType.metaMedium)
                         .foregroundStyle(theme.accent)
                 } else if let note = item.note {
                     Text(note)
-                        .font(.system(size: 10.5))
+                        .font(MakiType.meta)
                         .foregroundStyle(theme.subtext)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -463,7 +464,7 @@ struct ShortcutsView: View {
                         apply(store.restoreShortcut(identifier))
                     } label: {
                         Image(systemName: "arrow.uturn.backward")
-                            .font(.system(size: 10.5, weight: .medium))
+                            .font(MakiType.metaMedium)
                             .foregroundStyle(theme.subtext)
                     }
                     .buttonStyle(.plain)
@@ -489,7 +490,7 @@ struct ShortcutsView: View {
             recording ? stopRecording() : startRecording(item)
         } label: {
             Text(recording ? "Press keys…" : spaced(item.keys))
-                .font(.system(size: 11.5, weight: .medium))
+                .font(MakiType.bodyMedium)
                 .foregroundStyle(tint)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
@@ -532,7 +533,7 @@ struct ShortcutsView: View {
 
     private func keyLabel(_ keys: String) -> some View {
         Text(spaced(keys))
-            .font(.system(size: 11.5, weight: .medium))
+            .font(MakiType.bodyMedium)
             .foregroundStyle(theme.text)
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
@@ -622,7 +623,7 @@ struct ShortcutsView: View {
                 .font(.system(size: 24, weight: .light))
                 .foregroundStyle(theme.subtext)
             Text("No shortcut matches “\(query)”")
-                .font(.system(size: 12.5))
+                .font(MakiType.content)
                 .foregroundStyle(theme.text)
         }
         .frame(maxWidth: .infinity)

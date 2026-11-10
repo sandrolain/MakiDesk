@@ -8,6 +8,7 @@ import SwiftUI
 enum MakiType {
     /// A badge, a keycap or the smallest annotation.
     static let micro = Font.system(size: 9.5)
+    static let microMedium = Font.system(size: 9.5, weight: .medium)
     static let microStrong = Font.system(size: 9.5, weight: .semibold)
 
     /// Counts, hints and secondary lines.
