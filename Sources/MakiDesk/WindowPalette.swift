@@ -2319,6 +2319,8 @@ struct PaletteView: View {
                     .padding(.leading, 2)
             }
         }
+        .makiHoverWash(model.theme.surfaceSelected.opacity(0.3),
+                       radius: MakiRadius.row, isEnabled: !isSelected)
         .padding(.horizontal, 6)
         .help("\(row.displayName) — click to edit its members, then Recall")
     }

@@ -290,6 +290,11 @@ weights the chrome needs. Surfaces whose text scales with their own metrics — 
 switcher cards, HUD and note editor — keep deriving their sizes locally; the
 scale covers panel headers, list rows, hints and Settings copy.
 
+`MicroInteractions.swift` holds the hover wash and hover border for flat
+actions, keycaps and picker rows, plus the press style used by footer buttons.
+The wash never changes a control's measured size, and Reduce Motion removes the
+fade while keeping the state.
+
 `ThemedTextCursor` keeps the caret and the selection on the theme accent for
 every editable control. They all edit through AppKit's shared field editor, an
 `NSTextView` that posts `NSText.didBeginEditingNotification`, so one observer

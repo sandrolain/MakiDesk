@@ -135,7 +135,8 @@ struct PortsView: View {
                 .font(MakiType.meta)
                 .foregroundStyle(theme.subtext)
             Button("Refresh") { onRefresh() }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverBorder(theme.accent.opacity(0.55), radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(theme.accent)
                 .padding(.horizontal, 8)
@@ -206,7 +207,9 @@ struct PortsView: View {
             }
             Spacer(minLength: 8)
             Button("Terminate") { onTerminate(port) }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverBorder(Color(nsColor: .systemRed).opacity(0.55),
+                                 radius: MakiRadius.control)
                 .font(MakiType.metaStrong)
                 .foregroundStyle(Color(nsColor: .systemRed))
                 .padding(.horizontal, 8)

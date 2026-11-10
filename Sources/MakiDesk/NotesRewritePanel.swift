@@ -132,12 +132,16 @@ private struct NotesRewriteView: View {
                 pasteboard.clearContents()
                 pasteboard.setString(controller.preview, forType: .string)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MakiActionButtonStyle())
+            .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                           radius: MakiRadius.control)
             .foregroundStyle(theme.subtext)
             .disabled(controller.preview.isEmpty)
             .help("Copy the proposal without touching the note")
             Button("Cancel", action: onCancel)
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control)
                 .foregroundStyle(theme.subtext)
                 .keyboardShortcut(.cancelAction)
             Button("Apply") { onApply(controller.preview) }

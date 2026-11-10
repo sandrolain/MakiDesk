@@ -422,7 +422,9 @@ struct ClipboardView: View {
             Button("To Shelf") {
                 if let entry = model.selectedEntry { onShelf(entry) }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MakiActionButtonStyle())
+            .makiHoverWash(model.theme.surfaceSelected.opacity(0.35),
+                           radius: MakiRadius.control)
             .font(MakiType.metaMedium)
             .foregroundStyle(model.selectedEntry == nil
                 ? model.theme.subtext.opacity(0.4)
@@ -443,7 +445,9 @@ struct ClipboardView: View {
                     .font(MakiType.meta)
                     .foregroundStyle(model.theme.subtext.opacity(0.5))
                 Button("Clear All…") { confirmsClearAll = true }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MakiActionButtonStyle())
+                    .makiHoverWash(model.theme.surfaceSelected.opacity(0.35),
+                                   radius: MakiRadius.control)
                     .font(MakiType.metaMedium)
                     .foregroundStyle(model.theme.subtext)
             }

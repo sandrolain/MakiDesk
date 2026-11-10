@@ -295,6 +295,8 @@ private struct CommandBoxView: View {
             RoundedRectangle(cornerRadius: MakiRadius.row)
                 .fill(selected ? theme.surfaceSelected : Color.clear)
         )
+        .makiHoverWash(theme.surfaceSelected.opacity(0.3),
+                       radius: MakiRadius.row, isEnabled: !selected)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(CommandCatalog.display(entry)): \(entry.summary)")

@@ -302,7 +302,9 @@ struct ShortcutsView: View {
                     Button("Restore all") {
                         apply(store.restoreAllShortcuts())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MakiActionButtonStyle())
+                    .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                                   radius: MakiRadius.control)
                     .font(MakiType.bodyMedium)
                     .foregroundStyle(theme.accent)
                     .help("Put every shortcut back to its default")
@@ -499,7 +501,8 @@ struct ShortcutsView: View {
                     .stroke(recording ? theme.accent : theme.border, lineWidth: 1))
                 .fixedSize()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MakiActionButtonStyle())
+        .makiHoverBorder(theme.accent.opacity(0.55), radius: MakiRadius.keycap)
         .help("Click, then press the new combination")
         .accessibilityLabel("\(item.title), \(item.keys). Change shortcut")
     }

@@ -342,7 +342,10 @@ struct SettingsView: View {
                         )
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control,
+                               isEnabled: !selected)
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
             Spacer(minLength: 0)

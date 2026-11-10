@@ -223,17 +223,23 @@ struct NotificationHistoryView: View {
                 .font(MakiType.meta)
                 .foregroundStyle(theme.subtext.opacity(0.8))
             Button("Clear") { hud.clearHistory() }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(hud.history.isEmpty ? theme.subtext.opacity(0.4) : theme.subtext)
                 .disabled(hud.history.isEmpty)
             Button("Copy") { copyCurrent() }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(current == nil ? theme.subtext.opacity(0.4) : theme.text)
                 .disabled(current == nil)
             Button("Close") { onClose() }
-                .buttonStyle(.plain)
+                .buttonStyle(MakiActionButtonStyle())
+                .makiHoverWash(theme.surfaceSelected.opacity(0.35),
+                               radius: MakiRadius.control)
                 .font(MakiType.metaMedium)
                 .foregroundStyle(theme.subtext)
                 .keyboardShortcut(.cancelAction)
