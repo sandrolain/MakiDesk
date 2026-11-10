@@ -363,7 +363,7 @@ struct SettingsView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .font(.system(size: 14))
+                .font(MakiType.reading)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -384,7 +384,7 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // A touch larger than the system default: the window holds a
                 // lot of small print (T58).
-                .font(.system(size: 14))
+                .font(MakiType.reading)
             }
             .id(settingsTab)
             .transition(.opacity)
@@ -1468,7 +1468,7 @@ struct SettingsView: View {
 
     private func caption(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12.5))
+            .font(MakiType.caption)
             .foregroundStyle(theme.subtext)
             // Settings carries long explanations; a little leading keeps
             // them readable without making the window taller by a screen.
@@ -1626,7 +1626,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 9) {
             if let title {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(MakiType.section)
                     .foregroundStyle(theme.text)
             }
             VStack(alignment: .leading, spacing: 9) {

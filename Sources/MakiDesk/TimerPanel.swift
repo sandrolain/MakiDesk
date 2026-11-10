@@ -466,11 +466,11 @@ private struct TimerOverlayView: View {
             ForEach(Array(controller.timers.prefix(4))) { timer in
                 HStack(spacing: 8) {
                     Image(systemName: timer.isPaused ? "pause.fill" : "timer")
-                        .font(.system(size: 9.5, weight: .semibold))
+                        .font(MakiType.microStrong)
                         .foregroundStyle(theme.accent)
                         .frame(width: 12)
                     Text(timer.label)
-                        .font(.system(size: 11.5))
+                        .font(MakiType.body)
                         .foregroundStyle(theme.subtext)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -483,7 +483,7 @@ private struct TimerOverlayView: View {
             }
             if controller.hiddenFromOverlay > 0 {
                 Text("+\(controller.hiddenFromOverlay) more in the menu")
-                    .font(.system(size: 10))
+                    .font(MakiType.meta)
                     .foregroundStyle(theme.subtext)
             }
         }
@@ -612,11 +612,11 @@ private struct TimerInputView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(theme.accent)
                 Text("New timer")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(MakiType.title)
                     .foregroundStyle(theme.text)
                 Spacer(minLength: 6)
                 Text("Ret starts · Esc closes")
-                    .font(.system(size: 10.5))
+                    .font(MakiType.meta)
                     .foregroundStyle(theme.subtext)
             }
             TextField("25m, 1h 30m, 8:30…", text: $model.text)
@@ -631,7 +631,7 @@ private struct TimerInputView: View {
                 .accessibilityLabel("Timer length or time of day")
             TextField("Label (optional) — Tea, Focus, Stand up…", text: $model.label)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .font(MakiType.content)
                 .foregroundStyle(theme.text)
                 .focused($labeling)
                 .onSubmit { TimerInputController.shared.submit() }
@@ -640,7 +640,7 @@ private struct TimerInputView: View {
                 .makiField(theme: theme, focused: labeling)
                 .accessibilityLabel("Timer label, optional")
             Text(model.error ?? TimerInputModel.hint)
-                .font(.system(size: 10.5))
+                .font(MakiType.meta)
                 .foregroundStyle(model.error == nil ? theme.subtext : Color.red)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)

@@ -284,6 +284,12 @@ own contrast floor (4.5:1 where the palette allows it); low-contrast palettes
 receive a smaller lift rather than a less readable one. The System theme
 returns its semantic surface instead.
 
+`Typography.swift` holds the small fixed type scale the panels share: `micro`,
+`meta`, `body`, `content`, `title`, `reading`, `section` and `caption`, with the
+weights the chrome needs. Surfaces whose text scales with their own metrics — the
+switcher cards, HUD and note editor — keep deriving their sizes locally; the
+scale covers panel headers, list rows, hints and Settings copy.
+
 `ThemedTextCursor` keeps the caret and the selection on the theme accent for
 every editable control. They all edit through AppKit's shared field editor, an
 `NSTextView` that posts `NSText.didBeginEditingNotification`, so one observer

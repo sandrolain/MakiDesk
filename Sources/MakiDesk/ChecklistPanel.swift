@@ -422,7 +422,7 @@ private struct ChecklistView: View {
         VStack(alignment: .leading, spacing: 4) {
             if store.items.isEmpty {
                 Text("No items.")
-                    .font(.system(size: 11.5))
+                    .font(MakiType.body)
                     .foregroundStyle(theme.subtext)
                     .padding(.vertical, 2)
             } else {
@@ -439,7 +439,7 @@ private struct ChecklistView: View {
 
             if store.isFull {
                 Text("\(Checklist.maxItems) items is the limit.")
-                    .font(.system(size: 10.5))
+                    .font(MakiType.meta)
                     .foregroundStyle(theme.subtext)
             }
 
@@ -470,7 +470,7 @@ private struct ChecklistView: View {
         HStack(spacing: 4) {
             TextField("Add an item…", text: $draft)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12.5))
+                .font(MakiType.content)
                 .foregroundStyle(theme.text)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
@@ -546,7 +546,7 @@ private struct ChecklistRow: View {
             .help(item.done ? "Mark as not done" : "Mark as done")
 
             Text(item.text)
-                .font(.system(size: 13))
+                .font(MakiType.content)
                 .foregroundStyle(item.done ? theme.subtext : theme.text)
                 .strikethrough(item.done, color: theme.subtext)
                 .lineLimit(2)
@@ -567,7 +567,7 @@ private struct ChecklistRow: View {
         .onHover { hovering = $0 }
         .draggable(item.id.uuidString) {
             Text(item.text)
-                .font(.system(size: 12.5))
+                .font(MakiType.content)
                 .foregroundStyle(theme.text)
                 .lineLimit(2)
                 .padding(6)

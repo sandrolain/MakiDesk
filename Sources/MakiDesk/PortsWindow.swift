@@ -125,18 +125,18 @@ struct PortsView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.accent)
             Text("Ports")
-                .font(.system(size: 13, weight: .semibold))
+                .font(MakiType.title)
                 .foregroundStyle(theme.text)
             Spacer()
             if model.isLoading {
                 ProgressView().controlSize(.mini)
             }
             Text(model.ports.count == 1 ? "1 listening" : "\(model.ports.count) listening")
-                .font(.system(size: 10.5))
+                .font(MakiType.meta)
                 .foregroundStyle(theme.subtext)
             Button("Refresh") { onRefresh() }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(MakiType.metaMedium)
                 .foregroundStyle(theme.accent)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -155,7 +155,7 @@ struct PortsView: View {
                 .foregroundStyle(theme.subtext)
             TextField("Filter ports, processes, pids or addresses", text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12))
+                .font(MakiType.content)
                 .foregroundStyle(theme.text)
                 .focused($searchFocused)
         }
@@ -182,7 +182,7 @@ struct PortsView: View {
                         row(port)
                     }
                 }
-                .padding(10)
+                .padding(12)
             }
         }
     }
@@ -195,11 +195,11 @@ struct PortsView: View {
                 .frame(width: 58, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(port.name)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(MakiType.contentMedium)
                     .foregroundStyle(theme.text)
                     .lineLimit(1)
                 Text("pid \(port.pid) · \(port.addresses.joined(separator: ", "))")
-                    .font(.system(size: 10).monospaced())
+                    .font(MakiType.meta.monospaced())
                     .foregroundStyle(theme.subtext)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -207,7 +207,7 @@ struct PortsView: View {
             Spacer(minLength: 8)
             Button("Terminate") { onTerminate(port) }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(MakiType.metaStrong)
                 .foregroundStyle(Color(nsColor: .systemRed))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -224,7 +224,7 @@ struct PortsView: View {
                 .font(.system(size: 24, weight: .light))
                 .foregroundStyle(theme.subtext)
             Text(text)
-                .font(.system(size: 12))
+                .font(MakiType.caption)
                 .foregroundStyle(color ?? theme.subtext)
                 .multilineTextAlignment(.center)
         }

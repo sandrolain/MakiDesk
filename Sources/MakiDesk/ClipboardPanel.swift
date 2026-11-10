@@ -352,15 +352,15 @@ struct ClipboardView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(model.theme.accent)
             Text("Clipboard")
-                .font(.system(size: 13, weight: .semibold))
+                .font(MakiType.title)
                 .foregroundStyle(model.theme.text)
             Spacer()
             Text(model.entries.count == 1 ? "1 item" : "\(model.entries.count) items")
-                .font(.system(size: 10.5))
+                .font(MakiType.meta)
                 .foregroundStyle(model.theme.subtext)
             if model.pinnedCount > 0 {
                 Text("· \(model.pinnedCount) pinned")
-                    .font(.system(size: 10.5))
+                    .font(MakiType.meta)
                     .foregroundStyle(model.theme.accent)
             }
         }
@@ -373,7 +373,7 @@ struct ClipboardView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: 6) {
                     ForEach(Array(model.entries.enumerated()), id: \.element.id) { index, entry in
                         ClipboardRow(entry: entry, selected: index == model.selection,
                                      theme: model.theme, onShelf: onShelf,
@@ -382,7 +382,7 @@ struct ClipboardView: View {
                             .onTapGesture { onPick(entry) }
                     }
                 }
-                .padding(10)
+                .padding(12)
             }
             .onChange(of: model.selection) { _, _ in
                 if let entry = model.selectedEntry {
@@ -404,10 +404,10 @@ struct ClipboardView: View {
                 .font(.system(size: 26, weight: .light))
                 .foregroundStyle(model.theme.subtext)
             Text("Nothing copied yet")
-                .font(.system(size: 12.5, weight: .medium))
+                .font(MakiType.contentMedium)
                 .foregroundStyle(model.theme.text)
             Text("Copy some text or an image, then press ⌥V.")
-                .font(.system(size: 11))
+                .font(MakiType.body)
                 .foregroundStyle(model.theme.subtext)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -423,35 +423,35 @@ struct ClipboardView: View {
                 if let entry = model.selectedEntry { onShelf(entry) }
             }
             .buttonStyle(.plain)
-            .font(.system(size: 10.5, weight: .medium))
+            .font(MakiType.metaMedium)
             .foregroundStyle(model.selectedEntry == nil
                 ? model.theme.subtext.opacity(0.4)
                 : model.theme.subtext)
             .disabled(model.selectedEntry == nil)
             Text("·")
-                .font(.system(size: 10))
+                .font(MakiType.meta)
                 .foregroundStyle(model.theme.subtext.opacity(0.5))
             Button("Clear") { onClear(false) }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(MakiType.metaMedium)
                 .foregroundStyle(model.entries.isEmpty
                     ? model.theme.subtext.opacity(0.4)
                     : model.theme.subtext)
                 .disabled(model.entries.isEmpty || model.pinnedCount == model.entries.count)
             if model.pinnedCount > 0 {
                 Text("·")
-                    .font(.system(size: 10))
+                    .font(MakiType.meta)
                     .foregroundStyle(model.theme.subtext.opacity(0.5))
                 Button("Clear All…") { confirmsClearAll = true }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(MakiType.metaMedium)
                     .foregroundStyle(model.theme.subtext)
             }
             Text("·")
-                .font(.system(size: 10))
+                .font(MakiType.meta)
                 .foregroundStyle(model.theme.subtext.opacity(0.5))
             Text("Kept in memory only")
-                .font(.system(size: 10))
+                .font(MakiType.meta)
                 .foregroundStyle(model.theme.subtext.opacity(0.8))
         }
         .padding(.horizontal, 16)
@@ -462,7 +462,7 @@ struct ClipboardView: View {
     private func hint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 4) {
             Text(key)
-                .font(.system(size: 10, weight: .semibold))
+                .font(MakiType.metaStrong)
                 .foregroundStyle(model.theme.text)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
@@ -490,26 +490,26 @@ private struct ClipboardRow: View {
                 .frame(width: 22, height: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.preview)
-                    .font(.system(size: 13))
+                    .font(MakiType.content)
                     .foregroundStyle(theme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text(entry.detail)
-                    .font(.system(size: 10))
+                    .font(MakiType.meta)
                     .foregroundStyle(theme.subtext)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
             if entry.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(MakiType.microStrong)
                     .foregroundStyle(theme.accent)
                     .help("Pinned · survives Clear")
                     .accessibilityLabel("Pinned")
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 7)
             .fill(selected ? theme.surfaceSelected
                   : theme.raisedSurface.opacity(hovered ? 1 : 0.6)))
@@ -570,7 +570,7 @@ private struct ClipboardThumbnail: View {
                     .scaledToFill()
             } else {
                 Image(systemName: "photo")
-                    .font(.system(size: 10))
+                    .font(MakiType.meta)
                     .foregroundStyle(.secondary)
             }
         }

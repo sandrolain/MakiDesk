@@ -226,7 +226,7 @@ private struct CommandBoxView: View {
 
             if model.text.trimmingCharacters(in: .whitespaces).isEmpty {
                 Text("A command, in words: tile left, layout grid, group 3, timer 25m…")
-                    .font(.system(size: 11.5))
+                    .font(MakiType.body)
                     .foregroundStyle(theme.subtext)
                     .padding(.horizontal, 12)
             }
@@ -253,12 +253,12 @@ private struct CommandBoxView: View {
             HStack(spacing: 6) {
                 if let error = model.error {
                     Text(error)
-                        .font(.system(size: 11))
+                        .font(MakiType.body)
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 } else {
                     Text("↑↓ choose · Tab completes · ⏎ runs · esc closes")
-                        .font(.system(size: 11))
+                        .font(MakiType.body)
                         .foregroundStyle(theme.subtext)
                 }
                 Spacer(minLength: 0)
@@ -278,13 +278,13 @@ private struct CommandBoxView: View {
     private func suggestionRow(_ entry: CommandEntry, selected: Bool) -> some View {
         HStack(spacing: 8) {
             Text(CommandCatalog.display(entry))
-                .font(.system(size: 12.5, weight: selected ? .semibold : .regular,
+                .font(.system(size: 13, weight: selected ? .semibold : .regular,
                               design: .monospaced))
                 .foregroundStyle(theme.text)
                 .frame(width: 190, alignment: .leading)
                 .lineLimit(1)
             Text(entry.summary)
-                .font(.system(size: 12))
+                .font(MakiType.caption)
                 .foregroundStyle(theme.subtext)
                 .lineLimit(1)
             Spacer(minLength: 0)
