@@ -236,7 +236,14 @@ private struct DockerSidebarSectionRow: View {
             )
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                hovering = true
+            case .ended:
+                hovering = false
+            }
+        }
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -303,6 +310,11 @@ struct DockerContainersView: View {
                 )
             } else {
                 List(selection: $store.selectedContainerID) {
+                    if standaloneContainers.isEmpty == false {
+                        ForEach(standaloneContainers) { container in
+                            containerRow(container, indent: 0)
+                        }
+                    }
                     ForEach(composeGroups) { group in
                         Section {
                             let isSearching = store.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -313,11 +325,6 @@ struct DockerContainersView: View {
                             }
                         } header: {
                             DockerGroupHeader(store: store, group: group)
-                        }
-                    }
-                    if standaloneContainers.isEmpty == false {
-                        ForEach(standaloneContainers) { container in
-                            containerRow(container, indent: 0)
                         }
                     }
                 }

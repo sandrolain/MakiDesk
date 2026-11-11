@@ -22,6 +22,9 @@ final class DockerCoreTests: XCTestCase {
         XCTAssertEqual(DockerFormatting.bytes(from: "900MB"), 900_000_000)
         XCTAssertEqual(DockerFormatting.bytes(from: "1.02GB"), 1_020_000_000)
         XCTAssertNil(DockerFormatting.bytes(from: "N/A"))
+        XCTAssertEqual(DockerFormatting.size(0), "0B")
+        XCTAssertEqual(DockerFormatting.size(900_000_000), "900MB")
+        XCTAssertEqual(DockerFormatting.size(1_020_000_000), "1.02GB")
     }
 
     func testPrunePlanKeepsRunningAndUsed() {

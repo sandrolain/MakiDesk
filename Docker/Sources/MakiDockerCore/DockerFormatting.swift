@@ -36,7 +36,7 @@ public enum DockerFormatting {
 
     public static func size(_ bytes: Int64?) -> String {
         guard let bytes else { return "—" }
-        if bytes == 0 { return "0 B" }
+        if bytes == 0 { return "0B" }
         let units = ["B", "kB", "MB", "GB", "TB"]
         var value = Double(bytes)
         var index = 0
@@ -44,9 +44,9 @@ public enum DockerFormatting {
             value /= 1_000
             index += 1
         }
-        if index == 0 { return "\(Int(value)) B" }
+        if index == 0 { return "\(Int(value))B" }
         let digits = value >= 100 ? 0 : value >= 10 ? 1 : 2
-        return String(format: "%.\(digits)f %@", value, units[index])
+        return String(format: "%.\(digits)f%@", value, units[index])
     }
 
     /// A tolerant, display-only parse of `docker ps` port strings. Handles

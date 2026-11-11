@@ -429,8 +429,8 @@ public struct DockerDiskUsageCategory: Equatable, Sendable {
     }
 
     public static let empty = DockerDiskUsageCategory(
-        title: "", total: 0, active: 0, size: "0 B",
-        bytes: 0, reclaimable: "0 B", reclaimableBytes: 0
+        title: "", total: 0, active: 0, size: "0B",
+        bytes: 0, reclaimable: "0B", reclaimableBytes: 0
     )
 }
 
