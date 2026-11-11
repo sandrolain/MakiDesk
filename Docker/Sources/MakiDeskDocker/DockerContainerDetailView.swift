@@ -113,9 +113,13 @@ struct DockerContainerDetailView: View {
                     Button("Kill", role: .destructive) { store.perform(.kill, on: container) }
                     Button("Delete", role: .destructive) { store.perform(.remove, on: container) }
                 } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+                    Image(systemName: "ellipsis.circle")
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("More")
+                .help("More container actions")
                 Spacer()
             }
             .buttonStyle(.bordered)

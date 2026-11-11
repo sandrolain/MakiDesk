@@ -8,6 +8,7 @@ struct DockerRootView: View {
     var body: some View {
         NavigationSplitView {
             DockerSidebarView(store: store)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
         } content: {
             Group {
                 switch store.section {
@@ -29,6 +30,7 @@ struct DockerRootView: View {
                 .navigationSplitViewColumnWidth(min: 320, ideal: 430)
         }
         .background(store.theme.background)
+        .tint(store.theme.accent)
         .searchable(text: $store.search, placement: .toolbar,
                     prompt: "Search \(store.section.title.lowercased())")
         .toolbar { toolbar }
@@ -48,9 +50,11 @@ struct DockerRootView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            if store.isRefreshing {
-                ProgressView().controlSize(.small)
-            }
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 16, height: 16)
+                .opacity(store.isRefreshing ? 1 : 0)
+                .accessibilityHidden(store.isRefreshing == false)
             Button {
                 store.refreshNow()
             } label: {
@@ -97,62 +101,121 @@ struct DockerRootView: View {
 
 struct DockerSidebarView: View {
     @Bindable var store: DockerStore
+    @State private var hoveredSection: DockerSection?
 
     var body: some View {
-        List(selection: $store.section) {
-            Section("Docker") {
-                ForEach(DockerSection.allCases) { section in
-                    Label {
-                        HStack(spacing: 8) {
-                            Text(section.title)
-                            Spacer(minLength: 6)
-                            Text(count(for: section))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(store.theme.subtext)
-                        }
-                    } icon: {
-                        Image(systemName: section.icon)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    sidebarTitle("Docker")
+                    ForEach(DockerSection.allCases) { section in
+                        sectionRow(section)
                     }
-                    .tag(section)
-                }
-            }
-            Section("Context") {
-                if store.contexts.isEmpty {
-                    Text(store.currentContext ?? "No context")
-                        .foregroundStyle(store.theme.subtext)
-                } else {
-                    ForEach(store.contexts) { context in
-                        Button {
-                            store.selectContext(context.name)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(context.name == store.currentContext
-                                          ? store.theme.accent : store.theme.border)
-                                    .frame(width: 6, height: 6)
-                                Text(context.name)
-                                    .lineLimit(1)
-                                Spacer()
-                                if context.isRemote {
-                                    Image(systemName: "network")
-                                        .font(.caption2)
-                                        .foregroundStyle(store.theme.subtext)
-                                }
-                            }
+
+                    sidebarTitle("Context")
+                        .padding(.top, 12)
+                    if store.contexts.isEmpty {
+                        Text(store.currentContext ?? "No context")
+                            .font(.caption)
+                            .foregroundStyle(store.theme.subtext)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                    } else {
+                        ForEach(store.contexts) { context in
+                            contextRow(context)
                         }
-                        .buttonStyle(.plain)
-                        .help(context.endpoint)
                     }
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
             }
-        }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
+            .scrollContentBackground(.hidden)
+
+            Divider().overlay(store.theme.border.opacity(0.6))
+
             DockerConnectionFooter(store: store)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(store.theme.surface.opacity(0.6))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(store.theme.background)
+        .tint(store.theme.accent)
+    }
+
+    private func sidebarTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(store.theme.subtext)
+            .textCase(.uppercase)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 3)
+    }
+
+    private func sectionRow(_ section: DockerSection) -> some View {
+        let selected = store.section == section
+        let hovered = hoveredSection == section
+        return Button {
+            store.section = section
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: section.icon)
+                    .frame(width: 16)
+                    .foregroundStyle(selected ? store.theme.accent : store.theme.subtext)
+                Text(section.title)
+                    .foregroundStyle(selected ? store.theme.text : store.theme.text.opacity(0.9))
+                Spacer(minLength: 6)
+                Text(count(for: section))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(store.theme.subtext)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+            .background(
+                selected ? store.theme.accent.opacity(0.16)
+                    : hovered ? store.theme.surfaceSelected.opacity(0.45)
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            hoveredSection = hovering ? section : (hoveredSection == section ? nil : hoveredSection)
+        }
+    }
+
+    private func contextRow(_ context: DockerContext) -> some View {
+        let selected = context.name == store.currentContext
+        return Button {
+            store.selectContext(context.name)
+        } label: {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(selected ? store.theme.accent : store.theme.border)
+                    .frame(width: 6, height: 6)
+                Text(context.name)
+                    .font(.caption)
+                    .foregroundStyle(selected ? store.theme.text : store.theme.text.opacity(0.85))
+                    .lineLimit(1)
+                Spacer()
+                if context.isRemote {
+                    Image(systemName: "network")
+                        .font(.caption2)
+                        .foregroundStyle(store.theme.subtext)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+            .background(
+                selected ? store.theme.surfaceSelected.opacity(0.4) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(context.endpoint)
     }
 
     private func count(for section: DockerSection) -> String {
@@ -231,12 +294,15 @@ struct DockerContainersView: View {
                 List(selection: $store.selectedContainerID) {
                     ForEach(store.filteredGroups) { group in
                         Section {
-                            ForEach(group.containers) { container in
-                                DockerContainerRow(store: store, container: container)
-                                    .tag(container.id)
-                                    .contextMenu {
-                                        containerMenu(store: store, container: container)
-                                    }
+                            if store.isGroupCollapsed(group.id) == false {
+                                ForEach(group.containers) { container in
+                                    DockerContainerRow(store: store, container: container)
+                                        .padding(.leading, group.isStandalone ? 0 : 18)
+                                        .tag(container.id)
+                                        .contextMenu {
+                                            containerMenu(store: store, container: container)
+                                        }
+                                }
                             }
                         } header: {
                             DockerGroupHeader(store: store, group: group)
@@ -376,6 +442,20 @@ struct DockerGroupHeader: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    store.toggleGroup(group.id)
+                }
+            } label: {
+                Image(systemName: store.isGroupCollapsed(group.id)
+                      ? "chevron.right" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .frame(width: 12, height: 14)
+                    .foregroundStyle(store.theme.subtext)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(store.isGroupCollapsed(group.id)
+                                ? "Expand \(group.name)" : "Collapse \(group.name)")
             Image(systemName: group.isStandalone ? "shippingbox" : "square.stack.3d.up")
                 .font(.caption)
                 .foregroundStyle(store.theme.subtext)
@@ -402,6 +482,9 @@ struct DockerGroupHeader: View {
                         .foregroundStyle(store.theme.subtext)
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .frame(width: 20)
                 .disabled(group.canRunCompose == false)
                 .help(group.canRunCompose
                       ? "Project actions"

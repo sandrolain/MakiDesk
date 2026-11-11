@@ -104,6 +104,7 @@ final class DockerStore {
     var selectedImageID: String?
     var selectedVolumeID: String?
     var selectedNetworkID: String?
+    var collapsedGroups: Set<String> = []
     var settings = DockerSettingsDocument.defaults
     var theme = DockerUITheme()
     var isSettingsPresented = false
@@ -365,6 +366,18 @@ final class DockerStore {
         guard let selectedNetworkID else { return }
         if networks.contains(where: { $0.id == selectedNetworkID }) == false {
             self.selectedNetworkID = nil
+        }
+    }
+
+    func isGroupCollapsed(_ id: String) -> Bool {
+        collapsedGroups.contains(id)
+    }
+
+    func toggleGroup(_ id: String) {
+        if collapsedGroups.contains(id) {
+            collapsedGroups.remove(id)
+        } else {
+            collapsedGroups.insert(id)
         }
     }
 
