@@ -810,16 +810,18 @@ Desktop, OrbStack, colima or Docker Engine must already be installed and
 reachable through the usual `docker` command.
 
 - **Containers.** The list groups containers by Compose project and puts
-  containers without a project under **Standalone**. Groups start collapsed;
-  open one with its chevron, and its containers are indented under it. The
-  group menu starts, stops, restarts or brings down the project when its
-  Compose files are still on disk. A container row has its state, image, ports
+  containers without a project under **Standalone**. Compose groups start
+  collapsed; open one with its chevron, and its containers are indented under
+  it. Containers without a Compose project appear directly in the list, with no
+  group header. The group menu starts, stops, restarts or brings down the
+  project when its Compose files are still on disk. A container row has its state, image, ports
   and health; the context menu starts, stops, restarts, pauses, kills or
   deletes it, copies its ID or opens a terminal. The detail
   pane has **Overview**, **Logs**, **Stats** and **Inspect**. Running containers
   are never removed by a prune.
 - **Images, volumes, networks.** Each section lists the resource with the size,
-  usage and Compose project where available. Remove asks first, and a resource
+  usage and Compose project where available; the lists follow the MakiDesk
+  theme, including their headers. Remove asks first, and a resource
   still in use is left alone. Network and volume details show who is connected.
 - **Logs and stats.** Logs stream with `docker logs --follow`; **Follow** and
   **Timestamps** restart the stream, the field filters the lines already

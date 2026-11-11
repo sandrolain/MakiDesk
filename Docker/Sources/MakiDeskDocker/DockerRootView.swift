@@ -24,7 +24,7 @@ struct DockerRootView: View {
                     DockerCleanupView(store: store)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 300, ideal: 430, max: 700)
+            .navigationSplitViewColumnWidth(min: 380, ideal: 540, max: 760)
         } detail: {
             DockerDetailPane(store: store)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 430)
@@ -102,7 +102,6 @@ struct DockerRootView: View {
 
 struct DockerSidebarView: View {
     @Bindable var store: DockerStore
-    @State private var hoveredSection: DockerSection?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -155,36 +154,8 @@ struct DockerSidebarView: View {
     }
 
     private func sectionRow(_ section: DockerSection) -> some View {
-        let selected = store.section == section
-        let hovered = hoveredSection == section
-        return Button {
-            store.section = section
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: section.icon)
-                    .frame(width: 18)
-                    .foregroundStyle(selected ? store.theme.accent : store.theme.subtext)
-                Text(section.title)
-                    .foregroundStyle(selected ? store.theme.text : store.theme.text.opacity(0.9))
-                Spacer(minLength: 6)
-                Text(count(for: section))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(store.theme.subtext)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .contentShape(Rectangle())
-            .background(
-                selected ? store.theme.accent.opacity(0.16)
-                    : hovered ? store.theme.surfaceSelected.opacity(0.45)
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: 7)
-            )
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            hoveredSection = hovering ? section : (hoveredSection == section ? nil : hoveredSection)
-        }
+        DockerSidebarSectionRow(store: store, section: section,
+                                count: count(for: section))
     }
 
     private func contextRow(_ context: DockerContext) -> some View {
@@ -228,6 +199,45 @@ struct DockerSidebarView: View {
         case .cleanup: return store.diskUsage.reclaimableBytes > 0
             ? DockerFormatting.size(store.diskUsage.reclaimableBytes) : "—"
         }
+    }
+}
+
+private struct DockerSidebarSectionRow: View {
+    @Bindable var store: DockerStore
+    let section: DockerSection
+    let count: String
+    @State private var hovering = false
+
+    var body: some View {
+        let selected = store.section == section
+        Button {
+            store.section = section
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: section.icon)
+                    .frame(width: 18)
+                    .foregroundStyle(selected ? store.theme.accent : store.theme.subtext)
+                Text(section.title)
+                    .foregroundStyle(selected ? store.theme.text : store.theme.text.opacity(0.9))
+                Spacer(minLength: 6)
+                Text(count)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(store.theme.subtext)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(
+                selected ? store.theme.accent.opacity(0.16)
+                    : hovering ? store.theme.surfaceSelected.opacity(0.45)
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -283,7 +293,7 @@ struct DockerContainersView: View {
             Divider().overlay(store.theme.border)
             if store.connection.failure != nil, store.containers.isEmpty {
                 DockerConnectionProblem(store: store)
-            } else if store.filteredGroups.isEmpty {
+            } else if composeGroups.isEmpty && standaloneContainers.isEmpty {
                 DockerEmptyView(
                     icon: "shippingbox",
                     title: store.containers.isEmpty ? "No containers" : "No containers match",
@@ -293,21 +303,21 @@ struct DockerContainersView: View {
                 )
             } else {
                 List(selection: $store.selectedContainerID) {
-                    ForEach(store.filteredGroups) { group in
+                    ForEach(composeGroups) { group in
                         Section {
                             let isSearching = store.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                             if store.isGroupCollapsed(group.id) == false || isSearching {
                                 ForEach(group.containers) { container in
-                                    DockerContainerRow(store: store, container: container)
-                                        .padding(.leading, group.isStandalone ? 0 : 18)
-                                        .tag(container.id)
-                                        .contextMenu {
-                                            containerMenu(store: store, container: container)
-                                        }
+                                    containerRow(container, indent: 18)
                                 }
                             }
                         } header: {
                             DockerGroupHeader(store: store, group: group)
+                        }
+                    }
+                    if standaloneContainers.isEmpty == false {
+                        ForEach(standaloneContainers) { container in
+                            containerRow(container, indent: 0)
                         }
                     }
                 }
@@ -316,6 +326,24 @@ struct DockerContainersView: View {
             }
         }
         .background(store.theme.background)
+    }
+
+    private var composeGroups: [DockerContainerGroup] {
+        store.filteredGroups.filter { $0.isStandalone == false }
+    }
+
+    private var standaloneContainers: [DockerContainer] {
+        store.filteredGroups.first(where: \.isStandalone)?.containers ?? []
+    }
+
+    @ViewBuilder
+    private func containerRow(_ container: DockerContainer, indent: CGFloat) -> some View {
+        DockerContainerRow(store: store, container: container)
+            .padding(.leading, indent)
+            .tag(container.id)
+            .contextMenu {
+                containerMenu(store: store, container: container)
+            }
     }
 
     @ViewBuilder

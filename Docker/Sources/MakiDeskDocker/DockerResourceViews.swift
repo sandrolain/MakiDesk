@@ -1,6 +1,31 @@
 import SwiftUI
 import MakiDockerCore
 
+struct DockerTableHeader: View {
+    @Bindable var store: DockerStore
+    let columns: [(String, CGFloat?)]
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(Array(columns.enumerated()), id: \.offset) { entry in
+                Text(entry.element.0)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(store.theme.subtext)
+                    .lineLimit(1)
+                    .frame(width: entry.element.1, alignment: .leading)
+                    .frame(maxWidth: entry.element.1 == nil ? .infinity : nil,
+                           alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(store.theme.surface.opacity(0.55))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(store.theme.border.opacity(0.55)).frame(height: 1)
+        }
+    }
+}
+
 struct DockerImagesView: View {
     @Bindable var store: DockerStore
 
@@ -17,7 +42,12 @@ struct DockerImagesView: View {
                                 title: "No images",
                                 detail: "Images appear here after a pull, a build or a Compose start.")
             } else {
-                Table(store.filteredImages, selection: $store.selectedImageID) {
+                VStack(spacing: 0) {
+                    DockerTableHeader(store: store, columns: [
+                        ("Repository:Tag", nil), ("ID", 92), ("Size", 70),
+                        ("Containers", 82),
+                    ])
+                    Table(store.filteredImages, selection: $store.selectedImageID) {
                     TableColumn("Repository:Tag") { image in
                         HStack(spacing: 5) {
                             Text(image.primaryTag)
@@ -27,26 +57,31 @@ struct DockerImagesView: View {
                             }
                         }
                     }
+                    .width(min: 150, ideal: 190, max: 260)
                     TableColumn("ID") { image in
                         Text(image.shortID).font(.callout.monospaced())
                     }
+                    .width(min: 82, ideal: 92, max: 110)
                     TableColumn("Size") { image in
                         Text(image.size).font(.callout.monospacedDigit())
                     }
+                    .width(min: 58, ideal: 70, max: 90)
                     TableColumn("Containers") { image in
                         Text("\(image.containers)").font(.callout.monospacedDigit())
                     }
-                    TableColumn("Created") { image in
-                        Text(image.createdAt).font(.callout).lineLimit(1)
-                    }
+                    .width(min: 72, ideal: 82, max: 100)
                 }
-                .tableStyle(.inset)
+                .tableStyle(.inset(alternatesRowBackgrounds: false))
+                .tableColumnHeaders(.hidden)
+                .scrollContentBackground(.hidden)
+                .background(store.theme.background)
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first, let image = store.images.first(where: { $0.id == id }) {
                         Button("Remove image", role: .destructive) { store.removeImage(image) }
                         Button("Copy image ID") { store.copyToPasteboard(image.id) }
                     }
                 } primaryAction: { _ in }
+                }
             }
         }
         .background(store.theme.background)
@@ -68,7 +103,12 @@ struct DockerVolumesView: View {
                 DockerEmptyView(icon: "externaldrive", title: "No volumes",
                                 detail: "Named and anonymous volumes appear here.")
             } else {
-                Table(store.filteredVolumes, selection: $store.selectedVolumeID) {
+                VStack(spacing: 0) {
+                    DockerTableHeader(store: store, columns: [
+                        ("Name", 180), ("Driver", 70), ("Size", 70),
+                        ("In use", 60),
+                    ])
+                    Table(store.filteredVolumes, selection: $store.selectedVolumeID) {
                     TableColumn("Name") { volume in
                         HStack(spacing: 5) {
                             Text(volume.name).lineLimit(1)
@@ -77,16 +117,22 @@ struct DockerVolumesView: View {
                             }
                         }
                     }
+                    .width(min: 140, ideal: 180, max: 260)
                     TableColumn("Driver") { Text($0.driver).font(.callout) }
+                        .width(min: 60, ideal: 70, max: 90)
                     TableColumn("Size") { Text($0.size ?? "—").font(.callout.monospacedDigit()) }
+                        .width(min: 60, ideal: 70, max: 90)
                     TableColumn("In use") { volume in
                         Text(volume.isUsed ? "yes" : "no")
                             .font(.callout)
                             .foregroundStyle(volume.isUsed ? store.theme.subtext : .orange)
                     }
-                    TableColumn("Mountpoint") { Text($0.mountpoint).font(.callout).lineLimit(1) }
+                    .width(min: 50, ideal: 60, max: 80)
                 }
-                .tableStyle(.inset)
+                .tableStyle(.inset(alternatesRowBackgrounds: false))
+                .tableColumnHeaders(.hidden)
+                .scrollContentBackground(.hidden)
+                .background(store.theme.background)
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first,
                        let volume = store.volumes.first(where: { $0.name == id }) {
@@ -95,6 +141,7 @@ struct DockerVolumesView: View {
                         Button("Copy name") { store.copyToPasteboard(volume.name) }
                     }
                 } primaryAction: { _ in }
+                }
             }
         }
         .background(store.theme.background)
@@ -116,7 +163,12 @@ struct DockerNetworksView: View {
                 DockerEmptyView(icon: "network", title: "No networks",
                                 detail: "Bridge, host and project networks appear here.")
             } else {
-                Table(store.filteredNetworks, selection: $store.selectedNetworkID) {
+                VStack(spacing: 0) {
+                    DockerTableHeader(store: store, columns: [
+                        ("Name", nil), ("Driver", 70), ("Scope", 60),
+                        ("Containers", 70),
+                    ])
+                    Table(store.filteredNetworks, selection: $store.selectedNetworkID) {
                     TableColumn("Name") { network in
                         HStack(spacing: 5) {
                             Text(network.name).lineLimit(1)
@@ -125,14 +177,20 @@ struct DockerNetworksView: View {
                             }
                         }
                     }
+                    .width(min: 140, ideal: 180, max: 260)
                     TableColumn("Driver") { Text($0.driver).font(.callout) }
+                        .width(min: 60, ideal: 70, max: 90)
                     TableColumn("Scope") { Text($0.scope).font(.callout) }
-                    TableColumn("Subnet") { Text($0.subnet ?? "—").font(.callout.monospaced()) }
+                        .width(min: 50, ideal: 60, max: 80)
                     TableColumn("Containers") {
                         Text("\($0.containers.count)").font(.callout.monospacedDigit())
                     }
+                    .width(min: 60, ideal: 70, max: 90)
                 }
-                .tableStyle(.inset)
+                .tableStyle(.inset(alternatesRowBackgrounds: false))
+                .tableColumnHeaders(.hidden)
+                .scrollContentBackground(.hidden)
+                .background(store.theme.background)
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first,
                        let network = store.networks.first(where: { $0.id == id }) {
@@ -141,6 +199,7 @@ struct DockerNetworksView: View {
                         Button("Copy network ID") { store.copyToPasteboard(network.id) }
                     }
                 } primaryAction: { _ in }
+                }
             }
         }
         .background(store.theme.background)
