@@ -169,6 +169,8 @@ tasks:
     desc: Kill the running app, then rebuild, sign and relaunch it
     cmds:
       - pkill -x "{{.APP_NAME}}" || true
+      - pkill -x "MakiDeskDocker" || true
+      - pkill -x "MakiTerminal" || true
       - sleep 1
       - task: open
 
