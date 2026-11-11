@@ -8,7 +8,7 @@ struct DockerRootView: View {
     var body: some View {
         NavigationSplitView {
             DockerSidebarView(store: store)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 330)
         } content: {
             Group {
                 switch store.section {
@@ -31,6 +31,7 @@ struct DockerRootView: View {
         }
         .background(store.theme.background)
         .tint(store.theme.accent)
+        .font(.system(size: 13.5))
         .searchable(text: $store.search, placement: .toolbar,
                     prompt: "Search \(store.section.title.lowercased())")
         .toolbar { toolbar }
@@ -52,7 +53,7 @@ struct DockerRootView: View {
         ToolbarItemGroup(placement: .primaryAction) {
             ProgressView()
                 .controlSize(.small)
-                .frame(width: 16, height: 16)
+                .frame(width: 18, height: 18)
                 .opacity(store.isRefreshing ? 1 : 0)
                 .accessibilityHidden(store.isRefreshing == false)
             Button {
@@ -116,7 +117,7 @@ struct DockerSidebarView: View {
                         .padding(.top, 12)
                     if store.contexts.isEmpty {
                         Text(store.currentContext ?? "No context")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(store.theme.subtext)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
@@ -146,7 +147,7 @@ struct DockerSidebarView: View {
 
     private func sidebarTitle(_ title: String) -> some View {
         Text(title)
-            .font(.caption2.weight(.semibold))
+            .font(.callout.weight(.semibold))
             .foregroundStyle(store.theme.subtext)
             .textCase(.uppercase)
             .padding(.horizontal, 10)
@@ -161,17 +162,17 @@ struct DockerSidebarView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: section.icon)
-                    .frame(width: 16)
+                    .frame(width: 18)
                     .foregroundStyle(selected ? store.theme.accent : store.theme.subtext)
                 Text(section.title)
                     .foregroundStyle(selected ? store.theme.text : store.theme.text.opacity(0.9))
                 Spacer(minLength: 6)
                 Text(count(for: section))
-                    .font(.caption.monospacedDigit())
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(store.theme.subtext)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .contentShape(Rectangle())
             .background(
                 selected ? store.theme.accent.opacity(0.16)
@@ -196,18 +197,18 @@ struct DockerSidebarView: View {
                     .fill(selected ? store.theme.accent : store.theme.border)
                     .frame(width: 6, height: 6)
                 Text(context.name)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(selected ? store.theme.text : store.theme.text.opacity(0.85))
                     .lineLimit(1)
                 Spacer()
                 if context.isRemote {
                     Image(systemName: "network")
-                        .font(.caption2)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 5)
+            .padding(.vertical, 6)
             .contentShape(Rectangle())
             .background(
                 selected ? store.theme.surfaceSelected.opacity(0.4) : Color.clear,
@@ -240,10 +241,10 @@ struct DockerConnectionFooter: View {
                 .frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 1) {
                 Text(statusTitle)
-                    .font(.caption.weight(.medium))
+                    .font(.callout.weight(.medium))
                     .lineLimit(1)
                 Text(store.currentContext ?? "docker")
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                     .lineLimit(1)
             }
@@ -294,7 +295,8 @@ struct DockerContainersView: View {
                 List(selection: $store.selectedContainerID) {
                     ForEach(store.filteredGroups) { group in
                         Section {
-                            if store.isGroupCollapsed(group.id) == false {
+                            let isSearching = store.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                            if store.isGroupCollapsed(group.id) == false || isSearching {
                                 ForEach(group.containers) { container in
                                     DockerContainerRow(store: store, container: container)
                                         .padding(.leading, group.isStandalone ? 0 : 18)
@@ -349,17 +351,17 @@ struct DockerSectionHeader: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(store.theme.text)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
             }
             Spacer()
             if store.isActionRunning {
                 ProgressView().controlSize(.small)
                 Text(store.actionLabel)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                     .lineLimit(1)
             }
@@ -387,7 +389,7 @@ struct DockerContainerRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(container.name)
-                        .font(.body.weight(.medium))
+                        .font(.system(size: 14.5, weight: .medium))
                         .foregroundStyle(store.theme.text)
                         .lineLimit(1)
                     if container.compose?.oneOff == true {
@@ -400,24 +402,24 @@ struct DockerContainerRow: View {
                     }
                 }
                 Text(container.image)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(container.state.label)
-                    .font(.caption.weight(.medium))
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(statusColor)
                 if container.displayPorts != "—" {
                     Text(container.displayPorts)
-                        .font(.caption2.monospacedDigit())
+                        .font(.callout.monospacedDigit())
                         .foregroundStyle(store.theme.subtext)
                         .lineLimit(1)
                 }
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 5)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(container.name), \(container.state.label), \(container.image)")
@@ -449,7 +451,7 @@ struct DockerGroupHeader: View {
             } label: {
                 Image(systemName: store.isGroupCollapsed(group.id)
                       ? "chevron.right" : "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .font(.callout.weight(.semibold))
                     .frame(width: 12, height: 14)
                     .foregroundStyle(store.theme.subtext)
             }
@@ -457,13 +459,13 @@ struct DockerGroupHeader: View {
             .accessibilityLabel(store.isGroupCollapsed(group.id)
                                 ? "Expand \(group.name)" : "Collapse \(group.name)")
             Image(systemName: group.isStandalone ? "shippingbox" : "square.stack.3d.up")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(store.theme.subtext)
             Text(group.name)
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundStyle(store.theme.text)
             Text("\(group.runningCount)/\(group.totalCount)")
-                .font(.caption2.monospacedDigit())
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(store.theme.subtext)
             Spacer()
             if group.compose != nil {
@@ -478,7 +480,7 @@ struct DockerGroupHeader: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                 }
                 .menuStyle(.borderlessButton)
@@ -492,7 +494,7 @@ struct DockerGroupHeader: View {
             }
         }
         .textCase(nil)
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
     }
 }
 
@@ -505,7 +507,7 @@ struct DockerConnectionProblem: View {
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(.orange)
             Text("Docker is not available")
-                .font(.headline)
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(store.theme.text)
             Text(store.connection.failure ?? "The Docker daemon did not answer.")
                 .font(.callout)
@@ -553,7 +555,7 @@ struct DockerEmptyView: View {
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(.secondary)
             Text(title)
-                .font(.headline)
+                .font(.system(size: 18, weight: .semibold))
             Text(detail)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -576,7 +578,7 @@ struct DockerBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.medium))
+            .font(.callout.weight(.medium))
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .foregroundStyle(foreground)

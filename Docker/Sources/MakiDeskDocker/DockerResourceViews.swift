@@ -28,16 +28,16 @@ struct DockerImagesView: View {
                         }
                     }
                     TableColumn("ID") { image in
-                        Text(image.shortID).font(.caption.monospaced())
+                        Text(image.shortID).font(.callout.monospaced())
                     }
                     TableColumn("Size") { image in
-                        Text(image.size).font(.caption.monospacedDigit())
+                        Text(image.size).font(.callout.monospacedDigit())
                     }
                     TableColumn("Containers") { image in
-                        Text("\(image.containers)").font(.caption.monospacedDigit())
+                        Text("\(image.containers)").font(.callout.monospacedDigit())
                     }
                     TableColumn("Created") { image in
-                        Text(image.createdAt).font(.caption).lineLimit(1)
+                        Text(image.createdAt).font(.callout).lineLimit(1)
                     }
                 }
                 .tableStyle(.inset)
@@ -77,14 +77,14 @@ struct DockerVolumesView: View {
                             }
                         }
                     }
-                    TableColumn("Driver") { Text($0.driver).font(.caption) }
-                    TableColumn("Size") { Text($0.size ?? "—").font(.caption.monospacedDigit()) }
+                    TableColumn("Driver") { Text($0.driver).font(.callout) }
+                    TableColumn("Size") { Text($0.size ?? "—").font(.callout.monospacedDigit()) }
                     TableColumn("In use") { volume in
                         Text(volume.isUsed ? "yes" : "no")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(volume.isUsed ? store.theme.subtext : .orange)
                     }
-                    TableColumn("Mountpoint") { Text($0.mountpoint).font(.caption).lineLimit(1) }
+                    TableColumn("Mountpoint") { Text($0.mountpoint).font(.callout).lineLimit(1) }
                 }
                 .tableStyle(.inset)
                 .contextMenu(forSelectionType: String.self) { ids in
@@ -125,11 +125,11 @@ struct DockerNetworksView: View {
                             }
                         }
                     }
-                    TableColumn("Driver") { Text($0.driver).font(.caption) }
-                    TableColumn("Scope") { Text($0.scope).font(.caption) }
-                    TableColumn("Subnet") { Text($0.subnet ?? "—").font(.caption.monospaced()) }
+                    TableColumn("Driver") { Text($0.driver).font(.callout) }
+                    TableColumn("Scope") { Text($0.scope).font(.callout) }
+                    TableColumn("Subnet") { Text($0.subnet ?? "—").font(.callout.monospaced()) }
                     TableColumn("Containers") {
-                        Text("\($0.containers.count)").font(.caption.monospacedDigit())
+                        Text("\($0.containers.count)").font(.callout.monospacedDigit())
                     }
                 }
                 .tableStyle(.inset)
@@ -175,14 +175,14 @@ struct DockerCleanupView: View {
                         .buttonStyle(.bordered)
                     Spacer()
                     Text("Estimated reclaimable: \(store.prunePlan.estimatedSize)")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                 }
                 Text(DockerPruneMode.basic.explanation)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                 Text(DockerPruneMode.all.explanation)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.orange)
             }
             .padding(16)
@@ -194,10 +194,10 @@ struct DockerCleanupView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Cleanup")
-                    .font(.headline)
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(store.theme.text)
                 Text("Reclaimable \(DockerFormatting.size(store.diskUsage.reclaimableBytes)) of \(DockerFormatting.size(store.diskUsage.totalBytes))")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
             }
             Spacer()
@@ -231,18 +231,18 @@ struct DockerCleanupCard: View {
                 Image(systemName: mode.icon)
                     .foregroundStyle(store.theme.accent)
                 Text(category.title.isEmpty ? mode.title : category.title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(size: 14, weight: .semibold))
                 Spacer()
             }
             Text("\(category.total) items · \(category.active) in use")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(store.theme.subtext)
             HStack {
                 Text(category.size)
-                    .font(.title3.monospacedDigit())
+                    .font(.title2.monospacedDigit())
                 Spacer()
                 Text("reclaim \(category.reclaimable)")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.orange)
             }
             Button("Prune") { store.prune(mode) }
@@ -334,9 +334,9 @@ struct DockerImageDetailView: View {
                 ], store: store)
                 if image.repoTags.count > 1 {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Tags").font(.caption).foregroundStyle(store.theme.subtext)
+                        Text("Tags").font(.callout).foregroundStyle(store.theme.subtext)
                         ForEach(image.repoTags, id: \.self) { tag in
-                            Text(tag).font(.caption.monospaced())
+                            Text(tag).font(.callout.monospaced())
                         }
                     }
                 }
@@ -404,14 +404,14 @@ struct DockerNetworkDetailView: View {
                 if network.containers.isEmpty == false {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Connected containers")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(store.theme.subtext)
                         ForEach(network.containers) { container in
                             HStack {
-                                Text(container.name).font(.caption)
+                                Text(container.name).font(.callout)
                                 Spacer()
                                 Text(container.ipv4 ?? "—")
-                                    .font(.caption.monospaced())
+                                    .font(.callout.monospaced())
                                     .foregroundStyle(store.theme.subtext)
                             }
                         }
@@ -460,11 +460,11 @@ struct DockerCleanupDetailView: View {
 func detailHeader(title: String, subtitle: String, icon: String) -> some View {
     HStack(spacing: 10) {
         Image(systemName: icon)
-            .font(.title2)
+            .font(.title)
             .foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.title3.weight(.semibold))
-            Text(subtitle).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.title2.weight(.semibold))
+            Text(subtitle).font(.callout).foregroundStyle(.secondary)
         }
     }
 }
@@ -478,16 +478,16 @@ struct DockerKeyValue: View {
             ForEach(Array(items.enumerated()), id: \.offset) { entry in
                 HStack(alignment: .top, spacing: 10) {
                     Text(entry.element.0)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
-                        .frame(width: 120, alignment: .leading)
+                        .frame(width: 132, alignment: .leading)
                     Text(entry.element.1)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.text)
                         .textSelection(.enabled)
                     Spacer(minLength: 0)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 6)
                 Divider().overlay(store.theme.border.opacity(0.4))
             }
         }

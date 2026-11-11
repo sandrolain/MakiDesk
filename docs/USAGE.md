@@ -810,8 +810,8 @@ Desktop, OrbStack, colima or Docker Engine must already be installed and
 reachable through the usual `docker` command.
 
 - **Containers.** The list groups containers by Compose project and puts
-  containers without a project under **Standalone**. Each group can be
-  collapsed with its chevron, and its containers are indented under it. The
+  containers without a project under **Standalone**. Groups start collapsed;
+  open one with its chevron, and its containers are indented under it. The
   group menu starts, stops, restarts or brings down the project when its
   Compose files are still on disk. A container row has its state, image, ports
   and health; the context menu starts, stops, restarts, pauses, kills or

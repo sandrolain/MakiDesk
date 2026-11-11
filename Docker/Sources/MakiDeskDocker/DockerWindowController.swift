@@ -45,8 +45,8 @@ final class DockerWindowController: NSObject, NSWindowDelegate {
         window.backgroundColor = store.theme.nsBackground
         window.isOpaque = true
         window.isMovableByWindowBackground = false
-        window.minSize = NSSize(width: 860, height: 520)
-        window.setContentSize(NSSize(width: 1180, height: 720))
+        window.minSize = NSSize(width: 900, height: 560)
+        window.setContentSize(NSSize(width: 1240, height: 780))
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.delegate = self

@@ -36,7 +36,7 @@ struct DockerTextView: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                   height: CGFloat.greatestFiniteMagnitude)
         textView.minSize = .zero
-        textView.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        textView.font = .monospacedSystemFont(ofSize: 12.5, weight: .regular)
         textView.textColor = NSColor(theme.text)
         textView.insertionPointColor = NSColor(theme.accent)
         textView.string = text
@@ -48,7 +48,7 @@ struct DockerTextView: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = context.coordinator.textView else { return }
         let colour = NSColor(theme.text)
-        let font = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        let font = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
         textView.textColor = colour
         textView.font = font
         let attributes: [NSAttributedString.Key: Any] = [

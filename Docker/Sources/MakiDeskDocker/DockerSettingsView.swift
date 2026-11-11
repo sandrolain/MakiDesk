@@ -12,7 +12,7 @@ struct DockerSettingsView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Docker Settings")
-                    .font(.title3.weight(.semibold))
+                    .font(.title2.weight(.semibold))
                 Spacer()
             }
             .padding(16)

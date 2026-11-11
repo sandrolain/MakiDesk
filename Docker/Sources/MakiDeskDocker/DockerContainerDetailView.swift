@@ -63,7 +63,7 @@ struct DockerContainerDetailView: View {
                     .fill(stateColor)
                     .frame(width: 9, height: 9)
                 Text(container.name)
-                    .font(.title3.weight(.semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(store.theme.text)
                     .lineLimit(1)
                 if container.health == .unhealthy {
@@ -73,18 +73,18 @@ struct DockerContainerDetailView: View {
                 }
                 Spacer()
                 if store.isActionRunning {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.regular)
                 }
             }
             HStack(spacing: 6) {
                 Text(container.image)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                     .lineLimit(1)
                 if let project = container.compose?.project {
                     Text("·").foregroundStyle(store.theme.subtext)
                     Text(project)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                 }
             }
@@ -123,7 +123,7 @@ struct DockerContainerDetailView: View {
                 Spacer()
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            .controlSize(.regular)
         }
         .padding(14)
         .background(store.theme.surface.opacity(0.45))
@@ -166,7 +166,7 @@ struct DockerContainerDetailView: View {
                     }
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+                .controlSize(.regular)
             }
             .padding(16)
         }
@@ -195,20 +195,20 @@ struct DockerLogsTabView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 220)
                 Spacer()
-                if logs.isActive { ProgressView().controlSize(.small) }
+                if logs.isActive { ProgressView().controlSize(.regular) }
                 Text("\(logs.lineCount) lines")
-                    .font(.caption.monospacedDigit())
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(store.theme.subtext)
                 if logs.dropped > 0 {
                     Text("· \(logs.dropped) trimmed")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                 }
                 Button("Clear") { logs.clear() }
                 Button("Restart") { logs.restart() }
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            .controlSize(.regular)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
 
@@ -222,12 +222,12 @@ struct DockerLogsTabView: View {
             Divider().overlay(store.theme.border)
             HStack {
                 Text(logs.status)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                 Spacer()
                 Button("Copy logs") { store.copyToPasteboard(logs.filteredText) }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .controlSize(.regular)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
@@ -280,7 +280,7 @@ struct DockerStatsTabView: View {
                 }
                 if stats.isRunning {
                     Text("Updates every \(Int(store.settings.statsInterval)) seconds while this tab is visible.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                 }
             }
@@ -309,10 +309,10 @@ struct DockerStatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.title3.monospacedDigit())
+                .font(.title2.monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -336,19 +336,19 @@ struct DockerInspectTabView: View {
             } else if let summary = model.summary {
                 VStack(alignment: .leading, spacing: 8) {
                     if let error = model.error {
-                        Text(error).font(.caption).foregroundStyle(.orange)
+                        Text(error).font(.callout).foregroundStyle(.orange)
                     }
                     if summary.environment.isEmpty == false {
                         DisclosureGroup(isExpanded: $revealEnvironment) {
                             Text(revealEnvironment
                                  ? summary.environment.joined(separator: "\n")
                                  : "Environment values are hidden because they can contain secrets.")
-                                .font(.caption.monospaced())
+                                .font(.callout.monospaced())
                                 .textSelection(.enabled)
                                 .foregroundStyle(revealEnvironment ? store.theme.text : store.theme.subtext)
                         } label: {
                             Text("Environment (\(summary.environment.count))")
-                                .font(.caption.weight(.medium))
+                                .font(.callout.weight(.medium))
                         }
                         .padding(.horizontal, 14)
                         .padding(.top, 8)
@@ -358,28 +358,28 @@ struct DockerInspectTabView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 ForEach(summary.labels.sorted(by: { $0.key < $1.key }), id: \.key) { pair in
                                     Text("\(pair.key)=\(pair.value)")
-                                        .font(.caption.monospaced())
+                                        .font(.callout.monospaced())
                                         .textSelection(.enabled)
                                 }
                             }
                         } label: {
                             Text("Labels (\(summary.labels.count))")
-                                .font(.caption.weight(.medium))
+                                .font(.callout.weight(.medium))
                         }
                         .padding(.horizontal, 14)
                     }
                     HStack {
                         Text("Raw JSON")
-                            .font(.caption.weight(.medium))
+                            .font(.callout.weight(.medium))
                         Spacer()
                         Button("Copy JSON") { store.copyToPasteboard(summary.rawJSON) }
                             .buttonStyle(.bordered)
-                            .controlSize(.small)
+                            .controlSize(.regular)
                     }
                     .padding(.horizontal, 14)
                     .padding(.top, 8)
                     Text("Environment values are redacted in this JSON. Reveal them above when needed.")
-                        .font(.caption2)
+                        .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                         .padding(.horizontal, 14)
                     DockerTextView(text: summary.rawJSON, theme: store.theme)
@@ -388,10 +388,10 @@ struct DockerInspectTabView: View {
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: 28, weight: .light))
+                        .font(.system(size: 32, weight: .light))
                         .foregroundStyle(.secondary)
                     Text("No inspect data")
-                        .font(.headline)
+                        .font(.system(size: 18, weight: .semibold))
                     Text(model.error ?? "Select the container again.")
                         .font(.callout)
                         .foregroundStyle(.secondary)

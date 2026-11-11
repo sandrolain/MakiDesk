@@ -104,7 +104,7 @@ final class DockerStore {
     var selectedImageID: String?
     var selectedVolumeID: String?
     var selectedNetworkID: String?
-    var collapsedGroups: Set<String> = []
+    var expandedGroups: Set<String> = []
     var settings = DockerSettingsDocument.defaults
     var theme = DockerUITheme()
     var isSettingsPresented = false
@@ -369,15 +369,17 @@ final class DockerStore {
         }
     }
 
+    /// Groups start collapsed. Only an explicit expansion is remembered for
+    /// the session, so a newly discovered project also starts folded.
     func isGroupCollapsed(_ id: String) -> Bool {
-        collapsedGroups.contains(id)
+        expandedGroups.contains(id) == false
     }
 
     func toggleGroup(_ id: String) {
-        if collapsedGroups.contains(id) {
-            collapsedGroups.remove(id)
+        if expandedGroups.contains(id) {
+            expandedGroups.remove(id)
         } else {
-            collapsedGroups.insert(id)
+            expandedGroups.insert(id)
         }
     }
 
