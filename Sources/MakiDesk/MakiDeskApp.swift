@@ -121,6 +121,9 @@ struct MakiDeskApp: App {
             menuButton("Docker", keys: shortcutKeys(.openDocker), icon: "shippingbox") {
                 DockerController.shared.open()
             }
+            menuButton("Browser", keys: shortcutKeys(.openBrowser), icon: "safari") {
+                BrowserLauncher.shared.open()
+            }
             Menu {
                 // No remaining time in these titles: a title that changed every
                 // second rebuilt the open menu and closed it under the pointer.

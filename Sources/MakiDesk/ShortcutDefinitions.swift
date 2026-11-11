@@ -359,5 +359,8 @@ enum ShortcutDefinitions {
         def("app.docker", "Docker", section: "App", key: kVK_ANSI_E,
             action: .openDocker,
             note: "Opens the native Docker window: containers, images, volumes, networks and cleanup."),
+        def("app.browser", "Browser", section: "App", key: kVK_ANSI_W,
+            modifiers: ctrlOptCmd, action: .openBrowser,
+            note: "Opens MakiBrowser with vertical tabs, a per-site ad blocker and an on-device page summary."),
     ]
 }

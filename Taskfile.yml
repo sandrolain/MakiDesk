@@ -81,6 +81,28 @@ tasks:
     cmds:
       - open dist/MakiDeskDocker.app
 
+  browser:build:
+    desc: Build the browser helper
+    cmds:
+      - swift build --package-path Browser
+
+  browser:bundle:
+    desc: Build and bundle the browser helper in dist/MakiDeskBrowser.app
+    cmds:
+      - sh scripts/bundle-browser.sh
+
+  browser:release:
+    desc: Build and bundle the browser helper with the release configuration
+    cmds:
+      - sh scripts/bundle-browser.sh release
+
+  browser:run:
+    desc: Launch the bundled browser helper
+    deps:
+      - browser:bundle
+    cmds:
+      - open dist/MakiDeskBrowser.app
+
   release:
     desc: Compile optimized release target
     cmds:
@@ -92,6 +114,7 @@ tasks:
       - release
       - terminal:release
       - docker:release
+      - browser:release
     cmds:
       - mkdir -p "{{.APP_BUNDLE}}/Contents/MacOS" "{{.APP_BUNDLE}}/Contents/Resources"
       - cp "{{.RELEASE_BIN}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
@@ -103,6 +126,8 @@ tasks:
       - cp -R "{{.ROOT_DIR}}/dist/MakiDeskTerminal.app" "{{.APP_BUNDLE}}/Contents/Applications/"
       - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskDocker.app"
       - cp -R "{{.ROOT_DIR}}/dist/MakiDeskDocker.app" "{{.APP_BUNDLE}}/Contents/Applications/"
+      - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskBrowser.app"
+      - cp -R "{{.ROOT_DIR}}/dist/MakiDeskBrowser.app" "{{.APP_BUNDLE}}/Contents/Applications/"
 
   cert:
     desc: Create a stable self-signed signing identity (run once)
@@ -137,6 +162,7 @@ tasks:
         KEYCHAIN="$HOME/Library/Keychains/makidesk-signing.keychain-db"
         HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskTerminal.app"
         DOCKER_HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskDocker.app"
+        BROWSER_HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskBrowser.app"
         if security find-identity -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$CERT_NAME"; then
           security unlock-keychain -p makidesk "$KEYCHAIN"
           if [ -d "$DOCKER_HELPER" ]; then
@@ -144,6 +170,9 @@ tasks:
           fi
           if [ -d "$HELPER" ]; then
             codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$HELPER"
+          fi
+          if [ -d "$BROWSER_HELPER" ]; then
+            codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$BROWSER_HELPER"
           fi
           codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "{{.APP_BUNDLE}}"
           echo "Signed with '$CERT_NAME' — Accessibility permission survives rebuilds."
@@ -153,6 +182,9 @@ tasks:
           fi
           if [ -d "$HELPER" ]; then
             codesign --force --sign - -r='designated => identifier "com.makidesk.app.terminal"' "$HELPER"
+          fi
+          if [ -d "$BROWSER_HELPER" ]; then
+            codesign --force --sign - -r='designated => identifier "com.makidesk.app.browser"' "$BROWSER_HELPER"
           fi
           codesign --force --deep --sign - -r='designated => identifier "com.makidesk.app"' "{{.APP_BUNDLE}}"
           echo "WARNING: ad-hoc signed. Accessibility permission may reset each build."
@@ -167,11 +199,12 @@ tasks:
       - open -n "{{.APP_BUNDLE}}"
 
   reload:
-    desc: Kill the running app, then rebuild, sign and relaunch it
+    desc: Kill the running MakiDesk and helpers, then rebuild, sign and relaunch MakiDesk
     cmds:
       - pkill -x "{{.APP_NAME}}" || true
       - pkill -x "MakiDeskDocker" || true
       - pkill -x "MakiTerminal" || true
+      - pkill -x "MakiDeskBrowser" || true
       - sleep 1
       - task: open
 
@@ -210,4 +243,5 @@ tasks:
     desc: Remove Swift build products and generated app bundle
     cmds:
       - swift package clean
+      - swift package --package-path Browser clean
       - rm -rf "{{.ROOT_DIR}}/dist"

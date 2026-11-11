@@ -15,15 +15,15 @@ app bundle is assembled from the SwiftPM product plus `Resources/`.
 
 ## Requirements
 
-- macOS 14 or later.
+- macOS 26 or later.
 - Xcode 15+ (or a Swift 5.9+ toolchain with the macOS SDK).
 - [go-task](https://taskfile.dev/) for the convenience tasks (optional; the
   `swift` commands work on their own).
 - Network access the first time, to resolve the SwiftPM dependencies.
 
-Release builds of the main app, Docker helper and terminal helper have been
+Release builds of the main app, Docker, terminal and browser helpers have been
 verified on macOS 26.6.2 with Xcode 26.6 (Swift 6.3.3, macOS SDK 26.5).
-The deployment target remains macOS 14; this build check does not replace
+The deployment target is macOS 26; this build check does not replace
 runtime testing on each supported macOS version.
 
 ## Build and run
@@ -143,6 +143,8 @@ and updates the xcframework's `LibraryPath` and `BinaryPath` entries, without
 changing the binary contents or archive checksum verification. It is safe to
 repeat and does not replace an existing locally built xcframework. Before a
 direct `swift build --package-path Terminal`, run `task terminal:fetch` once.
+The browser helper is a separate package: `swift build --package-path Browser`,
+`swift test --package-path Browser`, or `task browser:bundle` / `task browser:run`.
 
 ## Debugging
 

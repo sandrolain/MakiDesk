@@ -3,16 +3,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/sandrolain/MakiDesk/releases"><img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-1e1e2e?style=flat-square&logo=apple&logoColor=white"></a>
+  <a href="https://github.com/sandrolain/MakiDesk/releases"><img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-1e1e2e?style=flat-square&logo=apple&logoColor=white"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-cba6f7?style=flat-square"></a>
-  <img alt="247 tests" src="https://img.shields.io/badge/tests-247%20passing-a6e3a1?style=flat-square">
+  <img alt="1214 tests" src="https://img.shields.io/badge/tests-1214%20passing-a6e3a1?style=flat-square">
   <img alt="No telemetry" src="https://img.shields.io/badge/telemetry-none-a6e3a1?style=flat-square">
 </p>
 
 # MakiDesk
 
 **The Mac desktop, under control.** MakiDesk is a native menu-bar app for macOS
-14+ that arranges the windows you already have — no fake canvas, no second
+26+ that arranges the windows you already have — no fake canvas, no second
 desktop. Tiling that adapts to what you are reading, saved window groups, a live
 switcher, notes with syntax highlighting, clipboard history, a drag shelf and
 configurable command dropzones, all in one place. No account, no cloud, no
@@ -47,6 +47,18 @@ areas follow a weight, not a fixed cell, and the seven app-kind weights are
 editable in Settings. Each display is arranged in its own area, so a layout
 never moves a window across monitors, and a window that cannot fit an app's own
 minimum size is left where it is instead of being squeezed.
+
+### A browser that stays out of the way
+
+`⌃⌥⌘W` opens **MakiDesk Browser**, a separate WebKit app bundled with MakiDesk
+and listed by its window switcher: vertical tabs ordered by last use, pinned
+tabs that never expire, Active and Old groups with a 24/48-hour rule,
+favicon-tinted rows, a compact favicon-only mode and a relative time in
+five-minute steps. The address bar appears only when asked (`⌘L`) and shows
+local address suggestions you can choose with ↑/↓; saved logins come from the
+login Keychain. Blocking is on by default and can be turned off for one site or one tab;
+page summaries use the on-device model and never upload the page. It is WebKit,
+not a second browser engine.
 
 ### A pointer you can find
 
@@ -300,7 +312,7 @@ were last used on another one.
 
 ## Install
 
-**Requirements:** macOS 14 or later; Apple Silicon for the current binary (the
+**Requirements:** macOS 26 or later; Apple Silicon for the current binary (the
 source builds on Intel too); Accessibility and Screen Recording permissions.
 
 ### From source

@@ -1,6 +1,6 @@
 # MakiDesk — architecture
 
-MakiDesk is a SwiftPM executable for macOS 14+ with no Xcode project. It runs as
+MakiDesk is a SwiftPM executable for macOS 26+ with no Xcode project. It runs as
 an `.accessory` menu-bar app and controls the **real** windows of other apps; it
 never draws a separate desktop or mirrors their content as a workspace.
 
@@ -91,6 +91,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `TerminalClient.swift`                                                                                          | The MakiDesk side of the terminal helper: launch, one Unix-socket connection, handshake, retries and notices; no socket work on the main thread.                        |
 | `DockerClient.swift`                                                                                            | The MakiDesk side of the Docker helper: launch, one socket, handshake, theme notifications and the `openExec` bridge to the terminal.                                   |
 | `Docker/`                                                                                                       | The separate `MakiDockerCore`/`MakiDeskDocker` package: CLI JSON models and parsers, Compose grouping, prune plan, window, logs/stats/inspect and settings.             |
+| `Browser/`                                                                                                       | The separate `MakiBrowser`/`MakiDeskBrowser` app: MRU vertical tabs with the 24/48 h lifecycle, icon rail, address overlay with local history, content blocker, favicon tint and on-device summaries.                                      |
 | `Settings.swift`                                                                                                | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value.                                  |
 | `Theme.swift`, `MenuBarIcon.swift`                                                                              | Palette themes and the menu-bar glyph.                                                                                                                                  |
 | `LegacyMigration.swift`                                                                                         | One-time migration from the project's previous name.                                                                                                                    |
@@ -275,10 +276,10 @@ a searchable window.
 panel, passive card and overlay — and the recipe each one follows: corner
 radius, border, and whether the system may supply the fill. `makiSurface`
 chooses the native path only for the System theme with Reduce Transparency off;
-custom palettes and passive/overlay cards keep the theme fill. On macOS 26 and
-later chrome and floating panels use `glassEffect` (Liquid Glass), with `.bar`
-and `.regularMaterial` as the macOS 14–25 fallback; the availability check and
-the opaque fallback are what let the app keep a macOS 14 deployment target.
+custom palettes and passive/overlay cards keep the theme fill. Chrome and floating panels use `glassEffect` (Liquid Glass) under the System
+theme; the fixed `.bar` and `.regularMaterial` fills remain for Reduce
+Transparency and the other themes, so the surface is readable without relying
+on translucency.
 `PaletteTheme.raisedSurface` mixes a small amount of the theme's text colour
 into `surface` for cards: several palettes keep surface and background within a
 few RGB steps, and the derived tone gives those cards an edge without leaving
@@ -600,6 +601,66 @@ suspend MakiDesk's global shortcuts while the helper is frontmost, mirroring the
 terminal. `Taskfile` builds and bundles it with `docker:build`,
 `docker:bundle`, `docker:release` and `docker:run`; `bundle` copies it beside the
 terminal helper and `sign` signs the Docker helper before the outer app.
+
+### The browser (F5)
+
+The browser is a third helper app, `MakiDeskBrowser.app`, nested in
+`Contents/Applications/` with bundle id `com.makidesk.app.browser`. It is a
+regular app with its own Dock/⌘Tab identity, so its window is discovered by the
+same AX inventory as any other app and can be tiled, grouped and recalled
+without a special path. It lives in the separate `Browser/` SwiftPM package:
+`MakiBrowser` owns the model and UI, `MakiDeskBrowser` is the executable. The
+root package does not build it; `task browser:bundle` does.
+
+`BrowserStore` is the main-actor model and the only owner of the live WebKit
+objects. The value array `tabs` is observable and persisted; `BrowserTabSession`
+holds one `WKWebView` and forwards navigation, title, failure and new-window
+callbacks. A tab is created lazily when selected, and a session is stopped when
+the tab closes or the app quits. `BrowserTabLifecycle` is pure: pinned tabs
+never expire, a tab younger than 24 hours is Active, from 24 to 48 hours it is
+Old, and at 48 hours it is closed; `BrowserTabLifecycle.ordered` is the MRU sort
+used by the sidebar and `⌘1…9`. One `Timer` with a five-minute interval and a
+60-second tolerance drives the labels and the transitions; there is no timer per
+row, and wake/clock changes force a recalculation. Page interaction updates
+`lastUsed` through a local event monitor, throttled to once a minute.
+
+The left column is an icon rail plus a resizable tab column in an `HSplitView`;
+the rail holds navigation, address, new tab, pin, summary, blocker, compact-mode
+and settings.
+The address overlay is a SwiftUI view shown only on `⌘L` or on the link icon; it
+takes the keyboard, returns it to the web view on Esc, and never reserves layout
+space above the web view. Up/down move through local history suggestions and
+Return opens the highlighted one. Compact mode shrinks the tab column to
+favicons only. A new tab selects itself, shows an empty web view and
+prefills the configured default page. Browser `⌘` commands are handled by a
+local key monitor in `BrowserWindowController`, not by the global Carbon table.
+
+`BrowserAdBlocker` compiles a content-rule list from the starter domain array
+and attaches it before the web view is created. The per-domain exception lives
+in `browser-settings.json`; a tab can override it for the session. Because a
+content-rule list is fixed when the configuration is made, changing the blocker
+rebuilds the affected web view and reloads its URL. The starter list is a real
+network blocker, not a full EasyList/uBO replacement; the production conversion
+pipeline is described in the browser analysis.
+
+`BrowserCredentialStore` keeps user-saved Internet Password items in the login
+Keychain and fills the first username/password pair through a small script that
+uses the native input setter. It does not read Safari's private password store;
+the panel says so. `BrowserFaviconProvider` fetches the site's icon in an ephemeral `URLSession`,
+decodes it off the main thread and extracts a dominant colour; a missing icon
+falls back to a stable hash of the registrable domain. `BrowserSummaryController`
+extracts page text with a small JavaScript function and streams a summary from
+Foundation Models when Apple Intelligence is available; the page text is never
+logged, no request leaves the Mac, and each generation is cancelled on
+navigation or tab close. `BrowserHistoryStore` keeps a bounded local list of
+visited addresses only for address-bar suggestions.
+
+Tabs, pin state, last use, favicon colour, blocker exceptions and the address
+history are written atomically to `browser-tabs.json`, `browser-settings.json`
+and `browser-history.json` with a two-second debounce for the tab list; expired
+tabs are dropped on load. There is no browsing-history screen and no page-content
+cache on disk. MakiDesk launches the helper through `BrowserLauncher`; `task
+bundle` embeds it and `task reload` kills it before rebuilding.
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and

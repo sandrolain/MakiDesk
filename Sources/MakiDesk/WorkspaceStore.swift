@@ -1757,6 +1757,9 @@ final class WorkspaceStore {
         case .openDocker:
             DockerController.shared.open()
             return
+        case .openBrowser:
+            BrowserLauncher.shared.open()
+            return
         case .newTimer:
             TimerInputController.shared.show()
             return

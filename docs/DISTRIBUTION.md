@@ -62,7 +62,7 @@ by `task cert` cannot be notarized.
 
 ### 2. Universal build
 
-Build for both Apple Silicon and Intel (macOS 14+):
+Build for both Apple Silicon and Intel (macOS 26+):
 
 - with Xcode, archive the executable and set **Architectures** to
   `arm64 x86_64`;
@@ -147,7 +147,7 @@ update feed is added later, sign its appcast and keep the same identity.
   `CFBundleVersion` (build number). The DMG name follows the short version.
 - The bundle id is `com.makidesk.app`. Changing it is a new app for TCC: users
   must grant Accessibility and Screen Recording again.
-- Requirements: macOS 14+. The source builds on Apple Silicon and Intel; the
+- Requirements: macOS 26+. The source builds on Apple Silicon and Intel; the
   current local binary is Apple Silicon only.
 - The project name is not a trademark clearance: verify that “MakiDesk” is free
   in your jurisdiction before publishing a binary.

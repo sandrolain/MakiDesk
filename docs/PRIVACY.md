@@ -242,6 +242,52 @@ destructive confirmation names the context and endpoint; the app never runs
 Accessibility, Screen Recording and Full Disk Access are not needed for this
 window.
 
+## Browser
+
+MakiDesk Browser is a separate regular app (`com.makidesk.app.browser`) bundled
+inside MakiDesk. Pages are loaded by WebKit's own WebContent and Networking
+processes; cookies, local storage, cache and the website data store are handled
+by WebKit and stored under the user's WebKit data directory. MakiDesk does not
+add analytics, telemetry or a remote history service. The tab list, pin state,
+last-use timestamps, favicon colour and blocker exceptions are stored in
+`~/Library/Application Support/MakiDesk/browser-tabs.json` and
+`browser-settings.json`. The address suggestions use
+`browser-history.json`: a bounded local list of URLs and titles of pages that
+finished loading, kept only to suggest addresses already visited. There is no
+browsing-history screen and no "recently closed" archive. Page content, form
+values, cookies and summaries are not written to those files.
+
+The favicon is requested directly from the site's icon URL in an ephemeral
+`URLSession` with no shared cookies, a five-second timeout and a 512 KB cap.
+That request goes to the site you are already visiting; no favicon service is
+used. The icon and its extracted colour are cached in memory; the colour is
+persisted with the tab. The ad blocker is a WebKit content-rule list; it
+evaluates on the device and does not report page URLs to MakiDesk or to a
+server. The built-in starter list contains domain patterns only. Disabling the
+blocker for a site or a tab is stored as described above; the per-tab override
+is discarded when the tab navigates.
+
+Page summarization uses Apple's Foundation Models on the device. The readable
+text of the current page is extracted in the WebKit view, capped at 12,000
+characters, and passed to the local model; it is not uploaded, not written to
+disk and not logged. The resulting summary is kept in memory for the current
+view and is discarded on navigation or when the panel closes. If Apple
+Intelligence is unavailable, the browser shows that fact and does not fall back
+to a cloud model. The extension host is not active in this version; when it is
+added, extension permissions and storage will be documented here before they
+ship.
+
+Passwords saved from the browser's key panel are Internet Password items in
+the user's login Keychain, under the server's registrable domain and the chosen
+username. MakiDesk reads only its own items; Safari's saved passwords are a
+separate protected store and are neither imported nor read. The password is
+never written to the browser JSON files and never logged. Deleting an item from
+the panel removes it from the Keychain.
+
+The browser requests no Accessibility or Screen Recording permission. It uses
+the network as any WebKit page does, and downloads use `WKDownload` with a
+destination chosen by the user.
+
 ## Clipboard
 
 The history is **text and images, in memory, and never persisted**. It keeps at

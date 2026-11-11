@@ -20,6 +20,7 @@ through Accessibility.
 - [Command box](#command-box)
 - [Terminal](#terminal)
 - [Docker](#docker)
+- [Browser](#browser)
 - [Clipboard history](#clipboard-history)
 - [Shelf](#shelf)
 - [Dropzones](#dropzones)
@@ -913,6 +914,81 @@ toolbar and filters containers, images, volumes and networks; it is hidden in
 The helper is embedded when the app is bundled (`task bundle`). To try it
 alone, run `task docker:run`.
 
+## Browser
+
+`⌃⌥⌘W`, or **Browser** in the menu bar's menu, opens **MakiDesk Browser**, a
+separate WebKit app bundled inside MakiDesk. It is a real regular app: it has
+its own Dock/⌘Tab identity, its window is listed by MakiDesk's window switcher
+and can be tiled or grouped like Terminal and Docker, and closing it quits the
+browser without touching MakiDesk.
+
+- **Left column.** A narrow vertical rail holds the browser icons: back,
+  forward, reload/stop, address, new tab, pin, summary, blocker and settings.
+  The resizable column beside it holds the tabs. The compact button reduces it
+  to favicons only. A new tab selects itself, shows an empty web view and opens
+  the address overlay prefilled with the configured default page.
+- **Vertical tabs.** Tabs are ordered by the last time they were used (most
+  recent first). Each row shows the favicon, the title and the time since the
+  last use, rounded to five minutes. The row background is tinted with the
+  favicon's dominant colour; a missing or unreadable favicon falls back to a
+  stable colour for the domain. Sections: **Pinned**, **Active**, **Old**.
+- **24 and 48 hours.** A tab with no use for 24 hours moves from Active to Old;
+  after 48 hours it is closed and forgotten. Pinned tabs never expire and stay
+  at the top, still ordered by use. Activating an Old tab brings it back to
+  Active. The clock is deliberately loose: one timer checks every five minutes,
+  so a transition can be up to five minutes late rather than waking the app
+  continuously. Switching tabs, typing, clicking or scrolling in the page
+  counts as use; the timestamp is written at most once a minute.
+- **Pin.** Pin or unpin a tab from its context menu or with `⇧⌘P`. Unpinning a
+  tab that is already older than 48 hours closes it on the next check.
+- **Address bar.** There is no permanent address bar and no bar above the web
+  view. `⌘L` or the link icon opens the overlay over the page; it closes with
+  Esc and returns the keyboard to the page. Return navigates. Typing shows
+  previous addresses from the local history; ↑/↓ choose a suggestion and Return
+  opens it. A value that is not an address is searched with the configured
+  engine (Google by default, DuckDuckGo or Bing in settings). The shield in the
+  overlay toggles the blocker for the site.
+- **Settings.** The gear opens the browser's own settings: default page,
+  search engine, blocker by default and on-device summaries. The default page
+  is prefilled, not loaded automatically.
+- **Navigation.** The icon rail has back, forward and reload/stop. `⌘T` new tab,
+  `⌘W` close tab (the last one closes the window), `⇧⌘W` close window, `⌘R`
+  reload, `⌘.` stop, `⌘[` / `⌘]` back and forward, `⌘1…9` choose a tab,
+  `⌃Tab` / `⌃⇧Tab` cycle.
+- **Ad blocker.** Blocking is on by default and uses WebKit's content-blocker
+  API, not JavaScript injected into the page. Disable it for the current site
+  (persisted) or only for the current tab (until the tab navigates) from the
+  shield or the tab's context menu. The first version ships a compact starter
+  list of common ad and tracking networks; it blocks their requests but does
+  not hide editorial elements, and it is not a full uBlock replacement. The
+  full EasyList/EasyPrivacy pipeline is described in the browser analysis.
+- **Passwords.** The key button opens the passwords for the current site.
+  Credentials are stored as Internet Password items in the login Keychain and
+  can be filled into the username/password fields from the panel. Safari's own
+  saved passwords are a separate store and are not readable by this app.
+- **Page summary.** The sparkles button, or `⇧⌘S`, extracts the readable text
+  of the page and summarizes it on-device with Apple Intelligence (Foundation
+  Models). Nothing is uploaded and the page text is not logged. If Apple
+  Intelligence is unavailable, the panel says so instead of falling back to a
+  cloud service. `Copy`, `Regenerate`, `Stop` and `Close` are in the panel.
+- **Persistence.** Tabs, pin state, last use, favicon colour, address history
+  and blocker exceptions are kept in
+  `~/Library/Application Support/MakiDesk/browser-tabs.json`,
+  `browser-settings.json` and `browser-history.json`; the web content itself
+  is WebKit's. The address history is only used for suggestions, not shown as
+  a browsing-history screen.
+- **Build and reload.** `task browser:bundle` builds the helper,
+  `task browser:run` launches it alone, and `task reload` stops MakiDesk,
+  Docker, Terminal and MakiDesk Browser before rebuilding and signing the whole
+  bundle. `task bundle` embeds the browser in
+  `MakiDesk.app/Contents/Applications/MakiDeskBrowser.app`.
+- **Extensions.** The extension host is planned for a later phase. The built-in
+  blocker is not an extension and works without it.
+
+The browser needs no Accessibility or Screen Recording permission. The
+`⌃⌥⌘W` shortcut is global; the `⌘` shortcuts above work only while the browser
+window is key.
+
 ## Clipboard history
 
 `⌥V` opens the last **texts and images** you copied. It is **in memory only** and
@@ -1562,6 +1638,7 @@ The table below is generated from the app's own table, with
 | Terminal | `⌃⌥O` | Window |
 | Terminal quake | `⌃⌥Q` | Window |
 | Docker | `⌃⌥E` | Window |
+| Browser | `⌃⌥⌘W` | Desktop |
 
 <!-- shortcuts:end -->
 

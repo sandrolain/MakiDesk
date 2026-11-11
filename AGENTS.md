@@ -4,7 +4,7 @@ Applies to the entire repository. Follow the user's current scope; preserve unre
 
 ## Project and navigation
 
-Native macOS menu-bar app controlling **real windows** through Accessibility (AX), with a window switcher, overlays, clipboard, notes and Shelf. SwiftPM executable, Swift tools 5.9, macOS 14 minimum; SwiftUI + AppKit, ScreenCaptureKit, Tree-sitter and C grammar scanners. Do not assume a web app, Xcode project or Swift 6 language mode.
+Native macOS menu-bar app controlling **real windows** through Accessibility (AX), with a window switcher, overlays, clipboard, notes and Shelf. SwiftPM executable, Swift tools 5.9, macOS 26 minimum; SwiftUI + AppKit, ScreenCaptureKit, Tree-sitter and C grammar scanners. Do not assume a web app, Xcode project or Swift 6 language mode.
 
 Read only the relevant paths before editing:
 
@@ -21,8 +21,9 @@ Read only the relevant paths before editing:
 | Drag and image transfer | `WindowDrag.swift`, `ShelfController.swift`, `ShelfImageWriter.swift` |
 | Persistence and migration | `GroupStore.swift`, `NotesStore.swift`, `LegacyMigration.swift` |
 | Docker helper | `Sources/MakiDesk/DockerClient.swift`, `Docker/Sources/MakiDockerCore/`, `Docker/Sources/MakiDeskDocker/` |
+| Browser helper | `Browser/Sources/MakiBrowser/` (`BrowserModel.swift`, `BrowserStore.swift`, `BrowserSession.swift`, `BrowserRootView.swift`, `BrowserController.swift`, `BrowserAdBlocker.swift`, `BrowserFavicon.swift`, `BrowserSummary.swift`), `Browser/Sources/MakiDeskBrowser/` |
 
-Swift files above are under `Sources/MakiDesk/` unless marked; the Docker helper is the separate `Docker/` package. Tests are under `Tests/MakiDeskTests/` and `Docker/Tests/MakiDockerCoreTests/`. Package/dependency configuration is in `Package.swift`, `Docker/Package.swift` and `Package.resolved`; bundling/signing commands are in `Taskfile.yml`; app metadata is in `Resources/Info.plist` and `Docker/Resources/Info.plist`.
+Swift files above are under `Sources/MakiDesk/` unless marked; the Docker and browser helpers are separate packages. Tests are under `Tests/MakiDeskTests/`, `Docker/Tests/MakiDockerCoreTests/` and `Browser/Tests/MakiBrowserTests/`. Package/dependency configuration is in `Package.swift`, `Docker/Package.swift`, `Browser/Package.swift` and `Package.resolved`; bundling/signing commands are in `Taskfile.yml`; app metadata is in `Resources/Info.plist`, `Docker/Resources/Info.plist` and `Browser/Resources/Info.plist`.
 
 For performance, lifecycle, refactoring or shortcut work, read the findings, the implementation ledger and the six-phase plan in [the 2026-10-31 analysis](refs/docs/analisi-integrazioni-e-scorciatoie-2026-10-31.md); it carries the still-open items (N13, N15, N17) and supersedes the two ledgers listed in it. Those two (2026-10-26, 2026-10-28) were removed from the tree in `d66261d` and are still readable with `git show d66261d^:docs/<name>`. Verify historical claims against current code.
 
@@ -97,6 +98,8 @@ swift build -c release
 # Docker helper (separate package; no GhosttyKit dependency):
 swift build --package-path Docker
 swift test --package-path Docker
+swift build --package-path Browser
+swift test --package-path Browser
 # When tests are requested:
 swift test
 swift test --filter WindowInventoryTests
@@ -105,7 +108,7 @@ swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warn-concurrency
 git diff --check
 ```
 
-`task build`, `task release` and `task test` wrap the corresponding commands; `task docker:build`, `task docker:bundle`, `task docker:release` and `task docker:run` build and launch the Docker helper. `task docs:shortcuts` regenerates the shortcut block in `docs/USAGE.md`, which `swift test` checks for drift. Run SwiftPM operations sequentially against a shared build directory. In restricted environments, use writable module/cache paths and `--disable-automatic-resolution` when dependencies are already available. The analysis document records the local workaround for nested SwiftPM sandbox failures; do not confuse that build workaround with app permissions or change the app's security configuration.
+`task build`, `task release` and `task test` wrap the corresponding commands; `task docker:build`, `task docker:bundle`, `task docker:release` and `task docker:run` build and launch the Docker helper. `task browser:build`, `task browser:bundle`, `task browser:release` and `task browser:run` do the same for the browser helper. `task docs:shortcuts` regenerates the shortcut block in `docs/USAGE.md`, which `swift test` checks for drift. Run SwiftPM operations sequentially against a shared build directory. In restricted environments, use writable module/cache paths and `--disable-automatic-resolution` when dependencies are already available. The analysis document records the local workaround for nested SwiftPM sandbox failures; do not confuse that build workaround with app permissions or change the app's security configuration.
 
 - Add/run tests when requested by the user or included in the agreed verification scope. For regressions, prefer injected providers and deterministic pure tests over sleeps or the real desktop. Cover stale callbacks, rapid reopen, initial empty state, unavailable AX targets, duplicate IDs and Unicode where relevant.
 - Do not weaken assertions or silently skip tests to get a green suite. Report environment-dependent skips separately. A successful build or unit suite does not prove GUI latency, focus restoration or multi-monitor correctness.

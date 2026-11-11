@@ -80,6 +80,8 @@ enum WindowController {
         case toggleTerminalQuake
         /// Open the Docker helper window (F4).
         case openDocker
+        /// Open the in-process browser window (F5).
+        case openBrowser
         /// Open the field that starts a timer (T61).
         case newTimer
         /// Capture an area, annotate it and put it on the shelf (T40).

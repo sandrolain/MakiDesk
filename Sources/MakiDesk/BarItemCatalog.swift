@@ -114,6 +114,8 @@ enum BarItemCatalog {
                 zone: .utility, kind: .shortcut(.toggleTerminalQuake), priority: 2),
         BarItem(id: "docker", title: "Docker", symbol: "shippingbox",
                 zone: .utility, kind: .shortcut(.openDocker), priority: 2),
+        BarItem(id: "browser", title: "Browser", symbol: "safari",
+                zone: .utility, kind: .shortcut(.openBrowser), priority: 2),
     ]
 
     static let toggles: [BarItem] = [
