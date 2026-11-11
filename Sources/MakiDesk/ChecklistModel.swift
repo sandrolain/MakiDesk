@@ -190,6 +190,12 @@ enum ChecklistSettings {
 /// the user the list and never stops the app. The URL is injectable, so the
 /// store is tested on a temporary directory.
 struct ChecklistFile {
+    enum ReadResult: Sendable {
+        case loaded([ChecklistItem])
+        case missing
+        case failed(String)
+    }
+
     struct Payload: Codable, Equatable {
         var version: Int
         var items: [ChecklistItem]
@@ -220,14 +226,27 @@ struct ChecklistFile {
 
     /// The items written last, or an empty list when there is nothing to read.
     func load() -> [ChecklistItem] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
+        if case let .loaded(items) = loadResult() { return items }
+        return []
+    }
+
+    func loadResult() -> ReadResult {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { return .missing }
+            return .failed("Could not read the saved checklist. The file was preserved.")
+        }
         do {
             let payload = try StoredJSONFile.decoder().decode(Payload.self, from: data)
             // A filler item with no text is not a task.
-            return payload.items.filter { $0.text.isEmpty == false }
+            return .loaded(payload.items.filter { $0.text.isEmpty == false })
         } catch {
-            StoredJSONFile.quarantine(fileURL, label: "checklist")
-            return []
+            guard StoredJSONFile.quarantine(fileURL, label: "checklist") != nil else {
+                return .failed("Could not preserve the unreadable checklist file.")
+            }
+            return .failed("The checklist file was unreadable and has been kept as a recovery copy.")
         }
     }
 

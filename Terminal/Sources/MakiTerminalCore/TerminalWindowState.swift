@@ -68,6 +68,15 @@ public struct TerminalWindowStateStore {
         TerminalSocketLocation.directory.appendingPathComponent("window.json")
     }
 
+    /// A newer helper may have written fields this version cannot preserve.
+    /// Keep that file read-only until the matching app version opens it.
+    public var futureVersionOnDisk: Int? {
+        guard let version = versionOnDisk(), version > TerminalWindowState.currentVersion else {
+            return nil
+        }
+        return version
+    }
+
     public func load() -> TerminalWindowState? {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
         let decoder = StoredJSONFile.decoder()
@@ -81,6 +90,7 @@ public struct TerminalWindowStateStore {
 
     @discardableResult
     public func save(_ state: TerminalWindowState) -> Bool {
+        guard futureVersionOnDisk == nil else { return false }
         var payload = state
         payload.version = TerminalWindowState.currentVersion
         guard let data = try? StoredJSONFile.encoder().encode(payload) else { return false }
@@ -89,6 +99,25 @@ public struct TerminalWindowStateStore {
             return true
         } catch {
             return false
+        }
+    }
+
+    private func versionOnDisk() -> Int? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return (try? StoredJSONFile.decoder().decode(VersionHeader.self, from: data))?.version
+    }
+
+    private struct VersionHeader: Decodable {
+        var version: Int
+
+        private enum CodingKeys: String, CodingKey {
+            case version
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            version = try container.decodeIfPresent(Int.self, forKey: .version)
+                ?? TerminalWindowState.currentVersion
         }
     }
 }

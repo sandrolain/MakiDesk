@@ -79,8 +79,11 @@ enum DockerConfirm {
 final class DockerStore {
     // MARK: - State
 
-    var section: DockerSection = .containers
+    var section: DockerSection = .containers {
+        didSet { updateContainerStatsLoop() }
+    }
     var containers: [DockerContainer] = []
+    var containerStats: [String: DockerContainerStats] = [:]
     var groups: [DockerContainerGroup] = []
     var images: [DockerImage] = []
     var volumes: [DockerVolume] = []
@@ -114,6 +117,8 @@ final class DockerStore {
     @ObservationIgnored private var cli: DockerCLI?
     @ObservationIgnored private var reader: DockerReader?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    @ObservationIgnored private var containerStatsTask: Task<Void, Never>?
+    @ObservationIgnored private var containerStatsGeneration = 0
     @ObservationIgnored private var generation = 0
     private(set) var windowVisible = false
     @ObservationIgnored private var appActive = true
@@ -131,16 +136,22 @@ final class DockerStore {
     func stop() {
         refreshTask?.cancel()
         refreshTask = nil
+        containerStatsGeneration += 1
+        containerStatsTask?.cancel()
+        containerStatsTask = nil
+        containerStats = [:]
     }
 
     func setWindowVisible(_ visible: Bool) {
         windowVisible = visible
         updateRefreshLoop()
+        updateContainerStatsLoop()
     }
 
     func setAppActive(_ active: Bool) {
         appActive = active
         updateRefreshLoop()
+        updateContainerStatsLoop()
     }
 
     func reloadTheme() {
@@ -151,6 +162,7 @@ final class DockerStore {
 
     private func connect() async {
         connection = .locating
+        updateContainerStatsLoop()
         lastError = nil
 
         let executable: URL?
@@ -188,6 +200,7 @@ final class DockerStore {
             let version = try await reader.daemonVersion()
             connection = .ready(version: version)
             updateRefreshLoop()
+            updateContainerStatsLoop()
             await refreshAll()
         } catch {
             connection = .failed(error.localizedDescription)
@@ -217,6 +230,7 @@ final class DockerStore {
         showStopped = settings.showStoppedContainers
         _ = DockerSettingsStore.save(settings)
         updateRefreshLoop()
+        updateContainerStatsLoop()
     }
 
     private func updateRefreshLoop() {
@@ -238,6 +252,43 @@ final class DockerStore {
         }
     }
 
+    private func updateContainerStatsLoop() {
+        let shouldRun = windowVisible && appActive && section == .containers
+            && connection.isReady
+        guard shouldRun else {
+            containerStatsGeneration += 1
+            containerStatsTask?.cancel()
+            containerStatsTask = nil
+            containerStats = [:]
+            return
+        }
+        guard containerStatsTask == nil else { return }
+        containerStatsGeneration += 1
+        let generation = containerStatsGeneration
+        let interval = max(1, settings.statsInterval)
+        containerStatsTask = Task { [weak self] in
+            while Task.isCancelled == false {
+                guard let self else { return }
+                do {
+                    let latest = try await self.reader?.stats() ?? [:]
+                    guard Task.isCancelled == false,
+                          generation == self.containerStatsGeneration else { return }
+                    self.containerStats = latest
+                } catch {
+                    guard Task.isCancelled == false,
+                          generation == self.containerStatsGeneration else { return }
+                    self.containerStats = [:]
+                }
+                let nanos = UInt64(interval * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanos)
+            }
+        }
+    }
+
+    func stats(for container: DockerContainer) -> DockerContainerStats? {
+        containerStats[container.name]
+    }
+
     // MARK: - Reading
 
     func refreshNow() {
@@ -252,6 +303,9 @@ final class DockerStore {
         defer { isRefreshing = false }
 
         var firstError: String?
+        var refreshedImages: [DockerImage]?
+        var refreshedVolumes: [DockerVolume]?
+        var refreshedNetworks: [DockerNetwork]?
 
         do {
             let list = try await reader.containers()
@@ -276,7 +330,7 @@ final class DockerStore {
         do {
             let list = try await reader.images()
             guard currentGeneration == generation else { return }
-            images = list
+            refreshedImages = list
         } catch {
             firstError = firstError ?? error.localizedDescription
         }
@@ -285,7 +339,7 @@ final class DockerStore {
         do {
             let list = try await reader.volumes()
             guard currentGeneration == generation else { return }
-            volumes = list
+            refreshedVolumes = list
         } catch {
             firstError = firstError ?? error.localizedDescription
         }
@@ -294,7 +348,7 @@ final class DockerStore {
         do {
             let list = try await reader.networks()
             guard currentGeneration == generation else { return }
-            networks = list
+            refreshedNetworks = list
         } catch {
             firstError = firstError ?? error.localizedDescription
         }
@@ -304,13 +358,26 @@ final class DockerStore {
             let disk = try await reader.diskUsage()
             guard currentGeneration == generation else { return }
             diskUsage = disk
-            images = DockerJSON.mergingDiskUsage(images, with: disk)
-            volumes = DockerJSON.mergingDiskUsage(volumes, with: disk)
+            if let listedImages = refreshedImages {
+                refreshedImages = DockerJSON.mergingDiskUsage(listedImages, with: disk)
+            }
+            if let listedVolumes = refreshedVolumes {
+                refreshedVolumes = DockerJSON.mergingDiskUsage(listedVolumes, with: disk)
+            }
         } catch {
             firstError = firstError ?? error.localizedDescription
         }
 
         guard currentGeneration == generation else { return }
+        if let refreshedImages {
+            images = refreshedImages
+        }
+        if let refreshedVolumes {
+            volumes = refreshedVolumes
+        }
+        if let refreshedNetworks {
+            networks = refreshedNetworks
+        }
         lastUpdated = Date()
         if let firstError {
             lastError = firstError
@@ -452,7 +519,9 @@ final class DockerStore {
     func perform(_ action: DockerContainerAction, on container: DockerContainer) {
         guard let reader, isActionRunning == false else { return }
         let name = container.name
-        if action.isDestructive, settings.confirmDestructiveActions {
+        let requiresConfirmation = action == .remove
+            || (action == .kill && settings.confirmDestructiveActions)
+        if action.isDestructive, requiresConfirmation {
             let message = action == .remove
                 ? "Delete \(name)? If it is running it will be stopped first. This cannot be undone."
                 : "Kill \(name)? The process is terminated without a graceful shutdown."
@@ -480,13 +549,82 @@ final class DockerStore {
         }
     }
 
+    func performBulk(_ action: DockerContainerAction, ids: Set<String>) {
+        guard let reader, isActionRunning == false else { return }
+        let selected = containers.filter { container in
+            guard ids.contains(container.id) else { return false }
+            switch action {
+            case .start: return container.isStopped
+            case .stop: return container.isRunning || container.isPaused
+            case .remove: return true
+            case .restart, .pause, .unpause, .kill: return false
+            }
+        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        guard selected.isEmpty == false else { return }
+        if action == .remove {
+            let names = selected.map(\.name).sorted().joined(separator: ", ")
+            guard DockerConfirm.ask(title: "Delete \(selected.count) containers?",
+                                    message: "Running containers will be stopped first, then all selected containers will be removed: \(names). This cannot be undone.",
+                                    confirm: "Delete containers") else { return }
+        }
+        isActionRunning = true
+        actionLabel = "\(action.title) \(selected.count) containers"
+        actionMessage = nil
+        actionError = nil
+        Task {
+            do {
+                for container in selected {
+                    for arguments in action.arguments(containerID: container.id) {
+                        _ = try await reader.cli.runChecked(arguments,
+                                                            timeout: action == .remove ? 90 : 45)
+                    }
+                }
+                actionMessage = "\(action.title) completed for \(selected.count) containers"
+            } catch {
+                actionError = error.localizedDescription
+            }
+            isActionRunning = false
+            await refreshAll()
+        }
+    }
+
     func performCompose(_ action: DockerComposeAction, on group: DockerContainerGroup) {
         guard let reader, let compose = group.compose, isActionRunning == false else { return }
+        if action == .stop {
+            let containerIDs = containers
+                .filter { $0.compose?.groupKey == compose.groupKey }
+                .filter { $0.isRunning || $0.state == .paused }
+                .map(\.id)
+                .sorted()
+            guard containerIDs.isEmpty == false else {
+                actionMessage = "No running containers in \(group.name)"
+                actionError = nil
+                return
+            }
+            isActionRunning = true
+            actionLabel = "Stop project \(group.name)"
+            actionMessage = nil
+            actionError = nil
+            Task {
+                do {
+                    _ = try await reader.cli.runChecked(
+                        ["stop", "--time", "10"] + containerIDs,
+                        timeout: 120
+                    )
+                    actionMessage = "Stopped \(containerIDs.count) containers in \(group.name)"
+                } catch {
+                    actionError = error.localizedDescription
+                }
+                isActionRunning = false
+                await refreshAll()
+            }
+            return
+        }
         guard compose.canRunCompose else {
             actionError = "The Compose file or working directory is no longer available for \(group.name)."
             return
         }
-        if action.isDestructive, settings.confirmDestructiveActions {
+        if action.isDestructive {
             let message = action == .downVolumes
                 ? "Stop and remove \(group.name), its networks and the named volumes declared by Compose. This cannot be undone."
                 : "Stop and remove the containers and networks of \(group.name). Volumes are kept."
@@ -501,7 +639,9 @@ final class DockerStore {
 
         Task {
             do {
-                _ = try await reader.cli.runChecked(action.arguments(compose: compose),
+                let services = group.containers.compactMap { $0.compose?.service }
+                _ = try await reader.cli.runChecked(
+                    action.arguments(compose: compose, services: services),
                                                     timeout: 120)
                 actionMessage = "\(action.title) completed for \(group.name)"
             } catch {
@@ -548,6 +688,45 @@ final class DockerStore {
         }
     }
 
+    /// Prunes one resource category from its Cleanup card. Unlike the
+    /// aggregate shortcuts, category actions always show an explanatory
+    /// confirmation, including when destructive confirmations are disabled
+    /// for the rest of the app.
+    func prune(_ mode: DockerPruneMode, all: Bool) {
+        guard let reader, isActionRunning == false,
+              mode != .basic, mode != .all else { return }
+        let title = "\(mode.actionTitle(all: all)) \(mode.resourceTitle)?"
+        let estimate = prunePlan.estimatedSize(for: mode, all: all)
+        let message = mode.explanation(all: all)
+            + "\n\nEstimated reclaimable space: \(estimate)."
+        guard DockerConfirm.ask(title: title,
+                                message: message,
+                                confirm: mode.actionTitle(all: all)) else { return }
+
+        isActionRunning = true
+        actionLabel = "\(mode.actionTitle(all: all)) \(mode.resourceTitle)"
+        actionMessage = nil
+        actionError = nil
+        Task {
+            do {
+                let result = try await reader.cli.run(mode.arguments(all: all),
+                                                      timeout: mode.timeout)
+                if result.exitCode != 0 {
+                    throw DockerCLIError.nonZero(result.exitCode, result.stderr)
+                }
+                actionMessage = result.stdout
+                    .split(whereSeparator: { $0.isNewline })
+                    .last(where: { $0.contains("reclaimed") })
+                    .map(String.init)
+                    ?? "\(title) completed"
+            } catch {
+                actionError = error.localizedDescription
+            }
+            isActionRunning = false
+            await refreshAll()
+        }
+    }
+
     func openTerminal(for container: DockerContainer) {
         guard let server, server.hasClient else {
             if DockerConfirm.ask(
@@ -575,6 +754,131 @@ final class DockerStore {
             confirm: "Remove image"
         ) else { return }
         runSimple(["image", "rm", image.id], label: "Remove \(image.primaryTag)")
+    }
+
+    func pullImage() {
+        guard let reference = promptForText(title: "Pull image",
+                                            message: "Enter an image reference, such as nginx:latest.",
+                                            placeholder: "registry/repository:tag") else { return }
+        runSimple(DockerCommands.imagePull(reference), label: "Pull \(reference)", timeout: 600)
+    }
+
+    func buildImage() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose build context"
+        panel.message = "Select a folder containing a Dockerfile."
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let context = panel.url?.path,
+              let tag = promptForText(title: "Build image",
+                                      message: "Enter the image name and tag.",
+                                      placeholder: "my-app:latest") else { return }
+        runSimple(DockerCommands.imageBuild(tag: tag, context: context),
+                  label: "Build \(tag)", timeout: 1_800)
+    }
+
+    func tagImage(_ image: DockerImage) {
+        guard let tag = promptForText(title: "Tag image",
+                                      message: "Enter the new repository and tag.",
+                                      placeholder: "repository:tag") else { return }
+        runSimple(DockerCommands.imageTag(image.id, as: tag),
+                  label: "Tag \(image.primaryTag) as \(tag)")
+    }
+
+    func pushImage(_ image: DockerImage) {
+        guard image.isDangling == false else {
+            actionError = "Tag this image before pushing it to a registry."
+            return
+        }
+        let reference = image.primaryTag
+        guard DockerConfirm.ask(title: "Push \(reference)?",
+                                message: "Docker will use the credentials configured for the selected Docker context.",
+                                confirm: "Push", destructive: false) else { return }
+        runSimple(DockerCommands.imagePush(reference), label: "Push \(reference)", timeout: 1_800)
+    }
+
+    func saveImage(_ image: DockerImage) {
+        let panel = NSSavePanel()
+        panel.title = "Save image archive"
+        panel.nameFieldStringValue = "\(image.primaryTag.replacingOccurrences(of: ":", with: "-")).tar"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        runSimple(DockerCommands.imageSave(id: image.id, to: url.path),
+                  label: "Save \(image.primaryTag)", timeout: 600)
+    }
+
+    func createVolume() {
+        guard let name = promptForText(title: "Create volume",
+                                       message: "Choose a name for the new volume.",
+                                       placeholder: "volume-name") else { return }
+        runSimple(DockerCommands.volumeCreate(name), label: "Create volume \(name)")
+    }
+
+    func createNetwork() {
+        guard let name = promptForText(title: "Create network",
+                                       message: "Choose a name for the new bridge network.",
+                                       placeholder: "network-name") else { return }
+        runSimple(DockerCommands.networkCreate(name), label: "Create network \(name)")
+    }
+
+    func connectContainer(to network: DockerNetwork) {
+        guard let container = promptForText(title: "Connect container",
+                                            message: "Enter a container name or ID to connect to \(network.name).",
+                                            placeholder: "container name or ID") else { return }
+        runSimple(DockerCommands.networkConnect(network.id, container: container),
+                  label: "Connect \(container) to \(network.name)")
+    }
+
+    func disconnectContainer(_ container: DockerNetworkContainer, from network: DockerNetwork) {
+        guard DockerConfirm.ask(title: "Disconnect \(container.name)?",
+                                message: "The container will lose network access through \(network.name).",
+                                confirm: "Disconnect") else { return }
+        runSimple(DockerCommands.networkDisconnect(network.id, container: container.id),
+                  label: "Disconnect \(container.name) from \(network.name)")
+    }
+
+    func copyFileToContainer(_ container: DockerContainer) {
+        let panel = NSOpenPanel()
+        panel.title = "Choose file to copy"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let source = panel.url?.path,
+              let destination = promptForText(title: "Copy into container",
+                                              message: "Enter the destination path inside \(container.name).",
+                                              placeholder: "/path/in/container") else { return }
+        runSimple(DockerCommands.copyFile(from: source,
+                                          to: "\(container.id):\(destination)"),
+                  label: "Copy file to \(container.name)", timeout: 300)
+    }
+
+    func copyFileFromContainer(_ container: DockerContainer) {
+        guard let source = promptForText(title: "Copy from container",
+                                         message: "Enter a file or directory path inside \(container.name).",
+                                         placeholder: "/path/in/container") else { return }
+        let panel = NSSavePanel()
+        panel.title = "Save copied file"
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = URL(fileURLWithPath: source).lastPathComponent
+        guard panel.runModal() == .OK, let destination = panel.url?.path else { return }
+        runSimple(DockerCommands.copyFile(from: "\(container.id):\(source)",
+                                          to: destination),
+                  label: "Copy file from \(container.name)", timeout: 300)
+    }
+
+    func copyRunCommand(for container: DockerContainer) {
+        Task {
+            guard let summary = await inspect(container) else {
+                actionError = "Could not read the container configuration."
+                return
+            }
+            let hasEnvironment = summary.environment.isEmpty == false
+            if hasEnvironment,
+               DockerConfirm.ask(title: "Copy command with environment values?",
+                                 message: "The command will contain environment variables, which may include secrets, in your clipboard.",
+                                 confirm: "Copy command") == false { return }
+            copyToPasteboard(DockerRunCommand.make(container: container, inspect: summary))
+        }
     }
 
     func removeVolume(_ volume: DockerVolume) {
@@ -605,7 +909,7 @@ final class DockerStore {
         runSimple(["network", "rm", network.id], label: "Remove \(network.name)")
     }
 
-    private func runSimple(_ arguments: [String], label: String) {
+    private func runSimple(_ arguments: [String], label: String, timeout: TimeInterval = 60) {
         guard let reader else { return }
         isActionRunning = true
         actionLabel = label
@@ -613,7 +917,7 @@ final class DockerStore {
         actionError = nil
         Task {
             do {
-                _ = try await reader.cli.runChecked(arguments, timeout: 60)
+                _ = try await reader.cli.runChecked(arguments, timeout: timeout)
                 actionMessage = "\(label) completed"
             } catch {
                 actionError = error.localizedDescription
@@ -622,6 +926,23 @@ final class DockerStore {
             await refreshAll()
         }
     }
+
+    private func promptForText(title: String, message: String,
+                               placeholder: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Continue")
+        let field = NSTextField(string: "")
+        field.placeholderString = placeholder
+        field.frame = NSRect(x: 0, y: 0, width: 300, height: 24)
+        alert.accessoryView = field
+        guard alert.runModal() == .alertSecondButtonReturn else { return nil }
+        let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
 
     func copyToPasteboard(_ text: String) {
         NSPasteboard.general.clearContents()

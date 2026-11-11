@@ -36,13 +36,12 @@ final class GhosttyRuntime {
     var onSearchTotal: ((TerminalSurfaceView, Int?) -> Void)?
     var onSearchSelected: ((TerminalSurfaceView, Int?) -> Void)?
 
+    private let tickLock = NSLock()
     private var tickScheduled = false
+    private var isShutDown = false
     private var settings: TerminalSettingsDocument
     private var theme: TerminalThemeDocument
     private var config: ghostty_config_t?
-    /// Reloads are rare; keeping the old config alive is cheaper than risking a
-    /// surface that still points at it.
-    private var retiredConfigs: [ghostty_config_t] = []
     /// Filled by the window controller, so a reload can refresh every surface.
     var liveSurfaces: () -> [ghostty_surface_t] = { [] }
     private static weak var shared: GhosttyRuntime?
@@ -124,7 +123,11 @@ final class GhosttyRuntime {
             }
         }
 
-        guard let app = ghostty_app_new(&runtime, config) else { throw RuntimeError.application }
+        guard let app = ghostty_app_new(&runtime, config) else {
+            ghostty_config_free(config)
+            self.config = nil
+            throw RuntimeError.application
+        }
         self.app = app
     }
 
@@ -141,25 +144,60 @@ final class GhosttyRuntime {
         // surface is reconfigured: a new surface alone would leave open
         // terminals on the old colours.
         ghostty_app_update_config_without_surface_propagation(app, newConfig)
-        if let config {
-            retiredConfigs.append(config)
-        }
+        let previousConfig = config
         config = newConfig
         for surface in liveSurfaces() {
             ghostty_surface_update_config(surface, newConfig)
             ghostty_surface_refresh(surface)
+        }
+        if let previousConfig {
+            ghostty_config_free(previousConfig)
         }
     }
 
     var shellCommand: String? { settings.shell }
 
     func scheduleTick() {
-        guard tickScheduled == false else { return }
+        tickLock.lock()
+        guard tickScheduled == false, isShutDown == false else {
+            tickLock.unlock()
+            return
+        }
         tickScheduled = true
+        tickLock.unlock()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.tickLock.lock()
+            guard self.isShutDown == false else {
+                self.tickLock.unlock()
+                return
+            }
             self.tickScheduled = false
+            self.tickLock.unlock()
             if let app = self.app { ghostty_app_tick(app) }
+        }
+    }
+
+    /// Called after every surface has been freed on the main thread.
+    func shutdown() {
+        tickLock.lock()
+        guard isShutDown == false else {
+            tickLock.unlock()
+            return
+        }
+        isShutDown = true
+        tickLock.unlock()
+
+        if let app {
+            ghostty_app_free(app)
+            self.app = nil
+        }
+        if let config {
+            ghostty_config_free(config)
+            self.config = nil
+        }
+        if GhosttyRuntime.shared === self {
+            GhosttyRuntime.shared = nil
         }
     }
 

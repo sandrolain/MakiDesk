@@ -12,12 +12,17 @@ final class ChecklistStore {
     static let shared = ChecklistStore()
 
     private(set) var checklist = Checklist()
+    private(set) var loadError: String?
+    private(set) var persistenceError: String?
     /// Called after every change, so the panel can re-measure and re-place.
     @ObservationIgnored var onChange: (() -> Void)?
 
     private let file: ChecklistFile
     private let queue = DispatchQueue(label: "MakiDesk.checklist", qos: .utility)
     private var loaded = false
+    private var loading = false
+    var isRestoring: Bool { loading && !loaded }
+    var isReady: Bool { loaded && loadError == nil }
     private var saveWork: DispatchWorkItem?
 
     init(file: ChecklistFile = ChecklistFile()) {
@@ -32,16 +37,27 @@ final class ChecklistStore {
     /// Reads the file once, on first use, off the main thread: launch and the
     /// first opening of the card never wait on the disk.
     func loadIfNeeded() {
-        guard !loaded else { return }
-        loaded = true
+        guard !loaded, !loading else { return }
+        loading = true
         let file = self.file
         queue.async { [weak self] in
-            let items = file.load()
+            let result = file.loadResult()
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                // An item typed while the file was being read wins.
-                if self.checklist.items.isEmpty {
+                self.loading = false
+                switch result {
+                case let .loaded(items):
                     self.checklist = Checklist(items: items)
+                    self.loaded = true
+                    self.loadError = nil
+                case .missing:
+                    self.checklist = Checklist()
+                    self.loaded = true
+                    self.loadError = nil
+                case let .failed(message):
+                    // Keep actions and termination writes disabled until a
+                    // successful retry has established the saved baseline.
+                    self.loadError = message
                 }
                 self.onChange?()
             }
@@ -50,33 +66,35 @@ final class ChecklistStore {
 
     @discardableResult
     func add(_ text: String) -> Bool {
-        guard checklist.add(text) != nil else { return false }
+        guard loaded, checklist.add(text) != nil else { return false }
         changed()
         return true
     }
 
     func toggle(_ id: UUID) {
+        guard loaded else { return }
         checklist.toggle(id)
         changed()
     }
 
     func remove(_ id: UUID) {
+        guard loaded else { return }
         checklist.remove(id)
         changed()
     }
 
     func move(_ id: UUID, by offset: Int) {
-        guard checklist.move(id, by: offset) else { return }
+        guard loaded, checklist.move(id, by: offset) else { return }
         changed()
     }
 
     func move(_ id: UUID, to index: Int) {
-        guard checklist.move(id, to: index) else { return }
+        guard loaded, checklist.move(id, to: index) else { return }
         changed()
     }
 
     func clearCompleted() {
-        guard checklist.clearCompleted() > 0 else { return }
+        guard loaded, checklist.clearCompleted() > 0 else { return }
         changed()
     }
 
@@ -89,14 +107,20 @@ final class ChecklistStore {
         write()
     }
 
+    func retryPersistence() {
+        if loaded { flushAsync() } else { loadIfNeeded() }
+    }
+
     /// Waits for the write: the termination fence, so a tick made a moment
     /// before quitting is on disk.
     func flushBlocking() {
         saveWork?.cancel()
         saveWork = nil
+        guard loaded else { return }
         let items = checklist.items
         let file = self.file
-        queue.sync { _ = file.save(items) }
+        let saved = queue.sync { file.save(items) }
+        if !saved { persistenceError = "Could not save the checklist. Changes are still in memory; retry before quitting." }
     }
 
     private func changed() {
@@ -112,9 +136,19 @@ final class ChecklistStore {
     }
 
     private func write() {
+        guard loaded else { return }
         let items = checklist.items
         let file = self.file
-        queue.async { _ = file.save(items) }
+        queue.async { [weak self] in
+            let saved = file.save(items)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.persistenceError = saved
+                    ? nil
+                    : "Could not save the checklist. Changes are still in memory; retry before quitting."
+                self.onChange?()
+            }
+        }
     }
 }
 
@@ -414,13 +448,28 @@ private struct ChecklistView: View {
     private var width: CGFloat { CGFloat(WorkspaceStore.shared.checklistWidth) }
 
     private var canAdd: Bool {
-        store.isFull == false
+        store.isReady
+            && store.isFull == false
             && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if store.items.isEmpty {
+            if let error = store.loadError {
+                HStack(spacing: 6) {
+                    Text(error).font(MakiType.meta).foregroundStyle(theme.subtext)
+                    Button("Retry") { store.retryPersistence() }
+                        .buttonStyle(.plain)
+                }
+            } else if store.isRestoring {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading checklist…")
+                        .font(MakiType.body)
+                        .foregroundStyle(theme.subtext)
+                }
+                .padding(.vertical, 2)
+            } else if store.items.isEmpty {
                 Text("No items.")
                     .font(MakiType.body)
                     .foregroundStyle(theme.subtext)
@@ -447,6 +496,13 @@ private struct ChecklistView: View {
             // while the card has the keys, so the resting card is compact.
             if interaction.isKey {
                 addRow
+            }
+            if let error = store.persistenceError {
+                HStack(spacing: 6) {
+                    Text(error).font(MakiType.meta).foregroundStyle(theme.subtext)
+                    Button("Retry") { store.retryPersistence() }
+                        .buttonStyle(.plain)
+                }
             }
         }
         .padding(8)

@@ -485,7 +485,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
 
         let handle = ShelfDragHandle()
         handle.onDrag = { [weak self] event in self?.dragAll(event) }
-        let save = ShelfTextButton(title: "Save…")
+        let save = ShelfTextButton(title: "Save All…")
         save.target = self
         save.action = #selector(saveClicked)
         save.toolTip = "Copy or move everything to a folder"
@@ -493,6 +493,9 @@ final class ShelfController: NSObject, NSWindowDelegate,
         notes.target = self
         notes.action = #selector(sendToNewNote)
         notes.toolTip = "Send the selected text to a new note"
+        let actionSeparator = NSView()
+        actionSeparator.wantsLayer = true
+        actionSeparator.layer?.backgroundColor = NSColor.separatorColor.cgColor
         let hint = NSTextField(labelWithString: "Space · ⌫ · ⌘D")
         hint.font = .systemFont(ofSize: 9)
         hint.alignment = .right
@@ -531,7 +534,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
             view.translatesAutoresizingMaskIntoConstraints = false
             header.addSubview(view)
         }
-        for view in [handle, save, notes, zones, hint, runLabel, stop] {
+        for view in [handle, save, actionSeparator, notes, zones, hint, runLabel, stop] {
             view.translatesAutoresizingMaskIntoConstraints = false
             footer.addSubview(view)
         }
@@ -586,9 +589,13 @@ final class ShelfController: NSObject, NSWindowDelegate,
             handle.heightAnchor.constraint(equalToConstant: 26),
             save.leadingAnchor.constraint(equalTo: handle.trailingAnchor, constant: 6),
             save.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            save.widthAnchor.constraint(equalToConstant: 52),
+            save.widthAnchor.constraint(equalToConstant: 64),
             save.heightAnchor.constraint(equalToConstant: 26),
-            notes.leadingAnchor.constraint(equalTo: save.trailingAnchor, constant: 6),
+            actionSeparator.leadingAnchor.constraint(equalTo: save.trailingAnchor, constant: 4),
+            actionSeparator.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            actionSeparator.widthAnchor.constraint(equalToConstant: 1),
+            actionSeparator.heightAnchor.constraint(equalToConstant: 18),
+            notes.leadingAnchor.constraint(equalTo: actionSeparator.trailingAnchor, constant: 8),
             notes.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
             notes.widthAnchor.constraint(equalToConstant: 64),
             notes.heightAnchor.constraint(equalToConstant: 26),

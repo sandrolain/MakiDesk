@@ -450,11 +450,12 @@ even when you never save it to a file.
   cursor, and a note restored at launch waits for its body instead of being
   overwritten.
 - **Nothing is saved by asking.** A draft is written a fraction of a second
-  after you stop typing, again when the panel loses focus or closes, and each
-  write is flushed to the disk before it replaces the old copy: a crash or a
-  sudden power cut costs at most the last keystroke. Closing a note writes its
-  latest text to the Trash first, and a note whose file cannot be read stays in
-  the list marked *Could not load note* instead of vanishing.
+  after you stop typing and at least every two seconds while you keep typing;
+  it is also saved when the panel loses focus or closes. Each write is flushed
+  to disk before it replaces the old copy. Closing a note waits until its text
+  is loaded before moving the latest copy to the Trash, and a note whose file
+  cannot be read stays in the list marked *Could not load note* instead of
+  vanishing.
 - Notes and drafts live in `~/Library/Application Support/MakiDesk/Note/`.
   The factory reset has a **Notes** tick that removes them.
 
@@ -492,7 +493,10 @@ use it.
 - The mini-map keeps out of the card's way: when both belong in the same
   corner, the map appears below the card instead of on top of it.
 - The items are written to `~/Library/Application Support/MakiDesk/checklist.json`
-  after each change and come back on the next launch; a factory reset leaves
+  after each change and come back on the next launch. Quitting without opening
+  the card, or while its saved items are still loading, preserves the saved
+  list. Changes made after loading are flushed on normal app exit, including
+  intentionally deleting every item. A factory reset leaves
   them alone while the card's settings go back to their defaults. The card is
   left out of screenshots and recordings, and Reduce Transparency makes it
   solid.
@@ -515,6 +519,8 @@ ninety minutes. A length written with a colon is refused instead of guessed.
 The card also has an optional **label** — *Tea*, *Focus*, *Stand up* — which the
 card and the menu show instead of the length. Leave it empty and the timer is
 named after what it is (`25m`, `8:30`).
+The input card has a visible **Start Timer** button; Return submits the same
+entry.
 
 - Several timers run at once, nearest first on the card. The **Timers** menu
   lists them by label with Pause/Resume and Delete; the remaining time is on the
@@ -788,7 +794,9 @@ it running, so its shells keep working.
 - **Settings ▸ Terminal.** Font family and size, the cursor shape and blink,
   the scrollback size per pane, copying selected text, hiding the pointer while
   typing, the shell command (empty starts your login shell), the quake height
-  (30–60% of the screen), the SSH profiles and the opt-in agent hooks. The terminal, its sidebar and its title bar follow the
+  (30–60% of the screen), the SSH profiles and the opt-in agent hooks. Options
+  are grouped under Appearance, Behavior and Window; SSH port entries validate
+  the 1–65535 range. The terminal, its sidebar and its title bar follow the
   MakiDesk theme, and a change reaches the helper without a restart; a new
   scrollback size applies to panes created afterwards. Each theme brings its
   own sixteen ANSI colours;
@@ -807,38 +815,84 @@ says so in a notice instead of failing silently.
 `⌃⌥E`, or **Docker** in the menu bar's menu, opens **MakiDesk Docker**, a native
 window over the Docker CLI. It is a client, not a container engine: Docker
 Desktop, OrbStack, colima or Docker Engine must already be installed and
-reachable through the usual `docker` command.
+reachable through the usual `docker` command. Search is on the right of the
+toolbar and filters containers, images, volumes and networks; it is hidden in
+**Cleanup**, where it has no effect.
 
 - **Containers.** The list groups containers by Compose project and puts
   containers without a project under **Standalone**. Compose groups start
   collapsed; open one with its chevron, and its containers are indented under
-  it. Containers without a Compose project appear directly in the list, with no
-  group header. The group menu starts, stops, restarts or brings down the
-  project when its Compose files are still on disk. A container row has its state, image, ports
+  it. Within a Compose group the project prefix is omitted from container names
+  and rows sort by the displayed name. **Sort by** changes the order within
+  each group by name, state, CPU or memory. Containers without a Compose project appear directly in the list, with no
+  group header. The group menu stops the project's running containers by ID,
+  even when its Compose files are missing. Starting, restarting or deleting a
+  project requires its Compose files. Deleting it removes its containers and
+  networks but keeps volumes. Deleting a container stops it first if needed
+  and then removes it. Both delete actions always ask for confirmation. A
+  container row has its state, image, ports
   and health; the context menu starts, stops, restarts, pauses, kills or
-  deletes it, copies its ID or opens a terminal. The detail
-  pane has **Overview**, **Logs**, **Stats** and **Inspect**. Running containers
-  are never removed by a prune.
+  deletes it, copies its ID or opens a terminal. Select multiple rows with
+  Command-click or Shift-click to start, stop or delete them together. The
+  detail actions also copy files to and from the container, and copy a
+  `docker run` command reconstructed from inspect data. That command includes
+  environment variables, so copying it asks first when secrets are present.
+  **Start project** creates
+  missing containers and starts the services represented by that group,
+  including profile-gated services when their service names are available;
+  **Restart project** uses Docker's supported timeout option. The detail
+  pane has **Overview**, **Logs**, **Stats** and **Inspect**. Stats adds a
+  rolling CPU and memory percentage chart for the samples collected while the
+  tab is visible; the cards also show network I/O, block I/O and PID count. The container list
+  shows live CPU and memory readings while its window is visible, with Start,
+  Stop or Resume controls on each row. **Overview** shows the configured
+  entrypoint and command, plus environment variables in a Name/Value table
+  sorted by key. The environment values are visible in the Overview and may
+  contain secrets.
+  Inspect colours JSON keys, strings, numbers and literals to make the document
+  easier to scan. Running containers are never removed by a prune.
 - **Images, volumes, networks.** Each section lists the resource with the size,
-  usage and Compose project where available; the lists follow the MakiDesk
+  usage and Compose project where available. Image **Size** is Docker's
+  cumulative image size; image details show **Unique size** separately for
+  the portion attributed only to that image. Click any column header to sort
+  ascending or descending; sizes and container counts sort numerically. The lists follow the MakiDesk
   theme, including their headers. Remove asks first, and a resource
   still in use is left alone. Network and volume details show who is connected.
+  The Images section can pull, build, tag, push and save image archives. Pull
+  and push use the credentials already configured for the selected Docker
+  context. A built image uses a selected folder as its Docker build context.
+  Volumes and bridge networks can be created; networks can connect or disconnect
+  containers from their context and detail actions. The container overview can
+  open a published TCP port in the browser. The copied `docker run` command
+  includes the inspected ports, environment, mounts and restart policy, but
+  does not reproduce every daemon option such as resource limits or custom
+  network aliases.
 - **Logs and stats.** Logs stream with `docker logs --follow`; **Follow** and
-  **Timestamps** restart the stream, the field filters the lines already
-  received, and the buffer is bounded (20,000 lines by default) so a chatty
-  container cannot grow memory without limit. **Stats** polls only while the tab
-  is visible and the container is running.
+  **Timestamps** restart the stream; timestamps, clear and restart are grouped
+  under the log actions menu. The field filters the lines already received, and
+  the buffer is bounded (20,000 lines by default) so a chatty container cannot
+  grow memory without limit. **Stats** polls only while the tab is visible and
+  the container is running.
 - **Terminal.** **Terminal** opens a workspace in **MakiDesk Terminal** running
   `docker exec -it <container> <shell>`. The shell defaults to `sh` and can be
   changed in the Docker window's settings. MakiDesk must be running to relay the
   request; if it is not, the window offers to copy the command instead. The
   terminal workspace is saved like any other terminal session.
-- **Cleanup.** The **Cleanup** section shows what is reclaimable for containers,
-  images, volumes, networks and build cache. **Prune** runs
-  `docker system prune` and keeps tagged images and volumes; **Prune all** runs
-  `docker system prune --all --volumes` and also removes unused named volumes.
-  Both ask first, and **Prune all** asks a second time before deleting volumes.
-  The preview is an estimate: Docker has no dry-run for `system prune`.
+- **Cleanup.** Each resource card offers **Prune** and **Prune all**, with a
+  confirmation describing the affected resources and an estimated reclaimable
+  size. The right-hand detail pane shows separate resource lists for both
+  scopes, grouped by resource type. Standard image prune
+  removes dangling images; **Prune all** also removes other images unused by
+  containers. Standard volume prune removes unused anonymous volumes; **Prune
+  all** also removes unused named volumes, whose data cannot be recovered.
+  Build cache follows the same dangling versus all unused distinction, though
+  Docker does not expose the exact dangling cache records in its inventory.
+  Docker has no dry-run, so estimates may differ from the actual reclaimed size.
+  Container and network prune have the same scope in both buttons because
+  Docker provides no broader per-resource prune option. The resource lists for
+  both scopes appear in the right-hand detail pane. The main Cleanup column
+  keeps the disk summary and aggregate **Prune** / **Prune all** actions below
+  the per-resource cards, which retain their own scoped buttons.
 - **Contexts and permissions.** The current Docker context is shown in the
   sidebar and can be changed for this window from the toolbar without running
   `docker context use`. A remote context is marked; every destructive
@@ -865,7 +919,8 @@ alone, run `task docker:run`.
 disappears when MakiDesk quits.
 
 - Up/Down, Page Up/Down and Home/End move the selection; `↩` or a click pastes
-  the selected item into the app you were using. `Esc` closes.
+  the selected item into the app you were using. Search filters text and image
+  previews, and keyboard navigation follows the visible matches. `Esc` closes.
 - **To Shelf** sends the selected item to the shelf (also in the row's context
   menu); an image is decoded from its stored bytes.
 - A row shows a small preview of what it holds: a **colour swatch** when the
@@ -1278,14 +1333,15 @@ Notices appear on the display and in the corner chosen in
 
 ## Settings
 
-The Settings window has a **sidebar** on the left; the section you pick is
+The Settings window has a **sidebar** on the left; its search finds common
+settings and navigates to the relevant section. The section you pick is
 remembered for the next time, and opening **Dropzones…** from the menu goes
 straight to that section. Pages that hold several groups of options — General,
-Windows, Panels and Notifications — begin with a **strip of sub-sections**
-(Permissions · Behaviour · About, Placement · Focus · Overlay · macOS, and so
-on), so nothing is buried at the bottom of a long scroll. The sub-section is a
-place inside the page, not a preference: reopening Settings starts at the
-first one.
+Windows, Panels and Notifications — begin with a native **segmented control**
+for sub-sections (Permissions · Behaviour · About, Placement · Focus · Overlay
+· macOS, and so on), pinned above the scrolling content so it remains available
+while you adjust options. The sub-section is a place inside the page, not a preference:
+reopening Settings starts at the first one.
 
 - **General** — permissions and **Copy diagnostics** (a short report on the
   clipboard for a bug report), build, animations, keyboard shortcuts,

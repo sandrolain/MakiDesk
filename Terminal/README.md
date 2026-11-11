@@ -52,10 +52,13 @@ identity before the outer app.
   restores the pane's keyboard focus. The quake is only hidden.
 - **Persistence:** `Terminal/workspaces.json` holds titles, split tree, ratios,
   selection, each pane's last directory and its command (SSH included); it is
-  atomic and versioned, and a corrupt file is quarantined. Scrollback is not
-  saved. `Terminal/window.json` holds the main window's frame; it is restored
-  only when a title-bar-sized part still meets a display, otherwise the window
-  is centered.
+  atomic and versioned, and a corrupt file is quarantined. Newer-format layout
+  and window-state files are kept read-only; the helper warns when it cannot
+  persist changes. Debounced layout and frame writes run off the UI thread, and
+  quitting flushes the latest state before closing. Scrollback is not saved.
+  `Terminal/window.json` holds the main window's frame; it is restored only
+  when a title-bar-sized part still meets a display, otherwise the window is
+  centered.
 - **SSH profiles:** settings.json entries become `ssh` command lines in a new
   workspace from the sidebar's + menu; keys and prompts stay with ssh.
 - **tmux:** a preset runs `tmux new-session -A -s makidesk-…`, reattaching to the
@@ -142,6 +145,9 @@ identity before the outer app.
   listed.
 - **Shortcut handover:** while the helper is frontmost, MakiDesk suspends its
   other global rows (and the peek hold key) and keeps only `⌃⌥O` and `⌃⌥Q`.
+- **IPC startup:** the helper distinguishes an already-running instance from
+  socket or permission failures. If integration cannot start, the terminal
+  remains usable and explains that MakiDesk cannot connect.
 
 ## What is not there yet
 
@@ -163,6 +169,13 @@ MIT derivative). `scripts/fetch-ghosttykit.sh` pins:
 - Ghostty commit `cb1ef7091cdef0b581ee2cbd83742b653253523e`
 - build flavour `crashsubdir-cmux-crash-sentry-off-noi18n-v2`
 - archive SHA-256 `413515af9e3739068f91bae98bc33fa1d89d4ea20b35d0fa96b317379bb17ae2`
+
+After extraction, and for existing local copies, the fetch script adds the
+`lib` prefix to static-library filenames where needed and updates the
+xcframework plist. This fixes Xcode 26 SwiftPM's rejection of the archive's
+macOS `ghostty-internal.a` filename without changing the engine binary.
+`task terminal:build` and the bundle script run this preparation automatically;
+before invoking SwiftPM directly, run `task terminal:fetch`.
 
 The archive is about 129 MB, extracts to about 505 MB and is **not** committed
 (`vendor/` is ignored). The helper binary is about 18 MB after dead stripping.

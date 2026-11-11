@@ -122,8 +122,8 @@ public enum DockerJSON {
             }) else { return image }
             return DockerImage(id: image.id,
                                repoTags: image.repoTags,
-                               size: match.size,
-                               uniqueSize: image.uniqueSize,
+                               size: image.size,
+                               uniqueSize: match.size == "—" ? image.uniqueSize : match.size,
                                createdAt: image.createdAt,
                                containers: match.inUse ? max(1, image.containers) : 0,
                                digest: image.digest)
@@ -425,6 +425,17 @@ public enum DockerJSON {
         )
     }
 
+    public static func statsByName(from output: String) -> [String: DockerContainerStats] {
+        var result: [String: DockerContainerStats] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            let stats = self.stats(from: String(line))
+            let name = stats.name.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            guard name.isEmpty == false else { continue }
+            result[name] = stats
+        }
+        return result
+    }
+
     public static func inspect(from output: String) -> DockerInspectSummary {
         let pretty = redactedPrettyPrinted(output) ?? prettyPrinted(output) ?? output
         guard let data = output.data(using: .utf8),
@@ -435,6 +446,8 @@ public enum DockerJSON {
         let config = object["Config"] as? [String: Any]
         let host = object["HostConfig"] as? [String: Any]
         let env = config?["Env"] as? [String] ?? []
+        let entrypoint = config?["Entrypoint"] as? [String] ?? []
+        let command = config?["Cmd"] as? [String] ?? []
         let labels = config?["Labels"] as? [String: String] ?? [:]
         let mounts = (object["Mounts"] as? [[String: Any]] ?? []).compactMap { mount -> String? in
             guard let destination = mount["Destination"] as? String else { return nil }
@@ -443,12 +456,25 @@ public enum DockerJSON {
             let readOnly = (mount["RW"] as? Bool) == false ? " (ro)" : ""
             return "\(type): \(source) → \(destination)\(readOnly)"
         }
+        let mountArguments = (object["Mounts"] as? [[String: Any]] ?? []).compactMap { mount -> String? in
+            guard let destination = mount["Destination"] as? String else { return nil }
+            let type = mount["Type"] as? String ?? "volume"
+            let source = mount["Name"] as? String ?? mount["Source"] as? String
+            var fields = ["type=\(type)"]
+            if let source, source.isEmpty == false { fields.append("source=\(source)") }
+            fields.append("target=\(destination)")
+            if (mount["RW"] as? Bool) == false { fields.append("readonly") }
+            return fields.joined(separator: ",")
+        }
         let restart = (host?["RestartPolicy"] as? [String: Any])?["Name"] as? String ?? ""
         let logDriver = (host?["LogConfig"] as? [String: Any])?["Type"] as? String ?? ""
         return DockerInspectSummary(rawJSON: pretty,
                                     environment: env,
+                                    entrypoint: entrypoint,
+                                    command: command,
                                     labels: labels,
                                     mounts: mounts,
+                                    mountArguments: mountArguments,
                                     restartPolicy: restart,
                                     logDriver: logDriver)
     }

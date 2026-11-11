@@ -121,7 +121,7 @@ All paths are under your user account:
 | Window groups | `~/Library/Application Support/MakiDesk/groups.json` | Until you delete them or reset |
 | Dropzones and icons | `…/MakiDesk/dropzones.json` (0600) and `…/MakiDesk/DropzoneIcons/` | Until you delete them or reset |
 | Dropzone runs | `~/Library/Caches/MakiDesk/DropzoneRuns/<run>/` | Removed when the run ends unless kept or revealed |
-| Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` | Until you delete them or reset |
+| Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` (including a SHA-256 digest of each linked external file's last known text) | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, zoomed pane, last directory per pane | Until you delete it; a factory reset does not remove it |
@@ -210,8 +210,11 @@ written to disk and is dropped when the pane goes away.
 The Docker window is a separate helper app (`com.makidesk.app.docker`). It talks
 to the Docker daemon only through the `docker` CLI, using the user's own
 `DOCKER_HOST`, context and `~/.docker` configuration; it does not open a network
-server, does not listen on a port and sends nothing anywhere. MakiDesk and the
-helper meet on
+server or listen on a port. User-requested pull and push actions use the Docker
+CLI's configured registry credentials and contact the configured registry;
+commands also reach the daemon selected by the current context. Building sends
+the selected build context to that daemon; file-copy actions transfer the
+selected files through the Docker CLI. MakiDesk and the helper meet on
 `~/Library/Application Support/MakiDesk/Docker/docker-control.sock` (`0600` in a
 `0700` directory); the helper rejects a peer that is not MakiDesk.
 
@@ -219,11 +222,17 @@ Docker access is privilege-equivalent: the socket can control containers and
 host resources. The helper never executes a command received over IPC. The one
 cross-app request, **Terminal**, carries a validated container reference and an
 allow-listed shell; the terminal composes `docker exec -it` itself. Container
-environment variables and log contents can contain secrets. They are shown only
-in the window, environment values are hidden behind an explicit **Reveal**, and
-neither is written to disk or to a log. **Copy** is an explicit user action.
-Docker names, images, volumes, networks, Compose paths and disk usage are read to
-render the window; they are not sent anywhere.
+environment variables and log contents can contain secrets. They are shown
+only in the window; environment variables are visible in the Overview table
+and collapsed in Inspect until expanded. Neither is written to disk or to a
+log. A copied `docker run` command can include environment values and is placed
+on the system clipboard only after an explicit copy action and confirmation.
+The file transfer actions copy user-selected local files to a container or
+container files to a user-selected local path through `docker cp`; the helper
+does not retain those files. Container CPU, memory, network and block I/O, and
+PID samples are read while the relevant view is visible and kept only in memory.
+Docker names, images, volumes, networks, Compose paths and disk usage are read
+to render the window and are not sent to a separate MakiDesk service.
 
 The helper stores only its window frame, local preferences and the theme. It
 does not persist logs, inspect output, environment values, container IDs or

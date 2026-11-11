@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import MakiDockerCore
 
 struct DockerContainerDetailView: View {
@@ -109,6 +110,10 @@ struct DockerContainerDetailView: View {
                     }
                     Button("Copy container ID") { store.copyToPasteboard(container.id) }
                     Button("Copy name") { store.copyToPasteboard(container.name) }
+                    Button("Copy docker run command") { store.copyRunCommand(for: container) }
+                    Divider()
+                    Button("Copy file to container…") { store.copyFileToContainer(container) }
+                    Button("Copy file from container…") { store.copyFileFromContainer(container) }
                     Divider()
                     Button("Kill", role: .destructive) { store.perform(.kill, on: container) }
                     Button("Delete", role: .destructive) { store.perform(.remove, on: container) }
@@ -154,10 +159,28 @@ struct DockerContainerDetailView: View {
                     ("Ports", container.displayPorts),
                     ("Networks", container.networks.isEmpty ? "—" : container.networks.joined(separator: ", ")),
                     ("Mounts", container.mounts.isEmpty ? "—" : container.mounts),
+                    ("Entrypoint", overviewInspectValue(\.entrypoint)),
+                    ("Command", overviewInspectValue(\.command)),
                     ("Compose project", container.compose?.project ?? "—"),
                     ("Compose service", container.compose?.service ?? "—"),
                     ("Compose file", container.compose?.configFiles.joined(separator: "\n") ?? "—"),
                 ], store: store)
+
+                if inspect.isLoading {
+                    ProgressView("Reading container configuration…")
+                        .font(.callout)
+                }
+                if let error = inspect.error {
+                    Text(error).font(.callout).foregroundStyle(.orange)
+                }
+                if let summary = inspect.summary {
+                    if summary.environment.isEmpty {
+                        DockerKeyValue(items: [("Environment", "—")], store: store)
+                    } else {
+                        DockerEnvironmentTable(environment: summary.environment,
+                                               store: store)
+                    }
+                }
 
                 HStack {
                     Button("Copy ID") { store.copyToPasteboard(container.id) }
@@ -170,6 +193,82 @@ struct DockerContainerDetailView: View {
             }
             .padding(16)
         }
+        .task(id: container.id) { inspect.load(container: container, store: store) }
+    }
+
+    private func overviewInspectValue(_ keyPath: KeyPath<DockerInspectSummary, [String]>) -> String {
+        guard let summary = inspect.summary else {
+            return inspect.isLoading ? "Loading…" : "—"
+        }
+        let values = summary[keyPath: keyPath]
+        return values.isEmpty ? "—" : values.joined(separator: " ")
+    }
+}
+
+private struct DockerEnvironmentTable: View {
+    let environment: [String]
+    let store: DockerStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            let keyWidth = keyColumnWidth
+            Text("Environment (\(environment.count))")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(store.theme.text)
+                .padding(.bottom, 6)
+
+            HStack(spacing: 10) {
+                Text("Name")
+                    .frame(width: keyWidth, alignment: .leading)
+                Text("Value")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.callout.weight(.medium))
+            .foregroundStyle(store.theme.subtext)
+            .padding(.vertical, 5)
+            Divider().overlay(store.theme.border)
+
+            ForEach(Array(sortedEnvironment.enumerated()), id: \.offset) { _, entry in
+                let pair = split(entry)
+                HStack(alignment: .top, spacing: 10) {
+                    Text(pair.name)
+                        .font(.callout.monospaced())
+                        .foregroundStyle(store.theme.subtext)
+                        .frame(width: keyWidth, alignment: .leading)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                    Text(pair.value)
+                        .font(.callout.monospaced())
+                        .foregroundStyle(store.theme.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .padding(.vertical, 5)
+                Divider().overlay(store.theme.border.opacity(0.4))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func split(_ entry: String) -> (name: String, value: String) {
+        guard let separator = entry.firstIndex(of: "=") else {
+            return (entry, "")
+        }
+        return (String(entry[..<separator]), String(entry[entry.index(after: separator)...]))
+    }
+
+    private var keyColumnWidth: CGFloat {
+        let longestKey = environment.map { split($0).name.count }.max() ?? 0
+        return min(max(CGFloat(longestKey) * 8, 150), 220)
+    }
+
+    private var sortedEnvironment: [String] {
+        environment.sorted { lhs, rhs in
+            let leftKey = split(lhs).name
+            let rightKey = split(rhs).name
+            let order = leftKey.localizedStandardCompare(rightKey)
+            return order == .orderedSame ? lhs < rhs : order == .orderedAscending
+        }
     }
 }
 
@@ -180,32 +279,40 @@ struct DockerLogsTabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Toggle("Follow", isOn: Binding(
                     get: { logs.following },
                     set: { logs.setFollowing($0) }
                 ))
                 .toggleStyle(.checkbox)
-                Toggle("Timestamps", isOn: Binding(
-                    get: { logs.timestamps },
-                    set: { logs.setTimestamps($0) }
-                ))
-                .toggleStyle(.checkbox)
                 TextField("Filter lines", text: $logs.query)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 220)
+                    .frame(minWidth: 90, maxWidth: 220)
+                    .layoutPriority(1)
                 Spacer()
                 if logs.isActive { ProgressView().controlSize(.regular) }
                 Text("\(logs.lineCount) lines")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(store.theme.subtext)
+                    .lineLimit(1)
+                    .fixedSize()
                 if logs.dropped > 0 {
-                    Text("· \(logs.dropped) trimmed")
-                        .font(.callout)
+                    Image(systemName: "line.3.horizontal.decrease.circle")
                         .foregroundStyle(store.theme.subtext)
+                        .help("\(logs.dropped) older lines trimmed")
                 }
-                Button("Clear") { logs.clear() }
-                Button("Restart") { logs.restart() }
+                Menu {
+                    Toggle("Timestamps", isOn: Binding(
+                        get: { logs.timestamps },
+                        set: { logs.setTimestamps($0) }
+                    ))
+                    Divider()
+                    Button("Clear logs", systemImage: "trash") { logs.clear() }
+                    Button("Restart stream", systemImage: "arrow.clockwise") { logs.restart() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .help("More log actions")
             }
             .buttonStyle(.bordered)
             .controlSize(.regular)
@@ -277,6 +384,23 @@ struct DockerStatsTabView: View {
                     DockerStatCard(title: "Network I/O", value: stats.stats.networkIO)
                     DockerStatCard(title: "Block I/O", value: stats.stats.blockIO)
                     DockerStatCard(title: "PIDs", value: stats.stats.pids)
+                }
+                if stats.history.count > 1 {
+                    Chart {
+                        ForEach(stats.history) { sample in
+                            LineMark(x: .value("Time", sample.date),
+                                     y: .value("Percent", sample.cpuPercent),
+                                     series: .value("Metric", "CPU"))
+                            LineMark(x: .value("Time", sample.date),
+                                     y: .value("Percent", sample.memoryPercent),
+                                     series: .value("Metric", "Memory"))
+                        }
+                    }
+                    .chartYScale(domain: 0...100)
+                    .chartYAxisLabel("Percent")
+                    .frame(height: 190)
+                    .padding(10)
+                    .background(store.theme.surface, in: RoundedRectangle(cornerRadius: 8))
                 }
                 if stats.isRunning {
                     Text("Updates every \(Int(store.settings.statsInterval)) seconds while this tab is visible.")
@@ -382,7 +506,8 @@ struct DockerInspectTabView: View {
                         .font(.callout)
                         .foregroundStyle(store.theme.subtext)
                         .padding(.horizontal, 14)
-                    DockerTextView(text: summary.rawJSON, theme: store.theme)
+                    DockerTextView(text: summary.rawJSON, theme: store.theme,
+                                   syntaxHighlighted: true)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {

@@ -8,15 +8,34 @@ import SwiftUI
 @MainActor
 @Observable
 final class ClipboardModel {
+    struct VisibleEntry: Identifiable {
+        let index: Int
+        let entry: ClipboardEntry
+        var id: UUID { entry.id }
+    }
     var entries: [ClipboardEntry] = []
     var selection = 0
     var theme: PaletteTheme = PaletteTheme.all[0]
     var opacity: Double = 0.98
     var animationsEnabled = true
     var animationDuration = 0.22
+    var searchText = ""
+
+    var visibleEntries: [VisibleEntry] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return entries.enumerated().compactMap { index, entry in
+            guard query.isEmpty || entry.preview.localizedCaseInsensitiveContains(query)
+                    || entry.text.localizedCaseInsensitiveContains(query)
+                    || (entry.image != nil && "image".localizedCaseInsensitiveContains(query))
+            else { return nil }
+            return VisibleEntry(index: index, entry: entry)
+        }
+    }
 
     var selectedEntry: ClipboardEntry? {
-        entries.indices.contains(selection) ? entries[selection] : nil
+        guard entries.indices.contains(selection),
+              visibleEntries.contains(where: { $0.index == selection }) else { return nil }
+        return entries[selection]
     }
 
     var pinnedCount: Int {
@@ -36,14 +55,18 @@ final class ClipboardModel {
     }
 
     func move(by delta: Int) {
-        guard entries.isEmpty == false else { selection = 0; return }
-        selection = min(max(0, selection + delta), entries.count - 1)
+        let visible = visibleEntries
+        guard visible.isEmpty == false else { selection = 0; return }
+        let selectedID = selectedEntry?.id
+        let current = visible.firstIndex { $0.entry.id == selectedID } ?? 0
+        let target = min(max(0, current + delta), visible.count - 1)
+        selection = visible[target].index
     }
 
-    func moveToStart() { selection = 0 }
+    func moveToStart() { selection = visibleEntries.first?.index ?? 0 }
 
     func moveToEnd() {
-        selection = max(0, entries.count - 1)
+        selection = visibleEntries.last?.index ?? 0
     }
 }
 
@@ -173,7 +196,8 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
-        let size = Self.size
+        let size = NSSize(width: min(Self.size.width, max(300, visible.width - 24)),
+                          height: min(Self.size.height, max(260, visible.height - 24)))
         let frame = NSRect(x: visible.midX - size.width / 2,
                            y: visible.midY - size.height / 2 + 40,
                            width: size.width, height: size.height)
@@ -260,6 +284,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         removeMonitor()
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.isVisible else { return event }
+            if self.panel?.firstResponder is NSTextView { return event }
             switch event.specialKey {
             case .upArrow: self.model.move(by: -1); return nil
             case .downArrow: self.model.move(by: 1); return nil
@@ -323,6 +348,11 @@ struct ClipboardView: View {
                 .frame(height: 1)
             if model.entries.isEmpty {
                 empty
+            } else if model.visibleEntries.isEmpty {
+                Text("No matching clipboard items")
+                    .font(MakiType.contentMedium)
+                    .foregroundStyle(model.theme.subtext)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 list
             }
@@ -331,7 +361,14 @@ struct ClipboardView: View {
                 .frame(height: 1)
             footer
         }
-        .frame(width: 560, height: 420)
+        .frame(minWidth: 300, idealWidth: 560, maxWidth: 560,
+               minHeight: 260, idealHeight: 420, maxHeight: 420)
+        .onChange(of: model.searchText) { _, _ in
+            if let first = model.visibleEntries.first,
+               model.visibleEntries.contains(where: { $0.index == model.selection }) == false {
+                model.selection = first.index
+            }
+        }
         .background(RoundedRectangle(cornerRadius: MakiRadius.panel)
             .fill(model.theme.background.opacity(model.opacity)))
         .clipShape(RoundedRectangle(cornerRadius: MakiRadius.panel, style: .continuous))
@@ -355,6 +392,10 @@ struct ClipboardView: View {
                 .font(MakiType.title)
                 .foregroundStyle(model.theme.text)
             Spacer()
+            TextField("Search", text: $model.searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 150)
+                .accessibilityLabel("Search clipboard history")
             Text(model.entries.count == 1 ? "1 item" : "\(model.entries.count) items")
                 .font(MakiType.meta)
                 .foregroundStyle(model.theme.subtext)
@@ -374,12 +415,12 @@ struct ClipboardView: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 LazyVStack(spacing: 6) {
-                    ForEach(Array(model.entries.enumerated()), id: \.element.id) { index, entry in
-                        ClipboardRow(entry: entry, selected: index == model.selection,
+                    ForEach(model.visibleEntries) { item in
+                        ClipboardRow(entry: item.entry, selected: item.index == model.selection,
                                      theme: model.theme, onShelf: onShelf,
                                      onTogglePin: onTogglePin)
-                            .id(entry.id)
-                            .onTapGesture { onPick(entry) }
+                            .id(item.entry.id)
+                            .onTapGesture { onPick(item.entry) }
                     }
                 }
                 .padding(12)

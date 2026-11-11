@@ -1,33 +1,9 @@
 import SwiftUI
 import MakiDockerCore
 
-struct DockerTableHeader: View {
-    @Bindable var store: DockerStore
-    let columns: [(String, CGFloat?)]
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ForEach(Array(columns.enumerated()), id: \.offset) { entry in
-                Text(entry.element.0)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(store.theme.subtext)
-                    .lineLimit(1)
-                    .frame(width: entry.element.1, alignment: .leading)
-                    .frame(maxWidth: entry.element.1 == nil ? .infinity : nil,
-                           alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(store.theme.surface.opacity(0.55))
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(store.theme.border.opacity(0.55)).frame(height: 1)
-        }
-    }
-}
-
 struct DockerImagesView: View {
     @Bindable var store: DockerStore
+    @State private var sortOrder = [KeyPathComparator<DockerImage>(\.primaryTag)]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,19 +12,28 @@ struct DockerImagesView: View {
                 subtitle: "\(store.images.count) total · \(store.images.filter(\.isDangling).count) dangling",
                 store: store
             )
+            HStack {
+                Spacer()
+                Menu("Image actions") {
+                    Button("Pull image…") { store.pullImage() }
+                    Button("Build image…") { store.buildImage() }
+                }
+                .menuStyle(.borderlessButton)
+                .padding(.trailing, 12)
+            }
+            .frame(height: 30)
             Divider().overlay(store.theme.border)
             if store.filteredImages.isEmpty {
                 DockerEmptyView(icon: "square.stack.3d.up",
-                                title: "No images",
-                                detail: "Images appear here after a pull, a build or a Compose start.")
+                                title: store.images.isEmpty ? "No images" : "No matching images",
+                                detail: store.images.isEmpty
+                                    ? "Images appear here after a pull, a build or a Compose start."
+                                    : "Try another search or clear the filter.")
             } else {
                 VStack(spacing: 0) {
-                    DockerTableHeader(store: store, columns: [
-                        ("Repository:Tag", nil), ("ID", 92), ("Size", 70),
-                        ("Containers", 82),
-                    ])
-                    Table(store.filteredImages, selection: $store.selectedImageID) {
-                    TableColumn("Repository:Tag") { image in
+                    Table(sortedImages, selection: $store.selectedImageID,
+                          sortOrder: $sortOrder) {
+                    TableColumn("Repository:Tag", value: \.primaryTag) { image in
                         HStack(spacing: 5) {
                             Text(image.primaryTag)
                                 .lineLimit(1)
@@ -58,25 +43,30 @@ struct DockerImagesView: View {
                         }
                     }
                     .width(min: 150, ideal: 190, max: 260)
-                    TableColumn("ID") { image in
+                    TableColumn("ID", value: \.shortID) { image in
                         Text(image.shortID).font(.callout.monospaced())
                     }
                     .width(min: 82, ideal: 92, max: 110)
-                    TableColumn("Size") { image in
-                        Text(image.size).font(.callout.monospacedDigit())
+                    TableColumn("Size", value: \.sizeBytes) { image in
+                        Text(DockerFormatting.spacedSize(image.size)).font(.callout.monospacedDigit())
                     }
                     .width(min: 58, ideal: 70, max: 90)
-                    TableColumn("Containers") { image in
+                    TableColumn("Containers", value: \.containers) { image in
                         Text("\(image.containers)").font(.callout.monospacedDigit())
                     }
                     .width(min: 72, ideal: 82, max: 100)
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
-                .tableColumnHeaders(.hidden)
+                .tableColumnHeaders(.visible)
                 .scrollContentBackground(.hidden)
                 .background(store.theme.background)
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first, let image = store.images.first(where: { $0.id == id }) {
+                        Button("Tag image…") { store.tagImage(image) }
+                        Button("Push image…") { store.pushImage(image) }
+                            .disabled(image.isDangling)
+                        Button("Save image archive…") { store.saveImage(image) }
+                        Divider()
                         Button("Remove image", role: .destructive) { store.removeImage(image) }
                         Button("Copy image ID") { store.copyToPasteboard(image.id) }
                     }
@@ -86,10 +76,15 @@ struct DockerImagesView: View {
         }
         .background(store.theme.background)
     }
+
+    private var sortedImages: [DockerImage] {
+        store.filteredImages.sorted(using: sortOrder)
+    }
 }
 
 struct DockerVolumesView: View {
     @Bindable var store: DockerStore
+    @State private var sortOrder = [KeyPathComparator<DockerVolume>(\.name)]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -98,18 +93,25 @@ struct DockerVolumesView: View {
                 subtitle: "\(store.volumes.count) total · \(store.volumes.filter { $0.isUsed == false }.count) unused",
                 store: store
             )
+            HStack {
+                Spacer()
+                Button("Create volume…") { store.createVolume() }
+                    .buttonStyle(.borderless)
+                    .padding(.trailing, 12)
+            }
+            .frame(height: 30)
             Divider().overlay(store.theme.border)
             if store.filteredVolumes.isEmpty {
-                DockerEmptyView(icon: "externaldrive", title: "No volumes",
-                                detail: "Named and anonymous volumes appear here.")
+                DockerEmptyView(icon: "externaldrive",
+                                title: store.volumes.isEmpty ? "No volumes" : "No matching volumes",
+                                detail: store.volumes.isEmpty
+                                    ? "Named and anonymous volumes appear here."
+                                    : "Try another search or clear the filter.")
             } else {
                 VStack(spacing: 0) {
-                    DockerTableHeader(store: store, columns: [
-                        ("Name", 180), ("Driver", 70), ("Size", 70),
-                        ("In use", 60),
-                    ])
-                    Table(store.filteredVolumes, selection: $store.selectedVolumeID) {
-                    TableColumn("Name") { volume in
+                    Table(sortedVolumes, selection: $store.selectedVolumeID,
+                          sortOrder: $sortOrder) {
+                    TableColumn("Name", value: \.name) { volume in
                         HStack(spacing: 5) {
                             Text(volume.name).lineLimit(1)
                             if volume.isAnonymous {
@@ -118,11 +120,14 @@ struct DockerVolumesView: View {
                         }
                     }
                     .width(min: 140, ideal: 180, max: 260)
-                    TableColumn("Driver") { Text($0.driver).font(.callout) }
+                    TableColumn("Driver", value: \.driver) { Text($0.driver).font(.callout) }
                         .width(min: 60, ideal: 70, max: 90)
-                    TableColumn("Size") { Text($0.size ?? "—").font(.callout.monospacedDigit()) }
+                    TableColumn("Size", value: \.sizeBytes) {
+                        Text(DockerFormatting.spacedSize($0.size ?? "—"))
+                            .font(.callout.monospacedDigit())
+                    }
                         .width(min: 60, ideal: 70, max: 90)
-                    TableColumn("In use") { volume in
+                    TableColumn("In use", value: \.usageSortOrder) { volume in
                         Text(volume.isUsed ? "yes" : "no")
                             .font(.callout)
                             .foregroundStyle(volume.isUsed ? store.theme.subtext : .orange)
@@ -130,7 +135,7 @@ struct DockerVolumesView: View {
                     .width(min: 50, ideal: 60, max: 80)
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
-                .tableColumnHeaders(.hidden)
+                .tableColumnHeaders(.visible)
                 .scrollContentBackground(.hidden)
                 .background(store.theme.background)
                 .contextMenu(forSelectionType: String.self) { ids in
@@ -146,10 +151,15 @@ struct DockerVolumesView: View {
         }
         .background(store.theme.background)
     }
+
+    private var sortedVolumes: [DockerVolume] {
+        store.filteredVolumes.sorted(using: sortOrder)
+    }
 }
 
 struct DockerNetworksView: View {
     @Bindable var store: DockerStore
+    @State private var sortOrder = [KeyPathComparator<DockerNetwork>(\.name)]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -158,18 +168,25 @@ struct DockerNetworksView: View {
                 subtitle: "\(store.networks.count) total · \(store.networks.filter { $0.isUsed == false && $0.isBuiltIn == false }.count) unused",
                 store: store
             )
+            HStack {
+                Spacer()
+                Button("Create network…") { store.createNetwork() }
+                    .buttonStyle(.borderless)
+                    .padding(.trailing, 12)
+            }
+            .frame(height: 30)
             Divider().overlay(store.theme.border)
             if store.filteredNetworks.isEmpty {
-                DockerEmptyView(icon: "network", title: "No networks",
-                                detail: "Bridge, host and project networks appear here.")
+                DockerEmptyView(icon: "network",
+                                title: store.networks.isEmpty ? "No networks" : "No matching networks",
+                                detail: store.networks.isEmpty
+                                    ? "Bridge, host and project networks appear here."
+                                    : "Try another search or clear the filter.")
             } else {
                 VStack(spacing: 0) {
-                    DockerTableHeader(store: store, columns: [
-                        ("Name", nil), ("Driver", 70), ("Scope", 60),
-                        ("Containers", 70),
-                    ])
-                    Table(store.filteredNetworks, selection: $store.selectedNetworkID) {
-                    TableColumn("Name") { network in
+                    Table(sortedNetworks, selection: $store.selectedNetworkID,
+                          sortOrder: $sortOrder) {
+                    TableColumn("Name", value: \.name) { network in
                         HStack(spacing: 5) {
                             Text(network.name).lineLimit(1)
                             if network.isBuiltIn {
@@ -178,17 +195,17 @@ struct DockerNetworksView: View {
                         }
                     }
                     .width(min: 140, ideal: 180, max: 260)
-                    TableColumn("Driver") { Text($0.driver).font(.callout) }
+                    TableColumn("Driver", value: \.driver) { Text($0.driver).font(.callout) }
                         .width(min: 60, ideal: 70, max: 90)
-                    TableColumn("Scope") { Text($0.scope).font(.callout) }
+                    TableColumn("Scope", value: \.scope) { Text($0.scope).font(.callout) }
                         .width(min: 50, ideal: 60, max: 80)
-                    TableColumn("Containers") {
+                    TableColumn("Containers", value: \.containerCount) {
                         Text("\($0.containers.count)").font(.callout.monospacedDigit())
                     }
                     .width(min: 60, ideal: 70, max: 90)
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
-                .tableColumnHeaders(.hidden)
+                .tableColumnHeaders(.visible)
                 .scrollContentBackground(.hidden)
                 .background(store.theme.background)
                 .contextMenu(forSelectionType: String.self) { ids in
@@ -196,6 +213,8 @@ struct DockerNetworksView: View {
                        let network = store.networks.first(where: { $0.id == id }) {
                         Button("Remove network", role: .destructive) { store.removeNetwork(network) }
                             .disabled(network.isUsed || network.isBuiltIn)
+                        Button("Connect container…") { store.connectContainer(to: network) }
+                            .disabled(network.name == "host" || network.name == "none")
                         Button("Copy network ID") { store.copyToPasteboard(network.id) }
                     }
                 } primaryAction: { _ in }
@@ -203,6 +222,10 @@ struct DockerNetworksView: View {
             }
         }
         .background(store.theme.background)
+    }
+
+    private var sortedNetworks: [DockerNetwork] {
+        store.filteredNetworks.sorted(using: sortOrder)
     }
 }
 
@@ -226,23 +249,7 @@ struct DockerCleanupView: View {
                     DockerCleanupCard(store: store, mode: .buildCache,
                                       category: store.diskUsage.buildCache)
                 }
-                Divider().overlay(store.theme.border)
-                HStack(spacing: 10) {
-                    Button("Prune") { store.prune(.basic) }
-                        .buttonStyle(.borderedProminent)
-                    Button("Prune all", role: .destructive) { store.prune(.all) }
-                        .buttonStyle(.bordered)
-                    Spacer()
-                    Text("Estimated reclaimable: \(store.prunePlan.estimatedSize)")
-                        .font(.callout)
-                        .foregroundStyle(store.theme.subtext)
-                }
-                Text(DockerPruneMode.basic.explanation)
-                    .font(.callout)
-                    .foregroundStyle(store.theme.subtext)
-                Text(DockerPruneMode.all.explanation)
-                    .font(.callout)
-                    .foregroundStyle(.orange)
+                DockerCleanupSummaryActions(store: store)
             }
             .padding(16)
         }
@@ -277,6 +284,170 @@ struct DockerCleanupView: View {
             reclaimableBytes: 0
         )
     }
+
+}
+
+private struct DockerPrunePreviewGroup: Identifiable {
+    let title: String
+    let items: [String]
+    var note: String? = nil
+
+    var id: String { title }
+}
+
+struct DockerCleanupSummaryActions: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Cleanup summary")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(store.theme.text)
+            DockerKeyValue(items: [
+                ("Images", store.diskUsage.images.size),
+                ("Containers", store.diskUsage.containers.size),
+                ("Volumes", store.diskUsage.volumes.size),
+                ("Build cache", store.diskUsage.buildCache.size),
+                ("Estimated reclaimable", store.prunePlan.estimatedSize),
+            ], store: store)
+            HStack {
+                Button("Prune") { store.prune(.basic) }
+                    .buttonStyle(.borderedProminent)
+                Button("Prune all", role: .destructive) { store.prune(.all) }
+            }
+        }
+        .padding(12)
+        .background(store.theme.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10).stroke(store.theme.border.opacity(0.5))
+        }
+    }
+}
+
+struct DockerCleanupPreviewView: View {
+    @Bindable var store: DockerStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                detailHeader(title: "Removal preview",
+                             subtitle: "Resources eligible for each prune scope",
+                             icon: "trash")
+                Text("Docker may refine the build-cache selection when pruning.")
+                    .font(.callout)
+                    .foregroundStyle(store.theme.subtext)
+                pruneScope(title: "Prune",
+                           estimate: store.prunePlan.estimatedSize(for: .basic),
+                           accent: store.theme.accent,
+                           resources: standardPruneResources)
+                pruneScope(title: "Prune all",
+                           estimate: store.prunePlan.estimatedSize(for: .all),
+                           accent: .orange,
+                           resources: allPruneResources)
+            }
+            .padding(16)
+        }
+        .background(store.theme.background)
+    }
+
+    private var standardPruneResources: [DockerPrunePreviewGroup] {
+        let plan = store.prunePlan
+        return [
+            DockerPrunePreviewGroup(title: "Containers",
+                                    items: plan.stoppedContainers.map { "\($0.name) · \($0.state.label)" }),
+            DockerPrunePreviewGroup(title: "Images · dangling",
+                                    items: plan.danglingImages.map { "\($0.primaryTag) · \(DockerFormatting.spacedSize($0.size))" }),
+            DockerPrunePreviewGroup(title: "Volumes · anonymous",
+                                    items: plan.unusedVolumes.filter(\.isAnonymous).map(\.name)),
+            DockerPrunePreviewGroup(title: "Networks",
+                                    items: plan.unusedNetworks.map(\.name),
+                                    note: "Same eligible networks as Prune all."),
+            DockerPrunePreviewGroup(title: "Build cache · dangling",
+                                    items: [],
+                                    note: "Docker selects dangling cache records at execution; this inventory cannot identify that exact subset.")
+        ]
+    }
+
+    private var allPruneResources: [DockerPrunePreviewGroup] {
+        let plan = store.prunePlan
+        let cacheItems = plan.buildCache.items.filter { $0.inUse == false }
+        return [
+            DockerPrunePreviewGroup(title: "Containers",
+                                    items: plan.stoppedContainers.map { "\($0.name) · \($0.state.label)" },
+                                    note: "Same stopped containers as Prune."),
+            DockerPrunePreviewGroup(title: "Images · unused",
+                                    items: plan.unusedImages.map { "\($0.primaryTag) · \(DockerFormatting.spacedSize($0.size))" }),
+            DockerPrunePreviewGroup(title: "Volumes · unused",
+                                    items: plan.unusedVolumes.map { volume in
+                                        "\(volume.name) · \(volume.isAnonymous ? "anonymous" : "named")"
+                                    }),
+            DockerPrunePreviewGroup(title: "Networks",
+                                    items: plan.unusedNetworks.map(\.name),
+                                    note: "Same eligible networks as Prune."),
+            DockerPrunePreviewGroup(title: "Build cache · unused",
+                                    items: cacheItems.map { "\($0.name) · \(DockerFormatting.spacedSize($0.size))" })
+        ]
+    }
+
+    private func pruneScope(title: String,
+                            estimate: String,
+                            accent: Color,
+                            resources: [DockerPrunePreviewGroup]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(accent)
+                Spacer(minLength: 6)
+                Text(estimate)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(store.theme.subtext)
+            }
+            ForEach(resources) { resource in
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(resource.title)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(store.theme.text)
+                        Spacer()
+                        Text("\(resource.items.count)")
+                            .font(.callout.monospacedDigit())
+                            .foregroundStyle(accent)
+                    }
+                    if let note = resource.note {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(store.theme.subtext)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if resource.items.isEmpty {
+                        if resource.note == nil {
+                            Text("None").font(.caption).foregroundStyle(store.theme.subtext)
+                        }
+                    } else {
+                        ForEach(resource.items, id: \.self) { item in
+                            Text(item)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(store.theme.subtext)
+                                .lineLimit(1)
+                                .help(item)
+                        }
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(store.theme.surface, in: RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8).stroke(accent.opacity(0.3))
+                }
+            }
+        }
+        .padding(12)
+        .background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10).stroke(accent.opacity(0.22))
+        }
+    }
 }
 
 struct DockerCleanupCard: View {
@@ -304,9 +475,15 @@ struct DockerCleanupCard: View {
                     .font(.callout)
                     .foregroundStyle(.orange)
             }
-            Button("Prune") { store.prune(mode) }
+            HStack(spacing: 6) {
+                Button("Prune") { store.prune(mode, all: false) }
+                    .buttonStyle(.bordered)
+                Button("Prune all", role: .destructive) {
+                    store.prune(mode, all: true)
+                }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+            }
+            .controlSize(.small)
         }
         .padding(12)
         .background(store.theme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -385,8 +562,8 @@ struct DockerImageDetailView: View {
                 DockerKeyValue(items: [
                     ("Repository", image.primaryTag),
                     ("Image ID", image.id),
-                    ("Size", image.size),
-                    ("Unique size", image.uniqueSize ?? "—"),
+                    ("Size", DockerFormatting.spacedSize(image.size)),
+                    ("Unique size", DockerFormatting.spacedSize(image.uniqueSize ?? "—")),
                     ("Created", image.createdAt),
                     ("Containers", "\(image.containers)"),
                     ("Dangling", image.isDangling ? "yes" : "no"),
@@ -423,7 +600,7 @@ struct DockerVolumeDetailView: View {
                     ("Name", volume.name),
                     ("Driver", volume.driver),
                     ("Scope", volume.scope),
-                    ("Size", volume.size ?? "—"),
+                    ("Size", DockerFormatting.spacedSize(volume.size ?? "—")),
                     ("In use", volume.isUsed ? "yes" : "no"),
                     ("Compose project", volume.composeProject ?? "—"),
                     ("Mountpoint", volume.mountpoint),
@@ -472,6 +649,11 @@ struct DockerNetworkDetailView: View {
                                 Text(container.ipv4 ?? "—")
                                     .font(.callout.monospaced())
                                     .foregroundStyle(store.theme.subtext)
+                                Button("Disconnect") {
+                                    store.disconnectContainer(container, from: network)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(network.name == "host" || network.name == "none")
                             }
                         }
                     }
@@ -491,27 +673,7 @@ struct DockerCleanupDetailView: View {
     @Bindable var store: DockerStore
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                detailHeader(title: "Cleanup", subtitle: "Reclaim space", icon: "trash")
-                Text("Prune removes unused resources. Running containers and the images they use are kept. Prune all also removes unused named volumes.")
-                    .font(.callout)
-                    .foregroundStyle(store.theme.subtext)
-                DockerKeyValue(items: [
-                    ("Images", store.diskUsage.images.size),
-                    ("Containers", store.diskUsage.containers.size),
-                    ("Volumes", store.diskUsage.volumes.size),
-                    ("Build cache", store.diskUsage.buildCache.size),
-                    ("Estimated reclaimable", store.prunePlan.estimatedSize),
-                ], store: store)
-                HStack {
-                    Button("Prune") { store.prune(.basic) }
-                        .buttonStyle(.borderedProminent)
-                    Button("Prune all", role: .destructive) { store.prune(.all) }
-                }
-            }
-            .padding(16)
-        }
+        DockerCleanupPreviewView(store: store)
     }
 }
 

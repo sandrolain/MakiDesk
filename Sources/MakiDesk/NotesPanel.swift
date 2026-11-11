@@ -464,7 +464,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
         table.headerView = nil
-        table.rowHeight = 46
+        table.rowHeight = 50
         table.style = .plain
         table.selectionHighlightStyle = .none
         table.backgroundColor = .clear

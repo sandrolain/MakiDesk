@@ -77,7 +77,13 @@ final class TerminalWindowStateTests: XCTestCase {
 
     func testAFutureVersionIsNotUsed() throws {
         let url = directory.appendingPathComponent("window.json")
-        try Data(#"{"version":99,"x":0,"y":0,"width":900,"height":600}"#.utf8).write(to: url)
-        XCTAssertNil(TerminalWindowStateStore(fileURL: url).load())
+        let json = #"{"version":99,"x":0,"y":0,"width":900,"height":600}"#
+        try Data(json.utf8).write(to: url)
+        let store = TerminalWindowStateStore(fileURL: url)
+        XCTAssertNil(store.load())
+        XCTAssertEqual(store.futureVersionOnDisk, 99)
+        XCTAssertFalse(store.save(TerminalWindowState(frame: CGRect(x: 1, y: 2,
+                                                                    width: 700, height: 500))))
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), json)
     }
 }

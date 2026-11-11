@@ -18,7 +18,40 @@ FLAVOUR="crashsubdir-cmux-crash-sentry-off-noi18n-v2"
 EXPECTED_SHA256="413515af9e3739068f91bae98bc33fa1d89d4ea20b35d0fa96b317379bb17ae2"
 DEST="$ROOT/vendor/GhosttyKit.xcframework"
 
+normalize_static_libraries() {
+  local plist="$DEST/Info.plist"
+  local index=0 identifier library directory filename normalized binary
+  while identifier=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:$index:LibraryIdentifier" "$plist" 2>/dev/null); do
+    library=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:$index:LibraryPath" "$plist")
+    filename="${library##*/}"
+    case "$filename" in
+      lib*.a) ;;
+      *.a)
+        directory="${library%/*}"
+        if [ "$directory" = "$library" ]; then
+          normalized="lib$filename"
+        else
+          normalized="$directory/lib$filename"
+        fi
+        if [ -e "$DEST/$identifier/$normalized" ]; then
+          echo "Cannot normalize GhosttyKit: $normalized already exists" >&2
+          return 1
+        fi
+        mv "$DEST/$identifier/$library" "$DEST/$identifier/$normalized"
+        /usr/libexec/PlistBuddy -c "Set :AvailableLibraries:$index:LibraryPath $normalized" "$plist"
+        if binary=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:$index:BinaryPath" "$plist" 2>/dev/null); then
+          if [ "$binary" = "$library" ]; then
+            /usr/libexec/PlistBuddy -c "Set :AvailableLibraries:$index:BinaryPath $normalized" "$plist"
+          fi
+        fi
+        ;;
+    esac
+    index=$((index + 1))
+  done
+}
+
 if [ -d "$DEST" ]; then
+  normalize_static_libraries
   echo "GhosttyKit already present at $DEST"
   exit 0
 fi
@@ -41,4 +74,5 @@ fi
 
 mkdir -p "$ROOT/vendor"
 tar --no-same-owner -xzf "$TMP/GhosttyKit.xcframework.tar.gz" -C "$ROOT/vendor"
+normalize_static_libraries
 echo "GhosttyKit ready at $DEST"

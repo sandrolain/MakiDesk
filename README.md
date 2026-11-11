@@ -98,8 +98,9 @@ keeps your corner, follows the active display (the monitor of the last window
 focus or pointer move), sits on the same edge margin as a tiled window, and can
 rest faint, turning solid as soon as the pointer is over it or you type in it.
 It stays over the other apps without taking the keyboard — clicking the list
-does, and `Esc` closes it — and its items come back after a restart. Left out of
-screenshots; solid with Reduce Transparency.
+does, and `Esc` closes it — and its items come back after a restart, even if
+you quit without opening the card in that session. Left out of screenshots;
+solid with Reduce Transparency.
 
 ### A timer that gets out of the way
 
@@ -115,8 +116,8 @@ read from the deadline, so sleeping cannot make it drift.
 
 ### Clipboard history, kept private
 
-Text and images, in memory, never on disk. `⌥V` opens the list; Return or a
-click pastes into the app you were using. At most 50 entries (pinned items can
+Text and images, in memory, never on disk. `⌥V` opens the searchable list;
+Return or a click pastes into the app you were using. At most 50 entries (pinned items can
 exceed the limit), no duplicates, a bounded image budget, and password
 fields/secure input are skipped. Pin an entry
 to keep it across *Clear*; pins are in memory too. The panel will not even open
@@ -246,8 +247,10 @@ are grouped by Compose project, with start/stop/restart/delete and a terminal
 that opens in MakiDesk Terminal; images, volumes and networks show their size and
 usage; logs and stats update while you watch them. **Cleanup** previews what a
 prune would reclaim and separates the safe prune from the one that also removes
-unused volumes. It is a client for Docker Desktop, OrbStack, colima or Docker
-Engine, not a replacement engine, and it asks for no new permission.
+unused volumes. It can also pull/build/tag/push/save images, transfer files,
+manage volumes and network connections, and run bulk container actions. It is a
+client for Docker Desktop, OrbStack, colima or Docker Engine, not a replacement
+engine, and it asks for no new permission.
 
 ### Notices that stay readable
 

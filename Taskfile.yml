@@ -1,9 +1,9 @@
-version: '3'
+version: "3"
 
 vars:
   APP_NAME: MakiDesk
-  APP_BUNDLE: '{{.ROOT_DIR}}/dist/MakiDesk.app'
-  RELEASE_BIN: '{{.ROOT_DIR}}/.build/release/MakiDesk'
+  APP_BUNDLE: "{{.ROOT_DIR}}/dist/MakiDesk.app"
+  RELEASE_BIN: "{{.ROOT_DIR}}/.build/release/MakiDesk"
 
 tasks:
   default:
@@ -39,6 +39,7 @@ tasks:
   terminal:build:
     desc: Build the terminal helper (F0 spike)
     cmds:
+      - sh scripts/fetch-ghosttykit.sh
       - swift build --package-path Terminal
 
   terminal:bundle:

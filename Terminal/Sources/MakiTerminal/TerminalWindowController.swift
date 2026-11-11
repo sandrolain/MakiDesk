@@ -30,6 +30,7 @@ final class TerminalPaneHostView: NSView {
         addSubview(findBar)
         NSLayoutConstraint.activate([
             findBar.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            findBar.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
             findBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
         ])
         updateBorder()
@@ -146,6 +147,12 @@ final class TerminalQuakePanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+enum TerminalLayoutSaveResult: Equatable {
+    case saved
+    case readOnly
+    case failed
+}
+
 /// The helper's main window (F1): a sidebar of workspaces on the left, the
 /// selected workspace's split tree on the right. Surfaces are reused across
 /// rebuilds, so switching tabs never restarts a shell.
@@ -157,11 +164,19 @@ final class TerminalWindowController: NSWindowController,
     private let runtime: GhosttyRuntime
     private let layoutStore = TerminalLayoutStore()
     private let windowStateStore = TerminalWindowStateStore()
+    private let persistenceQueue = DispatchQueue(label: "com.makidesk.terminal.persistence")
     private var terminalSettings: TerminalSettingsDocument
     private var uiTheme = TerminalUITheme.fallback
     private var addButton: NSButton?
     private var saveTimer: Timer?
     private var windowFrameTimer: Timer?
+    private var layoutRevision: UInt64 = 0
+    private var pendingLayoutWrite: (revision: UInt64, layout: TerminalLayout)?
+    private var layoutWriteInFlight = false
+    private var layoutPersistenceIsReadOnly = false
+    private var persistenceWarnings: [String] = []
+    private var isPersistenceWarningPresented = false
+    private var windowFrameRevision: UInt64 = 0
     private var workspaces: [TerminalWorkspace] = []
     private var selected = 0
     private var nextWorkspaceNumber = 1
@@ -221,6 +236,9 @@ final class TerminalWindowController: NSWindowController,
         window.minSize = NSSize(width: 560, height: 320)
         super.init(window: window)
         window.delegate = self
+        if let version = windowStateStore.futureVersionOnDisk {
+            persistenceWarnings.append("The saved Terminal window position uses format version \(version). This version will leave it untouched.")
+        }
         if let saved = windowStateStore.load()?.frame,
            let frame = TerminalWindowGeometry.restoredFrame(
                saved,
@@ -354,6 +372,10 @@ final class TerminalWindowController: NSWindowController,
 
     private func restoreOrCreate() {
         let snapshot = layoutStore.load()
+        layoutPersistenceIsReadOnly = snapshot.canSave == false
+        if case let .futureVersion(version) = snapshot.state {
+            persistenceWarnings.append("The saved Terminal workspaces use format version \(version). Workspace changes will not be saved until you open them with a compatible version.")
+        }
         let restored = snapshot.layout.workspaces.filter { $0.paneCount > 0 }
         guard restored.isEmpty == false else {
             newWorkspace()
@@ -367,20 +389,114 @@ final class TerminalWindowController: NSWindowController,
     }
 
     private func scheduleSave() {
+        layoutRevision &+= 1
         saveTimer?.invalidate()
         let timer = Timer(timeInterval: 0.4, repeats: false) { [weak self] _ in
-            self?.saveNow()
+            self?.scheduleLayoutWrite()
         }
         RunLoop.main.add(timer, forMode: .common)
         saveTimer = timer
     }
 
-    func saveNow() {
+    private func scheduleLayoutWrite() {
         saveTimer?.invalidate()
         saveTimer = nil
+        guard layoutPersistenceIsReadOnly == false else { return }
+        pendingLayoutWrite = (
+            revision: layoutRevision,
+            layout: TerminalLayout(workspaces: workspaces, selectedIndex: selected)
+        )
+        startNextLayoutWrite()
+    }
+
+    private func startNextLayoutWrite() {
+        guard layoutWriteInFlight == false, let write = pendingLayoutWrite else { return }
+        pendingLayoutWrite = nil
+        layoutWriteInFlight = true
+        persistenceQueue.async { [weak self] in
+            guard let self else { return }
+            let saved = self.layoutStore.save(write.layout)
+            let futureVersion = self.layoutStore.futureVersionOnDisk
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.layoutWriteInFlight = false
+                guard write.revision == self.layoutRevision else {
+                    self.startNextLayoutWrite()
+                    return
+                }
+                self.handleLayoutWrite(saved: saved, futureVersion: futureVersion)
+                self.startNextLayoutWrite()
+            }
+        }
+    }
+
+    private func handleLayoutWrite(saved: Bool, futureVersion: Int?) {
+        if let futureVersion {
+            layoutPersistenceIsReadOnly = true
+            recordPersistenceWarning("The saved Terminal workspaces now use format version \(futureVersion). Workspace changes are not being saved.")
+        } else if saved == false {
+            recordPersistenceWarning("MakiDesk Terminal could not save the workspace layout. Check available disk space and file permissions; the last saved layout is still intact.")
+        }
+    }
+
+    func saveNow() -> TerminalLayoutSaveResult {
+        saveTimer?.invalidate()
+        saveTimer = nil
+        windowFrameTimer?.invalidate()
+        windowFrameTimer = nil
+        windowFrameRevision &+= 1
+        layoutRevision &+= 1
+        pendingLayoutWrite = nil
         let layout = TerminalLayout(workspaces: workspaces, selectedIndex: selected)
-        _ = layoutStore.save(layout)
-        saveWindowFrameNow()
+        let frameState = window.map { TerminalWindowState(frame: $0.frame) }
+        let canWriteLayout = layoutPersistenceIsReadOnly == false
+        let result = persistenceQueue.sync {
+            let layoutSaved = canWriteLayout ? layoutStore.save(layout) : true
+            let layoutFutureVersion = layoutStore.futureVersionOnDisk
+            let frameSaved = frameState.map(windowStateStore.save) ?? true
+            let frameFutureVersion = windowStateStore.futureVersionOnDisk
+            return (layoutSaved, layoutFutureVersion, frameSaved, frameFutureVersion)
+        }
+        if let version = result.1 {
+            layoutPersistenceIsReadOnly = true
+            recordPersistenceWarning("The saved Terminal workspaces use format version \(version). Workspace changes are not being saved.")
+        }
+        if let version = result.3 {
+            recordPersistenceWarning("The saved Terminal window position uses format version \(version). This version will leave it untouched.")
+        }
+        if result.0 == false && result.1 == nil {
+            recordPersistenceWarning("MakiDesk Terminal could not save the workspace layout. Check available disk space and file permissions; the last saved layout is still intact.")
+        }
+        if result.2 == false && result.3 == nil {
+            recordPersistenceWarning("MakiDesk Terminal could not save the window position. Check available disk space and file permissions.")
+        }
+        if (result.0 == false && result.1 == nil)
+            || (result.2 == false && result.3 == nil) {
+            return .failed
+        }
+        return layoutPersistenceIsReadOnly || result.1 != nil || result.3 != nil ? .readOnly : .saved
+    }
+
+    func presentPersistenceWarningIfNeeded() {
+        guard isPersistenceWarningPresented == false,
+              persistenceWarnings.isEmpty == false,
+              let window, window.isVisible,
+              window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Some Terminal state is read-only or could not be saved"
+        alert.informativeText = persistenceWarnings.joined(separator: "\n\n")
+        alert.addButton(withTitle: "OK")
+        isPersistenceWarningPresented = true
+        alert.beginSheetModal(for: window) { [weak self] _ in
+            self?.isPersistenceWarningPresented = false
+        }
+    }
+
+    private func recordPersistenceWarning(_ message: String) {
+        guard persistenceWarnings.contains(message) == false else { return }
+        persistenceWarnings.append(message)
+        presentPersistenceWarningIfNeeded()
     }
 
     /// An alert (close confirmation or quit) took the keyboard; put it back in
@@ -392,19 +508,34 @@ final class TerminalWindowController: NSWindowController,
     }
 
     private func scheduleWindowFrameSave() {
+        windowFrameRevision &+= 1
         windowFrameTimer?.invalidate()
         let timer = Timer(timeInterval: 0.4, repeats: false) { [weak self] _ in
-            self?.saveWindowFrameNow()
+            guard let self else { return }
+            self.saveWindowFrameSoon(revision: self.windowFrameRevision)
         }
         RunLoop.main.add(timer, forMode: .common)
         windowFrameTimer = timer
     }
 
-    private func saveWindowFrameNow() {
+    private func saveWindowFrameSoon(revision: UInt64) {
         windowFrameTimer?.invalidate()
         windowFrameTimer = nil
         guard let window else { return }
-        _ = windowStateStore.save(TerminalWindowState(frame: window.frame))
+        let state = TerminalWindowState(frame: window.frame)
+        persistenceQueue.async { [weak self] in
+            guard let self else { return }
+            let saved = self.windowStateStore.save(state)
+            let futureVersion = self.windowStateStore.futureVersionOnDisk
+            DispatchQueue.main.async { [weak self] in
+                guard let self, revision == self.windowFrameRevision else { return }
+                if let futureVersion {
+                    self.recordPersistenceWarning("The saved Terminal window position uses format version \(futureVersion). This version will leave it untouched.")
+                } else if saved == false {
+                    self.recordPersistenceWarning("MakiDesk Terminal could not save the window position. Check available disk space and file permissions.")
+                }
+            }
+        }
     }
 
     @objc func closeWorkspaceAction(_ sender: Any?) {

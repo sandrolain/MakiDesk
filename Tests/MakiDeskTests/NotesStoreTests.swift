@@ -330,6 +330,32 @@ final class NotesStoreTests: XCTestCase {
         XCTAssertEqual(store.note(id: note.id)?.text, "my draft")
     }
 
+    func testSavingAfterRestartPreservesChangesMadeWhileClosed() async throws {
+        let dir = try makeDirectory()
+        let file = dir.appendingPathComponent("shared.txt")
+        let drafts = dir.appendingPathComponent("notes")
+        try "original".write(to: file, atomically: true, encoding: .utf8)
+        let writer = NotesStore(directory: drafts)
+        let note = try writer.openExternal(file)
+        writer.updateText("my draft", for: note.id)
+        writer.flush(cleanClose: true)
+        try "outside edit while closed".write(to: file, atomically: true, encoding: .utf8)
+
+        let reader = NotesStore(directory: drafts)
+        reader.loadIfNeeded()
+        await loadBodies(of: reader)
+
+        XCTAssertThrowsError(try reader.saveToExternal(note.id))
+        let saved = expectation(description: "Asynchronous save rejects the conflict")
+        reader.saveToExternalAsync(note.id) { result in
+            if case .success = result { XCTFail("The external edit must not be overwritten") }
+            saved.fulfill()
+        }
+        await fulfillment(of: [saved], timeout: 3)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "outside edit while closed")
+        XCTAssertEqual(reader.note(id: note.id)?.text, "my draft")
+    }
+
     func testDraftIsNotLostWhenTheExternalFileDisappears() throws {
         let dir = try makeDirectory()
         let file = dir.appendingPathComponent("vanishing.txt")

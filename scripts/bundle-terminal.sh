@@ -10,6 +10,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${1:-debug}"
 APP="$ROOT/dist/MakiDeskTerminal.app"
 
+sh "$ROOT/scripts/fetch-ghosttykit.sh"
 swift build --package-path "$ROOT/Terminal" -c "$CONFIG"
 BIN_DIR="$(swift build --package-path "$ROOT/Terminal" -c "$CONFIG" --show-bin-path)"
 

@@ -202,6 +202,99 @@ final class ChecklistTests: XCTestCase {
         XCTAssertEqual(leftovers, ["checklist.json"])
     }
 
+    @MainActor
+    func testQuittingWithoutOpeningPreservesTheSavedChecklist() {
+        let file = file()
+        let saved = [item("Keep this", done: true)]
+        XCTAssertTrue(file.save(saved))
+        let store = ChecklistStore(file: file)
+
+        store.flushBlocking()
+
+        XCTAssertEqual(file.load(), saved)
+    }
+
+    @MainActor
+    func testQuittingDuringLoadingPreservesTheSavedChecklist() async {
+        let file = file()
+        let saved = [item("Keep this", done: true)]
+        XCTAssertTrue(file.save(saved))
+        let store = ChecklistStore(file: file)
+        let restored = expectation(description: "Checklist restored")
+        store.onChange = { restored.fulfill() }
+
+        store.loadIfNeeded()
+        store.flushBlocking()
+
+        XCTAssertEqual(file.load(), saved)
+        await fulfillment(of: [restored], timeout: 2)
+        XCTAssertEqual(store.items, saved)
+    }
+
+    @MainActor
+    func testHidingDuringLoadingPreservesTheSavedChecklist() async {
+        let file = file()
+        let saved = [item("Keep this")]
+        XCTAssertTrue(file.save(saved))
+        let store = ChecklistStore(file: file)
+        let restored = expectation(description: "Checklist restored")
+        store.onChange = { restored.fulfill() }
+
+        store.loadIfNeeded()
+        store.flushAsync()
+
+        await fulfillment(of: [restored], timeout: 2)
+        store.onChange = nil
+        store.flushBlocking()
+        XCTAssertEqual(file.load(), saved)
+    }
+
+    @MainActor
+    func testAddingDuringLoadingDoesNotReplaceSavedItems() async {
+        let file = file()
+        let saved = [item("Keep this")]
+        XCTAssertTrue(file.save(saved))
+        let store = ChecklistStore(file: file)
+        let restored = expectation(description: "Checklist restored")
+        store.onChange = { restored.fulfill() }
+
+        store.loadIfNeeded()
+        XCTAssertFalse(store.add("Too early"))
+
+        await fulfillment(of: [restored], timeout: 2)
+        store.onChange = nil
+        store.flushBlocking()
+        XCTAssertEqual(store.items, saved)
+        XCTAssertEqual(file.load(), saved)
+    }
+
+    @MainActor
+    func testImmediateQuitSavesChangesAndIntentionalEmptyList() async {
+        let file = file()
+        let saved = [item("First"), item("Second")]
+        XCTAssertTrue(file.save(saved))
+        let store = ChecklistStore(file: file)
+        let restored = expectation(description: "Checklist restored")
+        store.onChange = { restored.fulfill() }
+        store.loadIfNeeded()
+        await fulfillment(of: [restored], timeout: 2)
+        store.onChange = nil
+
+        store.toggle(saved[0].id)
+        store.move(saved[1].id, by: -1)
+        XCTAssertTrue(store.add("Third"))
+        store.flushBlocking()
+        XCTAssertEqual(file.load(), store.items)
+        XCTAssertEqual(file.load().map(\.text), ["Second", "First", "Third"])
+        XCTAssertTrue(file.load()[1].done)
+
+        for item in store.items {
+            store.remove(item.id)
+        }
+        store.flushBlocking()
+        XCTAssertTrue(file.load().isEmpty)
+    }
+
     // MARK: - Placement and limits
 
     func testOpacityAndWidthAreClamped() {

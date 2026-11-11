@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Darwin
 
 enum NotesStoreError: LocalizedError {
@@ -52,6 +53,9 @@ struct Note: Identifiable, Equatable, Sendable {
     /// `nil` means the file could not be read (it disappeared, or it is not
     /// text): the draft is then the only copy, and the note counts as changed.
     var externalBaseline: String?
+    /// A compact reference survives restart without retaining a second copy
+    /// of a potentially large external file.
+    var externalBaselineDigest: Data? = nil
     var externalEncoding: UInt
     var languageID: String
     var cursor: Int
@@ -141,8 +145,7 @@ enum NotesLanguage: String, CaseIterable, Identifiable {
 /// The notes and their session. Everything that survives is on disk: each note
 /// as a plain text file written continuously (debounced), plus a `session.json`
 /// with the open tabs, the cursors and the window frame. There is no clean
-/// shutdown dependency: `kill -9` loses at most the last few hundred
-/// milliseconds of typing (T20).
+/// shutdown dependency: a crash loses at most the bounded autosave interval (T20).
 @MainActor
 final class NotesStore {
     static let shared = NotesStore()
@@ -189,6 +192,7 @@ final class NotesStore {
     private var pendingDrafts: Set<UUID> = []
     private var draftWork: [UUID: DispatchWorkItem] = [:]
     private var draftRevision: [UUID: UInt64] = [:]
+    private var draftPendingSince: [UUID: Date] = [:]
     private var externalAssociationRevisions: [UUID: ExternalAssociationRevision] = [:]
     private let draftIOQueue = DispatchQueue(label: "com.makidesk.notes-draft-io", qos: .utility)
     private var sessionWork: DispatchWorkItem?
@@ -306,6 +310,7 @@ final class NotesStore {
             if let path = meta?.externalPath {
                 note.externalURL = URL(fileURLWithPath: path)
                 note.externalEncoding = meta?.encoding ?? String.Encoding.utf8.rawValue
+                note.externalBaselineDigest = meta?.externalBaselineDigest
                 if readExternalBaselines {
                     note.externalBaseline = readText(at: note.externalURL!, encoding: &note.externalEncoding)
                 }
@@ -362,6 +367,8 @@ final class NotesStore {
                         self.notes[index].titlePreview = nil
                         if self.notes[index].externalURL == url, url != nil {
                             self.notes[index].externalBaseline = baseline
+                            self.notes[index].externalBaselineDigest =
+                                note.externalBaselineDigest ?? baseline.map(Self.externalDigest)
                             self.notes[index].externalEncoding = encoding
                         }
                     } else {
@@ -558,10 +565,11 @@ final class NotesStore {
             ])
         }
         let now = Date()
-        let note = Note(id: UUID(), text: text, externalURL: url.standardizedFileURL,
+        var note = Note(id: UUID(), text: text, externalURL: url.standardizedFileURL,
                         externalBaseline: text, externalEncoding: encoding,
                         languageID: NotesLanguage.forFile(url).rawValue, cursor: 0,
                         createdAt: now, updatedAt: now)
+        note.externalBaselineDigest = Self.externalDigest(text)
         notes.insert(note, at: 0)
         openTabs.append(note.id)
         selectedTab = note.id
@@ -609,10 +617,11 @@ final class NotesStore {
                     return
                 }
                 let now = Date()
-                let note = Note(id: UUID(), text: text, externalURL: standardizedURL,
+                var note = Note(id: UUID(), text: text, externalURL: standardizedURL,
                                 externalBaseline: text, externalEncoding: encoding,
                                 languageID: NotesLanguage.forFile(standardizedURL).rawValue, cursor: 0,
                                 createdAt: now, updatedAt: now)
+                note.externalBaselineDigest = Self.externalDigest(text)
                 self.notes.insert(note, at: 0)
                 self.openTabs.append(note.id)
                 self.selectedTab = note.id
@@ -633,7 +642,15 @@ final class NotesStore {
         guard let currentText = Self.readText(at: url, encoding: &currentEncoding) else {
             throw NotesStoreError.externalFileUnavailable(url.lastPathComponent)
         }
-        guard currentText == notes[index].externalBaseline else {
+        let baselineMatches: Bool
+        if let digest = notes[index].externalBaselineDigest {
+            baselineMatches = Self.externalDigest(currentText) == digest
+        } else if let baseline = notes[index].externalBaseline {
+            baselineMatches = currentText == baseline
+        } else {
+            baselineMatches = false
+        }
+        guard baselineMatches else {
             throw NotesStoreError.externalFileChanged(url.lastPathComponent)
         }
         // The draft must not lag behind the file it mirrors: a crash right
@@ -644,6 +661,7 @@ final class NotesStore {
         try writeExternal(text, url, writeEncoding)
         notes[index].externalEncoding = writeEncoding
         notes[index].externalBaseline = text
+        notes[index].externalBaselineDigest = Self.externalDigest(text)
         notes[index].updatedAt = Date()
         scheduleSession()
         onChange?()
@@ -667,9 +685,10 @@ final class NotesStore {
             }
             return
         }
-        if notes[index].externalBaseline == nil {
+        if notes[index].externalBaseline == nil && notes[index].externalBaselineDigest == nil {
             refreshExternalState(id) { [weak self] in
-                guard let self, let note = self.note(id: id), note.externalBaseline != nil else {
+                guard let self, let note = self.note(id: id),
+                      note.externalBaseline != nil || note.externalBaselineDigest != nil else {
                     completion(.failure(NotesStoreError.externalFileUnavailable(url.lastPathComponent)))
                     return
                 }
@@ -693,7 +712,15 @@ final class NotesStore {
                 guard let currentText = Self.readText(at: url, encoding: &encoding) else {
                     throw NotesStoreError.externalFileUnavailable(url.lastPathComponent)
                 }
-                guard currentText == snapshot.externalBaseline else {
+                let baselineMatches: Bool
+                if let digest = snapshot.externalBaselineDigest {
+                    baselineMatches = Self.externalDigest(currentText) == digest
+                } else if let baseline = snapshot.externalBaseline {
+                    baselineMatches = currentText == baseline
+                } else {
+                    baselineMatches = false
+                }
+                guard baselineMatches else {
                     throw NotesStoreError.externalFileChanged(url.lastPathComponent)
                 }
                 guard association.matches(associationRevision) else { throw CancellationError() }
@@ -710,10 +737,12 @@ final class NotesStore {
                 }
                 if case .success = result, let currentIndex = self.noteIndex(id: id) {
                     self.notes[currentIndex].externalBaseline = snapshot.text
+                    self.notes[currentIndex].externalBaselineDigest = Self.externalDigest(snapshot.text)
                     self.notes[currentIndex].externalEncoding = writeEncoding
                     if self.draftRevision[id, default: 0] == revision {
                         self.notes[currentIndex].updatedAt = Date()
                         self.pendingDrafts.remove(id)
+                        self.draftPendingSince[id] = nil
                     }
                     self.scheduleSession()
                     self.onChange?()
@@ -736,6 +765,7 @@ final class NotesStore {
         try write(notes[index])
         notes[index].externalURL = url.standardizedFileURL
         notes[index].externalBaseline = text
+        notes[index].externalBaselineDigest = Self.externalDigest(text)
         notes[index].externalEncoding = String.Encoding.utf8.rawValue
         if notes[index].languageID == NotesLanguage.plain.rawValue {
             notes[index].languageID = NotesLanguage.forFile(url).rawValue
@@ -787,6 +817,7 @@ final class NotesStore {
                 if case .success = result, let currentIndex = self.noteIndex(id: id) {
                     self.notes[currentIndex].externalURL = standardizedURL
                     self.notes[currentIndex].externalBaseline = snapshot.text
+                    self.notes[currentIndex].externalBaselineDigest = Self.externalDigest(snapshot.text)
                     self.notes[currentIndex].externalEncoding = String.Encoding.utf8.rawValue
                     if self.notes[currentIndex].languageID == NotesLanguage.plain.rawValue {
                         self.notes[currentIndex].languageID = NotesLanguage.forFile(standardizedURL).rawValue
@@ -794,6 +825,7 @@ final class NotesStore {
                     if self.draftRevision[id, default: 0] == revision {
                         self.notes[currentIndex].updatedAt = Date()
                         self.pendingDrafts.remove(id)
+                        self.draftPendingSince[id] = nil
                     }
                     self.scheduleSession()
                     self.onChange?()
@@ -839,6 +871,13 @@ final class NotesStore {
 
     func deleteNote(_ id: UUID) {
         guard let index = noteIndex(id: id) else { return }
+        guard notes[index].textLoaded else {
+            loadTextAsync(for: id) { [weak self] in
+                guard let self, self.note(id: id)?.textLoaded == true else { return }
+                self.deleteNote(id)
+            }
+            return
+        }
         // What the user last saw, captured before the model forgets it: the
         // Trash copy is written from this and is never a debounce behind.
         let snapshot = notes[index]
@@ -848,6 +887,7 @@ final class NotesStore {
         draftWork[id] = nil
         draftRevision[id, default: 0] &+= 1
         pendingDrafts.remove(id)
+        draftPendingSince[id] = nil
         failedDraftIDs.remove(id)
         if let tabIndex = openTabs.firstIndex(of: id) {
             openTabs.remove(at: tabIndex)
@@ -989,12 +1029,15 @@ final class NotesStore {
 
     private func scheduleDraft(_ id: UUID) {
         pendingDrafts.insert(id)
+        if draftPendingSince[id] == nil { draftPendingSince[id] = Date() }
         draftWork[id]?.cancel()
+        let pendingSince = draftPendingSince[id] ?? Date()
+        let delay = min(0.4, max(0, 2.0 - Date().timeIntervalSince(pendingSince)))
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.enqueueDraftSave(id) }
         }
         draftWork[id] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// Captures an immutable note snapshot on the main actor, then writes it on
@@ -1018,6 +1061,7 @@ final class NotesStore {
                 switch result {
                 case .success:
                     self.pendingDrafts.remove(id)
+                    self.draftPendingSince[id] = nil
                     self.failedDraftIDs.remove(id)
                     if self.pendingDrafts.isEmpty { self.clearPersistenceError() }
                 case .failure:
@@ -1037,6 +1081,7 @@ final class NotesStore {
         do {
             try draftIOQueue.sync { try Self.writeDraft(note, to: directory) }
             pendingDrafts.remove(id)
+            draftPendingSince[id] = nil
             failedDraftIDs.remove(id)
             if pendingDrafts.isEmpty { clearPersistenceError() }
         } catch {
@@ -1188,6 +1233,7 @@ final class NotesStore {
             var externalPath: String?
             var encoding: UInt?
             var title: String?
+            var externalBaselineDigest: Data?
         }
         var notes: [Meta]
         var tabs: [UUID]
@@ -1218,7 +1264,7 @@ final class NotesStore {
         let metas = notes.map { note in
             Session.Meta(id: note.id, language: note.languageID, cursor: note.cursor,
                          externalPath: note.externalURL?.path, encoding: note.externalEncoding,
-                         title: note.title)
+                         title: note.title, externalBaselineDigest: note.externalBaselineDigest)
         }
         return Session(notes: metas, tabs: openTabs, selected: selectedTab,
                        frame: windowFrame, anchor: anchor, cleanClose: cleanClose)
@@ -1277,6 +1323,10 @@ final class NotesStore {
 
     nonisolated private static func write(text: String, to url: URL, encoding: UInt) throws {
         try text.write(to: url, atomically: true, encoding: String.Encoding(rawValue: encoding))
+    }
+
+    nonisolated private static func externalDigest(_ text: String) -> Data {
+        Data(SHA256.hash(data: Data(text.utf8)))
     }
 
     /// The file keeps its encoding unless the edited text cannot be represented

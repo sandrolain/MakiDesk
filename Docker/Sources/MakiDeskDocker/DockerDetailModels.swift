@@ -2,6 +2,14 @@ import Foundation
 import MakiDockerCore
 import Observation
 
+struct DockerStatsSample: Identifiable {
+    let date: Date
+    let cpuPercent: Double
+    let memoryPercent: Double
+
+    var id: Date { date }
+}
+
 @MainActor
 @Observable
 final class DockerLogsModel {
@@ -111,6 +119,7 @@ final class DockerLogsModel {
 @Observable
 final class DockerStatsModel {
     var stats = DockerContainerStats.empty
+    var history: [DockerStatsSample] = []
     var isRunning = false
     var error: String?
 
@@ -124,12 +133,23 @@ final class DockerStatsModel {
         }
         isRunning = true
         error = nil
+        history = []
         task = Task { [weak self] in
             while Task.isCancelled == false {
                 guard let self else { return }
                 if let value = await store.stats(for: container) {
                     self.stats = value
                     self.error = nil
+                    let cpu = Self.percentage(value.cpuPercent)
+                    let memory = Self.percentage(value.memoryPercent)
+                    if let cpu, let memory {
+                        self.history.append(DockerStatsSample(date: Date(),
+                                                              cpuPercent: cpu,
+                                                              memoryPercent: memory))
+                        if self.history.count > 60 {
+                            self.history.removeFirst(self.history.count - 60)
+                        }
+                    }
                 } else {
                     self.error = "Docker did not return statistics."
                 }
@@ -143,6 +163,10 @@ final class DockerStatsModel {
         task?.cancel()
         task = nil
         isRunning = false
+    }
+
+    private static func percentage(_ value: String) -> Double? {
+        Double(value.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: ""))
     }
 }
 

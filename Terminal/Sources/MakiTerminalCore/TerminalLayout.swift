@@ -89,6 +89,11 @@ public struct TerminalLayoutStore {
         TerminalSocketLocation.directory.appendingPathComponent("workspaces.json")
     }
 
+    public var futureVersionOnDisk: Int? {
+        guard let version = versionOnDisk(), version > Self.currentVersion else { return nil }
+        return version
+    }
+
     public func load() -> Snapshot {
         guard let data = try? Data(contentsOf: fileURL) else {
             return Snapshot(layout: TerminalLayout(workspaces: []), state: .missing)

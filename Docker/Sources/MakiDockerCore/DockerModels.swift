@@ -183,8 +183,21 @@ public struct DockerContainer: Identifiable, Equatable, Sendable {
         ports.isEmpty ? "—" : ports.map(\.display).joined(separator: ", ")
     }
 
+    /// Omits Compose's project prefix from generated names, while preserving
+    /// custom container names that do not use the project prefix.
+    public var displayName: String {
+        guard let project = compose?.project, project.isEmpty == false else { return name }
+        for separator in ["-", "_"] {
+            let prefix = project + separator
+            if name.hasPrefix(prefix) {
+                return String(name.dropFirst(prefix.count))
+            }
+        }
+        return name
+    }
+
     public var matches: String {
-        [name, image, status, compose?.project ?? "", compose?.service ?? ""]
+        [name, displayName, image, status, compose?.project ?? "", compose?.service ?? ""]
             .joined(separator: " ")
             .lowercased()
     }
@@ -251,6 +264,7 @@ public struct DockerImage: Identifiable, Equatable, Sendable {
         repoTags.isEmpty || repoTags.allSatisfy { $0.contains("<none>") }
     }
     public var isUsed: Bool { containers > 0 }
+    public var sizeBytes: Int64 { DockerFormatting.bytes(from: size) ?? 0 }
     public var matches: String {
         ([primaryTag, shortID] + repoTags).joined(separator: " ").lowercased()
     }
@@ -283,6 +297,8 @@ public struct DockerVolume: Identifiable, Equatable, Sendable {
 
     public var id: String { name }
     public var isUsed: Bool { links > 0 }
+    public var usageSortOrder: Int { isUsed ? 1 : 0 }
+    public var sizeBytes: Int64 { DockerFormatting.bytes(from: size ?? "") ?? -1 }
     public var isAnonymous: Bool {
         name.count == 64 && name.allSatisfy(\.isHexDigit)
     }
@@ -349,6 +365,7 @@ public struct DockerNetwork: Identifiable, Equatable, Sendable {
         ["bridge", "host", "none"].contains(name) && composeProject == nil
     }
     public var isUsed: Bool { containers.isEmpty == false }
+    public var containerCount: Int { containers.count }
     public var matches: String {
         [name, driver, composeProject ?? "", subnet ?? ""]
             .joined(separator: " ").lowercased()
@@ -505,21 +522,30 @@ public struct DockerContainerStats: Equatable, Sendable {
 public struct DockerInspectSummary: Equatable, Sendable {
     public let rawJSON: String
     public let environment: [String]
+    public let entrypoint: [String]
+    public let command: [String]
     public let labels: [String: String]
     public let mounts: [String]
+    public let mountArguments: [String]
     public let restartPolicy: String
     public let logDriver: String
 
     public init(rawJSON: String,
                 environment: [String] = [],
+                entrypoint: [String] = [],
+                command: [String] = [],
                 labels: [String: String] = [:],
                 mounts: [String] = [],
+                mountArguments: [String] = [],
                 restartPolicy: String = "",
                 logDriver: String = "") {
         self.rawJSON = rawJSON
         self.environment = environment
+        self.entrypoint = entrypoint
+        self.command = command
         self.labels = labels
         self.mounts = mounts
+        self.mountArguments = mountArguments
         self.restartPolicy = restartPolicy
         self.logDriver = logDriver
     }

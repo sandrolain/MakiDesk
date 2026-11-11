@@ -880,54 +880,47 @@ private struct ScreenshotLibraryView: View {
             Spacer()
             TextField("Search screenshots", text: $model.searchText)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 210)
-            if !model.isUsingSystemFolder {
-                Button("Use System Folder", action: model.useSystemFolder)
-                    .help(model.systemFolderType.map {
-                        "Follow the folder macOS saves screenshots in (\($0.uppercased()))"
-                    } ?? "Follow the folder macOS saves screenshots in")
+                .frame(minWidth: 100, idealWidth: 210, maxWidth: 260)
+            Menu {
+                if !model.isUsingSystemFolder {
+                    Button("Use System Folder", action: model.useSystemFolder)
+                }
+                Button("Choose Folder…", action: chooseFolder)
+                Button("Refresh", systemImage: "arrow.clockwise", action: model.refresh)
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
-            Button(action: chooseFolder) {
-                Label("Folder…", systemImage: "folder")
-            }
-            Button(action: model.refresh) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .help("Refresh screenshot list")
+            .help("Folder and refresh actions")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 10) {
             Text(model.message ?? "\(model.files.count) screenshots · \(model.selectedPaths.count) selected")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .truncationMode(.middle)
             Spacer()
-            Button("Select All", action: model.selectAll)
-                .disabled(model.visibleFiles.isEmpty || model.isOperating)
-            Button("Clear Selection", action: model.clearSelection)
-                .disabled(model.selectedPaths.isEmpty || model.isOperating)
-            Button(action: previewSelection) {
-                Label("Preview", systemImage: "eye")
+            Menu("Actions") {
+                Button("Select All", action: model.selectAll)
+                    .disabled(model.visibleFiles.isEmpty || model.isOperating)
+                Button("Clear Selection", action: model.clearSelection)
+                    .disabled(model.selectedPaths.isEmpty || model.isOperating)
+                Divider()
+                Button("Preview", systemImage: "eye", action: previewSelection)
+                    .disabled(model.selectedPaths.isEmpty)
+                Button("Recognize Text", systemImage: "text.viewfinder", action: recognizeSelection)
+                    .disabled(model.selectedFiles.count != 1 || model.isOperating)
+                Divider()
+                Button("Move…", systemImage: "folder.badge.arrow.right", action: moveSelection)
+                    .disabled(model.selectedPaths.isEmpty || model.isOperating)
+                Button("Move to Trash", systemImage: "trash", role: .destructive,
+                       action: model.trashSelected)
+                    .disabled(model.selectedPaths.isEmpty || model.isOperating)
             }
-            .help("Quick Look selected screenshots (Space)")
-            .disabled(model.selectedPaths.isEmpty)
-            Button(action: recognizeSelection) {
-                Label("Recognize Text", systemImage: "text.viewfinder")
-            }
-            .help("Read the text in the selected screenshot, without capturing anything")
-            .disabled(model.selectedFiles.count != 1 || model.isOperating)
-            Button(role: .destructive, action: model.trashSelected) {
-                Label("Move to Trash", systemImage: "trash")
-            }
-            .disabled(model.selectedPaths.isEmpty || model.isOperating)
-            Button(action: moveSelection) {
-                Label("Move…", systemImage: "folder.badge.arrow.right")
-            }
-            .disabled(model.selectedPaths.isEmpty || model.isOperating)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)

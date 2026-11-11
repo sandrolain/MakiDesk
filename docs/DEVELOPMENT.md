@@ -21,6 +21,11 @@ app bundle is assembled from the SwiftPM product plus `Resources/`.
   `swift` commands work on their own).
 - Network access the first time, to resolve the SwiftPM dependencies.
 
+Release builds of the main app, Docker helper and terminal helper have been
+verified on macOS 26.6.2 with Xcode 26.6 (Swift 6.3.3, macOS SDK 26.5).
+The deployment target remains macOS 14; this build check does not replace
+runtime testing on each supported macOS version.
+
 ## Build and run
 
 ```sh
@@ -46,23 +51,25 @@ possible, use the menu-bar icon or `⌘Q` from its panels.
 
 ## Task commands
 
-| Command | What it does |
-|---|---|
-| `task build` | Debug build. |
-| `task run` | `swift run` (not the app bundle). |
-| `task test` | `swift test`. |
-| `task docs:shortcuts` | Rewrite the generated shortcut block in `docs/USAGE.md` from `ShortcutDefinitions`. A test fails when it falls behind. |
-| `task release` | Optimized release build. |
-| `task bundle` | Copy the release binary, Info.plist, icon, licence and notices into `dist/MakiDesk.app`. |
-| `task cert` | Create the local `MakiDesk Local Signing` identity once (stable TCC identity). |
-| `task sign` | Sign the bundle with that identity, or ad-hoc if it is missing. |
-| `task open` | Build, sign, launch. |
-| `task reload` | Kill, build, sign, relaunch. |
-| `task install` | Copy the signed app to `~/Applications`. |
-| `task dmg` | Sign with the local identity and create a local DMG. |
-| `task dmg-only` | Package the current `dist/MakiDesk.app` without re-signing (Developer ID path). |
-| `task reset-permission` | `tccutil reset Accessibility com.makidesk.app`. |
-| `task clean` | SwiftPM clean. |
+| Command                 | What it does                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `task build`            | Debug build.                                                                                                                    |
+| `task run`              | `swift run` (not the app bundle).                                                                                               |
+| `task test`             | `swift test`.                                                                                                                   |
+| `task docs:shortcuts`   | Rewrite the generated shortcut block in `docs/USAGE.md` from `ShortcutDefinitions`. A test fails when it falls behind.          |
+| `task release`          | Optimized release build.                                                                                                        |
+| `task terminal:fetch`   | Fetch the pinned GhosttyKit archive if absent and normalize static-library names for SwiftPM, including an existing local copy. |
+| `task terminal:build`   | Prepare GhosttyKit and build the terminal helper.                                                                               |
+| `task bundle`           | Copy the release binary, Info.plist, icon, licence and notices into `dist/MakiDesk.app`.                                        |
+| `task cert`             | Create the local `MakiDesk Local Signing` identity once (stable TCC identity).                                                  |
+| `task sign`             | Sign the bundle with that identity, or ad-hoc if it is missing.                                                                 |
+| `task open`             | Build, sign, launch.                                                                                                            |
+| `task reload`           | Kill, build, sign, relaunch.                                                                                                    |
+| `task install`          | Copy the signed app to `~/Applications`.                                                                                        |
+| `task dmg`              | Sign with the local identity and create a local DMG.                                                                            |
+| `task dmg-only`         | Package the current `dist/MakiDesk.app` without re-signing (Developer ID path).                                                 |
+| `task reset-permission` | `tccutil reset Accessibility com.makidesk.app`.                                                                                 |
+| `task clean`            | SwiftPM clean.                                                                                                                  |
 
 ## Signing and permissions
 
@@ -128,6 +135,14 @@ Package.swift        dependency and target graph
   grammar is updated, regenerate it from the new query files instead of editing
   the strings by hand.
 - The app uses no analytics, networking SDK, database or private API.
+
+The terminal bundle scripts prepare GhosttyKit before building. The pinned
+archive names its macOS library `ghostty-internal.a`; SwiftPM in Xcode 26
+requires the `lib` prefix. Preparation renames it to `libghostty-internal.a`
+and updates the xcframework's `LibraryPath` and `BinaryPath` entries, without
+changing the binary contents or archive checksum verification. It is safe to
+repeat and does not replace an existing locally built xcframework. Before a
+direct `swift build --package-path Terminal`, run `task terminal:fetch` once.
 
 ## Debugging
 

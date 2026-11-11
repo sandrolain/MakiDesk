@@ -29,11 +29,11 @@ struct DockerRootView: View {
             DockerDetailPane(store: store)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 430)
         }
+        .navigationTitle("")
         .background(store.theme.background)
         .tint(store.theme.accent)
+        .preferredColorScheme(store.theme.isDark ? .dark : .light)
         .font(.system(size: 13.5))
-        .searchable(text: $store.search, placement: .toolbar,
-                    prompt: "Search \(store.section.title.lowercased())")
         .toolbar { toolbar }
         .sheet(isPresented: $store.isSettingsPresented) {
             DockerSettingsView(store: store)
@@ -50,12 +50,7 @@ struct DockerRootView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 18, height: 18)
-                .opacity(store.isRefreshing ? 1 : 0)
-                .accessibilityHidden(store.isRefreshing == false)
+        ToolbarItemGroup(placement: .navigation) {
             Button {
                 store.refreshNow()
             } label: {
@@ -96,6 +91,45 @@ struct DockerRootView: View {
                 Label("Settings", systemImage: "gearshape")
             }
             .help("Docker settings")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            HStack(spacing: 9) {
+                if store.section != .cleanup {
+                    HStack(spacing: 7) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(store.theme.subtext)
+                            .accessibilityHidden(true)
+                        TextField("Search \(store.section.title.lowercased())", text: $store.search)
+                            .textFieldStyle(.plain)
+                            .accessibilityLabel("Search \(store.section.title.lowercased())")
+                            .help("Filter \(store.section.title.lowercased())")
+                        if store.search.isEmpty == false {
+                            Button { store.search = "" } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(store.theme.subtext)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Clear search")
+                            .accessibilityLabel("Clear search")
+                        }
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(width: 220, height: 26)
+                    .background(store.theme.surface,
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(store.theme.border.opacity(0.7), lineWidth: 1)
+                    }
+                }
+
+                if store.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 16, height: 16)
+                        .accessibilityLabel("Refreshing Docker")
+                }
+            }
         }
     }
 }
@@ -289,6 +323,8 @@ struct DockerConnectionFooter: View {
 
 struct DockerContainersView: View {
     @Bindable var store: DockerStore
+    @State private var sortOrder: DockerContainerSortOrder = .name
+    @State private var selectedIDs: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -297,6 +333,34 @@ struct DockerContainersView: View {
                 subtitle: "\(store.containers.filter(\.isRunning).count) running · \(store.containers.count) total",
                 store: store
             )
+            HStack {
+                if selectedIDs.isEmpty == false {
+                    Text("\(selectedIDs.count) selected")
+                        .font(.callout)
+                        .foregroundStyle(store.theme.subtext)
+                    Button("Start") { store.performBulk(.start, ids: selectedIDs) }
+                        .disabled(selectedContainers.contains(where: \.isStopped) == false)
+                    Button("Stop") { store.performBulk(.stop, ids: selectedIDs) }
+                        .disabled(selectedContainers.contains(where: { $0.isRunning || $0.isPaused }) == false)
+                    Button("Delete", role: .destructive) {
+                        store.performBulk(.remove, ids: selectedIDs)
+                    }
+                }
+                Spacer()
+                Menu {
+                    Picker("Sort by", selection: $sortOrder) {
+                        ForEach(DockerContainerSortOrder.allCases, id: \.self) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                } label: {
+                    Label(sortOrder.title, systemImage: "arrow.up.arrow.down")
+                }
+                .menuStyle(.borderlessButton)
+                .help("Sort containers within each group")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
             Divider().overlay(store.theme.border)
             if store.connection.failure != nil, store.containers.isEmpty {
                 DockerConnectionProblem(store: store)
@@ -309,7 +373,7 @@ struct DockerContainersView: View {
                         : "Change the search or show stopped containers."
                 )
             } else {
-                List(selection: $store.selectedContainerID) {
+                List(selection: $selectedIDs) {
                     if standaloneContainers.isEmpty == false {
                         ForEach(standaloneContainers) { container in
                             containerRow(container, indent: 0)
@@ -319,7 +383,7 @@ struct DockerContainersView: View {
                         Section {
                             let isSearching = store.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                             if store.isGroupCollapsed(group.id) == false || isSearching {
-                                ForEach(group.containers) { container in
+                                ForEach(sortedContainers(in: group)) { container in
                                     containerRow(container, indent: 18)
                                 }
                             }
@@ -330,6 +394,20 @@ struct DockerContainersView: View {
                 }
                 .listStyle(.inset)
                 .scrollContentBackground(.hidden)
+                .onChange(of: selectedIDs) { _, ids in
+                    if let current = store.selectedContainerID, ids.contains(current) == false {
+                        store.selectedContainerID = ids.sorted().first
+                    } else if store.selectedContainerID == nil {
+                        store.selectedContainerID = ids.sorted().first
+                    }
+                }
+                .onChange(of: store.containers.map(\.id)) { _, currentIDs in
+                    selectedIDs.formIntersection(currentIDs)
+                    if let current = store.selectedContainerID,
+                       currentIDs.contains(current) == false {
+                        store.selectedContainerID = selectedIDs.sorted().first
+                    }
+                }
             }
         }
         .background(store.theme.background)
@@ -340,7 +418,17 @@ struct DockerContainersView: View {
     }
 
     private var standaloneContainers: [DockerContainer] {
-        store.filteredGroups.first(where: \.isStandalone)?.containers ?? []
+        guard let group = store.filteredGroups.first(where: \.isStandalone) else { return [] }
+        return sortedContainers(in: group)
+    }
+
+    private func sortedContainers(in group: DockerContainerGroup) -> [DockerContainer] {
+        DockerContainerOrdering.sort(group.containers, by: sortOrder,
+                                     stats: store.containerStats)
+    }
+
+    private var selectedContainers: [DockerContainer] {
+        store.containers.filter { selectedIDs.contains($0.id) }
     }
 
     @ViewBuilder
@@ -371,6 +459,9 @@ struct DockerContainersView: View {
         Divider()
         Button("Copy container ID") { store.copyToPasteboard(container.id) }
         Button("Copy name") { store.copyToPasteboard(container.name) }
+        Button("Copy docker run command") { store.copyRunCommand(for: container) }
+        Button("Copy file to container…") { store.copyFileToContainer(container) }
+        Button("Copy file from container…") { store.copyFileFromContainer(container) }
         Divider()
         Button("Kill", role: .destructive) { store.perform(.kill, on: container) }
         Button("Delete", role: .destructive) { store.perform(.remove, on: container) }
@@ -401,9 +492,19 @@ struct DockerSectionHeader: View {
                     .lineLimit(1)
             }
             if let message = store.lastError {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .help(message)
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                    Button("Retry") { store.refreshNow() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                .help(message)
             }
         }
         .padding(.horizontal, 14)
@@ -423,8 +524,8 @@ struct DockerContainerRow: View {
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(container.name)
-                        .font(.system(size: 14.5, weight: .medium))
+                    Text(container.displayName)
+                        .font(.system(size: 14.5, weight: .semibold))
                         .foregroundStyle(store.theme.text)
                         .lineLimit(1)
                     if container.compose?.oneOff == true {
@@ -440,6 +541,14 @@ struct DockerContainerRow: View {
                     .font(.callout)
                     .foregroundStyle(store.theme.subtext)
                     .lineLimit(1)
+                let stats = store.stats(for: container)
+                HStack(spacing: 10) {
+                    metric("CPU", value: stats?.cpuPercent ?? "—",
+                           icon: "cpu", color: .orange)
+                    metric("MEM", value: stats?.memoryUsage ?? "—",
+                           icon: "memorychip", color: .purple)
+                }
+                .lineLimit(1)
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
@@ -449,15 +558,33 @@ struct DockerContainerRow: View {
                 if container.displayPorts != "—" {
                     Text(container.displayPorts)
                         .font(.callout.monospacedDigit())
-                        .foregroundStyle(store.theme.subtext)
+                        .foregroundStyle(.blue)
                         .lineLimit(1)
                 }
             }
+            Button {
+                if container.isPaused {
+                    store.perform(.unpause, on: container)
+                } else {
+                    store.perform(container.isRunning ? .stop : .start, on: container)
+                }
+            } label: {
+                Image(systemName: container.isRunning ? "stop.fill" : "play.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(container.isRunning ? Color.orange : Color.green)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .disabled(store.isActionRunning)
+            .accessibilityLabel(container.isRunning ? "Stop \(container.name)" :
+                                    (container.isPaused ? "Resume \(container.name)" :
+                                        "Start \(container.name)"))
+            .help(container.isRunning ? "Stop container" :
+                    (container.isPaused ? "Resume container" : "Start container"))
         }
         .padding(.vertical, 5)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(container.name), \(container.state.label), \(container.image)")
     }
 
     private var statusColor: Color {
@@ -470,6 +597,16 @@ struct DockerContainerRow: View {
         case .removing: return .orange
         case .unknown: return .secondary
         }
+    }
+
+    private func metric(_ title: String, value: String,
+                        icon: String, color: Color) -> some View {
+        Label("\(title) \(value)", systemImage: icon)
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
     }
 }
 
@@ -506,13 +643,20 @@ struct DockerGroupHeader: View {
             if group.compose != nil {
                 Menu {
                     Button("Start project") { store.performCompose(.start, on: group) }
+                        .disabled(group.canRunCompose == false)
                     Button("Stop project") { store.performCompose(.stop, on: group) }
+                        .disabled(store.isActionRunning)
                     Button("Restart project") { store.performCompose(.restart, on: group) }
+                        .disabled(group.canRunCompose == false)
                     Divider()
-                    Button("Down", role: .destructive) { store.performCompose(.down, on: group) }
+                    Button("Delete project", role: .destructive) {
+                        store.performCompose(.down, on: group)
+                    }
+                    .disabled(group.canRunCompose == false)
                     Button("Down and remove volumes", role: .destructive) {
                         store.performCompose(.downVolumes, on: group)
                     }
+                    .disabled(group.canRunCompose == false)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.callout)
@@ -522,10 +666,9 @@ struct DockerGroupHeader: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .frame(width: 20)
-                .disabled(group.canRunCompose == false)
                 .help(group.canRunCompose
                       ? "Project actions"
-                      : "The Compose file or working directory is not available")
+                      : "Stop containers; other project actions need the Compose files")
             }
         }
         .textCase(nil)

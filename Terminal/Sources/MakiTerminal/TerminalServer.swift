@@ -10,6 +10,12 @@ import MakiShared
 /// the main queue. The socket is `0600` inside a `0700` directory, and the peer
 /// is checked to be MakiDesk (bundle id, or the development binary by name).
 final class TerminalIPCServer {
+    enum StartResult: Equatable {
+        case started
+        case alreadyRunning
+        case failed(String)
+    }
+
     private let queue = DispatchQueue(label: "com.makidesk.terminal.ipc.server")
     private let socketURL: URL
 
@@ -37,12 +43,12 @@ final class TerminalIPCServer {
 
     // MARK: - Lifecycle
 
-    /// Binds and starts accepting. The completion is on the main queue and is
-    /// false when another helper already owns the socket.
-    func start(completion: @escaping (Bool) -> Void) {
+    /// Binds and starts accepting. The completion is delivered on the main queue.
+    func start(completion: @escaping (StartResult) -> Void) {
         queue.async { [weak self] in
-            let started = self?.startLocked() ?? false
-            DispatchQueue.main.async { completion(started) }
+            let result = self?.startLocked()
+                ?? .failed("The terminal IPC server was released before startup completed.")
+            DispatchQueue.main.async { completion(result) }
         }
     }
 
@@ -76,24 +82,39 @@ final class TerminalIPCServer {
         }
     }
 
-    private func startLocked() -> Bool {
-        guard running == false else { return true }
+    private func startLocked() -> StartResult {
+        guard running == false else { return .started }
 
-        try? FileManager.default.createDirectory(at: socketURL.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true,
-                                                 attributes: [.posixPermissions: 0o700])
+        let directory = socketURL.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: directory,
+                                                    withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+        } catch {
+            return .failed("Could not prepare the terminal IPC directory: \(error.localizedDescription)")
+        }
+        guard chmod(directory.path, 0o700) == 0 else {
+            return .failed(Self.systemError("Could not secure the terminal IPC directory"))
+        }
 
         if FileManager.default.fileExists(atPath: socketURL.path) {
             if canConnect(to: socketURL) {
-                return false
+                return .alreadyRunning
             }
-            try? FileManager.default.removeItem(at: socketURL)
+            do {
+                try FileManager.default.removeItem(at: socketURL)
+            } catch {
+                return .failed("Could not remove a stale terminal IPC socket: \(error.localizedDescription)")
+            }
         }
 
         var address = sockaddr_un()
         address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
         address.sun_family = sa_family_t(AF_UNIX)
         let path = socketURL.path
+        guard path.utf8.count < MemoryLayout.size(ofValue: address.sun_path) else {
+            return .failed("The terminal IPC socket path is too long for macOS.")
+        }
         path.withCString { source in
             withUnsafeMutablePointer(to: &address.sun_path) { sunPath in
                 sunPath.withMemoryRebound(to: CChar.self, capacity: 104) { destination in
@@ -103,21 +124,37 @@ final class TerminalIPCServer {
         }
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
+        guard fd >= 0 else { return .failed(Self.systemError("Could not create the terminal IPC socket")) }
         var noSignal: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSignal,
-                   socklen_t(MemoryLayout<Int32>.size))
+        guard setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSignal,
+                         socklen_t(MemoryLayout<Int32>.size)) == 0 else {
+            let error = Self.systemError("Could not configure the terminal IPC socket")
+            close(fd)
+            return .failed(error)
+        }
 
         let bound = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard bound == 0, listen(fd, 4) == 0 else {
+        guard bound == 0 else {
+            let error = Self.systemError("Could not bind the terminal IPC socket")
             close(fd)
-            return false
+            return .failed(error)
         }
-        chmod(path, 0o600)
+        guard listen(fd, 4) == 0 else {
+            let error = Self.systemError("Could not listen on the terminal IPC socket")
+            close(fd)
+            try? FileManager.default.removeItem(at: socketURL)
+            return .failed(error)
+        }
+        guard chmod(path, 0o600) == 0 else {
+            let error = Self.systemError("Could not secure the terminal IPC socket")
+            close(fd)
+            try? FileManager.default.removeItem(at: socketURL)
+            return .failed(error)
+        }
 
         listenFD = fd
         running = true
@@ -126,7 +163,11 @@ final class TerminalIPCServer {
         source.setEventHandler { [weak self] in self?.acceptClient() }
         source.resume()
         acceptSource = source
-        return true
+        return .started
+    }
+
+    private static func systemError(_ operation: String) -> String {
+        "\(operation): \(String(cString: strerror(errno)))"
     }
 
     private func stopLocked() {

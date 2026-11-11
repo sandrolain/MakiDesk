@@ -64,12 +64,15 @@ final class TerminalFindBar: NSView, NSSearchFieldDelegate {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            field.widthAnchor.constraint(equalToConstant: 160),
+            field.widthAnchor.constraint(greaterThanOrEqualToConstant: 48),
+            field.widthAnchor.constraint(lessThanOrEqualToConstant: 160),
             field.heightAnchor.constraint(equalToConstant: 22),
-            countLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 56),
-            widthAnchor.constraint(equalToConstant: 360),
+            countLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 32),
+            widthAnchor.constraint(lessThanOrEqualToConstant: 360),
             heightAnchor.constraint(equalToConstant: 32),
         ])
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        countLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         apply(theme: .fallback)
     }
 

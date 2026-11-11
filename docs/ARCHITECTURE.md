@@ -32,69 +32,69 @@ never draws a separate desktop or mirrors their content as a workspace.
 
 ## Modules
 
-| File | Responsibility |
-|---|---|
-| `MakiDeskApp.swift` | Menu bar, app delegate, first-run Settings bridge, lifecycle. |
-| `WorkspaceStore.swift` | Central observable state: settings, window list, groups, focus, layout commands, status, colours, reset. |
-| `WindowController.swift` | Accessibility wrappers: discovery, frontmost window, frames, capabilities, full screen, screens. |
-| `WindowIndex.swift` | Cached window index with AX/workspace/screen observers; stable identity. |
-| `WindowOutlineController.swift`, `FocusBorder.swift` | Click-through focus-border panel and its pure geometry. |
-| `PointerEffect.swift`, `PointerEffectController.swift`, `PointerEffectSurface.swift` | Pointer pulse, five presentation styles and click ripple: pure trail/display rules; one click-through panel per display; no permission, no logged coordinates. |
-| `WindowCapture.swift` | ScreenCaptureKit previews and the edge-energy content measure. |
-| `TilingEngine.swift` | Pure geometry: ladders, halves, quarters, grid, golden spiral, squarified treemap. |
-| `DisplayLayoutIdentity.swift` | Pure display identity and settle fingerprint: which desk a saved layout belongs to, and whether it has stopped changing. |
-| `LayoutAdvisor.swift` | Pure advisor: window kinds, content measure, priors, suggested preset, reasons. |
-| `WindowPalette.swift` | `⌥⇥` / `⌥Space` switcher and search, preview cards, applications shelf, groups column, layout buttons. |
-| `InstalledApplications.swift` | Installed `.app` inventory and pure matching for the palette shelf; own worker queue, small in-memory cache. |
-| `PaletteMath.swift` | Expression parser for the search field: arithmetic, percentages and the closed unit table; pure, locale-aware separators, no I/O. |
-| `WindowDrag.swift`, `DragActivator.swift`, `MacOSTiling.swift` | ⌥-drag snapping, live activator, macOS tiling detection. |
-| `GroupStore.swift`, `WindowGroup.swift`, `GroupRenamePrompt.swift` | Groups: members, names, arrangement, persistence. |
-| `WindowScene.swift`, `WorkspaceStore` (focus) | Scene/focus state, send-away and undo. |
-| `PeekController.swift`, `PeekPanel.swift` | Designated-window overlay and hold state machine. |
-| `HUDController.swift` | Small passive feedback panel. |
-| `ActiveDisplay.swift` | Which display the cards and on-demand panels follow: the newest window focus or pointer move, with a pure newest-wins rule. |
-| `MiniMapController.swift` | Transient real-window overview overlay. |
-| `CornerPlacement.swift` | Pure corner rule shared by the mini map and the timer card: keep the corner, step aside for the checklist, stay on the display. |
-| `ChecklistModel.swift`, `ChecklistPanel.swift` | Checklist card: items, rules and persistence; the always-on panel. |
-| `TimerModel.swift`, `TimerPanel.swift` | Timers: deadlines, text formats and parser, proximity rule; the countdown card and the input field. |
-| `SystemMetrics.swift` | Disk space (Finder parity, `statfs` fallback), machine CPU ticks and the `libproc` process snapshot; decimal formatting. |
-| `SystemAlertPolicy.swift` | Pure sustained-load rule: duration, hysteresis, cooldown, snooze, and when load is attributed to unreadable system processes. |
-| `SystemMonitor.swift` | Owner of the disk and CPU timers, the menu-bar figure, the System menu values and the notices; one utility queue, main-actor publishing. |
-| `ListeningPorts.swift` | Pure `lsof -Fpcn` parser, injectable reader, list model; reads on open/refresh, never polls. |
-| `PortsWindow.swift` | Ports window: filter, addresses, confirmed `SIGTERM` termination. |
-| `SystemNotifier.swift` | Opt-in `UNUserNotificationCenter` copy of a notice; permission asked only when the option is switched on. |
-| `ShortcutManager.swift` | Carbon global hot keys (no Input Monitoring). |
-| `NotesStore.swift` | Notes, drafts, session, external-file baselines, Trash. |
-| `Confirmation.swift` | The modals as values: one wording, one presenter; no file builds an `NSAlert` by hand. |
-| `StoredJSONFile.swift` | The JSON-file mechanics four stores repeated: the path, the atomic write, the quarantine of an unreadable file. |
-| `NotesPanelViews.swift` | The note panel's leaf views: drop target, split and divider, toolbar buttons, table row. |
-| `NotesMarkdownTable.swift` | One Markdown table renderer: the formatter and the rewrite serializer both use it, so they cannot disagree on widths again. |
-| `NotesStore.swift` | Notes window, sidebar, toolbar, tabs-free navigation, anchoring. |
-| `NotesEditor.swift` | TextKit 1 text view and line-number ruler. |
-| `NotesSyntax.swift`, `NotesGrammarQueries.swift` | Syntax configuration, captures, colours, highlighter. |
-| `ClipboardHistory.swift`, `ClipboardPanel.swift` | In-memory text and image history, pasteboard poll, image budget and pins, picker. |
-| `ShelfController.swift`, `ShelfShake.swift` | Drag shelf, file promises, Quick Look, drag out, shake detector. |
-| `ScreenshotLibrary.swift` | Screenshot inventory, Quick Look, native file drags, configurable grid, sorting, date groups and file operations. |
-| `MarkupModel.swift` | Pure screenshot markup: arrow, rectangle, pen, highlighter, text label and pixel mosaic, rendered into pixels for both the preview and the saved file. |
-| `MarkupCrop.swift` | Pure crop: the capture is replaced and every mark is mapped into the new space, dropped when it falls outside. |
-| `ScreenshotAnnotationController.swift` | Area, window or whole-display capture → in-place annotation editor (marks, text, crop) → PNG on the shelf and on the clipboard. |
-| `ScreenRecordingController.swift` | Area recording to an H.264 movie: `SCStream` → `AVAssetWriter`, pause with retimed frames, system audio, menu-bar control, `.mov` on the shelf. |
-| `ShortcutsWindow.swift` | Searchable keyboard-shortcut reference. |
-| `SettingsView.swift` | Tabbed settings, permissions, diagnostics, reset. |
-| `SettingsKey.swift` | Every `UserDefaults` key, spelled once; a test fails on any literal written outside it. |
-| `CommandRouter.swift` | The dispatcher's pure questions: ladder axis, logical frame, golden cycle, label. Tested without a window. |
-| `MakiSignpost.swift` | The Instruments intervals: a frame write, a recognition request. Cheap when nobody is recording, no content in them. |
-| `FloatingPanel.swift` | The panel base class: a subclass names its style (utility, keyOverlay, passive, readOnly) instead of overriding the same three members. |
-| `HUDMessage.swift`, `HUDMessages.swift` | What a notice says, as a value; the capture family's sentences are written once and checked by a test. |
-| `UtilityBarController.swift`, `UtilityBarView.swift` | The utility bar's panel and lifecycle: pointer reveal with a 10 Hz sample while enabled, pin, overflow menu, keyboard session, capture exclusion. |
+| File                                                                                                            | Responsibility                                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MakiDeskApp.swift`                                                                                             | Menu bar, app delegate, first-run Settings bridge, lifecycle.                                                                                                           |
+| `WorkspaceStore.swift`                                                                                          | Central observable state: settings, window list, groups, focus, layout commands, status, colours, reset.                                                                |
+| `WindowController.swift`                                                                                        | Accessibility wrappers: discovery, frontmost window, frames, capabilities, full screen, screens.                                                                        |
+| `WindowIndex.swift`                                                                                             | Cached window index with AX/workspace/screen observers; stable identity.                                                                                                |
+| `WindowOutlineController.swift`, `FocusBorder.swift`                                                            | Click-through focus-border panel and its pure geometry.                                                                                                                 |
+| `PointerEffect.swift`, `PointerEffectController.swift`, `PointerEffectSurface.swift`                            | Pointer pulse, five presentation styles and click ripple: pure trail/display rules; one click-through panel per display; no permission, no logged coordinates.          |
+| `WindowCapture.swift`                                                                                           | ScreenCaptureKit previews and the edge-energy content measure.                                                                                                          |
+| `TilingEngine.swift`                                                                                            | Pure geometry: ladders, halves, quarters, grid, golden spiral, squarified treemap.                                                                                      |
+| `DisplayLayoutIdentity.swift`                                                                                   | Pure display identity and settle fingerprint: which desk a saved layout belongs to, and whether it has stopped changing.                                                |
+| `LayoutAdvisor.swift`                                                                                           | Pure advisor: window kinds, content measure, priors, suggested preset, reasons.                                                                                         |
+| `WindowPalette.swift`                                                                                           | `⌥⇥` / `⌥Space` switcher and search, preview cards, applications shelf, groups column, layout buttons.                                                                  |
+| `InstalledApplications.swift`                                                                                   | Installed `.app` inventory and pure matching for the palette shelf; own worker queue, small in-memory cache.                                                            |
+| `PaletteMath.swift`                                                                                             | Expression parser for the search field: arithmetic, percentages and the closed unit table; pure, locale-aware separators, no I/O.                                       |
+| `WindowDrag.swift`, `DragActivator.swift`, `MacOSTiling.swift`                                                  | ⌥-drag snapping, live activator, macOS tiling detection.                                                                                                                |
+| `GroupStore.swift`, `WindowGroup.swift`, `GroupRenamePrompt.swift`                                              | Groups: members, names, arrangement, persistence.                                                                                                                       |
+| `WindowScene.swift`, `WorkspaceStore` (focus)                                                                   | Scene/focus state, send-away and undo.                                                                                                                                  |
+| `PeekController.swift`, `PeekPanel.swift`                                                                       | Designated-window overlay and hold state machine.                                                                                                                       |
+| `HUDController.swift`                                                                                           | Small passive feedback panel.                                                                                                                                           |
+| `ActiveDisplay.swift`                                                                                           | Which display the cards and on-demand panels follow: the newest window focus or pointer move, with a pure newest-wins rule.                                             |
+| `MiniMapController.swift`                                                                                       | Transient real-window overview overlay.                                                                                                                                 |
+| `CornerPlacement.swift`                                                                                         | Pure corner rule shared by the mini map and the timer card: keep the corner, step aside for the checklist, stay on the display.                                         |
+| `ChecklistModel.swift`, `ChecklistPanel.swift`                                                                  | Checklist card: items, rules and persistence; the always-on panel.                                                                                                      |
+| `TimerModel.swift`, `TimerPanel.swift`                                                                          | Timers: deadlines, text formats and parser, proximity rule; the countdown card and the input field.                                                                     |
+| `SystemMetrics.swift`                                                                                           | Disk space (Finder parity, `statfs` fallback), machine CPU ticks and the `libproc` process snapshot; decimal formatting.                                                |
+| `SystemAlertPolicy.swift`                                                                                       | Pure sustained-load rule: duration, hysteresis, cooldown, snooze, and when load is attributed to unreadable system processes.                                           |
+| `SystemMonitor.swift`                                                                                           | Owner of the disk and CPU timers, the menu-bar figure, the System menu values and the notices; one utility queue, main-actor publishing.                                |
+| `ListeningPorts.swift`                                                                                          | Pure `lsof -Fpcn` parser, injectable reader, list model; reads on open/refresh, never polls.                                                                            |
+| `PortsWindow.swift`                                                                                             | Ports window: filter, addresses, confirmed `SIGTERM` termination.                                                                                                       |
+| `SystemNotifier.swift`                                                                                          | Opt-in `UNUserNotificationCenter` copy of a notice; permission asked only when the option is switched on.                                                               |
+| `ShortcutManager.swift`                                                                                         | Carbon global hot keys (no Input Monitoring).                                                                                                                           |
+| `NotesStore.swift`                                                                                              | Notes, drafts, session, external-file baselines, Trash.                                                                                                                 |
+| `Confirmation.swift`                                                                                            | The modals as values: one wording, one presenter; no file builds an `NSAlert` by hand.                                                                                  |
+| `StoredJSONFile.swift`                                                                                          | The JSON-file mechanics four stores repeated: the path, the atomic write, the quarantine of an unreadable file.                                                         |
+| `NotesPanelViews.swift`                                                                                         | The note panel's leaf views: drop target, split and divider, toolbar buttons, table row.                                                                                |
+| `NotesMarkdownTable.swift`                                                                                      | One Markdown table renderer: the formatter and the rewrite serializer both use it, so they cannot disagree on widths again.                                             |
+| `NotesStore.swift`                                                                                              | Notes window, sidebar, toolbar, tabs-free navigation, anchoring.                                                                                                        |
+| `NotesEditor.swift`                                                                                             | TextKit 1 text view and line-number ruler.                                                                                                                              |
+| `NotesSyntax.swift`, `NotesGrammarQueries.swift`                                                                | Syntax configuration, captures, colours, highlighter.                                                                                                                   |
+| `ClipboardHistory.swift`, `ClipboardPanel.swift`                                                                | In-memory text and image history, pasteboard poll, image budget and pins, picker.                                                                                       |
+| `ShelfController.swift`, `ShelfShake.swift`                                                                     | Drag shelf, file promises, Quick Look, drag out, shake detector.                                                                                                        |
+| `ScreenshotLibrary.swift`                                                                                       | Screenshot inventory, Quick Look, native file drags, configurable grid, sorting, date groups and file operations.                                                       |
+| `MarkupModel.swift`                                                                                             | Pure screenshot markup: arrow, rectangle, pen, highlighter, text label and pixel mosaic, rendered into pixels for both the preview and the saved file.                  |
+| `MarkupCrop.swift`                                                                                              | Pure crop: the capture is replaced and every mark is mapped into the new space, dropped when it falls outside.                                                          |
+| `ScreenshotAnnotationController.swift`                                                                          | Area, window or whole-display capture → in-place annotation editor (marks, text, crop) → PNG on the shelf and on the clipboard.                                         |
+| `ScreenRecordingController.swift`                                                                               | Area recording to an H.264 movie: `SCStream` → `AVAssetWriter`, pause with retimed frames, system audio, menu-bar control, `.mov` on the shelf.                         |
+| `ShortcutsWindow.swift`                                                                                         | Searchable keyboard-shortcut reference.                                                                                                                                 |
+| `SettingsView.swift`                                                                                            | Tabbed settings, permissions, diagnostics, reset.                                                                                                                       |
+| `SettingsKey.swift`                                                                                             | Every `UserDefaults` key, spelled once; a test fails on any literal written outside it.                                                                                 |
+| `CommandRouter.swift`                                                                                           | The dispatcher's pure questions: ladder axis, logical frame, golden cycle, label. Tested without a window.                                                              |
+| `MakiSignpost.swift`                                                                                            | The Instruments intervals: a frame write, a recognition request. Cheap when nobody is recording, no content in them.                                                    |
+| `FloatingPanel.swift`                                                                                           | The panel base class: a subclass names its style (utility, keyOverlay, passive, readOnly) instead of overriding the same three members.                                 |
+| `HUDMessage.swift`, `HUDMessages.swift`                                                                         | What a notice says, as a value; the capture family's sentences are written once and checked by a test.                                                                  |
+| `UtilityBarController.swift`, `UtilityBarView.swift`                                                            | The utility bar's panel and lifecycle: pointer reveal with a 10 Hz sample while enabled, pin, overflow menu, keyboard session, capture exclusion.                       |
 | `BarReveal.swift`, `BarLayout.swift`, `BarItemCatalog.swift`, `BarConfiguration.swift`, `UtilityBarModel.swift` | Pure rules for when the bar opens and retreats, what fits, which commands it offers, the hand-editable buttons file, and the info text; no AppKit or Accessibility I/O. |
-| `TerminalClient.swift` | The MakiDesk side of the terminal helper: launch, one Unix-socket connection, handshake, retries and notices; no socket work on the main thread. |
-| `DockerClient.swift` | The MakiDesk side of the Docker helper: launch, one socket, handshake, theme notifications and the `openExec` bridge to the terminal. |
-| `Docker/` | The separate `MakiDockerCore`/`MakiDeskDocker` package: CLI JSON models and parsers, Compose grouping, prune plan, window, logs/stats/inspect and settings. |
-| `Settings.swift` | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value. |
-| `Theme.swift`, `MenuBarIcon.swift` | Palette themes and the menu-bar glyph. |
-| `LegacyMigration.swift` | One-time migration from the project's previous name. |
-| `CanvasCore.swift` | Legacy geometry/helpers from the earlier canvas prototype; no longer referenced by the live app. |
+| `TerminalClient.swift`                                                                                          | The MakiDesk side of the terminal helper: launch, one Unix-socket connection, handshake, retries and notices; no socket work on the main thread.                        |
+| `DockerClient.swift`                                                                                            | The MakiDesk side of the Docker helper: launch, one socket, handshake, theme notifications and the `openExec` bridge to the terminal.                                   |
+| `Docker/`                                                                                                       | The separate `MakiDockerCore`/`MakiDeskDocker` package: CLI JSON models and parsers, Compose grouping, prune plan, window, logs/stats/inspect and settings.             |
+| `Settings.swift`                                                                                                | Typed reads and the declared defaults; `register(defaults:)` is built from the same table, so "unset" and "the default" are one value.                                  |
+| `Theme.swift`, `MenuBarIcon.swift`                                                                              | Palette themes and the menu-bar glyph.                                                                                                                                  |
+| `LegacyMigration.swift`                                                                                         | One-time migration from the project's previous name.                                                                                                                    |
+| `CanvasCore.swift`                                                                                              | Legacy geometry/helpers from the earlier canvas prototype; no longer referenced by the live app.                                                                        |
 
 ## Window discovery and control
 
@@ -146,7 +146,7 @@ and the keyboard ends where they chose. It is never repeated for the same set, s
 choosing another app later is not fought. The set is
 `WorkspaceStore.veilSelection`, filled by ⌥-clicking cards in the switcher (or
 ⌥K on the highlighted one) and toggled through the pure `FocusDim.toggled`,
-which keeps pick order because *Only the active display* reads the first pick.
+which keeps pick order because _Only the active display_ reads the first pick.
 It is session state, resolved against the current snapshot by stable identity; a
 minimised window is skipped while it is in the Dock, a window that is gone cannot
 be anchored to, and an empty plan takes the veil down. The
@@ -237,16 +237,16 @@ keyboard.
 
 ## Persistence
 
-| Data | Where |
-|---|---|
-| Window groups | `~/Library/Application Support/MakiDesk/groups.json` |
-| Notes and drafts | `~/Library/Application Support/MakiDesk/Note/note-<uuid>.txt` |
-| Notes session | `…/Note/session.json` (order, cursors, languages, external paths, frame, anchor) |
-| Preferences | `UserDefaults` (theme, layout priors, shelf shake, screenshot folder/view, animations, switcher, etc.) |
-| Clipboard history | Memory only; lost on quit |
-| Shelf | Memory + a temporary staging folder; removed on close |
-| Screenshot library | Original image files stay in the selected folder; previews are generated on demand in memory |
-| Peek | Session only; nothing on disk |
+| Data               | Where                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| Window groups      | `~/Library/Application Support/MakiDesk/groups.json`                                                   |
+| Notes and drafts   | `~/Library/Application Support/MakiDesk/Note/note-<uuid>.txt`                                          |
+| Notes session      | `…/Note/session.json` (order, cursors, languages, external paths, frame, anchor)                       |
+| Preferences        | `UserDefaults` (theme, layout priors, shelf shake, screenshot folder/view, animations, switcher, etc.) |
+| Clipboard history  | Memory only; lost on quit                                                                              |
+| Shelf              | Memory + a temporary staging folder; removed on close                                                  |
+| Screenshot library | Original image files stay in the selected folder; previews are generated on demand in memory           |
+| Peek               | Session only; nothing on disk                                                                          |
 
 Writes are debounced (notes 0.4 s, session 0.6 s) and flushed on hide/quit; the
 session carries a clean-close marker. An external file opened as a note keeps a
@@ -371,6 +371,13 @@ SwiftPM package, so `swift build` at the repository root neither needs the
 binary nor rebuilds the helper. `MakiShared` is the only code both apps link: the
 message envelope, length-prefixed framing and the socket location. The workspace
 model and its persistence live in `MakiTerminalCore`, which is free of AppKit.
+Ghostty config reloads keep the previous config alive through app and live-surface
+updates, then free it; shutdown frees the app and current config after detaching
+all surfaces.
+Terminal build tasks prepare the pinned xcframework through
+`scripts/fetch-ghosttykit.sh`: static-library filenames and matching plist
+paths are normalized to the `lib` prefix required by Xcode 26 SwiftPM.
+Existing local engines are prepared in place, not replaced or recompiled.
 `⌘W` closes the focused pane; with one pane it closes the workspace, and with
 one workspace it hides the window. `TerminalProcessTree` compares the foreground process id with the pane's shell
 (the process below `login`, or the helper's direct child): a deeper process is
@@ -415,7 +422,10 @@ field, so scripts can identify where they run. Workspace order, titles, split
 ratios, the selection, the zoomed pane, each pane's last directory and its
 command are written to
 `Terminal/workspaces.json`, atomically and
-with the usual quarantine/version rules; scrollback is not persisted. Closing the
+with the usual quarantine/version rules; newer-format layout and window-state
+files remain read-only, and persistence errors are surfaced in the helper.
+Debounced layout and frame writes run on a serial worker queue; confirmed Quit
+flushes the latest snapshot before surfaces are detached. Scrollback is not persisted. Closing the
 last pane of the last workspace starts a fresh shell instead of leaving an empty
 window. The main window's frame is saved (debounced) to
 `Terminal/window.json` and restored only when at least a title-bar-sized part of
@@ -656,7 +666,7 @@ the real one only exists on a system that reports the model available.
 is read as bytes on the main actor, then decoded, thumbnailed and hashed on a
 worker; the generation and `changeCount` are checked at publication, so a copy
 that arrives during the decode wins. The budget counts the original bytes plus
-the thumbnail; pins are exempt from eviction and from *Clear*, and the list and
+the thumbnail; pins are exempt from eviction and from _Clear_, and the list and
 the pins stay in memory.
 
 `TextRecognitionController` (T41) reads text with Vision from four sources —
@@ -686,8 +696,11 @@ the same thing once started — and `TimerText` owns the formats and the parser
 something is running; every remaining time is read from the deadline, so a
 sleep or a clock change cannot make it drift, and expiry is decided against the
 wall clock. `TimerStore` writes the same structs to `timers.json` from a serial
-queue on every change and again on termination, and `TimerRestore` is the pure
-rule a launch applies to them: a running timer carries on with what its deadline
+queue on every change after restoration and again on termination. The controller
+waits for the initial read before flushing an empty board, merges timers started
+during loading with the saved list, and leaves unreadable files untouched.
+`TimerRestore` is the pure rule a launch applies to them: a running timer carries
+on with what its deadline
 leaves (the time the app was closed is part of the subtraction), a paused one
 comes back paused, and one whose deadline passed while the app was closed is
 reported once instead of being dropped. `TimerProximity` is the pure hysteresis
@@ -703,7 +716,15 @@ a corner by `ChecklistSettings.frame` (the same corner arithmetic the notices
 use). `Checklist` holds the items and their rules — trim, 200 characters per
 item, 50 items, one-step and whole-row drag-to-slot moves, clear completed, the
 plain-text copy — and `ChecklistFile` writes them atomically to `checklist.json`
-from a serial queue, setting an unreadable file aside as `.bak`. Ticking never
+from a serial queue, setting an unreadable file aside as `.bak`.
+`ChecklistStore` distinguishes an in-flight load from a completed restore.
+Mutations and writes require the completed restore, so hiding or quitting
+before it finishes cannot overwrite saved items with the initial empty list.
+Read errors remain distinct from a missing file and show a retry action; failed
+writes are reported in the card and can be retried. Repeated opens coalesce the
+load. After restoration, changes are debounced for 250 ms, hiding enqueues a
+save, and normal termination flushes the serial queue synchronously, including
+intentionally empty lists. Ticking never
 activates MakiDesk; clicking the list takes the keys and shows the add field, and
 `Esc` closes the card, with `PanelFocusReturn` giving the keys back. The add
 field exists only while the card is key, which keeps the resting height to one
@@ -831,9 +852,12 @@ main target.
   scratchpad.
 - A note draft is replaced by writing a temporary file, flushing it, renaming it
   over the old one and flushing the directory entry. The cycle runs on the
-  persistence queue behind the 400 ms debounce, so durability does not touch the
-  main thread; the panel flushes again when it loses key focus, which is what
-  makes autosave have no explicit save step.
+  persistence queue after a 400 ms quiet period, with a two-second maximum
+  interval during continuous typing, so durability does not touch the main
+  thread; the panel flushes again when it loses key focus.
+- External-file notes keep a SHA-256 digest of the last content MakiDesk read or
+  wrote in the session metadata. After restart, saving compares the current file
+  with that digest before writing, preserving edits made by another app.
 - The app never stores window thumbnails or clipboard content on disk.
 
 ## Known constraints

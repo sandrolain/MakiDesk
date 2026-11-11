@@ -28,6 +28,13 @@ final class TimerController {
     private var layoutWork: DispatchWorkItem?
     private var revealWork: DispatchWorkItem?
     private var started = false
+    private var restoreCompleted = false
+    private var restoreInFlight = false
+    private var restoreRetryWork: DispatchWorkItem?
+    private var restoreRetryAttempt = 0
+    private var changesBeforeRestore = false
+    private var removedBeforeRestore = Set<UUID>()
+    private var removedAllBeforeRestore = false
     private var activeDisplayToken: UUID?
     private let store = TimerStore()
 
@@ -56,7 +63,12 @@ final class TimerController {
     /// Termination fence: the timers reach the disk before the process leaves.
     func shutdown() {
         guard started else { return }
-        store.flush(board.timers)
+        // A not-yet-published read owns the saved state. Writing the empty
+        // launch model here would erase timers before restoration completes.
+        if restoreCompleted { store.flush(board.timers) }
+        started = false
+        restoreRetryWork?.cancel()
+        restoreRetryWork = nil
         if let activeDisplayToken {
             ActiveDisplayTracker.shared.removeObserver(activeDisplayToken)
             self.activeDisplayToken = nil
@@ -138,11 +150,13 @@ final class TimerController {
 
     func remove(_ id: UUID) {
         board.remove(id)
+        if !restoreCompleted { removedBeforeRestore.insert(id) }
         timersChanged()
     }
 
     func removeAll() {
         board.removeAll()
+        if !restoreCompleted { removedAllBeforeRestore = true }
         timersChanged()
     }
 
@@ -153,6 +167,10 @@ final class TimerController {
     }
 
     private func timersChanged() {
+        if !restoreCompleted {
+            changesBeforeRestore = true
+            restore()
+        }
         now = Date()
         ensureTicking()
         refreshOverlay()
@@ -162,29 +180,68 @@ final class TimerController {
     // MARK: - What survives a quit
 
     private func restore() {
-        store.load { [weak self] timers in
-            Task { @MainActor [weak self] in self?.applyRestored(timers) }
+        guard !restoreInFlight, !restoreCompleted else { return }
+        restoreInFlight = true
+        store.loadResult { [weak self] result in
+            Task { @MainActor [weak self] in self?.applyRestored(result) }
         }
     }
 
     /// The file is applied once. A running timer keeps counting from its
     /// absolute deadline, so the time MakiDesk was closed is already accounted
     /// for; a timer the user has just started is never duplicated.
-    private func applyRestored(_ timers: [AppTimer]) {
+    private func applyRestored(_ result: TimerStore.ReadResult) {
         guard started else { return }
+        let timers: [AppTimer]
+        switch result {
+        case let .loaded(saved): timers = saved
+        case .missing: timers = []
+        case .failed:
+            restoreInFlight = false
+            MakiLog.store.error("timers: restoration failed; saved timers will not be overwritten")
+            HUDController.shared.show(HUDMessage(
+                title: "Could not read saved timers",
+                symbol: "exclamationmark.triangle.fill",
+                detail: "The saved file was preserved. MakiDesk will retry automatically."
+            ))
+            scheduleRestoreRetry()
+            return
+        }
+        restoreInFlight = false
+        restoreRetryWork?.cancel()
+        restoreRetryWork = nil
+        restoreRetryAttempt = 0
         let outcome = TimerRestore.resolve(timers, at: Date())
-        guard outcome.board.isEmpty == false || outcome.expired.isEmpty == false else { return }
-        board.restore(outcome.board.timers)
+        let restored = changesBeforeRestore
+            ? (removedAllBeforeRestore ? [] : outcome.board.timers.filter { !removedBeforeRestore.contains($0.id) })
+            : outcome.board.timers
+        board.restore(restored)
+        restoreCompleted = true
         now = Date()
         for timer in outcome.expired { announceExpiredWhileClosed(timer) }
-        persist()
+        if outcome.board.isEmpty || outcome.expired.isEmpty == false || changesBeforeRestore {
+            persist()
+        }
         ensureTicking()
         refreshOverlay()
     }
 
     private func persist() {
-        guard started else { return }
+        guard started, restoreCompleted else { return }
         store.save(board.timers)
+    }
+
+    private func scheduleRestoreRetry() {
+        guard restoreRetryWork == nil, started else { return }
+        let delay = min(pow(2.0, Double(restoreRetryAttempt)), 60.0)
+        restoreRetryAttempt = min(restoreRetryAttempt + 1, 6)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.started else { return }
+            self.restoreRetryWork = nil
+            self.restore()
+        }
+        restoreRetryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// A timer that ran out while the app was closed is not silently gone: it
@@ -564,7 +621,7 @@ final class TimerInputController {
     private func build() {
         let hosting = NSHostingView(rootView: TimerInputView(model: model))
         let panel = TimerInputPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 152),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 190),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -644,6 +701,13 @@ private struct TimerInputView: View {
                 .foregroundStyle(model.error == nil ? theme.subtext : Color.red)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Start Timer") { TimerInputController.shared.submit() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(12)
         .frame(width: 420, alignment: .leading)

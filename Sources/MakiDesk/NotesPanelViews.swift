@@ -285,12 +285,12 @@ final class NoteCellView: NSTableCellView {
     init(identifier: NSUserInterfaceItemIdentifier) {
         super.init(frame: .zero)
         self.identifier = identifier
-        titleLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        titleLabel.font = .systemFont(ofSize: 13, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
-        detailLabel.font = .systemFont(ofSize: 10.5)
+        detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.lineBreakMode = .byTruncatingTail
 
-        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close note")?
+        closeButton.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Move note to Trash")?
             .withSymbolConfiguration(.init(pointSize: 8, weight: .semibold))
         closeButton.isBordered = false
         closeButton.imagePosition = .imageOnly
@@ -298,11 +298,12 @@ final class NoteCellView: NSTableCellView {
         closeButton.refusesFirstResponder = true
         closeButton.target = self
         closeButton.action = #selector(closeClicked)
-        closeButton.toolTip = "Close the note"
+        closeButton.toolTip = "Move this note to Trash"
+        closeButton.setAccessibilityLabel("Move this note to Trash")
 
         dotView.wantsLayer = true
         dotView.layer?.cornerRadius = 3.5
-        dotView.toolTip = "Not saved to the file yet — hover to close"
+        dotView.toolTip = "Not saved to the file yet"
 
         for subview in [titleLabel, detailLabel, dotView, closeButton] {
             subview.translatesAutoresizingMaskIntoConstraints = false

@@ -79,14 +79,16 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        controller.presentPersistenceWarningIfNeeded()
 
         startServer()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
-        terminal?.saveNow()
+        _ = terminal?.saveNow()
         terminal?.detachAllPanes()
+        runtime?.shutdown()
     }
 
     /// Closing the window keeps the sessions alive: the helper stays running as
@@ -109,6 +111,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         }
         let reply = alert.runModal()
         if reply != .alertSecondButtonReturn {
+            terminal?.restoreFocusAfterAlert()
+            return .terminateCancel
+        }
+        if terminal?.saveNow() == .failed {
             terminal?.restoreFocusAfterAlert()
             return .terminateCancel
         }
@@ -140,11 +146,27 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
             self?.showMain()
         }
         server.onQuit = { NSApp.terminate(nil) }
-        server.start { started in
-            guard started == false else { return }
-            // Another helper owns the socket; this launch is a duplicate.
-            self.suppressQuitConfirmation = true
-            NSApp.terminate(nil)
+        server.start { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .started:
+                break
+            case .alreadyRunning:
+                // Another helper owns the socket; this launch is a duplicate.
+                self.suppressQuitConfirmation = true
+                NSApp.terminate(nil)
+            case let .failed(message):
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "Terminal integration is unavailable"
+                alert.informativeText = "MakiDesk Terminal can still be used directly, but MakiDesk cannot connect to it.\n\n\(message)"
+                alert.addButton(withTitle: "OK")
+                if let window = self.terminal?.window {
+                    alert.beginSheetModal(for: window)
+                } else {
+                    alert.runModal()
+                }
+            }
         }
         self.server = server
     }

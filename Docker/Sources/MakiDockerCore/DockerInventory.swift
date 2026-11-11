@@ -81,6 +81,11 @@ public struct DockerReader: Sendable {
         let output = try await cli.runChecked(DockerCommands.stats(id: id), timeout: 10)
         return await parse(output) { DockerJSON.stats(from: $0) }
     }
+
+    public func stats() async throws -> [String: DockerContainerStats] {
+        let output = try await cli.runChecked(DockerCommands.stats(), timeout: 15)
+        return await parse(output) { DockerJSON.statsByName(from: $0) }
+    }
 }
 
 public enum DockerGrouping {
@@ -97,9 +102,10 @@ public enum DockerGrouping {
             let compose = members.first?.compose
             let name = compose?.project ?? "Standalone"
             let sorted = members.sorted { lhs, rhs in
-                if lhs.isRunning != rhs.isRunning { return lhs.isRunning && rhs.isRunning == false }
+                let nameOrder = lhs.displayName.localizedStandardCompare(rhs.displayName)
+                if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
                 if lhs.state != rhs.state { return lhs.state.rawValue < rhs.state.rawValue }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                return lhs.id < rhs.id
             }
             result.append(DockerContainerGroup(
                 id: key,
@@ -112,6 +118,87 @@ public enum DockerGrouping {
             if lhs.isStandalone != rhs.isStandalone { return rhs.isStandalone }
             if lhs.runningCount != rhs.runningCount { return lhs.runningCount > rhs.runningCount }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+}
+
+public enum DockerContainerSortOrder: String, CaseIterable, Sendable {
+    case name
+    case state
+    case cpu
+    case memory
+
+    public var title: String {
+        switch self {
+        case .name: return "Name (A–Z)"
+        case .state: return "State"
+        case .cpu: return "CPU (high to low)"
+        case .memory: return "Memory (high to low)"
+        }
+    }
+}
+
+public enum DockerContainerOrdering {
+    /// Sorts the rows inside a project group. Missing metric samples stay last;
+    /// display name and stable ID break ties.
+    public static func sort(_ containers: [DockerContainer],
+                            by order: DockerContainerSortOrder,
+                            stats: [String: DockerContainerStats] = [:]) -> [DockerContainer] {
+        containers.sorted { lhs, rhs in
+            let nameOrder = lhs.displayName.localizedStandardCompare(rhs.displayName)
+            let namesBefore = nameOrder == .orderedSame ? lhs.id < rhs.id
+                : nameOrder == .orderedAscending
+            switch order {
+            case .name:
+                return namesBefore
+            case .state:
+                let left = stateRank(lhs.state)
+                let right = stateRank(rhs.state)
+                return left == right ? namesBefore : left < right
+            case .cpu:
+                return descending(metric: cpuValue(stats[lhs.name]),
+                                  against: cpuValue(stats[rhs.name]),
+                                  namesBefore: namesBefore)
+            case .memory:
+                return descending(metric: memoryValue(stats[lhs.name]),
+                                  against: memoryValue(stats[rhs.name]),
+                                  namesBefore: namesBefore)
+            }
+        }
+    }
+
+    private static func descending(metric lhs: Double?,
+                                    against rhs: Double?,
+                                    namesBefore: Bool) -> Bool {
+        switch (lhs, rhs) {
+        case let (left?, right?): return left == right ? namesBefore : left > right
+        case (_?, nil): return true
+        case (nil, _?): return false
+        case (nil, nil): return namesBefore
+        }
+    }
+
+    private static func cpuValue(_ stats: DockerContainerStats?) -> Double? {
+        guard let value = stats?.cpuPercent, value.hasSuffix("%") else { return nil }
+        return Double(value.dropLast())
+    }
+
+    private static func memoryValue(_ stats: DockerContainerStats?) -> Double? {
+        guard let value = stats?.memoryUsage,
+              let used = value.split(separator: "/", maxSplits: 1).first else { return nil }
+        return DockerFormatting.bytes(from: String(used)).map(Double.init)
+    }
+
+    private static func stateRank(_ state: DockerContainerState) -> Int {
+        switch state {
+        case .running: return 0
+        case .restarting: return 1
+        case .paused: return 2
+        case .created: return 3
+        case .exited: return 4
+        case .dead: return 5
+        case .removing: return 6
+        case .unknown: return 7
         }
     }
 }
@@ -172,6 +259,21 @@ public struct DockerPrunePlan: Equatable, Sendable {
 
     public func estimatedSize(for mode: DockerPruneMode) -> String {
         DockerFormatting.size(estimatedBytes(for: mode))
+    }
+
+    public func estimatedSize(for mode: DockerPruneMode, all: Bool) -> String {
+        let bytes: Int64
+        switch mode {
+        case .images:
+            bytes = all ? imageBytes(unusedImages) : imageBytes(danglingImages)
+        case .volumes:
+            let eligible = unusedVolumes.filter { all || $0.isAnonymous }
+            bytes = eligible.compactMap { DockerFormatting.bytes(from: $0.size ?? "0B") }
+                .reduce(0, +)
+        default:
+            bytes = estimatedBytes(for: mode)
+        }
+        return DockerFormatting.size(bytes)
     }
 
     private var volumeBytes: Int64 {

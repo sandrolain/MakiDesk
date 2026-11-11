@@ -324,6 +324,12 @@ struct TimerBoard: Equatable, Sendable {
 /// board works with, so a launch only reads the clock again instead of adding
 /// up the time the app was closed (T61).
 struct TimerStore: Sendable {
+    enum ReadResult: Sendable {
+        case loaded([AppTimer])
+        case missing
+        case failed
+    }
+
     let url: URL
 
     private static let queue = DispatchQueue(label: "com.makidesk.timers-file", qos: .utility)
@@ -335,26 +341,37 @@ struct TimerStore: Sendable {
     /// `~/Library/Application Support/MakiDesk/timers.json`.
     static var defaultURL: URL { StoredJSONFile.defaultURL(named: "timers.json") }
 
-    /// Read off the main thread: opening the app must not wait for the disk.
-    func load(completion: @escaping @Sendable ([AppTimer]) -> Void) {
+    /// Read off the main thread while preserving the difference between an
+    /// intentionally absent file and a file that could not be read.
+    func loadResult(completion: @escaping @Sendable (ReadResult) -> Void) {
         let url = self.url
-        Self.queue.async {
-            completion(Self.read(at: url))
-        }
+        Self.queue.async { completion(Self.readResult(at: url)) }
     }
 
     nonisolated static func read(at url: URL) -> [AppTimer] {
-        guard let data = try? Data(contentsOf: url) else { return [] }
+        switch readResult(at: url) {
+        case let .loaded(timers): return timers
+        case .missing, .failed: return []
+        }
+    }
+
+    nonisolated static func readResult(at url: URL) -> ReadResult {
+        let data: Data
         do {
-            return try StoredJSONFile.decoder().decode([AppTimer].self, from: data)
+            data = try Data(contentsOf: url)
+        } catch {
+            return FileManager.default.fileExists(atPath: url.path) ? .failed : .missing
+        }
+        do {
+            return .loaded(try StoredJSONFile.decoder().decode([AppTimer].self, from: data))
         } catch {
             // Never overwrite a file we could not understand (R07). The shared
             // quarantine keeps every earlier recovery copy: this used to delete
             // the previous `.bak` first, so a second bad file destroyed the
             // first one — the copy the user would have recovered from.
             MakiLog.store.error("timers: unreadable file -> \(error.localizedDescription, privacy: .public)")
-            StoredJSONFile.quarantine(url, label: "timers")
-            return []
+            _ = StoredJSONFile.quarantine(url, label: "timers")
+            return .failed
         }
     }
 

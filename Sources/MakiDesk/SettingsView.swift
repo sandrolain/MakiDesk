@@ -105,7 +105,33 @@ struct SettingsView: View {
     /// bar did not, so the content keeps its old room at the smallest size.
     static let minimumSize = CGSize(width: 800, height: 580)
 
+    private struct SearchDestination: Identifiable {
+        let title: String
+        let keywords: String
+        let tab: SettingsTab
+        var id: String { title }
+    }
+
+    private static let searchDestinations: [SearchDestination] = [
+        .init(title: "Terminal appearance", keywords: "terminal font cursor theme", tab: .terminal),
+        .init(title: "Terminal shell", keywords: "terminal shell command", tab: .terminal),
+        .init(title: "SSH profiles", keywords: "terminal ssh host port identity remote", tab: .terminal),
+        .init(title: "Window placement", keywords: "window position display screen move", tab: .windows),
+        .init(title: "Window focus", keywords: "focus border dim active", tab: .windows),
+        .init(title: "Layouts and groups", keywords: "layout tiling group preset", tab: .layouts),
+        .init(title: "Notes and clipboard", keywords: "notes clipboard history privacy", tab: .panels),
+        .init(title: "Shelf", keywords: "shelf drag drop files", tab: .panels),
+        .init(title: "Timers and checklist", keywords: "timer countdown checklist reminders", tab: .panels),
+        .init(title: "Notifications", keywords: "notification hud banner sound", tab: .notifications),
+        .init(title: "Permissions", keywords: "accessibility screen recording permission", tab: .general),
+        .init(title: "Dropzones", keywords: "dropzone automation action", tab: .dropzones),
+        .init(title: "System monitoring", keywords: "system cpu memory disk network", tab: .system),
+    ]
+
     @AppStorage(SettingsTab.defaultsKey) private var settingsTab: SettingsTab = .general
+    @State private var settingsSearch = ""
+    @State private var sshPortErrors: [UUID: String] = [:]
+    @State private var sshPortDrafts: [UUID: String] = [:]
     @AppStorage(SettingsKey.keepTerminalWindowShortcuts.rawValue)
     private var keepTerminalWindowShortcuts = true
     @AppStorage(ColorSamplerController.formatDefaultsKey)
@@ -251,20 +277,77 @@ struct SettingsView: View {
     /// ones the tab bar wrote, so an existing choice and the menu's deep links
     /// keep pointing at the same section (T58).
     private var sidebar: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsTab.allCases) { tab in
-                    sidebarRow(tab)
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(theme.subtext)
+                TextField("Search settings", text: $settingsSearch)
+                    .textFieldStyle(.plain)
+                    .accessibilityLabel("Search settings")
+                if settingsSearch.isEmpty == false {
+                    Button { settingsSearch = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(theme.subtext)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear search")
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .makiField(theme: theme, focused: false)
             .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .animation(selectionAnimation, value: settingsTab)
+            .padding(.top, 10)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if settingsSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        ForEach(SettingsTab.allCases) { tab in sidebarRow(tab) }
+                    } else if matchingDestinations.isEmpty {
+                        Text("No matching settings")
+                            .font(MakiType.body)
+                            .foregroundStyle(theme.subtext)
+                            .padding(10)
+                    } else {
+                        ForEach(matchingDestinations) { destination in
+                            Button {
+                                settingsTab = destination.tab
+                                settingsSearch = ""
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(destination.title)
+                                        .font(MakiType.contentMedium)
+                                        .foregroundStyle(theme.text)
+                                    Text(destination.tab.title)
+                                        .font(MakiType.meta)
+                                        .foregroundStyle(theme.subtext)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
+                .animation(selectionAnimation, value: settingsTab)
+            }
         }
         .frame(width: Self.sidebarWidth)
         // A slightly lifted column, like the native sidebars: the content
         // area keeps the window background, the navigation does not.
         .background(theme.raisedSurface.opacity(0.55))
+    }
+
+    private var matchingDestinations: [SearchDestination] {
+        let query = settingsSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard query.isEmpty == false else { return [] }
+        return Self.searchDestinations.filter {
+            $0.title.localizedCaseInsensitiveContains(query)
+                || $0.keywords.localizedCaseInsensitiveContains(query)
+        }
     }
 
     private func sidebarRow(_ tab: SettingsTab) -> some View {
@@ -325,40 +408,15 @@ struct SettingsView: View {
         selection: Binding<T>,
         title: @escaping (T) -> String
     ) -> some View {
-        HStack(spacing: 4) {
+        Picker("Settings subsection", selection: selection) {
             ForEach(tabs) { tab in
-                let selected = selection.wrappedValue == tab
-                Button {
-                    selection.wrappedValue = tab
-                } label: {
-                    Text(title(tab))
-                        .font(.system(size: 12, weight: selected ? .semibold : .regular))
-                        .foregroundStyle(selected ? theme.text : theme.subtext)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: MakiRadius.control)
-                                .fill(selected ? theme.selectionSurface : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: MakiRadius.control)
-                                .strokeBorder(selected ? theme.accent.opacity(0.55) : Color.clear,
-                                              lineWidth: 1)
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(MakiActionButtonStyle())
-                .makiHoverWash(theme.selectionSurface.opacity(0.35),
-                               radius: MakiRadius.control,
-                               isEnabled: !selected)
-                .accessibilityAddTraits(selected ? .isSelected : [])
+                Text(title(tab)).tag(tab)
             }
-            Spacer(minLength: 0)
         }
-        .padding(3)
-        .background(RoundedRectangle(cornerRadius: MakiRadius.row).fill(theme.raisedSurface))
-        .overlay(RoundedRectangle(cornerRadius: MakiRadius.row)
-            .stroke(theme.border.opacity(0.6), lineWidth: 1))
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize(horizontal: false, vertical: true)
+        .tint(theme.accent)
         .animation(selectionAnimation, value: selection.wrappedValue)
     }
 
@@ -373,29 +431,63 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .font(MakiType.reading)
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    switch settingsTab {
-                    case .general: generalTab
-                    case .windows: windowsTab
-                    case .layouts: layoutsTab
-                    case .panels: panelsTab
-                    case .terminal: terminalTab
-                    case .notifications: notificationsTab
-                    case .groups: groupsTab
-                    case .system: systemTab
-                    case .dropzones: EmptyView()
-                    }
+            VStack(spacing: 0) {
+                HStack(spacing: 9) {
+                    Image(systemName: settingsTab.icon)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(theme.accent)
+                        .accessibilityHidden(true)
+                    Text(settingsTab.title)
+                        .font(.system(.title3, design: .rounded).weight(.semibold))
+                        .foregroundStyle(theme.text)
+                    Spacer()
                 }
                 .padding(.horizontal, 18)
-                .padding(.vertical, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // A touch larger than the system default: the window holds a
-                // lot of small print (T58).
-                .font(MakiType.reading)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+
+                pageNavigation
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 6)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        switch settingsTab {
+                        case .general: generalTab
+                        case .windows: windowsTab
+                        case .layouts: layoutsTab
+                        case .panels: panelsTab
+                        case .terminal: terminalTab
+                        case .notifications: notificationsTab
+                        case .groups: groupsTab
+                        case .system: systemTab
+                        case .dropzones: EmptyView()
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(MakiType.reading)
+                }
             }
             .id(settingsTab)
             .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder
+    private var pageNavigation: some View {
+        switch settingsTab {
+        case .general:
+            pageTabs(GeneralPage.allCases, selection: $generalPage) { $0.title }
+        case .windows:
+            pageTabs(WindowsPage.allCases, selection: $windowsPage) { $0.title }
+        case .panels:
+            pageTabs(PanelsPage.allCases, selection: $panelsPage) { $0.title }
+        case .notifications:
+            pageTabs(NotificationsPage.allCases, selection: $notificationsPage) { $0.title }
+        default:
+            EmptyView()
         }
     }
 
@@ -404,7 +496,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            pageTabs(GeneralPage.allCases, selection: $generalPage) { $0.title }
             if generalPage == .permissions {
                 SettingsSection("Permissions") {
                     Label(
@@ -514,7 +605,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var windowsTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            pageTabs(WindowsPage.allCases, selection: $windowsPage) { $0.title }
             if windowsPage == .placement {
                 SettingsSection("Placement") {
                     Picker("Gap", selection: Binding(get: { store.gap }, set: { store.updateGap($0) })) {
@@ -689,7 +779,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var panelsTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            pageTabs(PanelsPage.allCases, selection: $panelsPage) { $0.title }
             if panelsPage == .shelf {
                 SettingsSection("Shelf") {
                     Toggle("Shake while dragging to open the shelf", isOn: Binding(
@@ -1124,15 +1213,18 @@ struct SettingsView: View {
 
     private var terminalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SettingsSection("Terminal") {
-                TextField("Font family", text: Binding(
+            SettingsSection("Appearance") {
+                LabeledContent("Font family") {
+                    TextField("Built-in monospaced", text: Binding(
                     get: { TerminalController.shared.settings.fontFamily ?? "" },
                     set: { value in
                         TerminalController.shared.updateSettings {
                             $0.fontFamily = value.isEmpty ? nil : value
                         }
                     }
-                ))
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
                 SliderRow(title: "Font size",
                           value: Binding(
                             get: { TerminalController.shared.settings.fontSize },
@@ -1156,6 +1248,8 @@ struct SettingsView: View {
                         TerminalController.shared.updateSettings { $0.cursorBlink = value }
                     }
                 ))
+            }
+            SettingsSection("Behavior") {
                 Picker("Scrollback", selection: Binding(
                     get: { TerminalController.shared.settings.scrollbackLimitMB ?? 0 },
                     set: { value in
@@ -1182,14 +1276,19 @@ struct SettingsView: View {
                         }
                     }
                 ))
-                TextField("Shell command (empty: login shell)", text: Binding(
+                LabeledContent("Shell command") {
+                    TextField("Empty uses your login shell", text: Binding(
                     get: { TerminalController.shared.settings.shell ?? "" },
                     set: { value in
                         TerminalController.shared.updateSettings {
                             $0.shell = value.isEmpty ? nil : value
                         }
                     }
-                ))
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
+            }
+            SettingsSection("Window") {
                 SliderRow(title: "Quake height",
                           value: Binding(
                             get: { TerminalController.shared.settings.quakeHeightFraction },
@@ -1251,6 +1350,8 @@ struct SettingsView: View {
                         Text(profile.displayName.isEmpty ? "New SSH profile" : profile.displayName)
                         Spacer()
                         Button {
+                            sshPortDrafts[profile.id] = nil
+                            sshPortErrors[profile.id] = nil
                             TerminalController.shared.removeSSHProfile(id: profile.id)
                         } label: {
                             Image(systemName: "trash")
@@ -1269,22 +1370,47 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func sshProfileFields(_ profile: TerminalSSHProfile) -> some View {
-        TextField("Name", text: sshStringBinding(profile, \.name))
-        TextField("Host", text: sshStringBinding(profile, \.host))
-        TextField("User", text: sshStringBinding(profile, \.user))
-        TextField("Port", text: Binding(
+        LabeledContent("Name") {
+            TextField("Profile name", text: sshStringBinding(profile, \.name))
+        }
+        LabeledContent("Host") {
+            TextField("host.example.com", text: sshStringBinding(profile, \.host))
+        }
+        LabeledContent("User") {
+            TextField("SSH user", text: sshStringBinding(profile, \.user))
+        }
+        LabeledContent("Port") {
+            TextField("Default: 22", text: Binding(
             get: {
-                profile.port.map(String.init) ?? ""
+                sshPortDrafts[profile.id] ?? profile.port.map(String.init) ?? ""
             },
             set: { value in
+                sshPortDrafts[profile.id] = value
                 let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
+                    sshPortErrors[profile.id] = nil
+                } else if let port = Int(trimmed), (1...65_535).contains(port) {
+                    sshPortErrors[profile.id] = nil
+                } else {
+                    sshPortErrors[profile.id] = "Enter a port from 1 to 65535."
+                    return
+                }
                 TerminalController.shared.updateSSHProfile(id: profile.id) {
                     $0.port = trimmed.isEmpty ? nil : Int(trimmed)
                 }
             }
-        ))
-        TextField("Identity file (optional)", text: sshOptionalBinding(profile, \.identityFile))
-        TextField("Remote command (optional)", text: sshOptionalBinding(profile, \.remoteCommand))
+            ))
+            .frame(maxWidth: 100)
+        }
+        if let error = sshPortErrors[profile.id] {
+            Text(error).font(MakiType.meta).foregroundStyle(.red)
+        }
+        LabeledContent("Identity file") {
+            TextField("Optional path to private key", text: sshOptionalBinding(profile, \.identityFile))
+        }
+        LabeledContent("Remote command") {
+            TextField("Optional command after connecting", text: sshOptionalBinding(profile, \.remoteCommand))
+        }
         Toggle("Forward agent", isOn: Binding(
             get: { profile.forwardAgent },
             set: { value in
@@ -1331,7 +1457,6 @@ struct SettingsView: View {
     @ViewBuilder
     private var notificationsTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            pageTabs(NotificationsPage.allCases, selection: $notificationsPage) { $0.title }
             if notificationsPage == .placement {
                 SettingsSection("Position") {
                     Picker("Placement", selection: hudPosition) {

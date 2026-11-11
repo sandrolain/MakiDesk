@@ -45,11 +45,14 @@ struct DockerSettingsView: View {
                 }
                 Section("Docker") {
                     HStack {
-                        TextField("Docker executable", text: Binding(
+                        LabeledContent("Executable") {
+                            TextField("Path to docker", text: Binding(
                             get: { draft.dockerPath ?? "" },
                             set: { draft.dockerPath = $0.isEmpty ? nil : $0 }
-                        ))
-                        Button("Choose…") { chooseDocker() }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            Button("Choose…") { chooseDocker() }
+                        }
                     }
                     Picker("Context", selection: Binding(
                         get: { draft.contextName },
@@ -66,6 +69,7 @@ struct DockerSettingsView: View {
             Divider()
             HStack {
                 Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Apply") {
                     store.settings = draft
@@ -74,6 +78,7 @@ struct DockerSettingsView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
             }
             .padding(16)
         }

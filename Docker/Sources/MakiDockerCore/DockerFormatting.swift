@@ -1,6 +1,18 @@
 import Foundation
 
 public enum DockerFormatting {
+    /// Adds the conventional space between a displayed numeric size and its
+    /// unit while leaving unavailable or non-size labels untouched.
+    public static func spacedSize(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let number = trimmed.prefix { $0.isNumber || $0 == "." || $0 == "," }
+        let unit = trimmed.dropFirst(number.count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard number.isEmpty == false, unit.isEmpty == false,
+              unit.first?.isLetter == true else { return trimmed }
+        return "\(number) \(unit)"
+    }
+
     /// Docker prints sizes with decimal units (`900MB`, `1.02GB`, `475kB`).
     /// This parser is for display totals and prune estimates, never for exact
     /// accounting; a value it cannot read is `nil`, not zero.
