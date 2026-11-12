@@ -978,9 +978,10 @@ browser without touching MakiDesk.
   is WebKit's. The address history is only used for suggestions, not shown as
   a browsing-history screen.
 - **Build and reload.** `task browser:bundle` builds the helper,
-  `task browser:run` launches it alone, and `task reload` stops MakiDesk,
-  Docker, Terminal and MakiDesk Browser before rebuilding and signing the whole
-  bundle. `task bundle` embeds the browser in
+  `task browser:run` launches it alone, and `task browser:reload` stops only the
+  browser before rebuilding, signing and relaunching it. `task reload` stops
+  MakiDesk, Docker, Terminal and MakiDesk Browser before rebuilding and signing
+  the whole bundle. `task bundle` embeds the browser in
   `MakiDesk.app/Contents/Applications/MakiDeskBrowser.app`.
 - **Extensions.** The extension host is planned for a later phase. The built-in
   blocker is not an extension and works without it.

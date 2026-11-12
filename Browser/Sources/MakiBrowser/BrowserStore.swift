@@ -157,7 +157,11 @@ final class BrowserStore {
     }
 
     var windowTitle: String {
-        selectedTab?.displayTitle ?? "MakiBrowser"
+        guard let tab = selectedTab else { return "MakiBrowser" }
+        if let url = tab.url {
+            return "\(tab.displayTitle) — \(url.absoluteString)"
+        }
+        return tab.displayTitle
     }
 
     var windowSubtitle: String {

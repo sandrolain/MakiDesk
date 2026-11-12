@@ -103,6 +103,14 @@ tasks:
     cmds:
       - open dist/MakiDeskBrowser.app
 
+  browser:reload:
+    desc: Kill, rebuild, sign and relaunch only the browser helper
+    cmds:
+      - pkill -x "MakiDeskBrowser" || true
+      - sleep 1
+      - sh scripts/bundle-browser.sh
+      - open dist/MakiDeskBrowser.app
+
   release:
     desc: Compile optimized release target
     cmds:

@@ -8,12 +8,13 @@ struct BrowserRootView: View {
     var body: some View {
         HSplitView {
             BrowserSidebar(store: store)
-                .frame(minWidth: store.settings.compactTabs ? 96 : 240,
-                       idealWidth: store.settings.compactTabs ? 96 : CGFloat(store.sidebarWidth),
-                       maxWidth: store.settings.compactTabs ? 120 : 480)
+                .frame(minWidth: store.settings.compactTabs ? 90 : 240,
+                       idealWidth: store.settings.compactTabs ? 90 : CGFloat(store.sidebarWidth),
+                       maxWidth: store.settings.compactTabs ? 90 : 480)
             BrowserContent(store: store)
                 .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
         }
+        .padding(.top, 32)
         .frame(minWidth: 900, minHeight: 600)
         .ignoresSafeArea()
         .background(Color(nsColor: .windowBackgroundColor))
@@ -41,7 +42,7 @@ private struct BrowserSidebar: View {
             Divider().opacity(0.6)
             VStack(spacing: 0) {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
+                    LazyVStack(alignment: store.settings.compactTabs ? .center : .leading, spacing: 2) {
                         section(.pinned, tabs: store.pinnedTabs)
                         section(.active, tabs: store.activeTabs)
                         section(.old, tabs: store.oldTabs)
@@ -167,9 +168,14 @@ private struct BrowserIconRail: View {
     }
 }
 
+private enum AddressFocus: Hashable {
+    case textField
+    case suggestion(index: Int)
+}
+
 private struct BrowserAddressOverlay: View {
     @Bindable var store: BrowserStore
-    @FocusState private var focused: Bool
+    @FocusState private var focus: AddressFocus?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -182,15 +188,23 @@ private struct BrowserAddressOverlay: View {
                 TextField("Search or enter address", text: $store.addressText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
-                    .focused($focused)
+                    .focused($focus, equals: .textField)
                     .onSubmit { store.navigate(store.addressText) }
                     .onExitCommand { dismiss() }
                     .onChange(of: store.addressFocusToken) { _, _ in
-                        focused = true
+                        focus = .textField
                         NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
                     }
                     .onChange(of: store.addressText) { _, _ in
                         store.resetAddressSelection()
+                    }
+                    .onKeyPress { press in
+                        if press.key == .downArrow, !store.addressSuggestions.isEmpty {
+                            store.addressSelectionIndex = 0
+                            focus = .suggestion(index: 0)
+                            return .handled
+                        }
+                        return .ignored
                     }
 
                 Button {
@@ -236,6 +250,10 @@ private struct BrowserAddressOverlay: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .focused($focus, equals: .suggestion(index: index))
+                        .onKeyPress { press in
+                            handleKeyPress(press, index: index, count: store.addressSuggestions.count)
+                        }
                         Divider().opacity(0.35)
                     }
                 }
@@ -265,9 +283,34 @@ private struct BrowserAddressOverlay: View {
         .shadow(color: .black.opacity(0.22), radius: 18, y: 6)
         .padding(.top, 12)
         .onAppear {
-            focused = true
+            focus = .textField
         }
         .onExitCommand { dismiss() }
+    }
+
+    private func handleKeyPress(_ press: KeyPress, index: Int, count: Int) -> KeyPress.Result {
+        switch press.key {
+        case .upArrow:
+            if index == 0 {
+                focus = .textField
+            } else {
+                store.moveAddressSelection(by: -1)
+                focus = .suggestion(index: index - 1)
+            }
+            return .handled
+        case .downArrow:
+            if index < count - 1 {
+                store.moveAddressSelection(by: 1)
+                focus = .suggestion(index: index + 1)
+            }
+            return .handled
+        case .return:
+            if store.acceptAddressSelection() { return .handled }
+            return .ignored
+        default:
+            focus = .textField
+            return .ignored
+        }
     }
 
     private func dismiss() {
@@ -336,8 +379,7 @@ private struct BrowserTabRow: View {
         }
         .padding(.leading, compact ? 0 : 7)
         .padding(.trailing, compact ? 0 : 6)
-        .frame(maxWidth: compact ? .infinity : nil)
-        .frame(height: compact ? 30 : 38)
+        .frame(width: compact ? 28 : nil, height: compact ? 28 : 38)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(color.opacity(selected ? 0.20 : (hovering ? 0.13 : 0.08)))
@@ -454,8 +496,10 @@ private struct BrowserContent: View {
         if let session = store.selectedSession {
             BrowserWebViewContainer(webView: session.webView)
                 .id(session.tabID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.isStarted {
             Color(nsColor: .textBackgroundColor)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 8) {
                 ProgressView()
@@ -463,6 +507,7 @@ private struct BrowserContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -470,7 +515,9 @@ private struct BrowserContent: View {
 private struct BrowserWebViewContainer: NSViewRepresentable {
     let webView: WKWebView
 
-    func makeNSView(context: Context) -> WKWebView { webView }
+    func makeNSView(context: Context) -> WKWebView {
+        webView
+    }
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
 

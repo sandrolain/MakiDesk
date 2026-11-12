@@ -16,8 +16,10 @@ swift build --package-path Browser
 swift test --package-path Browser
 task browser:bundle
 task browser:run
+task browser:reload
 ```
 
 The app is `.regular`: its window is a normal window in MakiDesk's AX inventory.
 `task bundle` embeds it beside Terminal and Docker; `task reload` stops it before
-rebuilding.
+rebuilding. `task browser:reload` does the same for the browser alone: stop,
+rebuild, sign and relaunch.

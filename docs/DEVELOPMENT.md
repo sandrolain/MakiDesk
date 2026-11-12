@@ -145,6 +145,8 @@ repeat and does not replace an existing locally built xcframework. Before a
 direct `swift build --package-path Terminal`, run `task terminal:fetch` once.
 The browser helper is a separate package: `swift build --package-path Browser`,
 `swift test --package-path Browser`, or `task browser:bundle` / `task browser:run`.
+`task browser:reload` stops only the running browser, then rebuilds, signs and
+relaunches it.
 
 ## Debugging
 

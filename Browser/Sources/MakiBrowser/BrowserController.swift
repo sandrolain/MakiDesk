@@ -21,8 +21,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = store.windowTitle
-        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 900, height: 600)
         window.collectionBehavior = [.fullScreenPrimary]
@@ -34,15 +34,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
         let hosting = NSHostingView(rootView: BrowserRootView(store: store))
         hosting.safeAreaRegions = []
         hosting.translatesAutoresizingMaskIntoConstraints = false
-        let container = NSView()
-        container.addSubview(hosting)
+        window.contentView = hosting
         NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: container.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            hosting.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor),
         ])
-        window.contentView = container
         installKeyMonitor()
         installActivityMonitor()
     }
