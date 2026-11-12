@@ -30,6 +30,70 @@ struct BrowserRootView: View {
                 window.title = title
             }
         }
+        .popover(item: store.passwordPopoverBinding, attachmentAnchor: .rect(.bounds)) { _ in
+            PasswordPopover(store: store)
+        }
+    }
+}
+
+private struct PasswordPopover: View {
+    @Bindable var store: BrowserStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Saved Passwords")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+            if let domain = store.passwordPopoverDomain,
+               !store.credentialStore.credentials(for: domain).isEmpty {
+                let credentials = store.credentialStore.credentials(for: domain)
+                ForEach(Array(credentials.enumerated()), id: \.element.id) { index, credential in
+                    Button {
+                        store.fillCredential(credential)
+                        store.dismissPasswordPopover()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(credential.username)
+                                .font(.system(size: 13, weight: .medium))
+                            Text(credential.domain)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.primary.opacity(0.05))
+                            .opacity(0.5)
+                    )
+                    if index < credentials.count - 1 {
+                        Divider().opacity(0.4)
+                    }
+                }
+                Button("Cancel") {
+                    store.dismissPasswordPopover()
+                }
+                .keyboardShortcut(.cancelAction)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+            } else {
+                Text("No saved passwords for this site")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 16)
+            }
+        }
+        .frame(width: 280)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.25), radius: 12)
+        .padding(12)
     }
 }
 

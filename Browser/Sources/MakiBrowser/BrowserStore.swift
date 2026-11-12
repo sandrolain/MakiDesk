@@ -1,7 +1,14 @@
 import AppKit
 import Foundation
+import LocalAuthentication
 import Observation
+import SwiftUI
 import WebKit
+
+struct IdentifiableUUID: Identifiable {
+    let id: UUID
+    init(_ uuid: UUID) { self.id = uuid }
+}
 
 /// The browser model and the owner of its live WebKit objects.
 ///
@@ -25,6 +32,15 @@ final class BrowserStore {
     var isSettingsVisible = false
     var isCredentialsVisible = false
     var addressSelectionIndex = -1
+    var passwordPopoverTabID: UUID?
+    var passwordPopoverDomain: String?
+
+    var passwordPopoverBinding: Binding<IdentifiableUUID?> {
+        Binding(
+            get: { self.passwordPopoverTabID.map { IdentifiableUUID($0) } },
+            set: { newValue in self.passwordPopoverTabID = newValue?.id }
+        )
+    }
     var summary: BrowserSummaryState = .idle
     var summaryTabID: UUID?
     var errorText: String?
@@ -38,7 +54,7 @@ final class BrowserStore {
     @ObservationIgnored private let tabStore: BrowserTabStore
     @ObservationIgnored private let settingsStore: BrowserSettingsStore
     @ObservationIgnored private let historyStore: BrowserHistoryStore
-    @ObservationIgnored private let credentialStore = BrowserCredentialStore()
+    @ObservationIgnored private(set) lazy var credentialStore = BrowserCredentialStore()
     @ObservationIgnored private var expandedSidebarWidth: Double = 264
     @ObservationIgnored private let blocker = BrowserAdBlocker()
     @ObservationIgnored private let faviconProvider = BrowserFaviconProvider()
@@ -404,9 +420,42 @@ final class BrowserStore {
     func fillCredential(_ credential: BrowserCredential) {
         guard let session = selectedSession else { return }
         Task { @MainActor in
-            _ = await BrowserCredentialStore.fill(credential,
-                                                  in: session.webView)
+            if await authenticateForCredential() {
+                _ = await BrowserCredentialStore.fill(credential,
+                                                      in: session.webView)
+                dismissPasswordPopover()
+            }
         }
+    }
+
+    private func authenticateForCredential() async -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        let canEvaluate = context.canEvaluatePolicy(.deviceOwnerAuthentication,
+                                                     error: &error)
+        guard canEvaluate else {
+            return true
+        }
+        return await withCheckedContinuation { continuation in
+            context.evaluatePolicy(
+                .deviceOwnerAuthentication,
+                localizedReason: "Fill password for this site"
+            ) { success, error in
+                continuation.resume(returning: success)
+            }
+        }
+    }
+
+    func passwordFieldFocused(tabID: UUID) {
+        guard let tab = tabs.first(where: { $0.id == tabID }),
+              let domain = tab.url.flatMap(BrowserDomain.registrableDomain) else { return }
+        passwordPopoverTabID = tabID
+        passwordPopoverDomain = domain
+    }
+
+    func dismissPasswordPopover() {
+        passwordPopoverTabID = nil
+        passwordPopoverDomain = nil
     }
 
     // MARK: - Blocker
@@ -607,7 +656,7 @@ final class BrowserStore {
 
     private func makeConfiguration(for tab: BrowserTab) -> WKWebViewConfiguration {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
+        configuration.websiteDataStore = WKWebsiteDataStore.default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.applicationNameForUserAgent = "MakiDesk/\(BrowserVersion.string)"
         if blockerReady,

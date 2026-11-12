@@ -5,16 +5,41 @@ import WebKit
 /// Owns one `WKWebView` and forwards its events to the store. The store keeps
 /// the session alive; the session never owns the model.
 @MainActor
-final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
-    let tabID: UUID
-    let webView: WKWebView
+final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+    private(set) var tabID: UUID
+    private(set) var webView: WKWebView!
     private weak var store: BrowserStore?
+
+    private static let passwordFocusScript = #"""
+    (function() {
+        const observer = new MutationObserver(() => {
+            document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="username"]').forEach(el => {
+                el.addEventListener('focus', () => {
+                    window.webkit.messageHandlers.passwordFocused.postMessage(el.id || 'password-field');
+                });
+            });
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="username"]').forEach(el => {
+            el.addEventListener('focus', () => {
+                window.webkit.messageHandlers.passwordFocused.postMessage(el.id || 'password-field');
+            });
+        });
+    })();
+    """#
 
     init(tabID: UUID, configuration: WKWebViewConfiguration, store: BrowserStore) {
         self.tabID = tabID
         self.store = store
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
+        configuration.userContentController.add(self, name: "passwordFocused")
+        let userScript = WKUserScript(
+            source: BrowserTabSession.passwordFocusScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        )
+        configuration.userContentController.addUserScript(userScript)
+        self.webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
@@ -22,6 +47,15 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
         #if DEBUG
         webView.isInspectable = true
         #endif
+    }
+
+    // MARK: - WKScriptMessageHandler
+
+    func userContentController(_ userContentController: WKUserContentController,
+                              didReceive message: WKScriptMessage) {
+        if message.name == "passwordFocused" {
+            store?.passwordFieldFocused(tabID: tabID)
+        }
     }
 
     func load(_ url: URL) {

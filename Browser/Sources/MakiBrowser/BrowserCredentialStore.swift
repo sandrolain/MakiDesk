@@ -50,6 +50,8 @@ struct BrowserCredentialStore {
             kSecAttrDescription as String: Self.serviceLabel,
             kSecAttrLabel as String: "\(Self.serviceLabel) — \(domain)",
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+            kSecAttrAuthenticationType as String: kSecAttrAuthenticationTypeHTMLForm,
+            kSecAttrProtocol as String: kSecAttrProtocolHTTPS,
             kSecValueData as String: Data(password.utf8),
         ]
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
