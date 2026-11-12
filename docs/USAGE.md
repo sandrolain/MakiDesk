@@ -962,10 +962,12 @@ browser without touching MakiDesk.
   list of common ad and tracking networks; it blocks their requests but does
   not hide editorial elements, and it is not a full uBlock replacement. The
   full EasyList/EasyPrivacy pipeline is described in the browser analysis.
-- **Passwords.** The key button opens the passwords for the current site.
-  Credentials are stored as Internet Password items in the login Keychain and
-  can be filled into the username/password fields from the panel. Safari's own
-  saved passwords are a separate store and are not readable by this app.
+- **Passwords.** When you focus a username or password field, MakiDesk Browser
+  shows a popover with credentials saved for that site. Select one to fill the
+  form after Touch ID authentication. Credentials are stored as Internet Password
+  items in the login Keychain; Safari's passwords are a separate store and are
+  not readable by this app. Credentials can also be managed from the
+  **Credentials** panel.
 - **Page summary.** The sparkles button, or `⇧⌘S`, extracts the readable text
   of the page and summarizes it on-device with Apple Intelligence (Foundation
   Models). Nothing is uploaded and the page text is not logged. If Apple

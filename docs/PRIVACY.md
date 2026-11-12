@@ -277,12 +277,14 @@ to a cloud model. The extension host is not active in this version; when it is
 added, extension permissions and storage will be documented here before they
 ship.
 
-Passwords saved from the browser's key panel are Internet Password items in
-the user's login Keychain, under the server's registrable domain and the chosen
-username. MakiDesk reads only its own items; Safari's saved passwords are a
-separate protected store and are neither imported nor read. The password is
-never written to the browser JSON files and never logged. Deleting an item from
-the panel removes it from the Keychain.
+Passwords are stored as Internet Password items in the user's login Keychain,
+under the server's registrable domain and the chosen username. When you focus a
+login field, the browser proposes matching credentials in a popover; filling them
+requires Touch ID authentication. Passwords can also be managed from the **Credentials**
+panel. MakiDesk reads only its own Keychain items; Safari's saved passwords are a
+separate protected store and are neither imported nor read. The password is never
+written to the browser JSON files and never logged. Deleting an item from the
+panel removes it from the Keychain.
 
 The browser requests no Accessibility or Screen Recording permission. It uses
 the network as any WebKit page does, and downloads use `WKDownload` with a
