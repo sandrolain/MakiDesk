@@ -26,7 +26,6 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("WebKit"),
-                .linkedFramework("Security"),
             ]
         ),
         .executableTarget(

@@ -15,8 +15,8 @@
 26+ that arranges the windows you already have — no fake canvas, no second
 desktop. Tiling that adapts to what you are reading, saved window groups, a live
 switcher, notes with syntax highlighting, clipboard history, a drag shelf and
-configurable command dropzones, all in one place. No account, no cloud, no
-telemetry.
+configurable command dropzones, all in one place. No MakiDesk account or cloud
+service, and no telemetry.
 
 <p align="center">
   <img src="docs/assets/notes.png" alt="MakiDesk notes panel with a searchable list and syntax highlighting" width="90%">
@@ -54,11 +54,17 @@ minimum size is left where it is instead of being squeezed.
 and listed by its window switcher: vertical tabs ordered by last use, pinned
 tabs that never expire, Active and Old groups with a 24/48-hour rule,
 favicon-tinted rows, a compact favicon-only mode and a relative time in
-five-minute steps. The address bar appears only when asked (`⌘L`) and shows
-local address suggestions you can choose with ↑/↓; saved logins come from the
-login Keychain. Blocking is on by default and can be turned off for one site or one tab;
-page summaries use the on-device model and never upload the page. It is WebKit,
-not a second browser engine.
+five-minute steps. The address bar appears only when asked (`⌘L`) and suggests
+local history, open tabs, direct addresses and search actions navigable with
+↑/↓, and a rail button copies the current page URL. MakiDesk has no built-in
+password manager; Apple Passwords autofill is not available in the current
+local build. Blocking is on by default and can be turned off for one site or one tab;
+page summaries use the on-device model or can open the page URL in ChatGPT. It is WebKit,
+not a second browser engine. It can be selected as the macOS default browser;
+incoming links show a chooser for MakiDesk Browser, another installed app or
+cancellation, which is useful for sites authenticated in another browser. It
+also has private tabs with ephemeral site data, an adjustable Reader view,
+per-site data clearing and a per-tab Safari Web Inspector toggle.
 
 ### A pointer you can find
 
@@ -246,11 +252,20 @@ you can edit by hand. It is left out of screenshots and recordings.
 of workspaces and split panes. Because it is a separate app, quitting MakiDesk
 does not end its sessions; it appears in the Dock and ⌘Tab while its window is
 open, and it restores the workspace layout and each shell's directory on the next
-launch. `⌘F` searches the focused pane's scrollback and shows how many matches it
+launch. When tmux is installed, each pane reconnects to its live tmux session
+after the helper quits or crashes; saved workspaces migrate to that backend.
+`⌘F` searches the focused pane's scrollback and shows how many matches it
 found, and an image on the clipboard is pasted as a PNG file path. An opt-in
 switch in Settings adds Claude Code and Codex hooks, so the sidebar shows which
-workspace is working, waiting or done. VoiceOver reads the pane as a text area
-and dictation inserts at the cursor. The helper is embedded in the app bundle.
+workspace is working, waiting or done, with the selected agent's state shown
+below the workspace list. A shared sidebar card also shows Codex account quota
+windows, reset times and any token metrics the local Codex app-server supplies;
+it updates on request and every five minutes while the Terminal window is
+visible. Click a terminal notice to return to its pane; move a
+focused split into its own workspace without stopping it. `⌘N` opens Notes in
+MakiDesk, and the sidebar gear opens Terminal settings. VoiceOver reads the pane
+as a text area and dictation inserts at the cursor. The helper is embedded in
+the app bundle.
 
 ### Docker without the desktop app
 

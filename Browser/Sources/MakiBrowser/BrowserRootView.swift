@@ -8,9 +8,9 @@ struct BrowserRootView: View {
     var body: some View {
         HSplitView {
             BrowserSidebar(store: store)
-                .frame(minWidth: store.settings.compactTabs ? 90 : 240,
-                       idealWidth: store.settings.compactTabs ? 90 : CGFloat(store.sidebarWidth),
-                       maxWidth: store.settings.compactTabs ? 90 : 480)
+                .frame(minWidth: store.settings.compactTabs ? 97 : 240,
+                       idealWidth: store.settings.compactTabs ? 97 : CGFloat(store.sidebarWidth),
+                       maxWidth: store.settings.compactTabs ? 97 : 480)
             BrowserContent(store: store)
                 .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -21,8 +21,21 @@ struct BrowserRootView: View {
         .sheet(isPresented: $store.isSettingsVisible) {
             BrowserSettingsView(store: store)
         }
-        .sheet(isPresented: $store.isCredentialsVisible) {
-            BrowserCredentialsView(store: store)
+        .sheet(item: $store.externalOpenRequest, onDismiss: store.finishExternalOpenRequest) { request in
+            ExternalLinkChooser(store: store, request: request)
+        }
+        .confirmationDialog("Clear website data?",
+                            isPresented: Binding(
+                                get: { store.siteDataConfirmationTabID != nil },
+                                set: { if !$0 { store.cancelSiteDataClear() } }
+                            ),
+                            titleVisibility: .visible) {
+            Button("Clear Site Data", role: .destructive) {
+                Task { await store.clearConfirmedSiteData() }
+            }
+            Button("Cancel", role: .cancel) { store.cancelSiteDataClear() }
+        } message: {
+            Text("Cookies and site storage for \(store.siteDataConfirmationHost ?? "this site") will be removed. You may be signed out.")
         }
         .onChange(of: store.windowTitle) { _, title in
             if let window = NSApp.keyWindow,
@@ -30,70 +43,60 @@ struct BrowserRootView: View {
                 window.title = title
             }
         }
-        .popover(item: store.passwordPopoverBinding, attachmentAnchor: .rect(.bounds)) { _ in
-            PasswordPopover(store: store)
-        }
     }
 }
 
-private struct PasswordPopover: View {
+private struct ExternalLinkChooser: View {
     @Bindable var store: BrowserStore
+    let request: BrowserStore.BrowserExternalOpenRequest
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Saved Passwords")
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            if let domain = store.passwordPopoverDomain,
-               !store.credentialStore.credentials(for: domain).isEmpty {
-                let credentials = store.credentialStore.credentials(for: domain)
-                ForEach(Array(credentials.enumerated()), id: \.element.id) { index, credential in
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Open link")
+                .font(.system(size: 16, weight: .semibold))
+            Text(request.url.absoluteString)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(2)
+            Button {
+                store.openExternalURLInBrowser()
+                dismiss()
+            } label: {
+                Label("Open in MakiDesk Browser", systemImage: "safari")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .disabled(!store.isStarted)
+            if !request.apps.isEmpty {
+                Divider()
+                Text("Open with another app")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                ForEach(request.apps) { app in
                     Button {
-                        store.fillCredential(credential)
-                        store.dismissPasswordPopover()
+                        store.openExternalURL(in: app)
+                        dismiss()
                     } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(credential.username)
-                                .font(.system(size: 13, weight: .medium))
-                            Text(credential.domain)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path))
+                                .resizable().frame(width: 20, height: 20)
+                            Text(app.name)
+                            Spacer()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.primary.opacity(0.05))
-                            .opacity(0.5)
-                    )
-                    if index < credentials.count - 1 {
-                        Divider().opacity(0.4)
-                    }
                 }
-                Button("Cancel") {
-                    store.dismissPasswordPopover()
-                }
-                .keyboardShortcut(.cancelAction)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-                .buttonStyle(.plain)
-            } else {
-                Text("No saved passwords for this site")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 16)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
             }
         }
-        .frame(width: 280)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.25), radius: 12)
-        .padding(12)
+        .padding(20)
+        .frame(width: 400)
     }
 }
 
@@ -111,7 +114,7 @@ private struct BrowserSidebar: View {
                         section(.active, tabs: store.activeTabs)
                         section(.old, tabs: store.oldTabs)
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, store.settings.compactTabs ? 7 : 8)
                     .padding(.vertical, 8)
                 }
                 .scrollIndicators(.hidden)
@@ -146,8 +149,8 @@ private struct BrowserSidebar: View {
             }
 
             ForEach(tabs) { tab in
-                BrowserTabRow(store: store, tab: tab,
-                              compact: store.settings.compactTabs)
+                BrowserTabRow(store: store, tab: tab)
+                    .id("\(tab.id.uuidString)-\(store.settings.compactTabs ? "compact" : "expanded")")
             }
             if store.settings.compactTabs {
                 Divider().opacity(0.25).padding(.vertical, 2)
@@ -160,86 +163,155 @@ private struct BrowserIconRail: View {
     @Bindable var store: BrowserStore
     @State private var hovering: String?
 
-    var body: some View {
-        VStack(spacing: 5) {
-            Color.clear.frame(height: 28)
+    private var inspectorEnabled: Bool {
+        guard let tabID = store.selectedTabID else { return false }
+        return store.isWebInspectorEnabled(for: tabID)
+    }
 
-            icon(store.settings.compactTabs ? "sidebar.left" : "rectangle.compress.vertical",
-                 id: "compact", help: "Compact tab column") {
+    var body: some View {
+        VStack(spacing: 4) {
+            icon("sidebar.left",
+                 id: "compact", help: store.settings.compactTabs ? "Expand tab column" : "Compact tab column",
+                 isActive: store.settings.compactTabs, animatePress: false) {
                 store.toggleCompactTabs()
             }
+            Divider().frame(width: 22).padding(.vertical, 2)
 
-            icon("chevron.left", id: "back", help: "Back") { store.goBack() }
+            icon("chevron.left", id: "back", help: "Back", isActive: false) { store.goBack() }
                 .disabled(store.canGoBack == false)
-            icon("chevron.right", id: "forward", help: "Forward") { store.goForward() }
+            icon("chevron.right", id: "forward", help: "Forward", isActive: false) { store.goForward() }
                 .disabled(store.canGoForward == false)
             icon(store.isLoading ? "xmark" : "arrow.clockwise",
-                 id: "reload", help: store.isLoading ? "Stop" : "Reload") {
+                 id: "reload", help: store.isLoading ? "Stop loading" : "Reload page",
+                 isActive: store.isLoading) {
                 store.isLoading ? store.stopLoading() : store.reload()
             }
-            icon("link", id: "address", help: "Address (⌘L)") { store.showAddress() }
-            icon("plus", id: "new", help: "New Tab (⌘T)") { store.newTab() }
+            icon("link", id: "address", help: "Address and search (⌘L)",
+                 isActive: store.isAddressVisible) { store.showAddress() }
+            icon("doc.on.doc", id: "copy-url", help: "Copy page URL") {
+                guard let url = store.selectedTab?.url else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+            }
+            .disabled(store.selectedTab?.url == nil)
+            icon("plus", id: "new", help: "New Tab (⌘T); private tab (⌥⌘T)") { store.newTab() }
+                .contextMenu {
+                    Button("New Private Tab (⌥⌘T)") { store.newPrivateTab() }
+                }
 
             Divider().frame(width: 20).padding(.vertical, 3)
 
             icon(store.selectedTab?.isPinned == true ? "pin.fill" : "pin",
-                 id: "pin", help: "Pin / unpin tab (⇧⌘P)") {
+                 id: "pin", help: store.selectedTab?.isPinned == true
+                    ? "Unpin tab (⇧⌘P)" : "Pin tab (⇧⌘P)",
+                 isActive: store.selectedTab?.isPinned == true) {
                 if let id = store.selectedTabID { store.togglePin(id) }
             }
             .disabled(store.selectedTab == nil)
+
+            icon("doc.text", id: "reader", help: "Reader mode") {
+                store.openReaderMode()
+            }
+            .disabled(store.selectedTab?.url == nil || store.isLoading)
 
             icon("sparkles", id: "summary", help: "Summarize page (⇧⌘S)") {
                 store.requestSummary()
             }
             .disabled(store.selectedTab == nil || store.settings.summaryEnabled == false)
 
-            icon("shield.slash", id: "blocker", help: "Toggle blocker for this site") {
+            icon("bubble.left.and.text.bubble.right", id: "chatgpt-summary",
+                 help: "Summarize in ChatGPT") {
+                _ = store.summarizeInChatGPT()
+            }
+            .disabled(store.selectedTab?.url == nil)
+
+            icon("curlybraces", id: "web-inspector",
+                 help: inspectorEnabled
+                    ? "Disable Web Inspector for this tab"
+                    : "Enable Web Inspector for this tab; inspect it in Safari > Develop",
+                 isActive: inspectorEnabled) {
+                store.toggleWebInspectorForSelectedTab()
+            }
+            .disabled(store.selectedTab?.url == nil)
+
+            icon(store.selectedTab.map { store.isBlockerEnabled(for: $0) } == true
+                 ? "shield.fill" : "shield.slash",
+                 id: "blocker",
+                 help: store.selectedTab.map { store.isBlockerEnabled(for: $0) } == true
+                    ? "Disable blocker for this site" : "Enable blocker for this site",
+                 isActive: store.selectedTab.map { store.isBlockerEnabled(for: $0) } == true) {
                 store.toggleBlockerForSelectedDomain()
             }
             .disabled(store.selectedTab?.url == nil)
 
             Spacer(minLength: 8)
 
-            icon("key.fill", id: "passwords", help: "Passwords from Keychain") {
-                store.isCredentialsVisible = true
-            }
-            .disabled(store.selectedTab?.url == nil)
-
             icon("gearshape", id: "settings", help: "Browser settings") {
                 store.isSettingsVisible = true
             }
         }
-        .frame(width: 42)
-        .padding(.top, 2)
+        .frame(width: 48)
+        .padding(.top, 8)
         .padding(.bottom, 8)
     }
 
-    private func icon(_ symbol: String, id: String, help: String,
+    private func icon(_ symbol: String, id: String, help: String, isActive: Bool = false,
+                      animatePress: Bool = true,
                       action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
-                .frame(width: 28, height: 28)
-                .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(hovering == id ? Color.primary.opacity(0.08) : Color.clear)
-                }
+                .font(.system(size: 14, weight: isActive ? .semibold : .medium))
+                .frame(width: 34, height: 34)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BrowserRailButtonStyle(isActive: isActive,
+                                            isHovered: hovering == id,
+                                            animatePress: animatePress))
+        .accessibilityLabel(help)
         .help(help)
         .onHover { hovering = $0 ? id : (hovering == id ? nil : hovering) }
     }
 }
 
-private enum AddressFocus: Hashable {
-    case textField
-    case suggestion(index: Int)
+private struct BrowserRailButtonStyle: ButtonStyle {
+    let isActive: Bool
+    let isHovered: Bool
+    let animatePress: Bool
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled
+                             ? (isActive ? Color.accentColor : Color.primary.opacity(0.82))
+                             : Color.secondary.opacity(0.45))
+            .background {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(backgroundColor(isEnabled: isEnabled,
+                                          isPressed: configuration.isPressed))
+            }
+            .overlay {
+                if isActive && isEnabled {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(Color.accentColor.opacity(0.28), lineWidth: 1)
+                }
+            }
+            .scaleEffect(animatePress && configuration.isPressed ? 0.94 : 1)
+            .animation(animatePress ? .easeOut(duration: 0.12) : nil,
+                       value: configuration.isPressed)
+    }
+
+    private func backgroundColor(isEnabled: Bool, isPressed: Bool) -> Color {
+        guard isEnabled else { return .clear }
+        if isPressed { return Color.accentColor.opacity(isActive ? 0.24 : 0.16) }
+        if isActive { return Color.accentColor.opacity(0.13) }
+        if isHovered { return Color.primary.opacity(0.08) }
+        return .clear
+    }
 }
 
 private struct BrowserAddressOverlay: View {
     @Bindable var store: BrowserStore
-    @FocusState private var focus: AddressFocus?
+    @FocusState private var isAddressFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -247,28 +319,37 @@ private struct BrowserAddressOverlay: View {
                 Image(systemName: store.selectedTab?.url?.scheme == "https"
                       ? "lock.fill" : "globe")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
 
                 TextField("Search or enter address", text: $store.addressText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
-                    .focused($focus, equals: .textField)
+                    .foregroundStyle(.primary)
+                    .focused($isAddressFocused)
                     .onSubmit { store.navigate(store.addressText) }
                     .onExitCommand { dismiss() }
                     .onChange(of: store.addressFocusToken) { _, _ in
-                        focus = .textField
+                        isAddressFocused = true
                         NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
                     }
                     .onChange(of: store.addressText) { _, _ in
                         store.resetAddressSelection()
                     }
                     .onKeyPress { press in
-                        if press.key == .downArrow, !store.addressSuggestions.isEmpty {
-                            store.addressSelectionIndex = 0
-                            focus = .suggestion(index: 0)
+                        let modifiers = press.modifiers.subtracting(.numericPad)
+                        guard modifiers.isEmpty, !store.addressSuggestions.isEmpty else { return .ignored }
+                        switch press.key {
+                        case .downArrow:
+                            store.moveAddressSelection(by: 1)
                             return .handled
+                        case .upArrow:
+                            store.moveAddressSelection(by: -1)
+                            return .handled
+                        case .return:
+                            return store.acceptAddressSelection() ? .handled : .ignored
+                        default:
+                            return .ignored
                         }
-                        return .ignored
                     }
 
                 Button {
@@ -286,98 +367,81 @@ private struct BrowserAddressOverlay: View {
             .frame(height: 46)
 
             if !store.addressSuggestions.isEmpty {
-                Divider().opacity(0.4)
+                Divider().overlay(Color.primary.opacity(0.18))
                 VStack(spacing: 0) {
-                    ForEach(Array(store.addressSuggestions.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(store.addressSuggestions.enumerated()), id: \.element.id) { index, suggestion in
                         Button {
-                            store.navigate(to: entry.url)
+                            store.acceptAddressSuggestion(at: index)
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: "clock.arrow.circlepath")
+                                Image(systemName: suggestion.systemImage)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 1) {
-                                    Text(entry.title.isEmpty ? entry.url.host ?? entry.url.absoluteString : entry.title)
+                                    Text(suggestion.title)
                                         .font(.system(size: 12, weight: .medium))
                                         .lineLimit(1)
-                                    Text(entry.url.absoluteString)
+                                    Text(suggestion.detail)
                                         .font(.system(size: 9.5))
-                                        .foregroundStyle(.tertiary)
+                                        .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
                                 Spacer(minLength: 0)
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(index == store.addressSelectionIndex
-                                        ? Color.accentColor.opacity(0.12) : Color.clear)
+                            .background {
+                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .fill(index == store.addressSelectionIndex
+                                          ? Color.accentColor.opacity(0.24) : Color.clear)
+                            }
+                            .overlay {
+                                if index == store.addressSelectionIndex {
+                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        .strokeBorder(Color.accentColor.opacity(0.58), lineWidth: 1)
+                                }
+                            }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .focused($focus, equals: .suggestion(index: index))
-                        .onKeyPress { press in
-                            handleKeyPress(press, index: index, count: store.addressSuggestions.count)
-                        }
-                        Divider().opacity(0.35)
+                        Divider().overlay(Color.primary.opacity(0.14))
                     }
                 }
             }
 
             HStack(spacing: 12) {
-                Text("⌘L opens · ↑↓ choose · Esc closes · Return navigates")
+                Text(store.addressRequiresNavigation
+                     ? "Enter an address or search · Return opens · ⌘Return new tab"
+                     : "⌘L opens · ↑↓ choose · Return opens · ⌘Return new tab · Esc closes")
                     .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if let host = store.selectedTab?.url?.host {
                     Text(host)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
         .frame(maxWidth: 640)
-        .background(.regularMaterial,
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.98),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
+                .strokeBorder(.primary.opacity(0.2), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.22), radius: 18, y: 6)
         .padding(.top, 12)
         .onAppear {
-            focus = .textField
+            isAddressFocused = true
         }
         .onExitCommand { dismiss() }
     }
 
-    private func handleKeyPress(_ press: KeyPress, index: Int, count: Int) -> KeyPress.Result {
-        switch press.key {
-        case .upArrow:
-            if index == 0 {
-                focus = .textField
-            } else {
-                store.moveAddressSelection(by: -1)
-                focus = .suggestion(index: index - 1)
-            }
-            return .handled
-        case .downArrow:
-            if index < count - 1 {
-                store.moveAddressSelection(by: 1)
-                focus = .suggestion(index: index + 1)
-            }
-            return .handled
-        case .return:
-            if store.acceptAddressSelection() { return .handled }
-            return .ignored
-        default:
-            focus = .textField
-            return .ignored
-        }
-    }
-
     private func dismiss() {
+        guard !store.addressRequiresNavigation else { return }
         store.hideAddress()
         DispatchQueue.main.async {
             if let webView = store.selectedSession?.webView {
@@ -388,11 +452,11 @@ private struct BrowserAddressOverlay: View {
 }
 
 private struct BrowserTabRow: View {
-    let store: BrowserStore
+    @Bindable var store: BrowserStore
     let tab: BrowserTab
-    var compact = false
     @State private var hovering = false
 
+    private var compact: Bool { store.settings.compactTabs }
     private var selected: Bool { store.selectedTabID == tab.id }
     private var color: Color {
         let value = store.fallbackColor(for: tab)
@@ -418,6 +482,13 @@ private struct BrowserTabRow: View {
                         .foregroundStyle(.tertiary)
                 }
 
+                if store.isPrivateTab(tab.id) {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .help("Private session")
+                }
+
                 Text(BrowserTimeLabel.string(since: tab.lastUsed, now: store.now))
                     .font(.system(size: 9.5, design: .monospaced))
                     .foregroundStyle(.tertiary)
@@ -435,15 +506,11 @@ private struct BrowserTabRow: View {
                     .buttonStyle(.plain)
                     .help("Close tab")
                 }
-            } else if tab.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.leading, compact ? 0 : 7)
         .padding(.trailing, compact ? 0 : 6)
-        .frame(width: compact ? 28 : nil, height: compact ? 28 : 38)
+        .frame(width: compact ? 34 : nil, height: compact ? 34 : 38)
         .background {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(color.opacity(selected ? 0.20 : (hovering ? 0.13 : 0.08)))
@@ -491,6 +558,8 @@ private struct BrowserTabRow: View {
             NSPasteboard.general.setString(url.absoluteString, forType: .string)
         }
         .disabled(tab.url == nil)
+        Button("Clear Website Data…") { store.requestSiteDataClear(for: tab.id) }
+            .disabled(tab.url?.host == nil)
         Divider()
         Button(store.isBlockerEnabled(for: tab) ? "Disable Blocker for This Site" : "Enable Blocker for This Site") {
             store.select(tab.id)
@@ -516,6 +585,7 @@ private struct BrowserTabRow: View {
         if let host = tab.url?.host { parts.append(host) }
         parts.append("last used \(BrowserTimeLabel.string(since: tab.lastUsed, now: store.now))")
         if tab.isPinned { parts.append("pinned") }
+        if store.isPrivateTab(tab.id) { parts.append("private session") }
         if !store.isBlockerEnabled(for: tab) { parts.append("blocker off") }
         return parts.joined(separator: ", ")
     }
@@ -528,8 +598,12 @@ private struct BrowserContent: View {
         ZStack(alignment: .top) {
             let _ = store.sessionRevision
             webContent
+            if store.isReaderVisible {
+                BrowserReaderPanel(store: store)
+                    .zIndex(2)
+            }
             if store.isAddressVisible {
-                Color.clear
+                Color.black.opacity(0.28)
                     .contentShape(Rectangle())
                     .onTapGesture { dismissAddress() }
                 BrowserAddressOverlay(store: store)
@@ -541,12 +615,40 @@ private struct BrowserContent: View {
                         .padding(12)
                 }
             }
+            if let message = store.errorText {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(message)
+                        .font(.system(size: 11.5))
+                        .lineLimit(3)
+                        .textSelection(.enabled)
+                    Button {
+                        store.dismissNavigationError()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss error")
+                }
+                .padding(10)
+                .background(.regularMaterial,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(12)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
     }
 
     private func dismissAddress() {
+        guard !store.addressRequiresNavigation else { return }
         store.hideAddress()
         DispatchQueue.main.async {
             if let webView = store.selectedSession?.webView {
@@ -559,7 +661,7 @@ private struct BrowserContent: View {
     private var webContent: some View {
         if let session = store.selectedSession {
             BrowserWebViewContainer(webView: session.webView)
-                .id(session.tabID)
+                .id(ObjectIdentifier(session))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.isStarted {
             Color(nsColor: .textBackgroundColor)
@@ -585,10 +687,79 @@ private struct BrowserWebViewContainer: NSViewRepresentable {
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 }
 
+private struct BrowserReaderPanel: View {
+    @Bindable var store: BrowserStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Label("Reader", systemImage: "doc.text")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Button("A−") { store.changeReaderTextSize(by: -1) }
+                    .help("Decrease text size")
+                Button("A+") { store.changeReaderTextSize(by: 1) }
+                    .help("Increase text size")
+                Button("Summarize") {
+                    store.closeReaderMode()
+                    store.requestSummary()
+                }
+                Button {
+                    store.closeReaderMode()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .help("Close reader")
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .frame(height: 48)
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let page = store.readerPage {
+                        if !page.title.isEmpty {
+                            Text(page.title)
+                                .font(.system(size: 31, weight: .bold, design: .serif))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if let url = page.url {
+                            Text(url.host ?? url.absoluteString)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        Text(page.text)
+                            .font(.system(size: store.readerTextSize, design: .serif))
+                            .lineSpacing(8)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else if let error = store.readerError {
+                        ContentUnavailableView("Reader mode unavailable",
+                                               systemImage: "doc.text.magnifyingglass",
+                                               description: Text(error))
+                    } else {
+                        ProgressView("Preparing article…")
+                            .frame(maxWidth: .infinity, minHeight: 240)
+                    }
+                }
+                .frame(maxWidth: 720, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 36)
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+}
+
 private struct BrowserSettingsView: View {
     @Bindable var store: BrowserStore
     @Environment(\.dismiss) private var dismiss
     @State private var draft: BrowserSettings
+    @State private var defaultBrowserMessage: String?
+    @State private var settingDefaultBrowser = false
 
     init(store: BrowserStore) {
         self.store = store
@@ -612,10 +783,31 @@ private struct BrowserSettingsView: View {
                        isOn: $draft.blockerEnabledByDefault)
                 Toggle("On-device page summaries",
                        isOn: $draft.summaryEnabled)
+                Toggle("Allow Safari Web Inspector",
+                       isOn: $draft.webInspectorEnabled)
+                Button("Set MakiDesk Browser as default") {
+                    settingDefaultBrowser = true
+                    Task {
+                        do {
+                            try await store.requestAsDefaultBrowser()
+                            defaultBrowserMessage = "Default browser updated in macOS settings."
+                        } catch {
+                            defaultBrowserMessage = "Could not set the default browser: \(error.localizedDescription)"
+                        }
+                        settingDefaultBrowser = false
+                    }
+                }
+                .disabled(settingDefaultBrowser)
+                if let defaultBrowserMessage {
+                    Text(defaultBrowserMessage).font(.caption).foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
 
             Text("The default page is prefilled in the address bar when a new tab opens; it is not loaded automatically.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+            Text("When enabled, inspect this browser from Safari ▸ Develop ▸ MakiDesk Browser.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
 
@@ -635,96 +827,6 @@ private struct BrowserSettingsView: View {
     }
 }
 
-private struct BrowserCredentialsView: View {
-    @Bindable var store: BrowserStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var username = ""
-    @State private var password = ""
-    @State private var credentials: [BrowserCredential] = []
-
-    private var domain: String? {
-        store.selectedTab?.url.flatMap(BrowserDomain.registrableDomain)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Passwords")
-                .font(.system(size: 15, weight: .semibold))
-
-            if let domain {
-                Text(domain)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.secondary)
-
-                if credentials.isEmpty {
-                    Text("No saved password for this site.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                } else {
-                    List {
-                        ForEach(credentials) { credential in
-                            HStack {
-                                Text(credential.username)
-                                    .lineLimit(1)
-                                Spacer()
-                                Button("Fill") {
-                                    store.fillCredential(credential)
-                                    dismiss()
-                                }
-                                .controlSize(.small)
-                                Button("Delete", role: .destructive) {
-                                    store.deleteCredential(credential)
-                                    reload()
-                                }
-                                .controlSize(.small)
-                            }
-                        }
-                    }
-                    .frame(height: 130)
-                }
-
-                Divider()
-
-                Text("Add a password")
-                    .font(.system(size: 12, weight: .semibold))
-                TextField("Username", text: $username)
-                SecureField("Password", text: $password)
-                HStack {
-                    Spacer()
-                    Button("Save") {
-                        store.saveCredential(username: username, password: password)
-                        username = ""
-                        password = ""
-                        reload()
-                    }
-                    .disabled(username.isEmpty || password.isEmpty)
-                }
-            } else {
-                Text("Open a website before using saved passwords.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-            }
-
-            Text("Stored as Internet Password items in the login Keychain. Safari's own saved passwords are not accessible to this app.")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(18)
-        .frame(width: 440)
-        .onAppear { reload() }
-    }
-
-    private func reload() {
-        credentials = store.credentialsForCurrentDomain()
-    }
-}
-
 private struct BrowserSummaryPanel: View {
     @Bindable var store: BrowserStore
 
@@ -737,6 +839,10 @@ private struct BrowserSummaryPanel: View {
                 Text("ON-DEVICE")
                     .font(.system(size: 8.5, weight: .bold))
                     .foregroundStyle(.secondary)
+                Button("Open in ChatGPT") {
+                    _ = store.summarizeInChatGPT()
+                }
+                .font(.system(size: 10))
                 Button {
                     store.cancelSummary()
                 } label: {

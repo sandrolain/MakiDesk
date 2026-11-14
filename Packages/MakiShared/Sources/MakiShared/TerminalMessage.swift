@@ -38,6 +38,10 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         case willTerminate
         /// Ask the terminal to open a pane running `docker exec -it`.
         case dockerExec
+        /// Open MakiDesk Notes from the terminal's ⌘N menu item.
+        case openNotes
+        /// Select and focus a workspace/pane after an attention notice is clicked.
+        case focusTarget
     }
 
     public struct Body: Codable, Equatable, Sendable {
@@ -58,6 +62,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
         public var shell: String?
         /// A short label for the workspace opened by `dockerExec`.
         public var title: String?
+        public var paneID: String?
 
         public init(protocolVersion: Int? = nil,
                     appVersion: String? = nil,
@@ -73,7 +78,8 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
                     agentState: AgentState? = nil,
                     containerID: String? = nil,
                     shell: String? = nil,
-                    title: String? = nil) {
+                    title: String? = nil,
+                    paneID: String? = nil) {
             self.protocolVersion = protocolVersion
             self.appVersion = appVersion
             self.build = build
@@ -89,6 +95,7 @@ public struct TerminalMessage: Codable, Equatable, Sendable {
             self.containerID = containerID
             self.shell = shell
             self.title = title
+            self.paneID = paneID
         }
     }
 

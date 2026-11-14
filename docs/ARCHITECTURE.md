@@ -425,6 +425,18 @@ command are written to
 `Terminal/workspaces.json`, atomically and
 with the usual quarantine/version rules; newer-format layout and window-state
 files remain read-only, and persistence errors are surfaced in the helper.
+When tmux is available, every pane command is wrapped in a stable per-pane
+`new-session -A` command, including default shells and configured SSH/Docker
+commands. Legacy saved pane commands are wrapped during restore and persisted;
+already-managed tmux commands keep their session name. Closing a pane or
+workspace explicitly kills its managed tmux session, while helper termination
+only frees Ghostty surfaces and leaves tmux sessions available for reattach.
+At startup, a worker lists managed pane sessions and recovers any pane id not
+present in the saved layout, covering a crash before the debounced layout
+write. The session environment carries the workspace id so agent hooks retain
+their destination during that recovery.
+Without tmux, the original command runs directly and only layout state can be
+restored.
 Debounced layout and frame writes run on a serial worker queue; confirmed Quit
 flushes the latest snapshot before surfaces are detached. Scrollback is not persisted. Closing the
 last pane of the last workspace starts a fresh shell instead of leaving an empty
@@ -527,6 +539,25 @@ before their first run, so its rows say to trust them with `/hooks`. Settings â–
 Terminal â–¸ Agents gives each agent a row that reads that state off the main
 thread and performs the merge on a background task.
 
+Agent state remains workspace-scoped and volatile. A transition to `waiting`
+is relayed back through the local socket as an attention notice; terminal
+notices include workspace and pane ids so their HUD action can select and focus
+the originating target. The helper sidebar also renders the selected
+workspace's current agent state below its workspace list.
+
+The sidebar's separate Codex account card is global to the helper, not attached
+to a workspace. `CodexAccountUsageReader` starts one owned `codex app-server
+--stdio` child on demand, negotiates `initialize`/`initialized`, and requests
+only `account/rateLimits/read` and `account/usage/read` from the [documented
+app-server protocol](https://learn.chatgpt.com/docs/app-server). It declines unsupported
+server-initiated methods, never starts a thread or turn, caps response data,
+times out and terminates only its own process. `CodexAccountUsageParser` in
+`MakiTerminalCore` accepts only the documented quota windows, reset count and
+account-wide token summary. The helper retains the last snapshot in memory;
+refresh begins on visibility and repeats every five minutes only while the main
+window is visible. Hiding the window cancels the timer and active request, and
+generation checks discard late responses.
+
 `TerminalController` watches `NSWorkspace.didActivateApplicationNotification`.
 While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`
 with the two terminal rows, so every other table row and the peek's hold key are
@@ -614,8 +645,12 @@ root package does not build it; `task browser:bundle` does.
 
 `BrowserStore` is the main-actor model and the only owner of the live WebKit
 objects. The value array `tabs` is observable and persisted; `BrowserTabSession`
-holds one `WKWebView` and forwards navigation, title, failure and new-window
-callbacks. A tab is created lazily when selected, and a session is stopped when
+holds one `WKWebView`, forwards navigation and failure callbacks, and observes
+URL, title, loading and back/forward state with a coalesced main-thread KVO
+update. Publications verify that the session still belongs to the tab. Site
+changes refresh the row's title, favicon and blocker exception; same-document
+URL/title changes such as SPA routes update the row and address state. A tab is
+created lazily when selected, and a session is stopped when
 the tab closes or the app quits. `BrowserTabLifecycle` is pure: pinned tabs
 never expire, a tab younger than 24 hours is Active, from 24 to 48 hours it is
 Old, and at 48 hours it is closed; `BrowserTabLifecycle.ordered` is the MRU sort
@@ -642,18 +677,40 @@ content-rule list is fixed when the configuration is made, changing the blocker
 rebuilds the affected web view and reloads its URL. The starter list is a real
 network blocker, not a full EasyList/uBO replacement; the production conversion
 pipeline is described in the browser analysis.
+The WebKit representable is keyed by session identity rather than tab identity,
+so SwiftUI attaches the replacement view after a rebuild instead of retaining
+the removed view for the same tab.
 
-`BrowserCredentialStore` keeps user-saved Internet Password items in the login
-Keychain and fills the first username/password pair through a small script that
-uses the native input setter. It does not read Safari's private password store;
-the panel says so. `BrowserFaviconProvider` fetches the site's icon in an ephemeral `URLSession`,
+The helper registers for HTTP and HTTPS URL events in its bundle metadata.
+`BrowserAppDelegate` passes incoming links to `BrowserAppController`, which
+queues them in `BrowserStore` until the user chooses MakiDesk Browser, an
+installed URL handler, or cancellation. The settings action requests default
+HTTP and HTTPS handlers through `NSWorkspace`; system consent remains under
+macOS control. The link is opened in a new tab only after the user chooses
+MakiDesk Browser.
+
+`BrowserWindowController` restores the saved AppKit frame and keeps a small
+placement record with the display identity. Move and resize events are
+debounced; closing the window flushes the latest frame. If the saved display
+is disconnected, the same size is centered on an available screen.
+
+`BrowserFaviconProvider` fetches the site's icon in an ephemeral `URLSession`,
 decodes it off the main thread and extracts a dominant colour; a missing icon
 falls back to a stable hash of the registrable domain. `BrowserSummaryController`
-extracts page text with a small JavaScript function and streams a summary from
-Foundation Models when Apple Intelligence is available; the page text is never
-logged, no request leaves the Mac, and each generation is cancelled on
-navigation or tab close. `BrowserHistoryStore` keeps a bounded local list of
-visited addresses only for address-bar suggestions.
+extracts visible page text in WebKit's isolated client world and streams a
+summary from Foundation Models when Apple Intelligence is available; model
+availability is refreshed for each request, page text is never logged, and
+each generation is cancelled on navigation or tab close. A separate rail
+button opens the official ChatGPT app with the current URL and an Italian
+prompt prefilled; the user reviews and sends it there. This handoff does not
+extract or transmit page text. `BrowserHistoryStore` keeps a bounded local list
+of visited addresses. The omnibox combines those local matches with open tabs
+and a direct-visit option; search suggestions are local actions that navigate
+only after selection, so partial queries are not sent to a provider while typing.
+
+Navigation failures are displayed in a dismissible page overlay. WebKit's
+cancelled-navigation error is ignored so the Stop action does not look like a
+failure.
 
 Tabs, pin state, last use, favicon colour, blocker exceptions and the address
 history are written atomically to `browser-tabs.json`, `browser-settings.json`
@@ -661,6 +718,20 @@ and `browser-history.json` with a two-second debounce for the tab list; expired
 tabs are dropped on load. There is no browsing-history screen and no page-content
 cache on disk. MakiDesk launches the helper through `BrowserLauncher`; `task
 bundle` embeds it and `task reload` kills it before rebuilding.
+
+Private tab identity is session-only: private tabs use a nonpersistent WebKit
+data store, are filtered from tab snapshots and history writes, and are dropped
+when their tabs close. The opt-in `webInspectorEnabled` setting supplies the
+default for `WKWebView.isInspectable`; a session-only per-tab override powers
+the icon-rail toggle. Reader mode and summaries share a bounded page-text
+extractor that scores semantic/article containers, penalizes link-heavy blocks,
+and skips common navigation, promotion, comment and share elements. It keeps
+the resulting text in memory;
+its generation token prevents an extraction from publishing after navigation,
+tab selection or closure. Site-data clearing fetches WebKit records from the
+current tab's data store, removes host-related records after confirmation, and
+reloads same-domain sessions in that store.
+
 
 `ScreenshotCaptureWatcher` (T48) keeps one FSEvents stream on the screenshot
 folder while the opt-in notice is on, baselines the files already there, and
@@ -795,6 +866,59 @@ search, notices and mini map ask the same tracker when they open. The card is
 SwiftUI in an `NSHostingView` and the controller re-measures it after each
 change, so the list grows and shrinks with its content.
 
+### Apple Passwords integration
+
+**Status: blocked for the current local build; extension support is not implemented.**
+The browser has no application-owned password manager. The experimental
+`ASAuthorizationPasswordProvider` focus bridge was removed: this API requests
+credentials for the application through trusted app/website associations, not
+for arbitrary sites visited by a browser. Changing a JavaScript field detector
+cannot grant access to Google or other unrelated website credentials.
+
+The intended integration is Apple's iCloud Passwords web extension plus its
+system native-messaging helper. Read-only inspection on 2026-11-12 of
+`PasswordManagerBrowserExtensionHelper` on this Mac confirmed parent launch
+constraints accepting either `com.apple.developer.web-browser.public-key-credential`
+or an approved signing identifier and team. The current
+`com.makidesk.app.browser` bundle has neither the managed entitlement nor a
+TeamIdentifier and is not in the helper's allowed identities. No helper was
+launched and no passwords were requested during this inspection.
+
+The next prerequisites and implementation steps are:
+
+1. Obtain Apple's approval for a stable browser signing identity. The managed
+   capability request requires the Account Holder of an organization Apple
+   Developer account. Alternatively, Apple documents a browser allowlist
+   contribution process that requires an OS update to take effect. Neither
+   route is completed; a self-signed or ad hoc entitlement is not approval.
+2. Register and implement HTTP/HTTPS URL opening in the helper, as required by
+   Apple's browser eligibility criteria; preserve URLs arriving before startup
+   and do not change the user's default browser.
+3. Add a store-owned `WKWebExtensionController`, extension installation and
+   permission UI, tab/window adapters and lifecycle events, and teardown. Attach
+   the controller to every new or rebuilt web-view configuration.
+4. Implement the extension's native-messaging transport to the Apple helper,
+   with extension identity checks, bounded framed messages, cancellation and
+   child-process teardown. Keep system authentication and pairing in Apple's
+   UI; do not introduce an application password store.
+5. Verify pairing in an authorized signed bundle, then login suggestions,
+   multi-step forms, cancellation, navigation and tab teardown. Password
+   changes and saving new credentials require separate verification; a working
+   login fill alone does not establish them.
+
+There is no extension host or native-messaging transport in this version. Work
+on that host is deferred until an authorized identity is available, so the
+local build does not expose a nonfunctional installation or pairing flow.
+
+References:
+
+- [Apple: app access to saved passwords](https://support.apple.com/en-lamr/guide/security/sec8762eb992/1/web/1)
+- [Apple: browser managed capability requirements](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.web-browser.public-key-credential)
+- [Apple: iCloud Passwords helper launch restrictions and browser allowlist](https://github.com/apple/password-manager-resources#how-apple-uses-web-browser-extension-distribution-information)
+- [Apple: WKWebExtensionController](https://developer.apple.com/documentation/webkit/wkwebextensioncontroller)
+- [Firefox integration source](https://github.com/au2001/icloud-passwords-firefox)
+- [Crest: signed release and development build limitations](https://crestbrowser.com/guides/icloud-passwords/)
+
 ## Pointer effects
 
 `PointerEffectController` owns three things that share one surface per display:
@@ -908,6 +1032,10 @@ main target.
 
 - `NSSplitView` was replaced by a small custom split for the notes sidebar: the
   split view ignored its divider position once the panes used Auto Layout.
+- Terminal's root sidebar uses the same constraint-backed layout pattern. Its
+  draggable divider keeps the sidebar at 220 pt initially, with 160 pt minimum
+  sidebar and 360 pt minimum terminal content; the footer's intrinsic width no
+  longer determines the divider position.
 - Notes panes use TextKit 1 deliberately: the line-number ruler reads the layout
   manager, and a whole-document parse with a 120 ms debounce is enough for a
   scratchpad.

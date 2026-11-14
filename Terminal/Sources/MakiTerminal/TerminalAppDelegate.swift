@@ -51,7 +51,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
             controller?.updateDirectory(for: view, path: path)
         }
         runtime.onNotification = { [weak self] view, title, body in
-            self?.server?.sendAttention(title: title, detail: body)
+            let target = view.flatMap { self?.terminal?.target(for: $0) }
+            self?.server?.sendAttention(title: title, detail: body,
+                                        workspaceID: target?.workspaceID,
+                                        paneID: target?.paneID)
             self?.terminal?.markAttention(for: view)
         }
         runtime.onBell = { [weak self] view in
@@ -103,7 +106,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Quit MakiDesk Terminal?"
-        alert.informativeText = "Every open terminal and its running command will be closed. The workspaces reopen next time, but running work is lost."
+        alert.informativeText = "Terminals using tmux will detach and can be reattached next time. Other shells and their running commands will close. The workspace layout is saved."
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Quit")
         if #available(macOS 11.0, *) {
@@ -137,7 +140,16 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         server.onSettingsChanged = { [weak self] in self?.terminal?.applyTerminalSettings() }
         server.onThemeChanged = { [weak self] in self?.terminal?.applyTerminalSettings() }
         server.onAgentStatus = { [weak self] id, state, label in
-            self?.terminal?.setAgentState(state, forWorkspaceID: id, label: label)
+            let changed = self?.terminal?.setAgentState(state, forWorkspaceID: id,
+                                                        label: label) ?? false
+            if changed, state == .waiting {
+                self?.server?.sendAttention(title: label ?? "Agent needs input",
+                                            detail: "An agent is waiting for your input.",
+                                            workspaceID: id)
+            }
+        }
+        server.onFocusTarget = { [weak self] id, pane in
+            self?.terminal?.focusTarget(workspaceID: id, paneID: pane)
         }
         server.onDockerExec = { [weak self] containerID, shell, title in
             self?.terminal?.openDockerExec(containerID: containerID,
@@ -178,6 +190,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         terminal?.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    func requestSettings() {
+        openMakiDeskSettings(nil)
     }
 
     func hideMain() {
@@ -248,6 +264,8 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         menu(makiMenu, "Open MakiDesk", #selector(openMakiDesk(_:)), "", [], self)
         menu(makiMenu, "Terminal Settings…",
              #selector(openMakiDeskSettings(_:)), ",", [], self)
+        menu(makiMenu, "New Note in MakiDesk",
+             #selector(requestMakiDeskNotes(_:)), "n", [], self)
         makiItem.submenu = makiMenu
 
         let fileItem = NSMenuItem()
@@ -294,6 +312,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         menu(workspaceMenu, "Move Workspace Down",
              #selector(TerminalWindowController.moveWorkspaceDownAction(_:)),
              "\u{F701}", [.control], target)
+        workspaceMenu.addItem(.separator())
+        menu(workspaceMenu, "Move Focused Pane to New Workspace",
+             #selector(TerminalWindowController.moveFocusedPaneToNewWorkspaceAction(_:)),
+             "", [], target)
         workspaceItem.submenu = workspaceMenu
 
         let editItem = NSMenuItem()
@@ -348,6 +370,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         viewItem.submenu = viewMenu
 
         NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func requestMakiDeskNotes(_ sender: Any?) {
+        server?.sendOpenNotes()
     }
 
     @discardableResult

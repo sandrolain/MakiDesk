@@ -11,6 +11,21 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
     private var keyMonitor: Any?
     private var activityMonitor: Any?
+    private var placementSaveWorkItem: DispatchWorkItem?
+    private var isRestoringPlacement = false
+
+    private static let frameAutosaveName = "MakiDeskBrowserWindow"
+    private static let placementDefaultsKey = "MakiDeskBrowserWindowPlacement"
+
+    private struct WindowPlacement: Codable {
+        let x: Double
+        let y: Double
+        let width: Double
+        let height: Double
+        let displayID: UInt32?
+        let displayName: String?
+
+    }
 
     init(store: BrowserStore) {
         self.store = store
@@ -27,10 +42,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
         window.minSize = NSSize(width: 900, height: 600)
         window.collectionBehavior = [.fullScreenPrimary]
         window.tabbingMode = .disallowed
-        window.setFrameAutosaveName("MakiDeskBrowserWindow")
-        window.center()
+        window.setFrameAutosaveName(Self.frameAutosaveName)
+        let hasSavedFrame = window.setFrameUsingName(Self.frameAutosaveName)
         super.init(window: window)
         window.delegate = self
+        isRestoringPlacement = true
+        if let placement = Self.loadPlacement() {
+            restore(placement, in: window)
+        } else if !hasSavedFrame {
+            window.center()
+        }
+        isRestoringPlacement = false
         let hosting = NSHostingView(rootView: BrowserRootView(store: store))
         hosting.safeAreaRegions = []
         hosting.translatesAutoresizingMaskIntoConstraints = false
@@ -48,9 +70,18 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { nil }
 
     func windowWillClose(_ notification: Notification) {
+        savePlacement()
         removeMonitors()
         store.stop()
         onClose?()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        schedulePlacementSave()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        schedulePlacementSave()
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -58,6 +89,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func removeMonitors() {
+        placementSaveWorkItem?.cancel()
+        placementSaveWorkItem = nil
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
@@ -66,6 +99,71 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
             NSEvent.removeMonitor(activityMonitor)
             self.activityMonitor = nil
         }
+    }
+
+    private func schedulePlacementSave() {
+        guard !isRestoringPlacement, let window else { return }
+        placementSaveWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self, weak window] in
+            guard let self, let window else { return }
+            self.writePlacement(for: window)
+        }
+        placementSaveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+    }
+
+    private func savePlacement() {
+        placementSaveWorkItem?.cancel()
+        placementSaveWorkItem = nil
+        guard let window else { return }
+        writePlacement(for: window)
+        window.saveFrame(usingName: Self.frameAutosaveName)
+    }
+
+    private func writePlacement(for window: NSWindow) {
+        let frame = window.frame
+        let screen = NSScreen.screens.first { $0.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) }
+            ?? window.screen
+        let displayID = screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        let placement = WindowPlacement(x: frame.origin.x,
+                                        y: frame.origin.y,
+                                        width: frame.size.width,
+                                        height: frame.size.height,
+                                        displayID: displayID?.uint32Value,
+                                        displayName: screen?.localizedName)
+        guard let data = try? JSONEncoder().encode(placement) else { return }
+        UserDefaults.standard.set(data, forKey: Self.placementDefaultsKey)
+    }
+
+    private static func loadPlacement() -> WindowPlacement? {
+        guard let data = UserDefaults.standard.data(forKey: placementDefaultsKey) else { return nil }
+        return try? JSONDecoder().decode(WindowPlacement.self, from: data)
+    }
+
+    private func restore(_ placement: WindowPlacement, in window: NSWindow) {
+        let screens = NSScreen.screens
+        let matchingScreen = screens.first { candidate in
+            guard let number = candidate.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                return false
+            }
+            return number.uint32Value == placement.displayID
+        } ?? screens.first { $0.localizedName == placement.displayName }
+        guard let screen = matchingScreen ?? NSScreen.main ?? screens.first else {
+            window.center()
+            return
+        }
+
+        let visible = screen.visibleFrame
+        let width = min(max(placement.width, window.minSize.width), visible.width)
+        let height = min(max(placement.height, window.minSize.height), visible.height)
+        let origin: NSPoint
+        if matchingScreen != nil {
+            origin = NSPoint(x: min(max(placement.x, visible.minX), visible.maxX - width),
+                             y: min(max(placement.y, visible.minY), visible.maxY - height))
+        } else {
+            origin = NSPoint(x: visible.midX - width / 2, y: visible.midY - height / 2)
+        }
+        window.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: false)
     }
 
     /// Any click, key or scroll in the browser window is use of its selected
@@ -95,19 +193,34 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
 
-            if self.store.isAddressVisible, flags.isEmpty,
-               !self.store.addressSuggestions.isEmpty {
-                switch event.keyCode {
-                case UInt16(kVK_DownArrow):
-                    self.store.moveAddressSelection(by: 1)
+            if flags == [.command, .option], characters == "t" {
+                self.store.newPrivateTab()
+                return nil
+            }
+
+            if self.store.isAddressVisible {
+                let addressFlags = flags.subtracting([.numericPad, .function])
+                let isReturn = event.keyCode == UInt16(kVK_Return)
+                    || event.keyCode == UInt16(kVK_ANSI_KeypadEnter)
+                if addressFlags == .command, isReturn {
+                    if self.store.acceptAddressSelectionInNewTab() == false {
+                        self.store.navigateInNewTab(self.store.addressText)
+                    }
                     return nil
-                case UInt16(kVK_UpArrow):
-                    self.store.moveAddressSelection(by: -1)
-                    return nil
-                case UInt16(kVK_Return):
-                    if self.store.acceptAddressSelection() { return nil }
-                default:
-                    break
+                }
+                if addressFlags.isEmpty, !self.store.addressSuggestions.isEmpty {
+                    switch event.keyCode {
+                    case UInt16(kVK_DownArrow):
+                        self.store.moveAddressSelection(by: 1)
+                        return nil
+                    case UInt16(kVK_UpArrow):
+                        self.store.moveAddressSelection(by: -1)
+                        return nil
+                    case UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter):
+                        if self.store.acceptAddressSelection() { return nil }
+                    default:
+                        break
+                    }
                 }
             }
 
@@ -230,14 +343,7 @@ public final class BrowserAppController {
     public func open(url: URL) {
         show()
         guard let store = window?.store else { return }
-        if store.isStarted {
-            store.navigate(to: url)
-        } else {
-            Task { @MainActor in
-                await store.start()
-                store.navigate(to: url)
-            }
-        }
+        store.receiveExternalURL(url)
     }
 
     public func shutdown() {

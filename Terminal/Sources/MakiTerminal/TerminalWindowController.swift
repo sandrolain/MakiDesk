@@ -141,6 +141,106 @@ final class WorkspaceSplitView: NSSplitView {
     }
 }
 
+/// A two-pane root layout with a constraint-backed, draggable sidebar.
+/// NSSplitView can recalculate its divider from pane constraints after layout,
+/// so the root uses an explicit width constraint like the Notes panel does.
+final class TerminalSidebarSplitView: NSView {
+    private static let minimumSidebar: CGFloat = 160
+    private static let minimumContent: CGFloat = 360
+    private static let defaultSidebar: CGFloat = 220
+
+    private let sidebarHolder = NSView()
+    private let contentHolder = NSView()
+    private let divider = TerminalSidebarDividerView()
+    private var sidebarWidthConstraint: NSLayoutConstraint!
+    private var sidebarWidth = TerminalSidebarSplitView.defaultSidebar
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        divider.onDrag = { [weak self] delta in self?.resizeSidebar(by: delta) }
+        for view in [sidebarHolder, divider, contentHolder] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        sidebarWidthConstraint = sidebarHolder.widthAnchor.constraint(equalToConstant: sidebarWidth)
+        NSLayoutConstraint.activate([
+            sidebarHolder.leadingAnchor.constraint(equalTo: leadingAnchor),
+            sidebarHolder.topAnchor.constraint(equalTo: topAnchor),
+            sidebarHolder.bottomAnchor.constraint(equalTo: bottomAnchor),
+            sidebarWidthConstraint,
+            divider.leadingAnchor.constraint(equalTo: sidebarHolder.trailingAnchor),
+            divider.topAnchor.constraint(equalTo: topAnchor),
+            divider.bottomAnchor.constraint(equalTo: bottomAnchor),
+            divider.widthAnchor.constraint(equalToConstant: 5),
+            contentHolder.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
+            contentHolder.trailingAnchor.constraint(equalTo: trailingAnchor),
+            contentHolder.topAnchor.constraint(equalTo: topAnchor),
+            contentHolder.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layout() {
+        super.layout()
+        let maximum = max(Self.minimumSidebar, bounds.width - 5 - Self.minimumContent)
+        if sidebarWidth > maximum {
+            sidebarWidth = maximum
+            sidebarWidthConstraint.constant = maximum
+        }
+    }
+
+    func setSides(sidebar: NSView, content: NSView) {
+        for (view, holder) in [(sidebar, sidebarHolder), (content, contentHolder)] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            holder.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: holder.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+                view.topAnchor.constraint(equalTo: holder.topAnchor),
+                view.bottomAnchor.constraint(equalTo: holder.bottomAnchor),
+            ])
+        }
+    }
+
+    private func resizeSidebar(by delta: CGFloat) {
+        let maximum = max(Self.minimumSidebar, bounds.width - 5 - Self.minimumContent)
+        let wanted = min(max(sidebarWidth + delta, Self.minimumSidebar), maximum)
+        guard wanted != sidebarWidth else { return }
+        sidebarWidth = wanted
+        sidebarWidthConstraint.constant = wanted
+    }
+}
+
+private final class TerminalSidebarDividerView: NSView {
+    var onDrag: ((CGFloat) -> Void)?
+    private var previousX: CGFloat?
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .resizeLeftRight)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.separatorColor.setFill()
+        NSBezierPath(rect: NSRect(x: (bounds.width - 1) / 2,
+                                  y: 0, width: 1, height: bounds.height)).fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        previousX = event.locationInWindow.x
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let x = event.locationInWindow.x
+        if let previousX { onDrag?(x - previousX) }
+        previousX = x
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        previousX = nil
+    }
+}
+
 /// A scratch terminal that drops from the top of the screen.
 final class TerminalQuakePanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -178,6 +278,7 @@ final class TerminalWindowController: NSWindowController,
     private var isPersistenceWarningPresented = false
     private var windowFrameRevision: UInt64 = 0
     private var workspaces: [TerminalWorkspace] = []
+    private var recoveryGeneration: UInt64 = 0
     private var selected = 0
     private var nextWorkspaceNumber = 1
     private var paneViews: [PaneID: TerminalPaneHostView] = [:]
@@ -210,11 +311,22 @@ final class TerminalWindowController: NSWindowController,
     private var activeSearch: ActiveSearch?
     private var searchDebounce: Timer?
 
-    private let splitView = NSSplitView()
+    private let splitView = TerminalSidebarSplitView(frame: .zero)
     private let sidebar = NSView()
     private let contentView = NSView()
     private let tableView = NSTableView()
     private let closeButton = NSButton()
+    private let agentStatusLabel = NSTextField(labelWithString: "No active agent")
+    private let codexUsageHeader = NSTextField(labelWithString: "Codex account")
+    private let codexUsageDetails = NSTextField(labelWithString: "Usage is not available yet")
+    private let codexUsageUpdated = NSTextField(labelWithString: "Not updated")
+    private let codexRefreshButton = NSButton()
+    private let codexUsageStack = NSStackView()
+    private let codexUsageReader: AccountUsageProvider = CodexAccountUsageReader()
+    private var codexUsage: CodexAccountUsage?
+    private var codexUsageError: String?
+    private var codexUsageTimer: Timer?
+    private var codexUsageLifecycle = CodexUsageRefreshLifecycle()
 
     /// The sidebar's own drag type: a foreign string drop is ignored.
     private static let workspaceDragType = NSPasteboard.PasteboardType(
@@ -236,6 +348,9 @@ final class TerminalWindowController: NSWindowController,
         window.minSize = NSSize(width: 560, height: 320)
         super.init(window: window)
         window.delegate = self
+        if TmuxSession.executableURL() == nil {
+            persistenceWarnings.append("tmux is not installed. Workspace layout will be restored, but live shells and running commands cannot survive quitting or a crash.")
+        }
         if let version = windowStateStore.futureVersionOnDisk {
             persistenceWarnings.append("The saved Terminal window position uses format version \(version). This version will leave it untouched.")
         }
@@ -261,9 +376,6 @@ final class TerminalWindowController: NSWindowController,
     // MARK: - Interface
 
     private func buildInterface() {
-        splitView.isVertical = true
-        splitView.dividerStyle = .thin
-        splitView.delegate = self
         splitView.translatesAutoresizingMaskIntoConstraints = false
 
         sidebar.translatesAutoresizingMaskIntoConstraints = false
@@ -271,16 +383,10 @@ final class TerminalWindowController: NSWindowController,
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.wantsLayer = true
 
-        splitView.addArrangedSubview(sidebar)
-        splitView.addArrangedSubview(contentView)
-        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
-
+        splitView.setSides(sidebar: sidebar, content: contentView)
         window?.contentView = splitView
         buildSidebar()
 
-        DispatchQueue.main.async { [weak self] in
-            self?.splitView.setPosition(220, ofDividerAt: 0)
-        }
     }
 
     private func buildSidebar() {
@@ -336,7 +442,57 @@ final class TerminalWindowController: NSWindowController,
 
         bar.addArrangedSubview(add)
         bar.addArrangedSubview(closeButton)
+        let settings = NSButton(image: NSImage(systemSymbolName: "gearshape",
+                                               accessibilityDescription: "Terminal settings")!,
+                                target: self, action: #selector(openSettingsAction(_:)))
+        settings.isBordered = false
+        settings.toolTip = "Terminal Settings"
+        bar.addArrangedSubview(settings)
         bar.addArrangedSubview(NSView())
+
+        agentStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        agentStatusLabel.font = .systemFont(ofSize: 11)
+        agentStatusLabel.textColor = .secondaryLabelColor
+        agentStatusLabel.lineBreakMode = .byTruncatingTail
+        sidebar.addSubview(agentStatusLabel)
+
+        codexUsageStack.translatesAutoresizingMaskIntoConstraints = false
+        codexUsageStack.orientation = .vertical
+        codexUsageStack.alignment = .leading
+        codexUsageStack.spacing = 3
+        codexUsageStack.edgeInsets = NSEdgeInsets(top: 6, left: 11, bottom: 6, right: 8)
+        codexUsageStack.wantsLayer = true
+        codexUsageStack.layer?.cornerRadius = 7
+
+        codexUsageHeader.font = .systemFont(ofSize: 11, weight: .semibold)
+        let usageTopRow = NSStackView()
+        usageTopRow.orientation = .horizontal
+        usageTopRow.alignment = .centerY
+        usageTopRow.spacing = 4
+        codexRefreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh Codex usage")
+        codexRefreshButton.isBordered = false
+        codexRefreshButton.bezelStyle = .inline
+        codexRefreshButton.target = self
+        codexRefreshButton.action = #selector(refreshCodexUsageAction(_:))
+        codexRefreshButton.toolTip = "Refresh Codex usage"
+        usageTopRow.addArrangedSubview(codexUsageHeader)
+        usageTopRow.addArrangedSubview(NSView())
+        usageTopRow.addArrangedSubview(codexRefreshButton)
+
+        codexUsageDetails.font = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        codexUsageDetails.textColor = .secondaryLabelColor
+        codexUsageDetails.maximumNumberOfLines = 7
+        codexUsageDetails.lineBreakMode = .byWordWrapping
+        codexUsageDetails.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        codexUsageUpdated.font = .systemFont(ofSize: 9)
+        codexUsageUpdated.textColor = .tertiaryLabelColor
+        codexUsageStack.addArrangedSubview(usageTopRow)
+        codexUsageStack.addArrangedSubview(codexUsageDetails)
+        codexUsageStack.addArrangedSubview(codexUsageUpdated)
+        for view in [usageTopRow, codexUsageDetails, codexUsageUpdated] {
+            view.widthAnchor.constraint(equalTo: codexUsageStack.widthAnchor, constant: -19).isActive = true
+        }
+        sidebar.addSubview(codexUsageStack)
 
         sidebar.addSubview(scroll)
         sidebar.addSubview(bar)
@@ -344,7 +500,13 @@ final class TerminalWindowController: NSWindowController,
             scroll.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: sidebar.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bar.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: agentStatusLabel.topAnchor, constant: -6),
+            agentStatusLabel.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
+            agentStatusLabel.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -8),
+            agentStatusLabel.bottomAnchor.constraint(equalTo: codexUsageStack.topAnchor, constant: -5),
+            codexUsageStack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 7),
+            codexUsageStack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -7),
+            codexUsageStack.bottomAnchor.constraint(equalTo: bar.topAnchor, constant: -6),
             bar.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor),
             bar.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             bar.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor),
@@ -359,8 +521,12 @@ final class TerminalWindowController: NSWindowController,
     }
 
     private func newWorkspace() {
-        let workspace = TerminalWorkspace(title: "Workspace \(nextWorkspaceNumber)")
+        var workspace = TerminalWorkspace(title: "Workspace \(nextWorkspaceNumber)")
         nextWorkspaceNumber += 1
+        workspace.setCommand(persistentPaneCommand(for: workspace.focusedPane,
+                                                   workspaceID: workspace.id,
+                                                   command: terminalSettings.shell),
+                             for: workspace.focusedPane)
         workspaces.append(workspace)
         selected = workspaces.count - 1
         reloadSidebar()
@@ -371,6 +537,7 @@ final class TerminalWindowController: NSWindowController,
     // MARK: - Persistence
 
     private func restoreOrCreate() {
+        defer { recoverOrphanedTmuxSessions() }
         let snapshot = layoutStore.load()
         layoutPersistenceIsReadOnly = snapshot.canSave == false
         if case let .futureVersion(version) = snapshot.state {
@@ -381,11 +548,94 @@ final class TerminalWindowController: NSWindowController,
             newWorkspace()
             return
         }
-        workspaces = restored
+        var didMigrateCommands = false
+        workspaces = restored.map { savedWorkspace in
+            var workspace = savedWorkspace
+            for pane in workspace.paneIDs {
+                let savedCommand = workspace.command(for: pane)
+                if let savedCommand, TmuxSession.isAttachCommand(savedCommand) { continue }
+                let persistentCommand = persistentPaneCommand(
+                    for: pane, workspaceID: workspace.id,
+                    command: savedCommand ?? terminalSettings.shell
+                )
+                guard persistentCommand != savedCommand else { continue }
+                workspace.setCommand(persistentCommand, for: pane)
+                didMigrateCommands = true
+            }
+            return workspace
+        }
         selected = min(max(0, snapshot.layout.selectedIndex), workspaces.count - 1)
         nextWorkspaceNumber = workspaces.count + 1
         reloadSidebar()
         rebuildContent()
+        if didMigrateCommands { scheduleSave() }
+    }
+
+    private func recoverOrphanedTmuxSessions() {
+        guard TmuxSession.executableURL() != nil else { return }
+        recoveryGeneration &+= 1
+        let generation = recoveryGeneration
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let sessions = TmuxSession.existingPaneSessions()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.recoveryGeneration == generation else { return }
+                let knownPaneIDs = Set(self.workspaces.flatMap(\.paneIDs))
+                let orphaned = sessions.filter { knownPaneIDs.contains($0.paneID) == false }
+                guard orphaned.isEmpty == false else { return }
+                let groups = Dictionary(grouping: orphaned) {
+                    $0.workspaceID ?? $0.paneID.raw
+                }
+                var firstRecoveredIndex: Int?
+                for groupID in groups.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+                    guard let panes = groups[groupID]?.sorted(by: {
+                        $0.paneID.description < $1.paneID.description
+                    }), panes.isEmpty == false else { continue }
+                    let workspaceID = panes.first?.workspaceID ?? groupID
+                    var index = self.workspaces.firstIndex(where: { $0.id == workspaceID })
+                    if index == nil {
+                        let first = panes[0].paneID
+                        self.workspaces.append(TerminalWorkspace(
+                            id: workspaceID,
+                            title: "Recovered Terminal",
+                            firstPane: first
+                        ))
+                        index = self.workspaces.count - 1
+                        firstRecoveredIndex = firstRecoveredIndex ?? index
+                    }
+                    guard let index else { continue }
+                    for record in panes where self.workspaces[index].contains(record.paneID) == false {
+                        var workspace = self.workspaces[index]
+                        guard workspace.split(workspace.focusedPane,
+                                               orientation: .sideBySide,
+                                               newPane: record.paneID) != nil else { continue }
+                        self.workspaces[index] = workspace
+                    }
+                    for record in panes {
+                        self.workspaces[index].setCommand(
+                            TmuxSession.command(for: record.paneID,
+                                                environment: ["MAKIDESK_TERMINAL": "1",
+                                                              "MAKIDESK_WORKSPACE_ID": workspaceID.uuidString]),
+                            for: record.paneID
+                        )
+                    }
+                }
+                if let firstRecoveredIndex { self.selected = firstRecoveredIndex }
+                self.reloadSidebar()
+                self.rebuildContent()
+                self.scheduleSave()
+            }
+        }
+    }
+
+    private func persistentPaneCommand(for pane: PaneID,
+                                       workspaceID: UUID,
+                                       command: String?) -> String? {
+        guard let executable = TmuxSession.executableURL()?.path else { return command }
+        if let command, TmuxSession.isAttachCommand(command) { return command }
+        return TmuxSession.command(for: pane, shellCommand: command,
+                                   environment: ["MAKIDESK_TERMINAL": "1",
+                                                 "MAKIDESK_WORKSPACE_ID": workspaceID.uuidString],
+                                   executable: executable)
     }
 
     private func scheduleSave() {
@@ -484,7 +734,7 @@ final class TerminalWindowController: NSWindowController,
               window.attachedSheet == nil else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Some Terminal state is read-only or could not be saved"
+        alert.messageText = "Terminal state needs attention"
         alert.informativeText = persistenceWarnings.joined(separator: "\n\n")
         alert.addButton(withTitle: "OK")
         isPersistenceWarningPresented = true
@@ -553,7 +803,7 @@ final class TerminalWindowController: NSWindowController,
         }
         let workspace = workspaces[selected]
         guard confirmClosing(workspace.paneIDs, in: workspace) else { return }
-        disposeWorkspace(at: selected)
+        disposeWorkspace(at: selected, terminateTmuxSessions: true)
         attentionWorkspaces.remove(workspaces[selected].id)
         workspaces.remove(at: selected)
         selected = min(selected, workspaces.count - 1)
@@ -599,9 +849,15 @@ final class TerminalWindowController: NSWindowController,
 
     @objc func newTmuxSessionAction(_ sender: Any?) {
         let id = UUID()
-        let name = TmuxSession.name(for: id)
-        var workspace = TerminalWorkspace(id: id, title: "tmux \(name.suffix(4))")
-        workspace.setCommand(TmuxSession.command(sessionName: name),
+        let pane = PaneID()
+        let name = TmuxSession.name(for: pane)
+        var workspace = TerminalWorkspace(id: id, title: "tmux \(name.suffix(4))",
+                                           firstPane: pane)
+        workspace.setCommand(TmuxSession.command(
+            sessionName: name,
+            environment: ["MAKIDESK_TERMINAL": "1",
+                          "MAKIDESK_WORKSPACE_ID": id.uuidString]
+        ),
                              for: workspace.focusedPane)
         workspaces.append(workspace)
         selected = workspaces.count - 1
@@ -618,7 +874,10 @@ final class TerminalWindowController: NSWindowController,
             return
         }
         var workspace = TerminalWorkspace(title: profile.displayName)
-        workspace.setCommand(command, for: workspace.focusedPane)
+        workspace.setCommand(persistentPaneCommand(for: workspace.focusedPane,
+                                                   workspaceID: workspace.id,
+                                                   command: command),
+                             for: workspace.focusedPane)
         workspaces.append(workspace)
         selected = workspaces.count - 1
         reloadSidebar()
@@ -636,7 +895,10 @@ final class TerminalWindowController: NSWindowController,
             return
         }
         var workspace = TerminalWorkspace(title: title ?? "Docker")
-        workspace.setCommand(command, for: workspace.focusedPane)
+        workspace.setCommand(persistentPaneCommand(for: workspace.focusedPane,
+                                                   workspaceID: workspace.id,
+                                                   command: command),
+                             for: workspace.focusedPane)
         workspaces.append(workspace)
         selected = workspaces.count - 1
         reloadSidebar()
@@ -659,6 +921,10 @@ final class TerminalWindowController: NSWindowController,
         guard let newPane = workspace.split(workspace.focusedPane,
                                             orientation: orientation) else { return }
         if let directory { workspace.setDirectory(directory, for: newPane) }
+        workspace.setCommand(persistentPaneCommand(for: newPane,
+                                                   workspaceID: workspace.id,
+                                                   command: terminalSettings.shell),
+                             for: newPane)
         workspaces[selected] = workspace
         reloadSidebar()
         rebuildContent()
@@ -676,6 +942,27 @@ final class TerminalWindowController: NSWindowController,
         guard selected < workspaces.count else { return }
         workspaces[selected].equalizeSplits()
         rebuildContent()
+        scheduleSave()
+    }
+
+    @objc func moveFocusedPaneToNewWorkspaceAction(_ sender: Any?) {
+        guard workspaces.indices.contains(selected) else { return }
+        var source = workspaces[selected]
+        guard source.paneCount > 1 else { NSSound.beep(); return }
+        let pane = source.focusedPane
+        let title = source.title
+        let directory = source.directory(for: pane)
+        let command = source.command(for: pane)
+        guard source.remove(pane) else { return }
+        workspaces[selected] = source
+        var destination = TerminalWorkspace(title: title, firstPane: pane)
+        destination.setDirectory(directory ?? "", for: pane)
+        destination.setCommand(command, for: pane)
+        workspaces.append(destination)
+        selected = workspaces.count - 1
+        reloadSidebar()
+        rebuildContent()
+        focusPane(pane)
         scheduleSave()
     }
 
@@ -707,7 +994,8 @@ final class TerminalWindowController: NSWindowController,
             NSSound.beep()
             return
         }
-        disposePane(pane)
+        disposePane(pane, terminateTmuxSession: true,
+                    command: workspace.command(for: pane))
         workspaces[selected] = updated
         reloadSidebar()
         rebuildContent()
@@ -723,13 +1011,31 @@ final class TerminalWindowController: NSWindowController,
         let alert = NSAlert()
         alert.alertStyle = .warning
         if panes.count == 1 {
-            alert.messageText = "Close this terminal?"
-            alert.informativeText = "A command is still running. Closing the terminal ends it."
+            if let command = workspace.command(for: panes[0]),
+               TmuxSession.isAttachCommand(command) {
+                alert.messageText = "Close this terminal and end its tmux session?"
+                alert.informativeText = "Processes running in this session will be stopped."
+            } else {
+                alert.messageText = "Close this terminal?"
+                alert.informativeText = "A command is still running. Closing the terminal ends it."
+            }
         } else {
-            alert.messageText = "Close this workspace?"
-            alert.informativeText = busy == 1
-                ? "A command is still running in one of its terminals."
-                : "Commands are still running in \(busy) of its \(panes.count) terminals."
+            let persistentCount = panes.filter { pane in
+                guard let command = workspace.command(for: pane) else { return false }
+                return TmuxSession.isAttachCommand(command)
+            }.count
+            if persistentCount == panes.count {
+                alert.messageText = "Close this workspace and end its tmux sessions?"
+                alert.informativeText = "Processes running in these sessions will be stopped."
+            } else {
+                alert.messageText = "Close this workspace?"
+                let summary = busy == 1
+                    ? "A command is still running in one of its terminals."
+                    : "Commands are still running in \(busy) of its \(panes.count) terminals."
+                alert.informativeText = persistentCount > 0
+                    ? summary + " Closing the workspace also ends its \(persistentCount) tmux session(s)."
+                    : summary
+            }
         }
         alert.addButton(withTitle: "Cancel")
         alert.addButton(withTitle: "Close")
@@ -789,17 +1095,20 @@ final class TerminalWindowController: NSWindowController,
 
     /// Applies a status from the helper's CLI. Unknown workspace ids (a stale
     /// shell from another session) are ignored.
-    func setAgentState(_ state: AgentState, forWorkspaceID id: UUID, label: String?) {
-        guard let index = workspaces.firstIndex(where: { $0.id == id }) else { return }
+    @discardableResult
+    func setAgentState(_ state: AgentState, forWorkspaceID id: UUID, label: String?) -> Bool {
+        guard let index = workspaces.firstIndex(where: { $0.id == id }) else { return false }
+        let changed = agentStates[id] != state
         if state == .done, index == selected, window?.isKeyWindow == true {
             agentStates[id] = nil
             agentLabels[id] = nil
             reloadSidebar()
-            return
+            return changed
         }
         agentStates[id] = state
         agentLabels[id] = label
         reloadSidebar()
+        return changed
     }
 
     /// Marks the workspace that owns `view`. Selecting it, or focusing it when
@@ -825,10 +1134,31 @@ final class TerminalWindowController: NSWindowController,
               let index = workspaces.firstIndex(where: { $0.contains(pane) }) else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return }
+        // Only the selected pane owns the tab/window title. Other split panes
+        // may emit their own transient agent titles and must not fight it.
+        guard workspaces[index].focusedPane == pane else { return }
         workspaces[index].title = trimmed
         reloadSidebar()
         if index == selected { window?.title = trimmed }
         scheduleSave()
+    }
+
+    func target(for view: TerminalSurfaceView) -> (workspaceID: UUID, paneID: PaneID)? {
+        guard let pane = view.paneID,
+              let workspace = workspaces.first(where: { $0.contains(pane) }) else { return nil }
+        return (workspace.id, pane)
+    }
+
+    func focusTarget(workspaceID: UUID, paneID: PaneID?) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else { return }
+        if index != selected { selectWorkspace(at: index) }
+        if let paneID, workspaces[selected].contains(paneID) { focusPane(paneID) }
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func openSettingsAction(_ sender: Any?) {
+        TerminalAppDelegate.shared?.requestSettings()
     }
 
     func updateDirectory(for view: TerminalSurfaceView, path: String) {
@@ -1096,6 +1426,11 @@ final class TerminalWindowController: NSWindowController,
         window?.backgroundColor = uiTheme.background
         window?.titlebarAppearsTransparent = true
         sidebar.layer?.backgroundColor = uiTheme.surface.cgColor
+        codexUsageStack.layer?.backgroundColor = uiTheme.surfaceSelected.cgColor
+        codexUsageHeader.textColor = uiTheme.text
+        codexUsageDetails.textColor = uiTheme.subtext
+        codexUsageUpdated.textColor = uiTheme.subtext.withAlphaComponent(0.75)
+        codexRefreshButton.contentTintColor = uiTheme.subtext
         contentView.layer?.backgroundColor = uiTheme.background.cgColor
         applyQuakeAppearance()
         addButton?.contentTintColor = uiTheme.subtext
@@ -1213,7 +1548,12 @@ final class TerminalWindowController: NSWindowController,
         return host
     }
 
-    private func disposePane(_ pane: PaneID) {
+    private func disposePane(_ pane: PaneID,
+                             terminateTmuxSession: Bool = false,
+                             command: String? = nil) {
+        if terminateTmuxSession, let command {
+            TmuxSession.terminate(command: command)
+        }
         guard let host = paneViews.removeValue(forKey: pane) else { return }
         if activeSearch?.view === host.surfaceView {
             closeSearch(restoreFocus: false)
@@ -1222,9 +1562,14 @@ final class TerminalWindowController: NSWindowController,
         host.removeFromSuperview()
     }
 
-    private func disposeWorkspace(at index: Int) {
+    private func disposeWorkspace(at index: Int,
+                                  terminateTmuxSessions: Bool = false) {
         guard index < workspaces.count else { return }
-        for pane in workspaces[index].paneIDs { disposePane(pane) }
+        let workspace = workspaces[index]
+        for pane in workspace.paneIDs {
+            disposePane(pane, terminateTmuxSession: terminateTmuxSessions,
+                        command: workspace.command(for: pane))
+        }
     }
 
     func detachAllPanes() {
@@ -1244,6 +1589,7 @@ final class TerminalWindowController: NSWindowController,
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === window else { return true }
         window?.orderOut(nil)
+        updateRendererVisibility()
         NSApp.setActivationPolicy(.accessory)
         return false
     }
@@ -1292,6 +1638,7 @@ final class TerminalWindowController: NSWindowController,
 
     private func updateRendererVisibility() {
         let mainVisible = isVisible(window, reported: &mainWindowReportedVisible)
+        updateCodexUsageLifecycle(isVisible: mainVisible && NSApp.isHidden == false)
         var visiblePanes: Set<PaneID> = []
         if workspaces.indices.contains(selected) {
             let workspace = workspaces[selected]
@@ -1303,6 +1650,93 @@ final class TerminalWindowController: NSWindowController,
         let quakeOnScreen = quakeVisible
             && isVisible(quakePanel, reported: &quakePanelReportedVisible)
         quakeHost?.surfaceView.setRendererVisible(quakeOnScreen)
+    }
+
+    private func updateCodexUsageLifecycle(isVisible: Bool) {
+        let becameVisible = codexUsageLifecycle.setVisible(isVisible)
+        if isVisible {
+            if codexUsageTimer == nil {
+                codexUsageTimer = Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
+                    self?.refreshCodexUsage()
+                }
+            }
+            if becameVisible { refreshCodexUsage() }
+        } else {
+            codexUsageTimer?.invalidate()
+            codexUsageTimer = nil
+            codexUsageReader.cancel()
+            renderCodexUsage()
+        }
+    }
+
+    @objc private func refreshCodexUsageAction(_ sender: Any?) {
+        refreshCodexUsage()
+    }
+
+    private func refreshCodexUsage() {
+        guard window?.isVisible == true,
+              let generation = codexUsageLifecycle.beginRefresh() else { return }
+        codexUsageError = nil
+        codexRefreshButton.isEnabled = false
+        codexUsageUpdated.stringValue = "Refreshing…"
+        codexUsageReader.refresh { [weak self] result in
+            guard let self,
+                  self.codexUsageLifecycle.finishRefresh(generation: generation),
+                  self.window?.isVisible == true else { return }
+            self.codexRefreshButton.isEnabled = true
+            switch result {
+            case .success(let usage):
+                self.codexUsage = usage
+                self.codexUsageError = nil
+            case .failure(let error):
+                self.codexUsageError = error.localizedDescription
+            }
+            self.renderCodexUsage()
+        }
+    }
+
+    private func renderCodexUsage() {
+        var lines: [String] = []
+        if let usage = codexUsage {
+            lines.append(contentsOf: usage.windows.map { window in
+                let remaining = window.resetsAt.map { " · resets \(Self.shortDateTime($0))" } ?? ""
+                return "\(window.label): \(window.usedPercent)% used\(remaining)"
+            })
+            if let tokens = usage.lifetimeTokens {
+                lines.append("Lifetime tokens: \(Self.grouped(tokens))")
+            }
+            if let tokens = usage.peakDailyTokens {
+                lines.append("Peak day: \(Self.grouped(tokens)) tokens")
+            }
+            if let credits = usage.resetCredits {
+                lines.append("Reset credits: \(credits)")
+            }
+            lines.append(contentsOf: usage.creditSummaries)
+            if lines.isEmpty { lines.append("No quota or usage metrics provided") }
+            codexUsageUpdated.stringValue = codexUsageError == nil
+                ? "Updated \(Self.shortDateTime(usage.updatedAt))"
+                : "Stale · last updated \(Self.shortDateTime(usage.updatedAt))"
+        } else {
+            lines.append("Usage is not available yet")
+            codexUsageUpdated.stringValue = "Not updated"
+        }
+        if let codexUsageError {
+            lines.append("Update failed: \(codexUsageError)")
+        }
+        codexUsageDetails.stringValue = lines.joined(separator: "\n")
+    }
+
+    private static func shortDateTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private static func grouped(_ value: Int64) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        return formatter.string(from: NSNumber(value: value)) ?? String(value)
     }
 
     /// `occlusionState` is authoritative on a real display; until a window has
@@ -1486,6 +1920,19 @@ final class TerminalWindowController: NSWindowController,
     private func reloadSidebar() {
         fitSidebarColumn()
         tableView.reloadData()
+        if workspaces.indices.contains(selected),
+           let state = agentStates[workspaces[selected].id] {
+            let label = agentLabels[workspaces[selected].id]
+            let stateText: String
+            switch state {
+            case .working: stateText = "Codex / Agent working"
+            case .waiting: stateText = "Codex / Agent waiting"
+            case .done: stateText = "Codex / Agent finished"
+            }
+            agentStatusLabel.stringValue = [stateText, label].compactMap { $0 }.joined(separator: " · ")
+        } else {
+            agentStatusLabel.stringValue = "No active agent"
+        }
         closeButton.isEnabled = workspaces.count > 1
         if selected < workspaces.count {
             tableView.selectRowIndexes(IndexSet(integer: selected),
@@ -1573,7 +2020,6 @@ final class TerminalWindowController: NSWindowController,
     // MARK: - Split view
 
     func splitViewDidResizeSubviews(_ notification: Notification) {
-        fitSidebarColumn()
         guard isBuilding == false,
               let split = notification.object as? WorkspaceSplitView,
               split.subviews.count >= 2,

@@ -1,5 +1,20 @@
 import Foundation
 
+enum BrowserChatGPTHandoff {
+    static func url(for pageURL: URL) -> URL? {
+        guard let scheme = pageURL.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
+        var components = URLComponents()
+        components.scheme = "codex"
+        components.host = "new"
+        components.queryItems = [URLQueryItem(
+            name: "prompt",
+            value: "Apri questo link e riassumi l’articolo in italiano, evidenziando i punti principali. Se non riesci a leggere il contenuto completo, segnalalo: \(pageURL.absoluteString)"
+        )]
+        return components.url
+    }
+}
+
 /// The lifecycle bucket of a browser tab. `pinned` is not a time bucket: it
 /// overrides the 24/48 hour rule, so the enum is also the UI section.
 enum BrowserTabPhase: String, Codable, CaseIterable {
@@ -138,6 +153,50 @@ enum BrowserSearchEngine: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum BrowserAddressSuggestion: Identifiable, Equatable {
+    case history(BrowserHistoryEntry)
+    case openTab(BrowserTab)
+    case visit(URL)
+    case search(query: String, engine: BrowserSearchEngine)
+
+    var id: String {
+        switch self {
+        case .history(let entry): return "history:\(entry.id)"
+        case .openTab(let tab): return "tab:\(tab.id.uuidString)"
+        case .visit(let url): return "visit:\(url.absoluteString)"
+        case .search(let query, let engine): return "search:\(engine.rawValue):\(query)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .history(let entry):
+            return entry.title.isEmpty ? (entry.url.host ?? entry.url.absoluteString) : entry.title
+        case .openTab(let tab): return "Switch to \(tab.displayTitle)"
+        case .visit(let url): return "Visit \(url.host ?? url.absoluteString)"
+        case .search(let query, let engine): return "Search \(engine.title) for “\(query)”"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .history(let entry): return entry.url.absoluteString
+        case .openTab(let tab): return tab.url?.absoluteString ?? ""
+        case .visit(let url): return url.absoluteString
+        case .search(_, let engine): return "Search with \(engine.title)"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .history: return "clock.arrow.circlepath"
+        case .openTab: return "rectangle.on.rectangle"
+        case .visit: return "globe"
+        case .search: return "magnifyingglass"
+        }
+    }
+}
+
 struct BrowserSettings: Codable, Equatable {
     var blockerEnabledByDefault: Bool
     var disabledBlockerDomains: Set<String>
@@ -146,19 +205,22 @@ struct BrowserSettings: Codable, Equatable {
     var defaultPageURL: String
     var searchEngine: BrowserSearchEngine
     var compactTabs: Bool
+    var webInspectorEnabled: Bool
 
     init(blockerEnabledByDefault: Bool = true,
          disabledBlockerDomains: Set<String> = [],
          summaryEnabled: Bool = true,
          defaultPageURL: String = "https://www.google.com",
          searchEngine: BrowserSearchEngine = .google,
-         compactTabs: Bool = false) {
+         compactTabs: Bool = false,
+         webInspectorEnabled: Bool = false) {
         self.blockerEnabledByDefault = blockerEnabledByDefault
         self.disabledBlockerDomains = disabledBlockerDomains
         self.summaryEnabled = summaryEnabled
         self.defaultPageURL = defaultPageURL
         self.searchEngine = searchEngine
         self.compactTabs = compactTabs
+        self.webInspectorEnabled = webInspectorEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -169,6 +231,7 @@ struct BrowserSettings: Codable, Equatable {
         defaultPageURL = try container.decodeIfPresent(String.self, forKey: .defaultPageURL) ?? "https://www.google.com"
         searchEngine = try container.decodeIfPresent(BrowserSearchEngine.self, forKey: .searchEngine) ?? .google
         compactTabs = try container.decodeIfPresent(Bool.self, forKey: .compactTabs) ?? false
+        webInspectorEnabled = try container.decodeIfPresent(Bool.self, forKey: .webInspectorEnabled) ?? false
     }
 }
 
@@ -293,6 +356,17 @@ enum BrowserBlockerPolicy {
 /// Turns what the address field contains into a URL. A bare host becomes
 /// HTTPS; anything with spaces or without a dot becomes a DuckDuckGo search.
 enum BrowserURLInput {
+    static func looksLikeAddress(_ raw: String) -> Bool {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else {
+            return false
+        }
+        if let scheme = URL(string: value)?.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            return true
+        }
+        return value.contains(".") || value.lowercased().hasPrefix("localhost")
+    }
+
     static func url(from raw: String, searchEngine: BrowserSearchEngine = .google) -> URL? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }

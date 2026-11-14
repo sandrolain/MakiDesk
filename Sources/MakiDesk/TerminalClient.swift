@@ -206,18 +206,28 @@ final class TerminalClient {
         case .attention:
             let title = message.body?.message ?? "Terminal"
             let detail = message.body?.detail
+            let workspaceID = message.body?.workspaceID.flatMap(UUID.init(uuidString:))
+            let paneID = message.body?.paneID
             DispatchQueue.main.async {
+                let actions: [HUDAction] = workspaceID.map { id in
+                    [HUDAction(title: "Focus Terminal") {
+                        TerminalController.shared.focusTarget(workspaceID: id, paneID: paneID)
+                    }]
+                } ?? []
                 HUDController.shared.show(
-                    HUDMessage.terminalNotification(title: title, detail: detail)
+                    HUDMessage.terminalNotification(title: title, detail: detail),
+                    sticky: true, actions: actions
                 )
             }
         case .openSettings:
             DispatchQueue.main.async {
                 SettingsController.shared.show(tab: .terminal)
             }
+        case .openNotes:
+            DispatchQueue.main.async { NotesController.shared.toggle() }
         case .ping, .pong, .state, .settingsRequested,
              .settingsChanged, .themeChanged, .agentStatus, .willTerminate,
-             .dockerExec:
+             .dockerExec, .focusTarget:
             break
         case .hello, .showMain, .hideMain, .toggleQuake, .quit:
             break
@@ -336,6 +346,12 @@ final class TerminalController {
 
     func toggleQuake() {
         client.send(.toggleQuake)
+    }
+
+    func focusTarget(workspaceID: UUID, paneID: String?) {
+        client.send(.showMain)
+        client.send(.focusTarget,
+                    body: .init(workspaceID: workspaceID.uuidString, paneID: paneID))
     }
 
     /// Opens a terminal workspace running `docker exec -it` in a container.

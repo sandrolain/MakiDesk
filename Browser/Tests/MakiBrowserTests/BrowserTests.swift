@@ -88,6 +88,241 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(duck?.host, "duckduckgo.com")
     }
 
+    func testChatGPTHandoffEncodesURLInPromptWithoutSubmitting() throws {
+        let pageURL = try XCTUnwrap(URL(string: "https://example.com/a?x=1&y=due"))
+        let handoff = try XCTUnwrap(BrowserChatGPTHandoff.url(for: pageURL))
+        let components = try XCTUnwrap(URLComponents(url: handoff, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.scheme, "codex")
+        XCTAssertEqual(components.host, "new")
+        let prompt = try XCTUnwrap(components.queryItems?.first(where: { $0.name == "prompt" })?.value)
+        XCTAssertTrue(prompt.contains(pageURL.absoluteString))
+        XCTAssertTrue(prompt.contains("riassumi l’articolo in italiano"))
+        XCTAssertNil(components.queryItems?.first(where: { $0.name == "submit" }))
+        XCTAssertNil(BrowserChatGPTHandoff.url(for: URL(fileURLWithPath: "/tmp/page.html")))
+    }
+
+    func testIncomingExternalURLWaitsForUserChoice() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserExternal-(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let url = try XCTUnwrap(URL(string: "https://login.example/path"))
+
+        store.receiveExternalURL(url)
+
+        XCTAssertEqual(store.externalOpenRequest?.url, url)
+        XCTAssertTrue(store.tabs.isEmpty)
+        store.receiveExternalURL(URL(string: "mailto:user@example.com")!)
+        XCTAssertEqual(store.externalOpenRequest?.url, url)
+        store.stop()
+    }
+
+    func testPrivateTabsAreExcludedFromPersistedTabSnapshot() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserPrivate-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tabURL = directory.appendingPathComponent("tabs.json")
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: tabURL),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let saved = store.newTab(url: URL(string: "https://example.com")!, title: "Saved", select: false)
+        let privateTab = store.newTab(url: URL(string: "https://private.example")!,
+                                      title: "Private", select: false, isPrivate: true)
+        store.selectedTabID = privateTab.id
+        store.flush()
+
+        let payload = BrowserTabStore(fileURL: tabURL).load()
+        XCTAssertEqual(payload.tabs.map(\.id), [saved.id])
+        XCTAssertEqual(payload.selectedTabID, saved.id)
+        XCTAssertTrue(store.isPrivateTab(privateTab.id))
+        store.stop()
+    }
+
+    func testWebInspectorSettingDefaultsOffForOlderSettingsFiles() throws {
+        let data = Data(#"{"blockerEnabledByDefault":true,"disabledBlockerDomains":[],"summaryEnabled":true,"defaultPageURL":"https://www.google.com","searchEngine":"google","compactTabs":false}"#.utf8)
+        let settings = try JSONDecoder().decode(BrowserSettings.self, from: data)
+        XCTAssertFalse(settings.webInspectorEnabled)
+
+        var enabled = settings
+        enabled.webInspectorEnabled = true
+        let roundTrip = try JSONDecoder().decode(BrowserSettings.self,
+                                                 from: JSONEncoder().encode(enabled))
+        XCTAssertTrue(roundTrip.webInspectorEnabled)
+    }
+
+    func testWebInspectorCanBeOverriddenPerTab() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserInspector-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+
+        let first = store.newTab(url: URL(string: "https://one.example")!, title: "One")
+        XCTAssertFalse(store.isWebInspectorEnabled(for: first.id))
+        store.toggleWebInspectorForSelectedTab()
+        XCTAssertTrue(store.isWebInspectorEnabled(for: first.id))
+        XCTAssertTrue(store.selectedSession?.webView.isInspectable == true)
+
+        let second = store.newTab(url: URL(string: "https://two.example")!, title: "Two")
+        XCTAssertFalse(store.isWebInspectorEnabled(for: second.id))
+        store.select(first.id)
+        store.toggleWebInspectorForSelectedTab()
+        XCTAssertFalse(store.isWebInspectorEnabled(for: first.id))
+        XCTAssertFalse(store.selectedSession?.webView.isInspectable == true)
+
+        var settings = store.settings
+        settings.webInspectorEnabled = true
+        store.updateSettings(settings)
+        XCTAssertFalse(store.isWebInspectorEnabled(for: first.id))
+        XCTAssertTrue(store.isWebInspectorEnabled(for: second.id))
+        store.select(first.id)
+        XCTAssertFalse(store.selectedSession?.webView.isInspectable == true)
+        store.select(second.id)
+        XCTAssertTrue(store.selectedSession?.webView.isInspectable == true)
+        store.stop()
+    }
+
+    func testBackgroundNavigationDoesNotReplaceSelectedTabControls() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserNavigation-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let selected = BrowserTab(url: URL(string: "https://selected.example")!, title: "Selected")
+        let background = BrowserTab(url: URL(string: "https://old.example")!, title: "Background")
+        store.tabs = [selected, background]
+        store.selectedTabID = selected.id
+        store.loadingTabID = selected.id
+        store.addressText = "https://selected.example"
+        store.isAddressVisible = true
+        store.canGoBack = true
+        store.canGoForward = false
+
+        store.sessionDidStart(tabID: background.id, url: background.url)
+        let committedURL = try XCTUnwrap(URL(string: "https://background.example"))
+        store.sessionDidCommit(tabID: background.id, url: committedURL)
+        XCTAssertEqual(store.tabs.first(where: { $0.id == background.id })?.title,
+                       committedURL.host)
+        store.sessionDidFinish(tabID: background.id,
+                              url: committedURL,
+                              title: "Background finished",
+                              canGoBack: false,
+                              canGoForward: true)
+
+        XCTAssertEqual(store.loadingTabID, selected.id)
+        XCTAssertEqual(store.addressText, "https://selected.example")
+        XCTAssertTrue(store.canGoBack)
+        XCTAssertFalse(store.canGoForward)
+        XCTAssertEqual(store.tabs.first(where: { $0.id == background.id })?.title, "Background finished")
+        store.stop()
+    }
+
+    func testSameDocumentRouteUpdatesTabTitleAndClearsOldSiteIcon() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserRoute-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let tab = BrowserTab(title: "Old page",
+                             faviconURL: URL(string: "https://old.example/favicon.ico"),
+                             faviconColor: BrowserColor(red: 1, green: 0, blue: 0))
+        store.tabs = [tab]
+        store.selectedTabID = tab.id
+        let session = try XCTUnwrap(store.ensureSession(for: tab.id))
+        store.tabs[0].url = try XCTUnwrap(URL(string: "https://old.example/article"))
+
+        let route = try XCTUnwrap(URL(string: "https://new.example/story"))
+        store.sessionDidObserve(session,
+                                state: BrowserNavigationState(url: route,
+                                                              title: "New story",
+                                                              isLoading: false,
+                                                              canGoBack: true,
+                                                              canGoForward: false))
+
+        XCTAssertEqual(store.tabs[0].url, route)
+        XCTAssertEqual(store.tabs[0].title, "New story")
+        XCTAssertNil(store.tabs[0].faviconURL)
+        XCTAssertNil(store.tabs[0].faviconColor)
+        XCTAssertTrue(store.canGoBack)
+        XCTAssertFalse(store.canGoForward)
+        store.stop()
+    }
+
+    func testNavigationErrorsIgnoreCancellationAndCanBeDismissed() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserErrors-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let tab = BrowserTab()
+        store.tabs = [tab]
+        store.selectedTabID = tab.id
+
+        store.sessionDidFail(tabID: tab.id,
+                             error: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
+        XCTAssertNil(store.errorText)
+        store.sessionDidFail(tabID: tab.id,
+                             error: NSError(domain: "BrowserTests", code: 1,
+                                            userInfo: [NSLocalizedDescriptionKey: "Could not load page"]))
+        XCTAssertEqual(store.errorText, "Could not load page")
+        store.dismissNavigationError()
+        XCTAssertNil(store.errorText)
+        store.stop()
+    }
+
+    func testNewTabClearsPreviousNavigationControls() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserNewTabState-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let previous = BrowserTab(title: "Previous")
+        store.tabs = [previous]
+        store.selectedTabID = previous.id
+        _ = store.ensureSession(for: previous.id)
+        store.loadingTabID = previous.id
+        store.canGoBack = true
+        store.canGoForward = true
+        store.errorText = "Previous page failed"
+
+        let newTab = store.newTab()
+
+        XCTAssertEqual(store.selectedTabID, newTab.id)
+        XCTAssertNil(store.loadingTabID)
+        XCTAssertFalse(store.canGoBack)
+        XCTAssertFalse(store.canGoForward)
+        XCTAssertNil(store.errorText)
+        store.stop()
+    }
+
     func testPersistenceRoundTripAndExpiredDrop() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("MakiBrowserTests-\(UUID().uuidString)", isDirectory: true)
@@ -128,6 +363,36 @@ final class BrowserTests: XCTestCase {
         XCTAssertTrue(store.isAddressVisible)
         XCTAssertEqual(store.addressText, "https://example.org/start")
         XCTAssertNil(tab.url)
+        XCTAssertTrue(store.addressRequiresNavigation)
+        store.hideAddress()
+        XCTAssertTrue(store.isAddressVisible)
+        store.navigate("")
+        XCTAssertTrue(store.isAddressVisible)
+        store.navigate("https://example.org/start")
+        XCTAssertFalse(store.isAddressVisible)
+        store.stop()
+    }
+
+    func testCompactTabColumnMatchesToolbarButtonWidthAndRestoresSidebarWidth() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserCompactTabs-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        store.sidebarWidth = 320
+
+        store.toggleCompactTabs()
+        XCTAssertTrue(store.settings.compactTabs)
+        XCTAssertEqual(store.sidebarWidth, 97)
+
+        store.toggleCompactTabs()
+        XCTAssertFalse(store.settings.compactTabs)
+        XCTAssertEqual(store.sidebarWidth, 320)
         store.stop()
     }
 
@@ -161,7 +426,47 @@ final class BrowserTests: XCTestCase {
         )
         store.history = loaded
         store.addressText = "example"
-        XCTAssertEqual(store.addressSuggestions.map(\.title), ["Example A"])
+        XCTAssertEqual(store.addressSuggestions.map(\.title), [
+            "Example A",
+            "Search Google for “example”",
+        ])
+    }
+
+    func testOmniboxCombinesLocalHistoryOpenTabsVisitAndSearch() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserOmnibox-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        store.settings.searchEngine = .duckDuckGo
+        let selected = BrowserTab(url: URL(string: "https://current.example")!, title: "Current")
+        let openTab = BrowserTab(url: URL(string: "https://example.com/dashboard")!, title: "Example dashboard")
+        store.tabs = [selected, openTab]
+        store.selectedTabID = selected.id
+        store.history = [
+            BrowserHistoryEntry(url: URL(string: "https://example.com/guide")!,
+                                title: "Example guide",
+                                lastVisited: Date()),
+        ]
+        store.addressText = "example.com"
+
+        let suggestions = store.addressSuggestions
+        XCTAssertTrue(suggestions.contains(.history(store.history[0])))
+        XCTAssertTrue(suggestions.contains(.openTab(openTab)))
+        XCTAssertTrue(suggestions.contains(.visit(URL(string: "https://example.com")!)))
+        XCTAssertTrue(suggestions.contains(.search(query: "example.com", engine: .duckDuckGo)))
+
+        store.moveAddressSelection(by: 1)
+        XCTAssertEqual(store.addressSelectionIndex, 0)
+        store.moveAddressSelection(by: 1)
+        XCTAssertEqual(store.addressSelectionIndex, 1)
+        for _ in 0..<suggestions.count { store.moveAddressSelection(by: 1) }
+        XCTAssertEqual(store.addressSelectionIndex, 1)
+        store.stop()
     }
 
     func testBlockerRulesAreValidJSON() throws {
@@ -205,6 +510,34 @@ final class BrowserTests: XCTestCase {
         XCTAssertNotNil(store.blockerList)
         XCTAssertNotNil(store.selectedSession)
         XCTAssertEqual(store.tabs.count, 1)
+        store.stop()
+    }
+
+    func testBlockerToggleRecreatesSelectedSessionWithoutChangingTab() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserBlockerToggle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        let url = try XCTUnwrap(URL(string: "https://blocker-toggle.example/path"))
+        let tab = BrowserTab(url: url, title: "Blocker test")
+        store.tabs = [tab]
+        store.selectedTabID = tab.id
+        await store.start()
+        let originalSession = try XCTUnwrap(store.selectedSession)
+
+        store.toggleBlockerForSelectedDomain()
+
+        let replacementSession = try XCTUnwrap(store.selectedSession)
+        XCTAssertFalse(originalSession === replacementSession)
+        XCTAssertEqual(replacementSession.tabID, tab.id)
+        XCTAssertEqual(store.selectedTab?.url, url)
+        XCTAssertFalse(store.isBlockerEnabled(for: tab))
         store.stop()
     }
 

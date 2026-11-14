@@ -14,6 +14,7 @@ enum MakiDeskBrowserMain {
 
 final class BrowserAppDelegate: NSObject, NSApplicationDelegate {
     private var controller: BrowserAppController?
+    private var pendingURLs: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = makeMainMenu()
@@ -21,6 +22,20 @@ final class BrowserAppDelegate: NSObject, NSApplicationDelegate {
             let controller = BrowserAppController()
             self.controller = controller
             controller.show()
+            pendingURLs.forEach { controller.open(url: $0) }
+            pendingURLs.removeAll()
+        }
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated {
+            for url in urls where ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+                if let controller {
+                    controller.open(url: url)
+                } else {
+                    pendingURLs.append(url)
+                }
+            }
         }
     }
 

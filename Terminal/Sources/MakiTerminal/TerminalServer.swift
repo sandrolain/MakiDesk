@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import Foundation
 import MakiShared
+import MakiTerminalCore
 
 /// The helper side of the MakiDesk ↔ Terminal socket (F1).
 ///
@@ -35,6 +36,8 @@ final class TerminalIPCServer {
     var onThemeChanged: (() -> Void)?
     var onAgentStatus: ((UUID, AgentState, String?) -> Void)?
     var onDockerExec: ((String, String, String?) -> Void)?
+    var onFocusTarget: ((UUID, PaneID?) -> Void)?
+    var onOpenNotes: (() -> Void)?
     var onPeerConnected: (() -> Void)?
 
     init(socketURL: URL = TerminalSocketLocation.socketURL) {
@@ -60,11 +63,13 @@ final class TerminalIPCServer {
 
     /// Sends a shell desktop notification to MakiDesk, which turns it into a
     /// notice. Dropped when no client is connected: the terminal keeps working.
-    func sendAttention(title: String, detail: String) {
+    func sendAttention(title: String, detail: String, workspaceID: UUID? = nil, paneID: PaneID? = nil) {
         queue.async { [weak self] in
             guard let self, self.clientFD >= 0 else { return }
             self.send(TerminalMessage(kind: .attention,
-                                      body: .init(message: title, detail: detail)))
+                                      body: .init(message: title, detail: detail,
+                                                  workspaceID: workspaceID?.uuidString,
+                                                  paneID: paneID?.description)))
         }
     }
 
@@ -79,6 +84,13 @@ final class TerminalIPCServer {
         queue.async { [weak self] in
             guard let self, self.clientFD >= 0 else { return }
             self.send(TerminalMessage(kind: .openSettings))
+        }
+    }
+
+    func sendOpenNotes() {
+        queue.async { [weak self] in
+            guard let self, self.clientFD >= 0 else { return }
+            self.send(TerminalMessage(kind: .openNotes))
         }
     }
 
@@ -282,6 +294,13 @@ final class TerminalIPCServer {
             DispatchQueue.main.async { [weak self] in
                 self?.onDockerExec?(containerID, shell, title)
             }
+        case .focusTarget:
+            guard let raw = message.body?.workspaceID,
+                  let id = UUID(uuidString: raw) else { return }
+            let pane = message.body?.paneID.flatMap { UUID(uuidString: $0) }.map { PaneID(raw: $0) }
+            DispatchQueue.main.async { [weak self] in self?.onFocusTarget?(id, pane) }
+        case .openNotes:
+            DispatchQueue.main.async { [weak self] in self?.onOpenNotes?() }
         case .welcome, .pong, .state, .attention, .openSettings,
              .settingsRequested, .willTerminate:
             break

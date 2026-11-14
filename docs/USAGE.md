@@ -672,12 +672,14 @@ it running, so its shells keep working.
 
 - **Workspaces.** The sidebar lists them. **+** adds one, **−** closes the
   selected one, and the last one cannot be closed. `⌘T` adds a workspace too.
+  Drag the divider to choose the sidebar width.
   The row currently on screen has an accent bar and a brighter title; a
   workspace with more than one pane shows how many at its right. Drag a row to
   reorder, or use `⌃⌘↑` / `⌃⌘↓`; the order is saved with the layout and the
   selected shell stays selected. `⌘1`…`⌘9` select a workspace
   directly, and `⌃⌘←` / `⌃⌘→` step to the previous or next one, wrapping at
-  the ends.
+  the ends. **Workspace ▸ Move Focused Pane to New Workspace** detaches the
+  focused terminal from a multi-pane workspace while keeping its shell alive.
 - **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
   one; `⌘W` closes the focused pane, or the whole workspace when it holds a
   single terminal, and hides the window when it is also the last workspace.
@@ -694,7 +696,14 @@ it running, so its shells keep working.
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
   on the next launch. The main window reopens at its last size and position
   (`Terminal/window.json`) when enough of that frame still meets a display;
-  otherwise it is centered. Scrollback is not saved.
+  otherwise it is centered. When tmux is installed, each pane runs in its own
+  stable tmux session; quitting or crashing the helper detaches the UI, and the
+  next launch reattaches to the same processes and screen. Saved workspaces are
+  migrated to tmux on launch. If a crash happens before the layout write, the
+  helper also discovers and restores managed tmux sessions missing from the
+  saved layout. Without tmux, shells still relaunch from their
+  saved directory and command, but live process state cannot be recovered.
+  Scrollback for ordinary shells is not saved; tmux retains its own history.
 - **Quake.** `⌃⌥Q` drops a scratch terminal from the top of the screen; the
   same key hides it. It appears on the display under the pointer, spans that
   display's visible frame and leaves the menu bar and Dock alone. It is a
@@ -705,8 +714,8 @@ it running, so its shells keep working.
 - **Closing and quitting.** The red close button hides the window; it does
   not close the app or the shells. Running commands keep going, the Dock icon
   disappears, and `⌃⌥O` brings the same window and sessions back. Quitting
-  **MakiDesk Terminal** (`⌘Q`) is the only action that ends them, and it asks
-  for confirmation first.
+  **MakiDesk Terminal** (`⌘Q`) asks for confirmation. Tmux-backed panes detach
+  and keep running; panes without tmux end with the helper.
 - **Hidden means not drawn.** Workspaces you are not looking at, a hidden
   quake, a minimized window or an app that macOS has hidden stop rendering;
   their shells keep running and consuming output, and drawing resumes when they
@@ -777,10 +786,12 @@ it running, so its shells keep working.
   before the pane) reports nothing rather than failing. Agents read hooks when
   a session starts, so a session that was already open may need a restart before
   its dot moves.
-- **tmux.** **New tmux Session** in the sidebar's **+** menu runs
-  `tmux new-session -A -s makidesk-…`: it attaches to that workspace's session
-  or creates it. Closing the pane detaches; the tmux server keeps the session,
-  and reopening the same pane reattaches. The shell also receives
+- **tmux.** When tmux is installed, ordinary workspaces, split panes, SSH and
+  Docker terminals each use a stable per-pane session automatically. It
+  survives helper crashes and `⌘Q`; reopening attaches to the existing session.
+  Explicitly closing a pane or workspace ends its tmux session after
+  confirmation. **New tmux Session** remains available from the sidebar's **+**
+  menu for a named tmux session. The shell also receives
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID`. The item is disabled and
   says so when tmux is not installed (`brew install tmux`).
 - **SSH profiles.** Add them in **Settings ▸ Terminal ▸ SSH profiles** (name,
@@ -792,6 +803,21 @@ it running, so its shells keep working.
 - **MakiDesk menu.** While the helper is in front, its own menu bar has
   **Open MakiDesk** and **Terminal Settings…**. The second opens Settings ▸
   Terminal directly, or offers to launch MakiDesk when it is not running.
+  **New Note in MakiDesk** (`⌘N`) opens Notes in the main app. The gear button
+  below the workspace list opens Terminal settings.
+- **Agent status.** The selected workspace's sidebar footer shows the latest
+  agent state and optional status label. Workspace rows retain their coloured
+  status marker. When a hook first reports **waiting**, MakiDesk shows a notice;
+  clicking **Focus Terminal** opens the owning workspace. Clicking the same
+  action on a terminal notification opens its workspace and pane.
+- **Codex account usage.** The compact sidebar card shows account-wide Codex
+  quota windows with percent used and reset time, plus token or credit metrics
+  only when Codex provides them. It is shared across workspaces. Use
+  the refresh button for an immediate update; while the Terminal window is
+  visible it refreshes about every five minutes. The last update time remains
+  visible, and a failed refresh marks the previous values stale.
+- **Split titles.** The selected pane controls the workspace tab and window
+  title. Titles emitted by background split panes do not replace it.
 - **Settings ▸ Terminal.** Font family and size, the cursor shape and blink,
   the scrollback size per pane, copying selected text, hiding the pointer while
   typing, the shell command (empty starts your login shell), the quake height
@@ -925,13 +951,17 @@ browser without touching MakiDesk.
 - **Left column.** A narrow vertical rail holds the browser icons: back,
   forward, reload/stop, address, new tab, pin, summary, blocker and settings.
   The resizable column beside it holds the tabs. The compact button reduces it
-  to favicons only. A new tab selects itself, shows an empty web view and opens
-  the address overlay prefilled with the configured default page.
+  to favicons only, with 34-point favicon tiles matching the toolbar buttons,
+  centered with the same 7-point side inset as the icon rail. Both columns have
+  8 points of space above their first item.
+  A new tab selects itself, shows an empty web view and opens the address
+  overlay prefilled with the configured default page.
 - **Vertical tabs.** Tabs are ordered by the last time they were used (most
   recent first). Each row shows the favicon, the title and the time since the
   last use, rounded to five minutes. The row background is tinted with the
   favicon's dominant colour; a missing or unreadable favicon falls back to a
-  stable colour for the domain. Sections: **Pinned**, **Active**, **Old**.
+  stable colour for the domain. The title and favicon follow the active page as
+  it changes site or route. Sections: **Pinned**, **Active**, **Old**.
 - **24 and 48 hours.** A tab with no use for 24 hours moves from Active to Old;
   after 48 hours it is closed and forgotten. Pinned tabs never expire and stay
   at the top, still ordered by use. Activating an Old tab brings it back to
@@ -941,20 +971,57 @@ browser without touching MakiDesk.
   counts as use; the timestamp is written at most once a minute.
 - **Pin.** Pin or unpin a tab from its context menu or with `⇧⌘P`. Unpinning a
   tab that is already older than 48 hours closes it on the next check.
+- **Private tab.** Choose **New Private Tab** from the plus button's menu or
+  press `⌥⌘T`. Private tabs use a temporary WebKit data store, do not add
+  entries to address history and are omitted from saved tabs when the browser
+  closes. Close the tab to discard its cookies and site data.
+- **Reader mode.** Select the page-with-text button in the left rail on a
+  finished page to show its readable article text in a clean, adjustable-size
+  view. **Summarize** hands the page to the existing summary panel; the reader
+  scores likely article containers and removes common navigation, ads, cookie
+  notices, comments, recommendations and sharing controls. Extraction is
+  heuristic, so unusual site layouts may still contain noise or omit text. The
+  visible text is extracted locally and is not saved.
+- **Website data.** A tab's context menu offers **Clear Website Data…** for
+  that site's cookies and storage in its current session. Confirming may sign
+  you out and reloads open tabs for the same site.
 - **Address bar.** There is no permanent address bar and no bar above the web
   view. `⌘L` or the link icon opens the overlay over the page; it closes with
   Esc and returns the keyboard to the page. Return navigates. Typing shows
-  previous addresses from the local history; ↑/↓ choose a suggestion and Return
-  opens it. A value that is not an address is searched with the configured
-  engine (Google by default, DuckDuckGo or Bing in settings). The shield in the
+  local history and matching open tabs; an address-like input also offers a
+  direct visit, while every query offers a search action for the configured
+  engine. ↑/↓ cycle through the suggestions while the text field keeps focus;
+  Return opens the selection and `⌘Return` opens it in a new tab. Typing does
+  not send partial queries to a search provider. A value that is not an address
+  is searched with the configured engine (Google by default, DuckDuckGo or Bing
+  in settings). The shield in the
   overlay toggles the blocker for the site.
+- **Copy URL.** The copy icon in the left rail copies the active tab's current
+  page address to the macOS clipboard. It is disabled for an empty tab.
+- **New tab.** The address panel opens over a dimmed page. A new empty tab
+  keeps the panel open until an address or search is submitted; Esc and clicks
+  outside cannot leave an empty web view. Once the tab has a page, the panel
+  closes normally.
 - **Settings.** The gear opens the browser's own settings: default page,
-  search engine, blocker by default and on-device summaries. The default page
-  is prefilled, not loaded automatically.
+  search engine, blocker by default, on-device summaries and a button to ask
+  macOS to make MakiDesk Browser the default for HTTP and HTTPS links. macOS
+  may ask you to confirm. When a link arrives from another app, a chooser lets
+  you open it in MakiDesk Browser, choose another installed app that handles
+  web links, or cancel. The choice applies to that link; cookies and login
+  sessions are not transferred. The default page is prefilled, not loaded
+  automatically.
+- **Web Inspector.** The `{}` button in the icon rail enables or disables
+  inspection for the current tab. Then select that page in Safari's **Develop**
+  menu. The Settings option **Allow Safari Web Inspector** sets the default for
+  all tabs; per-tab button choices override it. Inspection is off by default.
+- **Window placement.** MakiDesk Browser remembers its last window size,
+  position and display, and restores them when reopened. If that display is no
+  longer available, it opens centered on an available display.
 - **Navigation.** The icon rail has back, forward and reload/stop. `⌘T` new tab,
   `⌘W` close tab (the last one closes the window), `⇧⌘W` close window, `⌘R`
   reload, `⌘.` stop, `⌘[` / `⌘]` back and forward, `⌘1…9` choose a tab,
-  `⌃Tab` / `⌃⇧Tab` cycle.
+  `⌃Tab` / `⌃⇧Tab` cycle. Failed navigations show a dismissible message over
+  the page; stopping a load does not show an error.
 - **Ad blocker.** Blocking is on by default and uses WebKit's content-blocker
   API, not JavaScript injected into the page. Disable it for the current site
   (persisted) or only for the current tab (until the tab navigates) from the
@@ -962,17 +1029,22 @@ browser without touching MakiDesk.
   list of common ad and tracking networks; it blocks their requests but does
   not hide editorial elements, and it is not a full uBlock replacement. The
   full EasyList/EasyPrivacy pipeline is described in the browser analysis.
-- **Passwords.** When you focus a username or password field, MakiDesk Browser
-  shows a popover with credentials saved for that site. Select one to fill the
-  form after Touch ID authentication. Credentials are stored as Internet Password
-  items in the login Keychain; Safari's passwords are a separate store and are
-  not readable by this app. Credentials can also be managed from the
-  **Credentials** panel.
+- **Passwords.** Apple Passwords autofill is not available in the current
+  local build. MakiDesk has no built-in password manager. The earlier system
+  authorization prototype has been removed because it could not request
+  passwords for arbitrary websites. The iCloud Passwords extension requires
+  an extension host and a browser identity authorized by Apple; neither is
+  available in this build. See the [integration requirements](ARCHITECTURE.md#apple-passwords-integration).
 - **Page summary.** The sparkles button, or `⇧⌘S`, extracts the readable text
   of the page and summarizes it on-device with Apple Intelligence (Foundation
   Models). Nothing is uploaded and the page text is not logged. If Apple
   Intelligence is unavailable, the panel says so instead of falling back to a
   cloud service. `Copy`, `Regenerate`, `Stop` and `Close` are in the panel.
+  The **ChatGPT** button in the left rail prepares the current URL and an
+  Italian summary prompt in the official ChatGPT app. It does not send the
+  prompt; review it and press
+  Send there. Pages that need a login or block ChatGPT's retrieval may not be
+  readable.
 - **Persistence.** Tabs, pin state, last use, favicon colour, address history
   and blocker exceptions are kept in
   `~/Library/Application Support/MakiDesk/browser-tabs.json`,

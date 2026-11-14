@@ -2,60 +2,38 @@ import AppKit
 import Foundation
 import WebKit
 
+struct BrowserNavigationState: Sendable {
+    var url: URL?
+    var title: String?
+    var isLoading: Bool
+    var canGoBack: Bool
+    var canGoForward: Bool
+}
+
 /// Owns one `WKWebView` and forwards its events to the store. The store keeps
 /// the session alive; the session never owns the model.
 @MainActor
-final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var tabID: UUID
     private(set) var webView: WKWebView!
     private weak var store: BrowserStore?
+    private var stateObservations: [NSKeyValueObservation] = []
+    private var stateUpdateTask: Task<Void, Never>?
 
-    private static let passwordFocusScript = #"""
-    (function() {
-        const observer = new MutationObserver(() => {
-            document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="username"]').forEach(el => {
-                el.addEventListener('focus', () => {
-                    window.webkit.messageHandlers.passwordFocused.postMessage(el.id || 'password-field');
-                });
-            });
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        document.querySelectorAll('input[type="password"], input[autocomplete="current-password"], input[autocomplete="username"]').forEach(el => {
-            el.addEventListener('focus', () => {
-                window.webkit.messageHandlers.passwordFocused.postMessage(el.id || 'password-field');
-            });
-        });
-    })();
-    """#
-
-    init(tabID: UUID, configuration: WKWebViewConfiguration, store: BrowserStore) {
+    init(tabID: UUID,
+         configuration: WKWebViewConfiguration,
+         store: BrowserStore,
+         isInspectable: Bool) {
         self.tabID = tabID
         self.store = store
         super.init()
-        configuration.userContentController.add(self, name: "passwordFocused")
-        let userScript = WKUserScript(
-            source: BrowserTabSession.passwordFocusScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
-        )
-        configuration.userContentController.addUserScript(userScript)
         self.webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
         webView.allowsMagnification = true
-        #if DEBUG
-        webView.isInspectable = true
-        #endif
-    }
-
-    // MARK: - WKScriptMessageHandler
-
-    func userContentController(_ userContentController: WKUserContentController,
-                              didReceive message: WKScriptMessage) {
-        if message.name == "passwordFocused" {
-            store?.passwordFieldFocused(tabID: tabID)
-        }
+        webView.isInspectable = isInspectable
+        observeNavigationState()
     }
 
     func load(_ url: URL) {
@@ -63,10 +41,60 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
     }
 
     func stop() {
+        stateUpdateTask?.cancel()
+        stateUpdateTask = nil
+        stateObservations.removeAll()
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
         webView.removeFromSuperview()
+    }
+
+    private func observeNavigationState() {
+        stateObservations = [
+            webView.observe(\.url, options: [.new]) { [weak self] _, _ in
+                self?.navigationStateDidChange()
+            },
+            webView.observe(\.title, options: [.new]) { [weak self] _, _ in
+                self?.navigationStateDidChange()
+            },
+            webView.observe(\.isLoading, options: [.new]) { [weak self] _, _ in
+                self?.navigationStateDidChange()
+            },
+            webView.observe(\.canGoBack, options: [.new]) { [weak self] _, _ in
+                self?.navigationStateDidChange()
+            },
+            webView.observe(\.canGoForward, options: [.new]) { [weak self] _, _ in
+                self?.navigationStateDidChange()
+            },
+        ]
+    }
+
+    /// WebKit KVO notifications are delivered on the thread that changes the
+    /// observed UI property. WebKit mutations and this session are main-thread
+    /// owned; check that invariant before entering the main actor synchronously.
+    nonisolated private func navigationStateDidChange() {
+        guard Thread.isMainThread else {
+            assertionFailure("WKWebView navigation state changed off the main thread")
+            return
+        }
+        MainActor.assumeIsolated {
+            scheduleNavigationStateUpdate()
+        }
+    }
+
+    private func scheduleNavigationStateUpdate() {
+        guard stateUpdateTask == nil else { return }
+        stateUpdateTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.stateUpdateTask = nil
+            let state = BrowserNavigationState(url: self.webView.url,
+                                               title: self.webView.title,
+                                               isLoading: self.webView.isLoading,
+                                               canGoBack: self.webView.canGoBack,
+                                               canGoForward: self.webView.canGoForward)
+            self.store?.sessionDidObserve(self, state: state)
+        }
     }
 
     // MARK: - Navigation
@@ -88,13 +116,13 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate, WKS
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        store?.sessionDidFail(tabID: tabID, message: error.localizedDescription)
+        store?.sessionDidFail(tabID: tabID, error: error)
     }
 
     func webView(_ webView: WKWebView,
                  didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: Error) {
-        store?.sessionDidFail(tabID: tabID, message: error.localizedDescription)
+        store?.sessionDidFail(tabID: tabID, error: error)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {

@@ -61,9 +61,14 @@ identity before the outer app.
   centered.
 - **SSH profiles:** settings.json entries become `ssh` command lines in a new
   workspace from the sidebar's + menu; keys and prompts stay with ssh.
-- **tmux:** a preset runs `tmux new-session -A -s makidesk-…`, reattaching to the
-  workspace's session after a restore. The menu item is disabled when tmux is
-  not installed (common paths are checked before PATH). Panes also get
+- **tmux:** when installed, each pane uses a stable `tmux new-session -A`
+  session, including default shells, SSH and Docker commands. Quitting or
+  crashing the helper detaches; reopening reattaches. Explicitly closing a pane
+  or workspace ends its managed session after confirmation. Saved layouts
+  migrate to per-pane sessions on launch; orphaned managed sessions are
+  discovered if a crash preceded the layout write. The **New tmux Session** preset is
+  still available. Without tmux, panes use ordinary shells and do not survive
+  helper termination. Common tmux paths are checked before PATH. Panes also get
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
 - **Settings and theme:** `Terminal/settings.json` (font, cursor shape and
   blink, scrollback size, selection copy, pointer hiding, shell command,
@@ -85,6 +90,13 @@ identity before the outer app.
   and exports its path as `MAKIDESK_CLI` in each pane; quote it in the shell.
   A helper started before an update does not have the new variables: quit and
   reopen it.
+- **Codex account usage:** one sidebar card reads account-wide quota windows,
+  reset times, and optional token activity from Codex app-server. It uses the
+  local Codex CLI with the documented stdio JSON-RPC handshake and read-only
+  account methods; it does not read auth files or conversation logs. Refresh is
+  manual or about every five minutes while the main window is visible. Data
+  stays in memory, and failed refreshes mark the previous snapshot stale. The
+  card is separate from each workspace's agent status.
 - **Automatic agent hooks:** `makidesk hooks install` (or the opt-in switches in
   Settings ▸ Terminal ▸ Agents) merges its lifecycle handlers into
   `~/.claude/settings.json` or `~/.codex/hooks.json`. Claude Code reports

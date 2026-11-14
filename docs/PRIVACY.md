@@ -111,6 +111,14 @@ identity asks again. A Developer ID-signed public release behaves best here.
   live in memory. Root-owned daemons cannot be read and are covered only by the
   machine's total, which is why an unexplained load is reported as *System
   processes*.
+- **Codex account usage**, only when the MakiDesk Terminal window is visible or
+  you press its refresh button: the local Codex CLI app-server returns account
+  quota percentages/reset times and, when available, account-wide token summary
+  or account credit values/counts. The app-server handles its own authentication; MakiDesk
+  does not read credential files, account identifiers, email addresses or
+  conversation logs. The snapshot stays in Terminal memory. Refreshes stop when
+  the window is hidden; the app-server may contact Codex services to answer the
+  documented account requests.
 
 ## What is stored
 
@@ -124,7 +132,7 @@ All paths are under your user account:
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` (including a SHA-256 digest of each linked external file's last known text) | Until you delete them or reset |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
-| Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, zoomed pane, last directory per pane | Until you delete it; a factory reset does not remove it |
+| Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, zoomed pane, last directory and launch command per pane | Until you delete it; a factory reset does not remove it |
 | Terminal window frame | `…/MakiDesk/Terminal/window.json`: the helper's main window position and size | Until you delete it; a factory reset does not remove it |
 | Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, cursor, scrollback, selection copy, pointer hiding, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
 | Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |
@@ -171,7 +179,11 @@ Desktop notifications emitted by the shell (OSC 9/777) are forwarded to
 MakiDesk and shown as notices; their title and body live in the notice history
 in memory, like every other notice, and are never written to disk. Agent
 statuses sent by the bundled `makidesk` CLI (working, waiting, done, optional
-title) also live only in the helper's memory and are shown as a sidebar dot.
+title) also live only in the helper's memory and are shown in the sidebar. A
+waiting status may create a notice with the workspace id so its Focus Terminal
+action can return to that workspace. Clicking a shell notice may carry its
+workspace and pane ids for the same purpose; these identifiers use the local
+socket and are not persisted.
 
 An image pasted into a pane (when the clipboard holds no text) is written as a
 PNG under `…/MakiDesk/Terminal/pasted-images/`, because a terminal can only send
@@ -192,9 +204,14 @@ switch off removes only the handlers that call `makidesk hook`; the backup is
 yours to keep or delete. Codex additionally asks you to review and trust new
 hooks once (with `/hooks`) before it runs them.
 
-The helper starts your login shell, so macOS attributes whatever that shell reads
-or connects to (shell startup files, tools it launches, `ssh`) to the helper, not
-to MakiDesk. That is why the first launch can ask for access to folders such as
+When tmux is installed, the helper starts a local tmux client and the separate
+tmux server owns each shell and its child processes. Quitting or crashing the
+helper detaches those clients; closing a pane explicitly ends its managed tmux
+session. tmux keeps its own runtime state outside MakiDesk's workspace file.
+Without tmux the helper starts the login shell directly, so its processes end
+with the helper. macOS attributes what the shell reads or connects to (shell
+startup files, tools it launches, `ssh`) to the helper or tmux server, not to
+MakiDesk. That is why the first launch can ask for access to folders such as
 `~/Downloads` or for a network connection when your shell's own files do. The
 request comes from the shell's configuration, not from MakiDesk or libghostty;
 starting the shell with `--no-rcs` avoids both in the development spike.
@@ -257,6 +274,25 @@ finished loading, kept only to suggest addresses already visited. There is no
 browsing-history screen and no "recently closed" archive. Page content, form
 values, cookies and summaries are not written to those files.
 
+Private tabs use `WKWebsiteDataStore.nonPersistent()`, are excluded from tab
+and address-history persistence, and do not record completed visits. Their
+cookies and site data are discarded when the tab's WebKit session ends. The
+Reader view extracts visible page text in memory for display; it does not write
+the text to disk. Clearing website data is an explicit action that removes
+WebKit records matching the current site's host and related subdomains from
+that tab's data store; this can sign the user out. The optional Safari Web
+Inspector setting supplies the default for WebKit inspection and is off by
+default; a per-tab control can override that default for the active tab. Page
+content may then be visible in Safari's Develop tools on the same Mac.
+
+Address-bar matches are computed locally from this history and the currently
+open tabs; direct-visit and search rows are also generated on the device. Text
+is sent to the configured search engine only after the user selects a search
+action or submits a non-address query.
+
+The **Copy page URL** button writes the active tab's current address to the
+macOS clipboard only when clicked. MakiDesk does not persist this copy.
+
 The favicon is requested directly from the site's icon URL in an ephemeral
 `URLSession` with no shared cookies, a five-second timeout and a 512 KB cap.
 That request goes to the site you are already visiting; no favicon service is
@@ -268,7 +304,8 @@ blocker for a site or a tab is stored as described above; the per-tab override
 is discarded when the tab navigates.
 
 Page summarization uses Apple's Foundation Models on the device. The readable
-text of the current page is extracted in the WebKit view, capped at 12,000
+text of the current page is extracted in the WebKit view's isolated client
+world, capped at 12,000
 characters, and passed to the local model; it is not uploaded, not written to
 disk and not logged. The resulting summary is kept in memory for the current
 view and is discarded on navigation or when the panel closes. If Apple
@@ -277,18 +314,27 @@ to a cloud model. The extension host is not active in this version; when it is
 added, extension permissions and storage will be documented here before they
 ship.
 
-Passwords are stored as Internet Password items in the user's login Keychain,
-under the server's registrable domain and the chosen username. When you focus a
-login field, the browser proposes matching credentials in a popover; filling them
-requires Touch ID authentication. Passwords can also be managed from the **Credentials**
-panel. MakiDesk reads only its own Keychain items; Safari's saved passwords are a
-separate protected store and are neither imported nor read. The password is never
-written to the browser JSON files and never logged. Deleting an item from the
-panel removes it from the Keychain.
+The optional **ChatGPT** action creates a new conversation in the
+official ChatGPT app with the current page URL and a summary prompt prefilled.
+MakiDesk does not send the prompt or page text; the user reviews and submits it
+in ChatGPT. After submission, ChatGPT may retrieve the public page from its own
+service. It does not inherit the MakiDesk WebKit login or cookies, so private,
+paywalled or retrieval-blocked pages may not be readable.
+
+MakiDesk has no built-in password manager and does not request, read, save,
+log or inject credentials through an application password integration. Apple
+Passwords autofill is unavailable in the current local build. The experimental
+Authentication Services login-field bridge was removed. Existing Keychain items
+created by older versions are left untouched. WebKit website cookies and
+session storage follow the website-data behavior described above.
 
 The browser requests no Accessibility or Screen Recording permission. It uses
-the network as any WebKit page does, and downloads use `WKDownload` with a
-destination chosen by the user.
+the network as any WebKit page does. When another app sends a web link to
+MakiDesk Browser, the link is shown in a chooser and is not loaded until the
+user selects MakiDesk Browser. Choosing another installed app passes that URL
+to the selected app; no cookies or credentials are copied. Setting the default
+browser is an explicit user action and macOS controls any confirmation. A
+download flow is not implemented yet.
 
 ## Clipboard
 
