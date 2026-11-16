@@ -60,6 +60,26 @@ final class ChecklistTests: XCTestCase {
         XCTAssertEqual(list.items.count, Checklist.maxItems)
     }
 
+    func testEditingNormalizesTextAndPreservesItemIdentityAndDoneState() {
+        var list = Checklist()
+        let added = list.add("before")
+        guard let item = added else { return XCTFail("no item") }
+        list.toggle(item.id)
+
+        XCTAssertTrue(list.updateText("  after  \n edit  ", for: item.id))
+        XCTAssertEqual(list.items, [ChecklistItem(id: item.id, text: "after\nedit", done: true)])
+    }
+
+    func testEditingRejectsBlankTextAndUnknownItems() {
+        var list = Checklist()
+        let added = list.add("keep this")
+        guard let item = added else { return XCTFail("no item") }
+
+        XCTAssertFalse(list.updateText(" \n ", for: item.id))
+        XCTAssertFalse(list.updateText("missing", for: UUID()))
+        XCTAssertEqual(list.items, [item])
+    }
+
     func testLoadingAManagedListNeverExceedsTheLimit() {
         let many = (0..<(Checklist.maxItems + 10)).map { item("item \($0)") }
         XCTAssertEqual(Checklist(items: many).items.count, Checklist.maxItems)
@@ -266,6 +286,28 @@ final class ChecklistTests: XCTestCase {
         store.flushBlocking()
         XCTAssertEqual(store.items, saved)
         XCTAssertEqual(file.load(), saved)
+    }
+
+    @MainActor
+    func testEditingAnItemPersistsItsTextAndDoneState() async {
+        let file = file()
+        let saved = [item("Original", done: true)]
+        XCTAssertTrue(file.save(saved))
+        let store = ChecklistStore(file: file)
+        let restored = expectation(description: "Checklist restored")
+        store.onChange = { restored.fulfill() }
+
+        store.loadIfNeeded()
+        await fulfillment(of: [restored], timeout: 2)
+        store.onChange = nil
+
+        XCTAssertTrue(store.updateText("Updated", for: saved[0].id))
+        store.flushBlocking()
+
+        XCTAssertEqual(
+            file.load(),
+            [ChecklistItem(id: saved[0].id, text: "Updated", done: true)]
+        )
     }
 
     @MainActor

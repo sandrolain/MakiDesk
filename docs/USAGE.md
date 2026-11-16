@@ -478,8 +478,10 @@ use it.
   row to delete it. When something is ticked, the trash appears in the add row
   and clears only the completed items. Items hold up to 200 characters and keep
   the line breaks you type; the list stops at 50.
-- The text of an item can be copied from its right-click menu with **Copy
-  Item**, or the whole list at once with **Copy All Items**. Dragging a row onto
+- Double-click an item's text, or point at it and click the pencil, to edit it
+  in place. Click the checkmark or leave the field to save; blank edits keep
+  the previous text. Use an item's right-click menu to copy it with **Copy
+  Item**, or copy the whole list with **Copy All Items**. Dragging a row onto
   another moves it to that slot, and the same moves are in the row's context
   menu and in the VoiceOver actions.
 - Ticking does not take the keyboard from the app you are in: clicking the list

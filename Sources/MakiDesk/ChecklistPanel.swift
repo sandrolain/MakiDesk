@@ -71,6 +71,13 @@ final class ChecklistStore {
         return true
     }
 
+    @discardableResult
+    func updateText(_ text: String, for id: UUID) -> Bool {
+        guard loaded, checklist.updateText(text, for: id) else { return false }
+        changed()
+        return true
+    }
+
     func toggle(_ id: UUID) {
         guard loaded else { return }
         checklist.toggle(id)
@@ -573,7 +580,7 @@ private struct ChecklistView: View {
     }
 }
 
-/// One line: the box, the text and, while the pointer is over it, the delete.
+/// One line: the box, text, edit and delete controls.
 /// The whole row is the drag handle: dragging it moves the item to the row it
 /// is dropped on, and the context menu and VoiceOver actions do the same
 /// without a mouse.
@@ -584,6 +591,9 @@ private struct ChecklistRow: View {
     let store: ChecklistStore
     @State private var hovering = false
     @State private var dropTargeted = false
+    @State private var isEditing = false
+    @State private var editingText = ""
+    @FocusState private var editingFocused: Bool
 
     var body: some View {
         HStack(spacing: 5) {
@@ -601,17 +611,37 @@ private struct ChecklistRow: View {
             .accessibilityValue(item.done ? "Done" : "Not done")
             .help(item.done ? "Mark as not done" : "Mark as done")
 
-            Text(item.text)
-                .font(MakiType.content)
-                .foregroundStyle(item.done ? theme.subtext : theme.text)
-                .strikethrough(item.done, color: theme.subtext)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityHidden(true)
+            if isEditing {
+                TextField("Edit checklist item", text: $editingText, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(MakiType.content)
+                    .foregroundStyle(theme.text)
+                    .lineLimit(1...3)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .makiField(theme: theme, focused: editingFocused)
+                    .focused($editingFocused)
+                    .onSubmit(finishEditing)
+                    .onChange(of: editingFocused) { _, focused in
+                        if focused == false { finishEditing() }
+                    }
+                    .accessibilityLabel("Edit checklist item")
+                icon("checkmark", "Save") { finishEditing() }
+            } else {
+                Text(item.text)
+                    .font(MakiType.content)
+                    .foregroundStyle(item.done ? theme.subtext : theme.text)
+                    .strikethrough(item.done, color: theme.subtext)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onTapGesture(count: 2, perform: beginEditing)
+                    .accessibilityHidden(true)
 
-            icon("xmark", "Delete") { store.remove(item.id) }
-                .opacity(hovering ? 1 : 0.4)
+                icon("pencil", "Edit", tint: theme.accent) { beginEditing() }
+                icon("xmark", "Delete") { store.remove(item.id) }
+                    .opacity(hovering ? 1 : 0.4)
+            }
         }
         .padding(.vertical, 1.5)
         .padding(.horizontal, 2)
@@ -654,12 +684,27 @@ private struct ChecklistRow: View {
         .accessibilityAction(named: "Delete") { store.remove(item.id) }
     }
 
-    private func icon(_ symbol: String, _ help: String,
+    private func beginEditing() {
+        guard isEditing == false else { return }
+        editingText = item.text
+        isEditing = true
+        ChecklistController.shared.beginEditing()
+        DispatchQueue.main.async { editingFocused = true }
+    }
+
+    private func finishEditing() {
+        guard isEditing else { return }
+        _ = store.updateText(editingText, for: item.id)
+        isEditing = false
+        editingFocused = false
+    }
+
+    private func icon(_ symbol: String, _ help: String, tint: Color? = nil,
                       action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(theme.subtext)
+                .foregroundStyle(tint ?? theme.subtext)
                 .frame(width: 15, height: 16)
                 .contentShape(Rectangle())
         }

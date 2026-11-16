@@ -55,6 +55,15 @@ struct Checklist: Equatable, Sendable {
         return item
     }
 
+    @discardableResult
+    mutating func updateText(_ text: String, for id: UUID) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }),
+              let clean = Self.normalized(text),
+              items[index].text != clean else { return false }
+        items[index].text = clean
+        return true
+    }
+
     mutating func toggle(_ id: UUID) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].done.toggle()

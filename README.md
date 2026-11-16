@@ -109,10 +109,11 @@ External files are written only when you press `⌘S`.
 ### A checklist you cannot leave behind
 
 `⌃⌥L` puts a small card over the desktop with the things you tick off: add,
-tick, drag a row to reorder, delete, clear what is done. Its text is copyable
-from the row menu, and the trash shares the add row and clears the completed
-items, while the add field only appears when the card has the keyboard. It
-keeps your corner, follows the active display (the monitor of the last window
+tick, drag a row to reorder, delete, clear what is done, and edit an item by
+double-clicking it or using its pencil. Its right-click menu can copy one item
+or the whole list. The trash shares the add row
+and clears the completed items, while the add field only appears when the card
+has the keyboard. It keeps your corner, follows the active display (the monitor of the last window
 focus or pointer move), sits on the same edge margin as a tiled window, and can
 rest faint, turning solid as soon as the pointer is over it or you type in it.
 It stays over the other apps without taking the keyboard — clicking the list
