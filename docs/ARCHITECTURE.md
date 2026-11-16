@@ -406,6 +406,12 @@ name), and replies to `hello` with its version and pid. `TerminalClient` keeps
 the connection, retries a launch up to 30 times at 150 ms intervals, and reports
 failure in a notice; none of it blocks the main thread. A development `swift run`
 looks for `dist/MakiDeskTerminal.app`, because it has no app bundle to nest into.
+The helper binds its socket at the start of application launch, before Ghostty
+initialization and workspace restoration, so the handshake is not delayed by
+creating the first set of terminal surfaces.
+The Git scroll document is installed in its clip view before constraints between
+them are activated. Constraint priorities are configured before activation;
+violating either ordering can interrupt window construction with an AppKit exception.
 
 Inside the helper, a workspace is one sidebar row and one binary split tree of
 terminal panes; surfaces are reused across rebuilds, so switching workspaces
@@ -435,6 +441,17 @@ At startup, a worker lists managed pane sessions and recovers any pane id not
 present in the saved layout, covering a crash before the debounced layout
 write. The session environment carries the workspace id so agent hooks retain
 their destination during that recovery.
+The workspace list marks tmux-backed panes separately, and its + menu can
+enumerate unattached tmux sessions by stable session ID and attach them into a
+new workspace without wrapping the command in a second managed session.
+Terminal settings control tmux's status line on managed and attached sessions;
+the option is session-wide and therefore shared with other tmux clients. The optional
+Git sidebar runs `git rev-parse` and porcelain status for the focused pane's
+working directory on a worker queue; it renders an expandable path tree and
+hides when the directory is outside a repository. While visible it refreshes
+every five seconds and stops its timer when the window is hidden. Collapsing the
+sidebar removes its content constraints and attaches the pane container to the
+content view's trailing edge without rebuilding terminal surfaces.
 Without tmux, the original command runs directly and only layout state can be
 restored.
 Debounced layout and frame writes run on a serial worker queue; confirmed Quit

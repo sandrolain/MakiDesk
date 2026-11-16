@@ -794,6 +794,17 @@ it running, so its shells keep working.
   menu for a named tmux session. The shell also receives
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID`. The item is disabled and
   says so when tmux is not installed (`brew install tmux`).
+- **tmux sessions and Git changes.** Each workspace row labels its focused
+  pane as `MUX` or `SH`. The **+** menu can list sessions without an attached
+  client and attach one as a new workspace. Use the connected-nodes button in
+  the workspace sidebar to show or hide Git changes for the focused pane. The
+  panel shows changed and untracked paths in an expandable file tree, refreshes every
+  five seconds while open, and uses the live tmux pane directory when available.
+  It disappears outside a Git repository.
+  **Settings ▸ Terminal ▸ Show tmux status bar**
+  controls the status line in managed and attached tmux sessions. Since tmux
+  stores this option per session, it also affects other clients attached to
+  that same session.
 - **SSH profiles.** Add them in **Settings ▸ Terminal ▸ SSH profiles** (name,
   host, user, port, optional key, remote command, agent forwarding), then pick
   **New SSH: …** from the sidebar's **+** menu. The pane runs `ssh` with those
@@ -821,7 +832,8 @@ it running, so its shells keep working.
 - **Settings ▸ Terminal.** Font family and size, the cursor shape and blink,
   the scrollback size per pane, copying selected text, hiding the pointer while
   typing, the shell command (empty starts your login shell), the quake height
-  (30–60% of the screen), the SSH profiles and the opt-in agent hooks. Options
+  (30–60% of the screen), the SSH profiles, the opt-in agent hooks and tmux
+  status bar visibility. Options
   are grouped under Appearance, Behavior and Window; SSH port entries validate
   the 1–65535 range. The terminal, its sidebar and its title bar follow the
   MakiDesk theme, and a change reaches the helper without a restart; a new

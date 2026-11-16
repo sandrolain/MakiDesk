@@ -70,6 +70,15 @@ identity before the outer app.
   still available. Without tmux, panes use ordinary shells and do not survive
   helper termination. Common tmux paths are checked before PATH. Panes also get
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
+- **tmux and Git controls:** workspace rows distinguish tmux panes from
+  ordinary shells. The + menu can list and attach tmux sessions that have no
+  attached clients, targeting them by stable session ID. Terminal settings can
+  show or hide tmux's status bar for managed and attached sessions; on external
+  sessions the option is shared with other clients. The right sidebar shows
+  changed and untracked files for the focused pane's Git repository as an
+  expandable path tree and collapses outside a repository. For tmux panes it
+  reads the live pane directory; Git status is read locally on a worker and is
+  not persisted.
 - **Settings and theme:** `Terminal/settings.json` (font, cursor shape and
   blink, scrollback size, selection copy, pointer hiding, shell command,
   quake height) and `Terminal/theme.json`

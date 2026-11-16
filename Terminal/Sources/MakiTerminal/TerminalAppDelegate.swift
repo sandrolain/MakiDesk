@@ -14,6 +14,10 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
+        // Bind IPC before Ghostty and restored panes are initialized. The
+        // client can then complete its handshake even if terminal startup is
+        // slow, and a queued showMain callback runs after this launch method.
+        startServer()
 
         // A stable, space-free path for `MAKIDESK_CLI`; recreated every launch
         // so a moved app bundle cannot leave a dangling link.
@@ -83,8 +87,6 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
         controller.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         controller.presentPersistenceWarningIfNeeded()
-
-        startServer()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -162,12 +164,15 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             switch result {
             case .started:
+                NSLog("MakiTerminal IPC: server listening")
                 break
             case .alreadyRunning:
+                NSLog("MakiTerminal IPC: another helper already owns the socket")
                 // Another helper owns the socket; this launch is a duplicate.
                 self.suppressQuitConfirmation = true
                 NSApp.terminate(nil)
             case let .failed(message):
+                NSLog("MakiTerminal IPC: server startup failed: \(message)")
                 let alert = NSAlert()
                 alert.alertStyle = .warning
                 alert.messageText = "Terminal integration is unavailable"

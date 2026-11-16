@@ -134,7 +134,7 @@ All paths are under your user account:
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, zoomed pane, last directory and launch command per pane | Until you delete it; a factory reset does not remove it |
 | Terminal window frame | `…/MakiDesk/Terminal/window.json`: the helper's main window position and size | Until you delete it; a factory reset does not remove it |
-| Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, cursor, scrollback, selection copy, pointer hiding, shell command, quake height, SSH profiles) and `theme.json` (colours) | Until you delete them |
+| Terminal settings and theme | `…/MakiDesk/Terminal/settings.json` (font, cursor, scrollback, selection copy, pointer hiding, shell command, quake height, SSH profiles, tmux status bar visibility) and `theme.json` (colours) | Until you delete them |
 | Terminal pasted images | `…/MakiDesk/Terminal/pasted-images/paste-*.png`: an image you pasted into a terminal pane, as its own PNG | Until a week old or beyond the newest 100, pruned at helper launch and after each paste |
 | Docker window state | `…/MakiDesk/Docker/window.json`: the helper's window position and size | Until you delete it |
 | Docker settings | `…/MakiDesk/Docker/settings.json`: refresh/stats intervals, default shell, confirmation and log preferences, optional docker path and context | Until you delete it |
@@ -208,6 +208,13 @@ When tmux is installed, the helper starts a local tmux client and the separate
 tmux server owns each shell and its child processes. Quitting or crashing the
 helper detaches those clients; closing a pane explicitly ends its managed tmux
 session. tmux keeps its own runtime state outside MakiDesk's workspace file.
+The optional Git sidebar runs the local `git` executable for the focused
+terminal's working directory and reads repository root and changed-path/status
+metadata only. It does not read file contents or save the result; it is hidden
+when the directory is outside a Git repository.
+The tmux status-bar preference also applies to externally attached sessions;
+tmux stores that setting per session, so other clients of the same session see
+the same change.
 Without tmux the helper starts the login shell directly, so its processes end
 with the helper. macOS attributes what the shell reads or connects to (shell
 startup files, tools it launches, `ssh`) to the helper or tmux server, not to

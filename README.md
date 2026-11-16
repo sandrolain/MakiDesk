@@ -263,7 +263,11 @@ windows, reset times and any token metrics the local Codex app-server supplies;
 it updates on request and every five minutes while the Terminal window is
 visible. Click a terminal notice to return to its pane; move a
 focused split into its own workspace without stopping it. `⌘N` opens Notes in
-MakiDesk, and the sidebar gear opens Terminal settings. VoiceOver reads the pane
+MakiDesk, and the sidebar gear opens Terminal settings. The workspace list marks
+tmux sessions separately from ordinary shells, and a right sidebar can show the
+focused pane's Git changes as an expandable path tree. Unattached tmux sessions
+can be attached into new workspaces, and the status-bar preference applies to
+managed or attached sessions. VoiceOver reads the pane
 as a text area and dictation inserts at the cursor. The helper is embedded in
 the app bundle.
 

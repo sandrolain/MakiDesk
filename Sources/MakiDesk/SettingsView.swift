@@ -1276,6 +1276,15 @@ struct SettingsView: View {
                         }
                     }
                 ))
+                Toggle("Show tmux status bar", isOn: Binding(
+                    get: { TerminalController.shared.settings.showTmuxStatusBar },
+                    set: { value in
+                        TerminalController.shared.updateSettings { $0.showTmuxStatusBar = value }
+                    }
+                ))
+                Text("Applies to managed sessions and sessions attached from the + menu. Attached sessions share this setting with their other tmux clients.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Shell command") {
                     TextField("Empty uses your login shell", text: Binding(
                     get: { TerminalController.shared.settings.shell ?? "" },

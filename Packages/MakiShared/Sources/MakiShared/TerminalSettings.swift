@@ -152,6 +152,8 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
     public var copyOnSelect: Bool
     /// Hide the pointer as soon as typing starts.
     public var hideMouseWhileTyping: Bool
+    /// Show tmux's own status line in MakiDesk-managed sessions.
+    public var showTmuxStatusBar: Bool
     /// Saved SSH targets offered in the helper's sidebar.
     public var sshProfiles: [TerminalSSHProfile]
 
@@ -165,6 +167,7 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
                 scrollbackLimitMB: Int? = nil,
                 copyOnSelect: Bool = true,
                 hideMouseWhileTyping: Bool = false,
+                showTmuxStatusBar: Bool = true,
                 sshProfiles: [TerminalSSHProfile] = []) {
         self.version = version
         self.fontFamily = fontFamily
@@ -176,6 +179,7 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         self.scrollbackLimitMB = scrollbackLimitMB
         self.copyOnSelect = copyOnSelect
         self.hideMouseWhileTyping = hideMouseWhileTyping
+        self.showTmuxStatusBar = showTmuxStatusBar
         self.sshProfiles = sshProfiles
     }
 
@@ -197,6 +201,8 @@ public struct TerminalSettingsDocument: Codable, Equatable, Sendable {
         copyOnSelect = try container.decodeIfPresent(Bool.self, forKey: .copyOnSelect) ?? true
         hideMouseWhileTyping = try container.decodeIfPresent(Bool.self,
                                                              forKey: .hideMouseWhileTyping) ?? false
+        showTmuxStatusBar = try container.decodeIfPresent(Bool.self,
+                                                          forKey: .showTmuxStatusBar) ?? true
         sshProfiles = try container.decodeIfPresent([TerminalSSHProfile].self,
                                                     forKey: .sshProfiles) ?? []
     }

@@ -35,4 +35,35 @@ final class TmuxSessionTests: XCTestCase {
                                               fixedPaths: [])
         XCTAssertEqual(found?.standardizedFileURL.path, tmux.standardizedFileURL.path)
     }
+
+    func testCurrentPaneDirectoryUsesTheSessionTargetAndPreservesSpaces() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiTmux-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let tmux = directory.appendingPathComponent("tmux")
+        try """
+        #!/bin/sh
+        [ "$1" = "display-message" ] || exit 1
+        [ "$2" = "-p" ] || exit 1
+        [ "$3" = "-t" ] || exit 1
+        [ "$4" = "makidesk-pane-test" ] || exit 1
+        [ "$5" = "#{pane_current_path}" ] || exit 1
+        printf '%s\\n' '/tmp/project with spaces'
+        """.write(to: tmux, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                              ofItemAtPath: tmux.path)
+
+        XCTAssertEqual(
+            TmuxSession.currentPaneDirectory(target: "makidesk-pane-test", executable: tmux),
+            "/tmp/project with spaces"
+        )
+    }
+
+    func testExternalAttachCommandIsRecognizedAndKeepsStableTarget() {
+        let command = "exec /opt/homebrew/bin/tmux attach-session -t '$3'"
+        XCTAssertTrue(TmuxSession.isAttachCommand(command))
+        XCTAssertEqual(TmuxSession.attachedSessionName(in: command), "$3")
+        XCTAssertEqual(TmuxSession.target(in: command), "$3")
+    }
 }

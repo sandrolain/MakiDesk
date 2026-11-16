@@ -3,6 +3,112 @@ import Foundation
 /// The tmux preset (F3 L2): a session named after the workspace, attached or
 /// created, so closing and reopening the pane returns to the same session.
 public enum TmuxSession {
+    public struct UnattachedSession: Equatable, Sendable, Identifiable {
+        /// Stable tmux target (for example `$3`), safe even when a name has shell syntax.
+        public let target: String
+        public let name: String
+        public var id: String { target }
+    }
+
+    private static let statusLock = NSLock()
+    private static let statusQueue = DispatchQueue(label: "com.makidesk.terminal.tmux-status",
+                                                   qos: .utility)
+    private static var statusGenerations: [String: UInt64] = [:]
+
+    /// Reads the active pane's current directory for a terminal attached to a
+    /// tmux session. Call from a worker queue.
+    public static func currentPaneDirectory(target: String,
+                                            executable: URL? = executableURL()) -> String? {
+        guard target.isEmpty == false, let executable else { return nil }
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = executable
+        process.arguments = ["display-message", "-p", "-t", target, "#{pane_current_path}"]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let timeout = DispatchWorkItem {
+                if process.isRunning { process.terminate() }
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2,
+                                                          execute: timeout)
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            timeout.cancel()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0,
+                  let directory = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  directory.isEmpty == false else { return nil }
+            return directory
+        } catch {
+            return nil
+        }
+    }
+
+    /// Returns sessions without attached clients. Call away from the main queue.
+    public static func unattachedSessions() -> [UnattachedSession] {
+        guard let executable = executableURL() else { return [] }
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = executable
+        process.arguments = ["list-sessions", "-F", "#{session_id}\t#{session_name}\t#{session_attached}"]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0,
+                  let text = String(data: data, encoding: .utf8) else { return [] }
+            return text.split(whereSeparator: \.isNewline).compactMap { line in
+                let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+                guard fields.count == 3, fields[2] == "0" else { return nil }
+                return UnattachedSession(target: String(fields[0]), name: String(fields[1]))
+            }
+        } catch { return [] }
+    }
+
+    /// Applies the preference to a session attached by this terminal. Retries
+    /// are invalidated when a newer settings value is requested.
+    public static func setStatusBarVisible(_ visible: Bool, sessionName: String, attempt: Int = 0) {
+        guard let executable = executableURL() else { return }
+        statusLock.lock()
+        let generation = (statusGenerations[sessionName] ?? 0) &+ 1
+        statusGenerations[sessionName] = generation
+        statusLock.unlock()
+        statusQueue.async {
+            applyStatusBar(visible, sessionName: sessionName, executable: executable,
+                           attempt: attempt, generation: generation)
+        }
+    }
+
+    private static func statusRequestIsCurrent(_ target: String, generation: UInt64) -> Bool {
+        statusLock.lock()
+        defer { statusLock.unlock() }
+        return statusGenerations[target] == generation
+    }
+
+    private static func applyStatusBar(_ visible: Bool, sessionName: String,
+                                       executable: URL, attempt: Int, generation: UInt64) {
+        guard statusRequestIsCurrent(sessionName, generation: generation) else { return }
+        let process = Process()
+        process.executableURL = executable
+        process.arguments = ["set-option", "-t", sessionName, "status", visible ? "on" : "off"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus != 0, attempt < 10,
+               statusRequestIsCurrent(sessionName, generation: generation) {
+                statusQueue.asyncAfter(deadline: .now() + 0.4) {
+                    applyStatusBar(visible, sessionName: sessionName, executable: executable,
+                                   attempt: attempt + 1, generation: generation)
+                }
+            }
+        } catch { }
+    }
     public struct ExistingPaneSession: Equatable, Sendable {
         public let paneID: PaneID
         public let workspaceID: UUID?
@@ -76,9 +182,18 @@ public enum TmuxSession {
 
     public static func isAttachCommand(_ command: String) -> Bool {
         let parts = command.split(whereSeparator: \.isWhitespace)
-        return parts.contains("new-session")
-            && parts.contains("-A")
-            && sessionName(in: command) != nil
+        if parts.contains("new-session"), parts.contains("-A") { return sessionName(in: command) != nil }
+        return parts.contains("attach-session") && attachedSessionName(in: command) != nil
+    }
+
+    public static func attachedSessionName(in command: String) -> String? {
+        let parts = command.split(whereSeparator: \.isWhitespace)
+        guard let flag = parts.firstIndex(of: "-t"), parts.indices.contains(flag + 1) else { return nil }
+        return String(parts[flag + 1]).trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+    }
+
+    public static func target(in command: String) -> String? {
+        sessionName(in: command) ?? attachedSessionName(in: command)
     }
 
     public static func sessionName(in command: String) -> String? {

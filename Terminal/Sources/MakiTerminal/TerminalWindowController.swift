@@ -63,6 +63,7 @@ final class WorkspaceCellView: NSTableCellView {
     let dot = NSView()
     let agentDot = NSView()
     let countLabel = NSTextField(labelWithString: "")
+    let transportLabel = NSTextField(labelWithString: "")
     /// The left bar that marks the workspace currently on screen; it does not
     /// depend on the table's focus, so the marker stays visible while the
     /// terminal has the keyboard.
@@ -83,6 +84,11 @@ final class WorkspaceCellView: NSTableCellView {
         countLabel.textColor = .secondaryLabelColor
         countLabel.isHidden = true
 
+        transportLabel.translatesAutoresizingMaskIntoConstraints = false
+        transportLabel.font = .systemFont(ofSize: 9, weight: .semibold)
+        transportLabel.textColor = .tertiaryLabelColor
+        transportLabel.isHidden = true
+
         dot.translatesAutoresizingMaskIntoConstraints = false
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3
@@ -99,7 +105,7 @@ final class WorkspaceCellView: NSTableCellView {
         accessoriesStack.alignment = .centerY
         accessoriesStack.spacing = 6
         accessoriesStack.detachesHiddenViews = true
-        accessoriesStack.setViews([countLabel, dot, agentDot], in: .leading)
+        accessoriesStack.setViews([transportLabel, countLabel, dot, agentDot], in: .leading)
         addSubview(accessoriesStack)
 
         NSLayoutConstraint.activate([
@@ -253,12 +259,26 @@ enum TerminalLayoutSaveResult: Equatable {
     case failed
 }
 
+private final class GitSidebarNode {
+    let name: String
+    var status: String?
+    let isDirectory: Bool
+    var children: [GitSidebarNode] = []
+    init(name: String, status: String? = nil, isDirectory: Bool = false) {
+        self.name = name
+        self.status = status
+        self.isDirectory = isDirectory
+    }
+}
+
 /// The helper's main window (F1): a sidebar of workspaces on the left, the
 /// selected workspace's split tree on the right. Surfaces are reused across
 /// rebuilds, so switching tabs never restarts a shell.
 final class TerminalWindowController: NSWindowController,
                                       NSTableViewDataSource,
                                       NSTableViewDelegate,
+                                      NSOutlineViewDataSource,
+                                      NSOutlineViewDelegate,
                                       NSSplitViewDelegate,
                                       NSWindowDelegate {
     private let runtime: GhosttyRuntime
@@ -310,6 +330,18 @@ final class TerminalWindowController: NSWindowController,
     }
     private var activeSearch: ActiveSearch?
     private var searchDebounce: Timer?
+    private var gitRefreshGeneration: UInt64 = 0
+    private var gitRefreshTimer: Timer?
+    private var gitRefreshInFlight = false
+    private var gitRefreshPending = false
+    private var gitSidebarVisible = false
+    private var gitSidebarWidth: NSLayoutConstraint?
+    private var gitRootTrailingConstraint: NSLayoutConstraint?
+    private var gitSidebarContentConstraints: [NSLayoutConstraint] = []
+    private let gitSidebar = NSView()
+    private let gitSidebarTitle = NSTextField(labelWithString: "Git changes")
+    private let gitOutlineView = NSOutlineView()
+    private var gitTreeRoots: [GitSidebarNode] = []
 
     private let splitView = TerminalSidebarSplitView(frame: .zero)
     private let sidebar = NSView()
@@ -494,8 +526,37 @@ final class TerminalWindowController: NSWindowController,
         }
         sidebar.addSubview(codexUsageStack)
 
+        let gitToggle = NSButton(image: NSImage(systemSymbolName: "point.3.connected.trianglepath.dotted", accessibilityDescription: "Toggle Git changes")!, target: self, action: #selector(toggleGitSidebar(_:)))
+        gitToggle.isBordered = false
+        gitToggle.toolTip = "Toggle Git changes for focused terminal"
+        bar.addArrangedSubview(gitToggle)
+
         sidebar.addSubview(scroll)
         sidebar.addSubview(bar)
+        gitSidebar.translatesAutoresizingMaskIntoConstraints = false
+        gitSidebar.wantsLayer = true
+        gitSidebar.layer?.backgroundColor = uiTheme.surface.cgColor
+        gitSidebar.isHidden = true
+        gitSidebarTitle.translatesAutoresizingMaskIntoConstraints = false
+        gitSidebarTitle.font = .systemFont(ofSize: 13, weight: .semibold)
+        let gitScroll = NSScrollView()
+        gitScroll.translatesAutoresizingMaskIntoConstraints = false
+        gitScroll.hasVerticalScroller = true
+        gitScroll.borderType = .noBorder
+        gitScroll.drawsBackground = false
+        gitOutlineView.headerView = nil
+        gitOutlineView.indentationPerLevel = 14
+        gitOutlineView.rowSizeStyle = .small
+        gitOutlineView.dataSource = self
+        gitOutlineView.delegate = self
+        let gitColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("git-path"))
+        gitColumn.title = "File"
+        gitOutlineView.addTableColumn(gitColumn)
+        gitOutlineView.outlineTableColumn = gitColumn
+        gitScroll.documentView = gitOutlineView
+        gitSidebar.addSubview(gitSidebarTitle)
+        gitSidebar.addSubview(gitScroll)
+        contentView.addSubview(gitSidebar)
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
@@ -511,7 +572,23 @@ final class TerminalWindowController: NSWindowController,
             bar.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             bar.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor),
             bar.heightAnchor.constraint(equalToConstant: 34),
+            gitSidebar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            gitSidebar.topAnchor.constraint(equalTo: contentView.topAnchor),
+            gitSidebar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
+        gitSidebarContentConstraints = [
+            gitSidebarTitle.leadingAnchor.constraint(equalTo: gitSidebar.leadingAnchor, constant: 12),
+            gitSidebarTitle.trailingAnchor.constraint(equalTo: gitSidebar.trailingAnchor, constant: -8),
+            gitSidebarTitle.topAnchor.constraint(equalTo: gitSidebar.topAnchor, constant: 12),
+            gitScroll.leadingAnchor.constraint(equalTo: gitSidebar.leadingAnchor, constant: 12),
+            gitScroll.trailingAnchor.constraint(equalTo: gitSidebar.trailingAnchor, constant: -8),
+            gitScroll.topAnchor.constraint(equalTo: gitSidebarTitle.bottomAnchor, constant: 8),
+            gitScroll.bottomAnchor.constraint(equalTo: gitSidebar.bottomAnchor, constant: -8),
+        ]
+        gitSidebarWidth = gitSidebar.widthAnchor.constraint(equalToConstant: 0)
+        gitSidebarWidth?.priority = .required
+        gitSidebarWidth?.constant = 0
+        gitSidebarWidth?.isActive = true
     }
 
     // MARK: - Workspaces
@@ -829,6 +906,14 @@ final class TerminalWindowController: NSWindowController,
         tmuxItem.target = self
         tmuxItem.isEnabled = hasTmux
         menu.addItem(tmuxItem)
+        if hasTmux {
+            let attachItem = NSMenuItem(title: "Attach Unattached tmux Session…",
+                                        action: #selector(showUnattachedTmuxSessions(_:)),
+                                        keyEquivalent: "")
+            attachItem.target = self
+            attachItem.representedObject = sender
+            menu.addItem(attachItem)
+        }
 
         let profiles = terminalSettings.sshProfiles.filter(\.isValid)
         if profiles.isEmpty == false {
@@ -845,6 +930,59 @@ final class TerminalWindowController: NSWindowController,
         menu.popUp(positioning: nil,
                    at: NSPoint(x: 0, y: sender.bounds.height + 4),
                    in: sender)
+    }
+
+    @objc private func showUnattachedTmuxSessions(_ sender: NSMenuItem) {
+        guard let button = sender.representedObject as? NSButton else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, weak button] in
+            let sessions = TmuxSession.unattachedSessions()
+            DispatchQueue.main.async {
+                guard let self, let button else { return }
+                let menu = NSMenu()
+                if sessions.isEmpty {
+                    let empty = NSMenuItem(title: "No unattached tmux sessions", action: nil, keyEquivalent: "")
+                    empty.isEnabled = false
+                    menu.addItem(empty)
+                } else {
+                    for session in sessions {
+                        let item = NSMenuItem(title: session.name,
+                                              action: #selector(self.attachTmuxSession(_:)),
+                                              keyEquivalent: "")
+                        item.target = self
+                        item.representedObject = session
+                        menu.addItem(item)
+                    }
+                }
+                menu.popUp(positioning: nil,
+                           at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+            }
+        }
+    }
+
+    @objc private func attachTmuxSession(_ sender: NSMenuItem) {
+        guard let session = sender.representedObject as? TmuxSession.UnattachedSession,
+              let executable = TmuxSession.executableURL()?.path else { return }
+        let id = UUID()
+        var workspace = TerminalWorkspace(id: id, title: "tmux · \(session.name)")
+        let escapedTarget = "'\(session.target.replacingOccurrences(of: "'", with: "'\\''"))'"
+        workspace.setCommand("exec \(executable) attach-session -t \(escapedTarget)",
+                             for: workspace.focusedPane)
+        workspaces.append(workspace)
+        selected = workspaces.count - 1
+        reloadSidebar()
+        rebuildContent()
+        scheduleSave()
+    }
+
+    private func applyTmuxStatusPreference() {
+        for workspace in workspaces {
+            for pane in workspace.paneIDs {
+                guard let command = workspace.command(for: pane),
+                      let name = TmuxSession.target(in: command) else { continue }
+                TmuxSession.setStatusBarVisible(terminalSettings.showTmuxStatusBar,
+                                                sessionName: name)
+            }
+        }
     }
 
     @objc func newTmuxSessionAction(_ sender: Any?) {
@@ -1161,11 +1299,127 @@ final class TerminalWindowController: NSWindowController,
         TerminalAppDelegate.shared?.requestSettings()
     }
 
+    @objc private func toggleGitSidebar(_ sender: Any?) {
+        gitSidebarVisible.toggle()
+        gitRefreshTimer?.invalidate()
+        gitRefreshTimer = nil
+        if gitSidebarVisible {
+            startGitRefreshTimerIfNeeded()
+        }
+        if gitSidebarVisible { setGitSidebarExpanded(true) }
+        else { setGitSidebarExpanded(false) }
+        gitSidebarTitle.stringValue = "Git changes"
+        refreshGitSidebar()
+    }
+
+    private func setGitSidebarExpanded(_ expanded: Bool) {
+        gitSidebar.isHidden = !expanded
+        gitSidebarWidth?.constant = expanded ? 280 : 0
+        if expanded {
+            NSLayoutConstraint.activate(gitSidebarContentConstraints)
+        } else {
+            NSLayoutConstraint.deactivate(gitSidebarContentConstraints)
+        }
+        if let root = currentRootView {
+            gitRootTrailingConstraint?.isActive = false
+            let constraint = expanded
+                ? root.trailingAnchor.constraint(equalTo: gitSidebar.leadingAnchor)
+                : root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+            gitRootTrailingConstraint = constraint
+            constraint.isActive = true
+        }
+        contentView.layoutSubtreeIfNeeded()
+    }
+
+    private func showGitSidebarMessage(_ message: String) {
+        gitTreeRoots = [GitSidebarNode(name: message)]
+        gitOutlineView.reloadData()
+        setGitSidebarExpanded(true)
+    }
+
+    private func refreshGitSidebar() {
+        gitRefreshGeneration &+= 1
+        let generation = gitRefreshGeneration
+        guard gitSidebarVisible, selected < workspaces.count else {
+            gitTreeRoots = []
+            gitOutlineView.reloadData()
+            setGitSidebarExpanded(false)
+            return
+        }
+        let workspace = workspaces[selected]
+        let pane = workspace.focusedPane
+        let savedDirectory = workspace.directory(for: pane)
+        let tmuxTarget = workspace.command(for: pane).flatMap(TmuxSession.target(in:))
+        guard savedDirectory != nil || tmuxTarget != nil else {
+            showGitSidebarMessage("Waiting for terminal directory")
+            return
+        }
+        guard gitRefreshInFlight == false else {
+            gitRefreshPending = true
+            return
+        }
+        gitRefreshInFlight = true
+        if let savedDirectory {
+            gitSidebarTitle.stringValue =
+                "Git changes · \(URL(fileURLWithPath: savedDirectory).lastPathComponent)"
+        }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let directory = tmuxTarget.flatMap {
+                TmuxSession.currentPaneDirectory(target: $0)
+            } ?? savedDirectory
+            let result = directory.flatMap(GitStatusReader.read(directory:))
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.gitRefreshInFlight = false
+                let refreshAgain = self.gitRefreshPending
+                self.gitRefreshPending = false
+                guard self.gitRefreshGeneration == generation,
+                      self.gitSidebarVisible, self.selected < self.workspaces.count,
+                      self.workspaces[self.selected].focusedPane == pane else {
+                    if refreshAgain { self.refreshGitSidebar() }
+                    return
+                }
+                guard directory != nil else {
+                    self.showGitSidebarMessage("Waiting for terminal directory")
+                    if refreshAgain { self.refreshGitSidebar() }
+                    return
+                }
+                guard let result else {
+                    self.setGitSidebarExpanded(false)
+                    if refreshAgain { self.refreshGitSidebar() }
+                    return
+                }
+                self.gitSidebarTitle.stringValue = "Git changes · \(URL(fileURLWithPath: result.root).lastPathComponent)"
+                self.gitTreeRoots = Self.makeGitTree(result.files)
+                if self.gitTreeRoots.isEmpty {
+                    self.gitTreeRoots = [GitSidebarNode(name: "Working tree clean")]
+                }
+                self.gitOutlineView.reloadData()
+                self.gitOutlineView.expandItem(nil, expandChildren: true)
+                self.setGitSidebarExpanded(self.gitSidebarVisible)
+                if refreshAgain { self.refreshGitSidebar() }
+            }
+        }
+    }
+
+    private func startGitRefreshTimerIfNeeded() {
+        guard gitSidebarVisible, window?.isVisible == true, gitRefreshTimer == nil else { return }
+        gitRefreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            self?.refreshGitSidebar()
+        }
+    }
+
+    private func stopGitRefreshTimer() {
+        gitRefreshTimer?.invalidate()
+        gitRefreshTimer = nil
+    }
+
     func updateDirectory(for view: TerminalSurfaceView, path: String) {
         guard let pane = view.paneID,
               let index = workspaces.firstIndex(where: { $0.contains(pane) }) else { return }
         workspaces[index].setDirectory(path, for: pane)
         scheduleSave()
+        if index == selected, pane == workspaces[index].focusedPane { refreshGitSidebar() }
     }
 
     // MARK: - Find
@@ -1462,6 +1716,7 @@ final class TerminalWindowController: NSWindowController,
         uiTheme = TerminalUITheme(document: theme)
         applyUITheme()
         runtime.apply(settings: settings, theme: theme)
+        applyTmuxStatusPreference()
         for host in paneViews.values {
             host.surfaceView.shellCommand = settings.shell
             host.surfaceView.hidesMouseWhileTyping = settings.hideMouseWhileTyping
@@ -1491,9 +1746,14 @@ final class TerminalWindowController: NSWindowController,
         let root = build(node, path: [])
         root.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(root)
+        let rootTrailing = gitSidebar.isHidden
+            ? root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+            : root.trailingAnchor.constraint(equalTo: gitSidebar.leadingAnchor)
+        gitRootTrailingConstraint?.isActive = false
+        gitRootTrailingConstraint = rootTrailing
         NSLayoutConstraint.activate([
             root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            rootTrailing,
             root.topAnchor.constraint(equalTo: contentView.topAnchor),
             root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         ])
@@ -1545,6 +1805,12 @@ final class TerminalWindowController: NSWindowController,
         host.findBar.apply(theme: uiTheme)
         paneViews[pane] = host
         surface.attach(runtime: runtime)
+        if selected < workspaces.count,
+           let command = workspaces[selected].command(for: pane),
+           let sessionName = TmuxSession.target(in: command) {
+            TmuxSession.setStatusBarVisible(terminalSettings.showTmuxStatusBar,
+                                            sessionName: sessionName)
+        }
         return host
     }
 
@@ -1588,6 +1854,7 @@ final class TerminalWindowController: NSWindowController,
     /// shows the same window again. Only Quit ends the sessions.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === window else { return true }
+        stopGitRefreshTimer()
         window?.orderOut(nil)
         updateRendererVisibility()
         NSApp.setActivationPolicy(.accessory)
@@ -1595,6 +1862,7 @@ final class TerminalWindowController: NSWindowController,
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        startGitRefreshTimerIfNeeded()
         clearAttention(for: selected)
         if workspaces.indices.contains(selected) {
             let id = workspaces[selected].id
@@ -1794,6 +2062,7 @@ final class TerminalWindowController: NSWindowController,
         if workspaces[selected].focus(pane) == false { return }
         clearAttention(for: selected)
         updateFocusBorders()
+        refreshGitSidebar()
         if let host = paneViews[pane] {
             window?.makeFirstResponder(host.surfaceView)
         }
@@ -1816,6 +2085,59 @@ final class TerminalWindowController: NSWindowController,
     }
 
     // MARK: - Sidebar table
+
+    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
+        (item as? GitSidebarNode)?.children.count ?? gitTreeRoots.count
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
+        (item as? GitSidebarNode)?.children[index] ?? gitTreeRoots[index]
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
+        (item as? GitSidebarNode)?.children.isEmpty == false
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        guard let node = item as? GitSidebarNode else { return nil }
+        let cell = NSTextField(labelWithString: node.status.map { "\(node.name)  \($0)" } ?? node.name)
+        cell.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        cell.lineBreakMode = .byTruncatingMiddle
+        cell.textColor = node.status == nil ? uiTheme.subtext : uiTheme.text
+        cell.toolTip = node.name
+        return cell
+    }
+
+    private static func makeGitTree(_ files: [GitChangedFile]) -> [GitSidebarNode] {
+        var roots: [GitSidebarNode] = []
+        for file in files.sorted(by: { $0.path.localizedStandardCompare($1.path) == .orderedAscending }) {
+            let components = file.path.split(separator: "/").map(String.init)
+            guard components.isEmpty == false else { continue }
+            var siblings = roots
+            var parent: GitSidebarNode?
+            for (index, name) in components.enumerated() {
+                let isFile = index == components.count - 1
+                let node: GitSidebarNode
+                if let existing = siblings.first(where: { $0.name == name }) {
+                    node = existing
+                    if isFile { node.status = file.status }
+                } else {
+                    node = GitSidebarNode(name: name, status: isFile ? file.status : nil,
+                                          isDirectory: !isFile)
+                    siblings.append(node)
+                    siblings.sort { lhs, rhs in
+                        if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+                        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                    }
+                }
+                parent?.children = siblings
+                if parent == nil { roots = siblings }
+                parent = node
+                siblings = node.children
+            }
+        }
+        return roots
+    }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
         workspaces.count
@@ -1868,6 +2190,13 @@ final class TerminalWindowController: NSWindowController,
         cell.countLabel.textColor = uiTheme.subtext
         cell.countLabel.isHidden = paneCount <= 1
         cell.countLabel.toolTip = paneCount > 1 ? "\(paneCount) terminals" : nil
+        let isTmux = workspace.paneIDs.contains { pane in
+            workspace.command(for: pane).map(TmuxSession.isAttachCommand) ?? false
+        }
+        cell.transportLabel.stringValue = isTmux ? "MUX" : "SH"
+        cell.transportLabel.textColor = isTmux ? uiTheme.accent : uiTheme.subtext
+        cell.transportLabel.isHidden = false
+        cell.transportLabel.toolTip = isTmux ? "tmux-backed terminal" : "Shell terminal"
         cell.dot.layer?.backgroundColor = uiTheme.accent.cgColor
         cell.dot.isHidden = attentionWorkspaces.contains(workspace.id) == false
         if let state = agentStates[workspace.id] {

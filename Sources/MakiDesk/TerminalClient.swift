@@ -89,6 +89,7 @@ final class TerminalClient {
             return
         }
         guard retriesLeft > 0 else {
+            NSLog("MakiDesk Terminal IPC: helper launched but its socket did not accept a connection")
             pending.removeAll()
             report(.terminalDidNotAnswer())
             return
@@ -155,6 +156,7 @@ final class TerminalClient {
         timer.schedule(deadline: .now() + 3)
         timer.setEventHandler { [weak self] in
             guard let self, self.fd >= 0 else { return }
+            NSLog("MakiDesk Terminal IPC: socket connected but helper did not complete the handshake")
             self.disconnectLocked()
             self.pending.removeAll()
             self.report(.terminalDidNotAnswer())
