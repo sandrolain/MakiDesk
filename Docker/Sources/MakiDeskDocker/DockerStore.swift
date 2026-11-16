@@ -100,6 +100,12 @@ final class DockerStore {
     var lastUpdated: Date?
     var search = ""
     var showStopped = true
+    var containerStateFilter: DockerContainerStateFilter = .defaultVisibility
+    var containerHealthFilter: DockerContainerHealthFilter = .all
+    var containerSourceFilter: DockerContainerSourceFilter = .all
+    var imageFilter: DockerImageFilter = .all
+    var volumeFilter: DockerVolumeFilter = .all
+    var networkFilter: DockerNetworkFilter = .all
     var autoRefresh = true {
         didSet { updateRefreshLoop() }
     }
@@ -459,7 +465,9 @@ final class DockerStore {
     var filteredGroups: [DockerContainerGroup] {
         groups.compactMap { group in
             let members = group.containers.filter { container in
-                (showStopped || container.isRunning || container.isPaused)
+                containerStateFilter.includes(container, showStopped: showStopped)
+                    && containerHealthFilter.includes(container.health)
+                    && containerSourceFilter.includes(container)
                     && (query.isEmpty || container.matches.contains(query))
             }
             guard members.isEmpty == false else { return nil }
@@ -472,19 +480,22 @@ final class DockerStore {
 
     var filteredImages: [DockerImage] {
         images.filter { image in
-            query.isEmpty || image.matches.contains(query)
+            imageFilter.includes(image)
+                && (query.isEmpty || image.matches.contains(query))
         }
     }
 
     var filteredVolumes: [DockerVolume] {
         volumes.filter { volume in
-            query.isEmpty || volume.matches.contains(query)
+            volumeFilter.includes(volume)
+                && (query.isEmpty || volume.matches.contains(query))
         }
     }
 
     var filteredNetworks: [DockerNetwork] {
         networks.filter { network in
-            query.isEmpty || network.matches.contains(query)
+            networkFilter.includes(network)
+                && (query.isEmpty || network.matches.contains(query))
         }
     }
 

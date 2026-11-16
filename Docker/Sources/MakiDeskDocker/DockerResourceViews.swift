@@ -1,9 +1,19 @@
 import SwiftUI
 import MakiDockerCore
 
+private func dockerTableHeader(_ title: String, theme: DockerUITheme) -> Text {
+    Text(title)
+        .font(.callout.weight(.medium))
+        .foregroundColor(theme.text)
+}
+
 struct DockerImagesView: View {
     @Bindable var store: DockerStore
     @State private var sortOrder = [KeyPathComparator<DockerImage>(\.primaryTag)]
+
+    private var primaryTagComparator: KeyPathComparator<DockerImage> {
+        KeyPathComparator(\DockerImage.primaryTag)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,6 +24,19 @@ struct DockerImagesView: View {
             )
             HStack {
                 Spacer()
+                Menu {
+                    Picker("Images", selection: $store.imageFilter) {
+                        Text("All images").tag(DockerImageFilter.all)
+                        Text("In use").tag(DockerImageFilter.inUse)
+                        Text("Unused").tag(DockerImageFilter.unused)
+                        Text("Dangling").tag(DockerImageFilter.dangling)
+                    }
+                } label: {
+                    Label("Filter", systemImage: store.imageFilter == .all
+                          ? "line.3.horizontal.decrease.circle"
+                          : "line.3.horizontal.decrease.circle.fill")
+                }
+                .menuStyle(.borderlessButton)
                 Menu("Image actions") {
                     Button("Pull image…") { store.pullImage() }
                     Button("Build image…") { store.buildImage() }
@@ -22,6 +45,8 @@ struct DockerImagesView: View {
                 .padding(.trailing, 12)
             }
             .frame(height: 30)
+            .frame(maxWidth: .infinity)
+            .background(store.theme.surface)
             Divider().overlay(store.theme.border)
             if store.filteredImages.isEmpty {
                 DockerEmptyView(icon: "square.stack.3d.up",
@@ -33,7 +58,8 @@ struct DockerImagesView: View {
                 VStack(spacing: 0) {
                     Table(sortedImages, selection: $store.selectedImageID,
                           sortOrder: $sortOrder) {
-                    TableColumn("Repository:Tag", value: \.primaryTag) { image in
+                    TableColumn(dockerTableHeader("Repository:Tag", theme: store.theme),
+                               sortUsing: primaryTagComparator) { image in
                         HStack(spacing: 5) {
                             Text(image.primaryTag)
                                 .lineLimit(1)
@@ -43,23 +69,42 @@ struct DockerImagesView: View {
                         }
                     }
                     .width(min: 150, ideal: 190, max: 260)
-                    TableColumn("ID", value: \.shortID) { image in
+                    TableColumn(dockerTableHeader("ID", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerImage.shortID)) { image in
                         Text(image.shortID).font(.callout.monospaced())
                     }
                     .width(min: 82, ideal: 92, max: 110)
-                    TableColumn("Size", value: \.sizeBytes) { image in
-                        Text(DockerFormatting.spacedSize(image.size)).font(.callout.monospacedDigit())
+                    TableColumn(dockerTableHeader("Size", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerImage.sizeBytes)) { image in
+                        Text(DockerFormatting.spacedSize(image.size))
+                            .font(.callout.monospacedDigit())
                     }
                     .width(min: 58, ideal: 70, max: 90)
-                    TableColumn("Containers", value: \.containers) { image in
+                    TableColumn(dockerTableHeader("Containers", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerImage.containers)) { image in
                         Text("\(image.containers)").font(.callout.monospacedDigit())
                     }
                     .width(min: 72, ideal: 82, max: 100)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
                 .tableColumnHeaders(.visible)
                 .scrollContentBackground(.hidden)
-                .background(store.theme.background)
+                .background(store.theme.surface)
+                .foregroundStyle(store.theme.text)
+                .environment(\.colorScheme, store.theme.isDark ? .dark : .light)
+                .background(DockerTableHeaderTheme(
+                    theme: store.theme,
+                    columnTitles: ["Repository:Tag", "ID", "Size", "Containers"],
+                    sortOrder: sortOrder,
+                    keyPaths: [\DockerImage.primaryTag, \DockerImage.shortID,
+                               \DockerImage.sizeBytes, \DockerImage.containers]))
+                .onChange(of: store.filteredImages.map(\.id)) { _, visibleIDs in
+                    if let selected = store.selectedImageID,
+                       visibleIDs.contains(selected) == false {
+                        store.selectedImageID = nil
+                    }
+                }
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first, let image = store.images.first(where: { $0.id == id }) {
                         Button("Tag image…") { store.tagImage(image) }
@@ -80,11 +125,16 @@ struct DockerImagesView: View {
     private var sortedImages: [DockerImage] {
         store.filteredImages.sorted(using: sortOrder)
     }
+
 }
 
 struct DockerVolumesView: View {
     @Bindable var store: DockerStore
     @State private var sortOrder = [KeyPathComparator<DockerVolume>(\.name)]
+
+    private var nameComparator: KeyPathComparator<DockerVolume> {
+        KeyPathComparator(\DockerVolume.name)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -95,11 +145,27 @@ struct DockerVolumesView: View {
             )
             HStack {
                 Spacer()
+                Menu {
+                    Picker("Volumes", selection: $store.volumeFilter) {
+                        Text("All volumes").tag(DockerVolumeFilter.all)
+                        Text("In use").tag(DockerVolumeFilter.inUse)
+                        Text("Unused").tag(DockerVolumeFilter.unused)
+                        Text("Anonymous").tag(DockerVolumeFilter.anonymous)
+                        Text("Named").tag(DockerVolumeFilter.named)
+                    }
+                } label: {
+                    Label("Filter", systemImage: store.volumeFilter == .all
+                          ? "line.3.horizontal.decrease.circle"
+                          : "line.3.horizontal.decrease.circle.fill")
+                }
+                .menuStyle(.borderlessButton)
                 Button("Create volume…") { store.createVolume() }
                     .buttonStyle(.borderless)
                     .padding(.trailing, 12)
             }
             .frame(height: 30)
+            .frame(maxWidth: .infinity)
+            .background(store.theme.surface)
             Divider().overlay(store.theme.border)
             if store.filteredVolumes.isEmpty {
                 DockerEmptyView(icon: "externaldrive",
@@ -111,7 +177,8 @@ struct DockerVolumesView: View {
                 VStack(spacing: 0) {
                     Table(sortedVolumes, selection: $store.selectedVolumeID,
                           sortOrder: $sortOrder) {
-                    TableColumn("Name", value: \.name) { volume in
+                    TableColumn(dockerTableHeader("Name", theme: store.theme),
+                               sortUsing: nameComparator) { volume in
                         HStack(spacing: 5) {
                             Text(volume.name).lineLimit(1)
                             if volume.isAnonymous {
@@ -120,24 +187,44 @@ struct DockerVolumesView: View {
                         }
                     }
                     .width(min: 140, ideal: 180, max: 260)
-                    TableColumn("Driver", value: \.driver) { Text($0.driver).font(.callout) }
-                        .width(min: 60, ideal: 70, max: 90)
-                    TableColumn("Size", value: \.sizeBytes) {
+                    TableColumn(dockerTableHeader("Driver", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerVolume.driver)) {
+                        Text($0.driver).font(.callout)
+                    }
+                    .width(min: 60, ideal: 70, max: 90)
+                    TableColumn(dockerTableHeader("Size", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerVolume.sizeBytes)) {
                         Text(DockerFormatting.spacedSize($0.size ?? "—"))
                             .font(.callout.monospacedDigit())
                     }
-                        .width(min: 60, ideal: 70, max: 90)
-                    TableColumn("In use", value: \.usageSortOrder) { volume in
+                    .width(min: 60, ideal: 70, max: 90)
+                    TableColumn(dockerTableHeader("In use", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerVolume.usageSortOrder)) { volume in
                         Text(volume.isUsed ? "yes" : "no")
                             .font(.callout)
                             .foregroundStyle(volume.isUsed ? store.theme.subtext : .orange)
                     }
                     .width(min: 50, ideal: 60, max: 80)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
                 .tableColumnHeaders(.visible)
                 .scrollContentBackground(.hidden)
-                .background(store.theme.background)
+                .background(store.theme.surface)
+                .foregroundStyle(store.theme.text)
+                .environment(\.colorScheme, store.theme.isDark ? .dark : .light)
+                .background(DockerTableHeaderTheme(
+                    theme: store.theme,
+                    columnTitles: ["Name", "Driver", "Size", "In use"],
+                    sortOrder: sortOrder,
+                    keyPaths: [\DockerVolume.name, \DockerVolume.driver,
+                               \DockerVolume.sizeBytes, \DockerVolume.usageSortOrder]))
+                .onChange(of: store.filteredVolumes.map(\.id)) { _, visibleIDs in
+                    if let selected = store.selectedVolumeID,
+                       visibleIDs.contains(selected) == false {
+                        store.selectedVolumeID = nil
+                    }
+                }
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first,
                        let volume = store.volumes.first(where: { $0.name == id }) {
@@ -155,11 +242,16 @@ struct DockerVolumesView: View {
     private var sortedVolumes: [DockerVolume] {
         store.filteredVolumes.sorted(using: sortOrder)
     }
+
 }
 
 struct DockerNetworksView: View {
     @Bindable var store: DockerStore
     @State private var sortOrder = [KeyPathComparator<DockerNetwork>(\.name)]
+
+    private var nameComparator: KeyPathComparator<DockerNetwork> {
+        KeyPathComparator(\DockerNetwork.name)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -170,11 +262,27 @@ struct DockerNetworksView: View {
             )
             HStack {
                 Spacer()
+                Menu {
+                    Picker("Networks", selection: $store.networkFilter) {
+                        Text("All networks").tag(DockerNetworkFilter.all)
+                        Text("In use").tag(DockerNetworkFilter.inUse)
+                        Text("Unused").tag(DockerNetworkFilter.unused)
+                        Text("Built-in").tag(DockerNetworkFilter.builtIn)
+                        Text("User-defined").tag(DockerNetworkFilter.userDefined)
+                    }
+                } label: {
+                    Label("Filter", systemImage: store.networkFilter == .all
+                          ? "line.3.horizontal.decrease.circle"
+                          : "line.3.horizontal.decrease.circle.fill")
+                }
+                .menuStyle(.borderlessButton)
                 Button("Create network…") { store.createNetwork() }
                     .buttonStyle(.borderless)
                     .padding(.trailing, 12)
             }
             .frame(height: 30)
+            .frame(maxWidth: .infinity)
+            .background(store.theme.surface)
             Divider().overlay(store.theme.border)
             if store.filteredNetworks.isEmpty {
                 DockerEmptyView(icon: "network",
@@ -186,7 +294,8 @@ struct DockerNetworksView: View {
                 VStack(spacing: 0) {
                     Table(sortedNetworks, selection: $store.selectedNetworkID,
                           sortOrder: $sortOrder) {
-                    TableColumn("Name", value: \.name) { network in
+                    TableColumn(dockerTableHeader("Name", theme: store.theme),
+                               sortUsing: nameComparator) { network in
                         HStack(spacing: 5) {
                             Text(network.name).lineLimit(1)
                             if network.isBuiltIn {
@@ -195,19 +304,41 @@ struct DockerNetworksView: View {
                         }
                     }
                     .width(min: 140, ideal: 180, max: 260)
-                    TableColumn("Driver", value: \.driver) { Text($0.driver).font(.callout) }
-                        .width(min: 60, ideal: 70, max: 90)
-                    TableColumn("Scope", value: \.scope) { Text($0.scope).font(.callout) }
-                        .width(min: 50, ideal: 60, max: 80)
-                    TableColumn("Containers", value: \.containerCount) {
+                    TableColumn(dockerTableHeader("Driver", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerNetwork.driver)) {
+                        Text($0.driver).font(.callout)
+                    }
+                    .width(min: 60, ideal: 70, max: 90)
+                    TableColumn(dockerTableHeader("Scope", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerNetwork.scope)) {
+                        Text($0.scope).font(.callout)
+                    }
+                    .width(min: 50, ideal: 60, max: 80)
+                    TableColumn(dockerTableHeader("Containers", theme: store.theme),
+                               sortUsing: KeyPathComparator(\DockerNetwork.containerCount)) {
                         Text("\($0.containers.count)").font(.callout.monospacedDigit())
                     }
                     .width(min: 60, ideal: 70, max: 90)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
                 .tableColumnHeaders(.visible)
                 .scrollContentBackground(.hidden)
-                .background(store.theme.background)
+                .background(store.theme.surface)
+                .foregroundStyle(store.theme.text)
+                .environment(\.colorScheme, store.theme.isDark ? .dark : .light)
+                .background(DockerTableHeaderTheme(
+                    theme: store.theme,
+                    columnTitles: ["Name", "Driver", "Scope", "Containers"],
+                    sortOrder: sortOrder,
+                    keyPaths: [\DockerNetwork.name, \DockerNetwork.driver,
+                               \DockerNetwork.scope, \DockerNetwork.containerCount]))
+                .onChange(of: store.filteredNetworks.map(\.id)) { _, visibleIDs in
+                    if let selected = store.selectedNetworkID,
+                       visibleIDs.contains(selected) == false {
+                        store.selectedNetworkID = nil
+                    }
+                }
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first,
                        let network = store.networks.first(where: { $0.id == id }) {
@@ -227,6 +358,7 @@ struct DockerNetworksView: View {
     private var sortedNetworks: [DockerNetwork] {
         store.filteredNetworks.sorted(using: sortOrder)
     }
+
 }
 
 struct DockerCleanupView: View {

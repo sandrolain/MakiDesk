@@ -865,7 +865,10 @@ toolbar and filters containers, images, volumes and networks; it is hidden in
   collapsed; open one with its chevron, and its containers are indented under
   it. Within a Compose group the project prefix is omitted from container names
   and rows sort by the displayed name. **Sort by** changes the order within
-  each group by name, state, CPU or memory. Containers without a Compose project appear directly in the list, with no
+  each group by name, state, CPU or memory. **Filter** narrows the list by
+  container state, health-check status and Compose/Standalone source; the
+  default state filter follows **Show stopped containers** in Settings.
+  Containers without a Compose project appear directly in the list, with no
   group header. The group menu stops the project's running containers by ID,
   even when its Compose files are missing. Starting, restarting or deleting a
   project requires its Compose files. Deleting it removes its containers and
@@ -886,7 +889,8 @@ toolbar and filters containers, images, volumes and networks; it is hidden in
   rolling CPU and memory percentage chart for the samples collected while the
   tab is visible; the cards also show network I/O, block I/O and PID count. The container list
   shows live CPU and memory readings while its window is visible, with Start,
-  Stop or Resume controls on each row. **Overview** shows the configured
+  Stop or Resume controls on each row. Primary Start, Stop, Restart and Terminal
+  actions show icons beside their labels. **Overview** shows the configured
   entrypoint and command, plus environment variables in a Name/Value table
   sorted by key. The environment values are visible in the Overview and may
   contain secrets.
@@ -903,8 +907,9 @@ toolbar and filters containers, images, volumes and networks; it is hidden in
   and push use the credentials already configured for the selected Docker
   context. A built image uses a selected folder as its Docker build context.
   Volumes and bridge networks can be created; networks can connect or disconnect
-  containers from their context and detail actions. The container overview can
-  open a published TCP port in the browser. The copied `docker run` command
+  containers from their context and detail actions. The container overview lists
+  published ports and provides browser links for common HTTP/HTTPS ports; other
+  TCP/UDP mappings remain informational. The copied `docker run` command
   includes the inspected ports, environment, mounts and restart policy, but
   does not reproduce every daemon option such as resource limits or custom
   network aliases.

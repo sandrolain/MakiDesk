@@ -35,6 +35,7 @@ struct DockerRootView: View {
         .preferredColorScheme(store.theme.isDark ? .dark : .light)
         .font(.system(size: 13.5))
         .toolbar { toolbar }
+        .modifier(DockerToolbarTheme(theme: store.theme))
         .sheet(isPresented: $store.isSettingsPresented) {
             DockerSettingsView(store: store)
         }
@@ -45,6 +46,24 @@ struct DockerRootView: View {
             Button("OK", role: .cancel) { store.actionError = nil }
         } message: {
             Text(store.actionError ?? "")
+        }
+    }
+
+    private struct DockerToolbarTheme: ViewModifier {
+        let theme: DockerUITheme
+
+        @ViewBuilder
+        func body(content: Content) -> some View {
+            if #available(macOS 15.0, *) {
+                content
+                    .toolbarBackground(theme.background, for: .windowToolbar)
+                    .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+                    .toolbarColorScheme(theme.isDark ? .dark : .light, for: .windowToolbar)
+            } else {
+                content
+                    .toolbarBackground(theme.background, for: .windowToolbar)
+                    .toolbarColorScheme(theme.isDark ? .dark : .light, for: .windowToolbar)
+            }
         }
     }
 
@@ -338,11 +357,15 @@ struct DockerContainersView: View {
                     Text("\(selectedIDs.count) selected")
                         .font(.callout)
                         .foregroundStyle(store.theme.subtext)
-                    Button("Start") { store.performBulk(.start, ids: selectedIDs) }
+                    Button("Start", systemImage: "play.fill") {
+                        store.performBulk(.start, ids: selectedIDs)
+                    }
                         .disabled(selectedContainers.contains(where: \.isStopped) == false)
-                    Button("Stop") { store.performBulk(.stop, ids: selectedIDs) }
+                    Button("Stop", systemImage: "stop.fill") {
+                        store.performBulk(.stop, ids: selectedIDs)
+                    }
                         .disabled(selectedContainers.contains(where: { $0.isRunning || $0.isPaused }) == false)
-                    Button("Delete", role: .destructive) {
+                    Button("Delete", systemImage: "trash", role: .destructive) {
                         store.performBulk(.remove, ids: selectedIDs)
                     }
                 }
@@ -358,9 +381,38 @@ struct DockerContainersView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .help("Sort containers within each group")
+
+                Menu {
+                    Picker("State", selection: $store.containerStateFilter) {
+                        ForEach(DockerContainerStateFilter.allCases, id: \.self) { filter in
+                            Text(filter.title(showStopped: store.showStopped)).tag(filter)
+                        }
+                    }
+                    Picker("Health", selection: $store.containerHealthFilter) {
+                        Text("Any health").tag(DockerContainerHealthFilter.all)
+                        Text("Healthy").tag(DockerContainerHealthFilter.healthy)
+                        Text("Unhealthy").tag(DockerContainerHealthFilter.unhealthy)
+                        Text("Starting").tag(DockerContainerHealthFilter.starting)
+                        Text("No healthcheck").tag(DockerContainerHealthFilter.noHealthcheck)
+                        Text("Unknown").tag(DockerContainerHealthFilter.unknown)
+                    }
+                    Picker("Source", selection: $store.containerSourceFilter) {
+                        Text("All sources").tag(DockerContainerSourceFilter.all)
+                        Text("Compose").tag(DockerContainerSourceFilter.compose)
+                        Text("Standalone").tag(DockerContainerSourceFilter.standalone)
+                    }
+                } label: {
+                    Label("Filter", systemImage: hasActiveFilters
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .help("Filter containers by state, health, or source")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
+            .background(store.theme.surface)
             Divider().overlay(store.theme.border)
             if store.connection.failure != nil, store.containers.isEmpty {
                 DockerConnectionProblem(store: store)
@@ -370,7 +422,7 @@ struct DockerContainersView: View {
                     title: store.containers.isEmpty ? "No containers" : "No containers match",
                     detail: store.containers.isEmpty
                         ? "Start a container or a Compose project to see it here."
-                        : "Change the search or show stopped containers."
+                        : "Change the search or filters."
                 )
             } else {
                 List(selection: $selectedIDs) {
@@ -389,11 +441,16 @@ struct DockerContainersView: View {
                             }
                         } header: {
                             DockerGroupHeader(store: store, group: group)
+                                .listRowInsets(EdgeInsets())
+                                .listRowBackground(store.theme.surface)
                         }
                     }
                 }
                 .listStyle(.inset)
+                .tint(store.theme.accent)
                 .scrollContentBackground(.hidden)
+                .listRowBackground(store.theme.background)
+                .environment(\.colorScheme, store.theme.isDark ? .dark : .light)
                 .onChange(of: selectedIDs) { _, ids in
                     if let current = store.selectedContainerID, ids.contains(current) == false {
                         store.selectedContainerID = ids.sorted().first
@@ -401,10 +458,11 @@ struct DockerContainersView: View {
                         store.selectedContainerID = ids.sorted().first
                     }
                 }
-                .onChange(of: store.containers.map(\.id)) { _, currentIDs in
-                    selectedIDs.formIntersection(currentIDs)
+                .onChange(of: filteredContainerIDs) { _, visibleIDs in
+                    let visibleSet = Set(visibleIDs)
+                    selectedIDs.formIntersection(visibleSet)
                     if let current = store.selectedContainerID,
-                       currentIDs.contains(current) == false {
+                       visibleSet.contains(current) == false {
                         store.selectedContainerID = selectedIDs.sorted().first
                     }
                 }
@@ -415,6 +473,10 @@ struct DockerContainersView: View {
 
     private var composeGroups: [DockerContainerGroup] {
         store.filteredGroups.filter { $0.isStandalone == false }
+    }
+
+    private var filteredContainerIDs: [String] {
+        store.filteredGroups.flatMap(\.containers).map(\.id)
     }
 
     private var standaloneContainers: [DockerContainer] {
@@ -431,11 +493,19 @@ struct DockerContainersView: View {
         store.containers.filter { selectedIDs.contains($0.id) }
     }
 
+    private var hasActiveFilters: Bool {
+        store.containerStateFilter != .defaultVisibility
+            || store.containerHealthFilter != .all
+            || store.containerSourceFilter != .all
+    }
+
     @ViewBuilder
     private func containerRow(_ container: DockerContainer, indent: CGFloat) -> some View {
+        let isSelected = selectedIDs.contains(container.id)
         DockerContainerRow(store: store, container: container)
             .padding(.leading, indent)
             .tag(container.id)
+            .listRowBackground(isSelected ? store.theme.surfaceSelected : store.theme.background)
             .contextMenu {
                 containerMenu(store: store, container: container)
             }
@@ -444,17 +514,21 @@ struct DockerContainersView: View {
     @ViewBuilder
     private func containerMenu(store: DockerStore, container: DockerContainer) -> some View {
         if container.isPaused {
-            Button("Resume") { store.perform(.unpause, on: container) }
-            Button("Stop") { store.perform(.stop, on: container) }
-            Button("Restart") { store.perform(.restart, on: container) }
+            Button("Resume", systemImage: "play.fill") { store.perform(.unpause, on: container) }
+            Button("Stop", systemImage: "stop.fill") { store.perform(.stop, on: container) }
+            Button("Restart", systemImage: "arrow.clockwise") {
+                store.perform(.restart, on: container)
+            }
         } else if container.isRunning {
-            Button("Stop") { store.perform(.stop, on: container) }
-            Button("Restart") { store.perform(.restart, on: container) }
-            Button("Pause") { store.perform(.pause, on: container) }
+            Button("Stop", systemImage: "stop.fill") { store.perform(.stop, on: container) }
+            Button("Restart", systemImage: "arrow.clockwise") {
+                store.perform(.restart, on: container)
+            }
+            Button("Pause", systemImage: "pause.fill") { store.perform(.pause, on: container) }
         } else {
-            Button("Start") { store.perform(.start, on: container) }
+            Button("Start", systemImage: "play.fill") { store.perform(.start, on: container) }
         }
-        Button("Terminal") { store.openTerminal(for: container) }
+        Button("Terminal", systemImage: "terminal") { store.openTerminal(for: container) }
             .disabled(container.isRunning == false)
         Divider()
         Button("Copy container ID") { store.copyToPasteboard(container.id) }
@@ -509,7 +583,7 @@ struct DockerSectionHeader: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(store.theme.surface.opacity(0.45))
+        .background(store.theme.surface)
     }
 }
 
@@ -642,18 +716,25 @@ struct DockerGroupHeader: View {
             Spacer()
             if group.compose != nil {
                 Menu {
-                    Button("Start project") { store.performCompose(.start, on: group) }
+                    Button("Start project", systemImage: "play.fill") {
+                        store.performCompose(.start, on: group)
+                    }
                         .disabled(group.canRunCompose == false)
-                    Button("Stop project") { store.performCompose(.stop, on: group) }
+                    Button("Stop project", systemImage: "stop.fill") {
+                        store.performCompose(.stop, on: group)
+                    }
                         .disabled(store.isActionRunning)
-                    Button("Restart project") { store.performCompose(.restart, on: group) }
+                    Button("Restart project", systemImage: "arrow.clockwise") {
+                        store.performCompose(.restart, on: group)
+                    }
                         .disabled(group.canRunCompose == false)
                     Divider()
-                    Button("Delete project", role: .destructive) {
+                    Button("Delete project", systemImage: "trash", role: .destructive) {
                         store.performCompose(.down, on: group)
                     }
                     .disabled(group.canRunCompose == false)
-                    Button("Down and remove volumes", role: .destructive) {
+                    Button("Down and remove volumes", systemImage: "externaldrive.badge.xmark",
+                           role: .destructive) {
                         store.performCompose(.downVolumes, on: group)
                     }
                     .disabled(group.canRunCompose == false)
@@ -672,7 +753,11 @@ struct DockerGroupHeader: View {
             }
         }
         .textCase(nil)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
         .padding(.vertical, 3)
+        .background(store.theme.surface)
+        .background(DockerGroupHeaderBackground(color: store.theme.surface))
     }
 }
 

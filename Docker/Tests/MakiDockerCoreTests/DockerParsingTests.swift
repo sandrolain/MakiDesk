@@ -22,6 +22,25 @@ final class DockerParsingTests: XCTestCase {
         XCTAssertEqual(container.ports[1].hostIP, "[::]")
     }
 
+    func testBrowserURLsOnlyIncludePublishedWebPorts() {
+        let http = DockerPortMapping(hostIP: "127.0.0.1", hostPort: 18080,
+                                     containerPort: 80, proto: "tcp")
+        let https = DockerPortMapping(hostIP: nil, hostPort: 8443,
+                                      containerPort: 443, proto: "tcp")
+        let database = DockerPortMapping(hostIP: nil, hostPort: 5432,
+                                         containerPort: 5432, proto: "tcp")
+        let udp = DockerPortMapping(hostIP: nil, hostPort: 8080,
+                                    containerPort: 80, proto: "udp")
+        let remote = DockerPortMapping(hostIP: "192.168.1.10", hostPort: 8080,
+                                       containerPort: 80, proto: "tcp")
+
+        XCTAssertEqual(http.browserURL?.absoluteString, "http://localhost:18080")
+        XCTAssertEqual(https.browserURL?.absoluteString, "https://localhost:8443")
+        XCTAssertNil(database.browserURL)
+        XCTAssertNil(udp.browserURL)
+        XCTAssertNil(remote.browserURL)
+    }
+
     func testGroupsPutRunningProjectsFirstAndStandaloneLast() {
         let compose = ComposeReference(project: "shop", workingDirectory: "/shop",
                                        configFiles: ["/shop/compose.yml"])

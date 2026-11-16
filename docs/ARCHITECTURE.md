@@ -605,6 +605,11 @@ parsing, Compose grouping, command builders, prune plan and log buffer, while
 `MakiDeskDocker` owns AppKit/SwiftUI. The core is Foundation-only apart from the
 shared exec validation, so the parsers and the prune policy are unit-tested
 without a daemon. The root package does not build the helper.
+The resource tables retain SwiftUI sorting and selection; an AppKit header view
+draws their column labels and sort indicator using the current theme and is
+restored when its SwiftUI owner is dismantled. Container group headers retain
+native sections and use a non-interactive AppKit background to cover the full
+native group row, including its margins.
 
 The data path is deliberately CLI-first. `DockerCLI` runs `docker` with
 `Process`, passing arguments as an array (never a shell string), forwarding

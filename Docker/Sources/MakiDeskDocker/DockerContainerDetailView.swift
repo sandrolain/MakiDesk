@@ -91,32 +91,62 @@ struct DockerContainerDetailView: View {
             }
             HStack(spacing: 8) {
                 if container.isPaused {
-                    Button("Resume") { store.perform(.unpause, on: container) }
-                    Button("Stop") { store.perform(.stop, on: container) }
+                    Button("Resume", systemImage: "play.fill") {
+                        store.perform(.unpause, on: container)
+                    }
+                    Button("Stop", systemImage: "stop.fill") {
+                        store.perform(.stop, on: container)
+                    }
                 } else if container.isRunning {
-                    Button("Stop") { store.perform(.stop, on: container) }
-                    Button("Restart") { store.perform(.restart, on: container) }
+                    Button("Stop", systemImage: "stop.fill") {
+                        store.perform(.stop, on: container)
+                    }
+                    Button("Restart", systemImage: "arrow.clockwise") {
+                        store.perform(.restart, on: container)
+                    }
                 } else {
-                    Button("Start") { store.perform(.start, on: container) }
+                    Button("Start", systemImage: "play.fill") {
+                        store.perform(.start, on: container)
+                    }
                         .buttonStyle(.borderedProminent)
                 }
-                Button("Terminal") { store.openTerminal(for: container) }
+                Button("Terminal", systemImage: "terminal") {
+                    store.openTerminal(for: container)
+                }
                     .disabled(container.isRunning == false)
                 Menu {
                     if container.isPaused {
-                        Button("Resume") { store.perform(.unpause, on: container) }
+                        Button("Resume", systemImage: "play.fill") {
+                            store.perform(.unpause, on: container)
+                        }
                     } else if container.isRunning {
-                        Button("Pause") { store.perform(.pause, on: container) }
+                        Button("Pause", systemImage: "pause.fill") {
+                            store.perform(.pause, on: container)
+                        }
                     }
-                    Button("Copy container ID") { store.copyToPasteboard(container.id) }
-                    Button("Copy name") { store.copyToPasteboard(container.name) }
-                    Button("Copy docker run command") { store.copyRunCommand(for: container) }
+                    Button("Copy container ID", systemImage: "doc.on.doc") {
+                        store.copyToPasteboard(container.id)
+                    }
+                    Button("Copy name", systemImage: "doc.on.doc") {
+                        store.copyToPasteboard(container.name)
+                    }
+                    Button("Copy docker run command", systemImage: "terminal") {
+                        store.copyRunCommand(for: container)
+                    }
                     Divider()
-                    Button("Copy file to container…") { store.copyFileToContainer(container) }
-                    Button("Copy file from container…") { store.copyFileFromContainer(container) }
+                    Button("Copy file to container…", systemImage: "arrow.down.doc") {
+                        store.copyFileToContainer(container)
+                    }
+                    Button("Copy file from container…", systemImage: "arrow.up.doc") {
+                        store.copyFileFromContainer(container)
+                    }
                     Divider()
-                    Button("Kill", role: .destructive) { store.perform(.kill, on: container) }
-                    Button("Delete", role: .destructive) { store.perform(.remove, on: container) }
+                    Button("Kill", systemImage: "xmark.octagon", role: .destructive) {
+                        store.perform(.kill, on: container)
+                    }
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        store.perform(.remove, on: container)
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -149,6 +179,38 @@ struct DockerContainerDetailView: View {
     private var overview: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if webPortMappings.isEmpty == false {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Web ports")
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(store.theme.text)
+                        ForEach(webPortMappings) { mapping in
+                            if let url = mapping.browserURL {
+                                Link(destination: url) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: url.scheme == "https" ? "lock.fill" : "safari")
+                                        Text(mapping.display)
+                                            .font(.callout.monospacedDigit())
+                                        Spacer()
+                                        Text(url.absoluteString)
+                                            .font(.callout.monospaced())
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
+                                    .foregroundStyle(store.theme.accent)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .help("Open \(url.absoluteString) in the browser")
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(store.theme.surface,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+
                 DockerKeyValue(items: [
                     ("State", container.state.label),
                     ("Status", container.status),
@@ -183,13 +245,13 @@ struct DockerContainerDetailView: View {
                 }
 
                 HStack {
-                    Button("Copy ID") { store.copyToPasteboard(container.id) }
-                    if let url = container.ports.compactMap(\.openURL).first {
-                        Link("Open \(url.absoluteString)", destination: url)
+                    Button("Copy ID", systemImage: "doc.on.doc") {
+                        store.copyToPasteboard(container.id)
                     }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
+
             }
             .padding(16)
         }
@@ -202,6 +264,14 @@ struct DockerContainerDetailView: View {
         }
         let values = summary[keyPath: keyPath]
         return values.isEmpty ? "—" : values.joined(separator: " ")
+    }
+
+    private var webPortMappings: [DockerPortMapping] {
+        var seenURLs = Set<String>()
+        return container.ports.filter { mapping in
+            guard let url = mapping.browserURL else { return false }
+            return seenURLs.insert(url.absoluteString).inserted
+        }
     }
 }
 
@@ -290,7 +360,7 @@ struct DockerLogsTabView: View {
                     .frame(minWidth: 90, maxWidth: 220)
                     .layoutPriority(1)
                 Spacer()
-                if logs.isActive { ProgressView().controlSize(.regular) }
+                if logs.isActive { ProgressView().controlSize(.small) }
                 Text("\(logs.lineCount) lines")
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(store.theme.subtext)

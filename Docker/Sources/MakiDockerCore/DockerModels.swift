@@ -76,15 +76,31 @@ public struct DockerPortMapping: Identifiable, Equatable, Sendable {
         return "\(containerPort)/\(proto)"
     }
 
-    public var openURL: URL? {
-        guard proto == "tcp", let hostPort else { return nil }
+    public var browserURL: URL? {
+        guard proto.lowercased() == "tcp",
+              let hostPort,
+              (1...65_535).contains(hostPort),
+              let scheme = Self.webScheme(for: hostPort) ?? Self.webScheme(for: containerPort)
+        else { return nil }
+
         if let hostIP, hostIP != "0.0.0.0", hostIP != "::", hostIP != "[::]" {
             if hostIP.hasPrefix("127.") || hostIP == "::1" || hostIP == "[::1]" {
-                return URL(string: "http://localhost:\(hostPort)")
+                return URL(string: "\(scheme)://localhost:\(hostPort)")
             }
             return nil
         }
-        return URL(string: "http://localhost:\(hostPort)")
+        return URL(string: "\(scheme)://localhost:\(hostPort)")
+    }
+
+    private static func webScheme(for port: Int) -> String? {
+        if [443, 8443, 9443].contains(port) {
+            return "https"
+        }
+        if [80, 3000, 3001, 4000, 5000, 5001, 5173, 5601, 7000, 7070,
+            8000, 8008, 8080, 8081, 8888, 9000, 9090].contains(port) {
+            return "http"
+        }
+        return nil
     }
 }
 

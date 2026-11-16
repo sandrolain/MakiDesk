@@ -17,8 +17,11 @@ The helper is built into `dist/MakiDeskDocker.app` and copied into
 ## What it does
 
 - Containers grouped by Compose project and by Standalone, with start, stop,
-  restart, pause, kill, delete, logs, stats, inspect and a terminal.
-- Images, volumes and networks with size, usage and safe removal.
+  restart, pause, kill, delete, logs, stats, inspect and a terminal; filter by
+  state, health and source. Published common HTTP/HTTPS ports link to the
+  default browser from the container overview.
+- Images, volumes and networks with size, usage, specific filters and safe
+  removal.
 - Cleanup with a preview, `docker system prune` and the destructive
   `docker system prune --all --volumes`.
 - Docker contexts; remote contexts are marked and every destructive action

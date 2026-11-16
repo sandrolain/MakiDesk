@@ -257,6 +257,9 @@ does not retain those files. Container CPU, memory, network and block I/O, and
 PID samples are read while the relevant view is visible and kept only in memory.
 Docker names, images, volumes, networks, Compose paths and disk usage are read
 to render the window and are not sent to a separate MakiDesk service.
+When you click a published HTTP/HTTPS port in the container overview, MakiDesk
+hands its localhost URL to the default browser. The Docker helper does not fetch
+the URL or read the page contents.
 
 The helper stores only its window frame, local preferences and the theme. It
 does not persist logs, inspect output, environment values, container IDs or
