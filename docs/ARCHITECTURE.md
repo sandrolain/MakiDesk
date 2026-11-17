@@ -589,11 +589,13 @@ refresh begins on visibility and repeats every five minutes only while the main
 window is visible. Hiding the window cancels the timer and active request, and
 generation checks discard late responses.
 
-`TerminalController` watches `NSWorkspace.didActivateApplicationNotification`.
-While the helper is frontmost it calls `ShortcutManager.setSuspended(_:keeping:)`
-with the two terminal rows, so every other table row and the peek's hold key are
-unregistered and the shell receives those combinations. Losing focus puts them
-back; the two exceptions stay global so the terminal can always be left.
+`TerminalController`, `DockerController` and `BrowserActivationObserver` watch
+`NSWorkspace.didActivateApplicationNotification`. While any helper is
+frontmost, they call `ShortcutManager.setSuspended(_:keeping:)`: panel, screen
+and desktop rows and the peek hold key are unregistered so the helper receives
+those combinations. The helper-open rows and, when the existing preference is
+enabled, MakiDesk's window-arrangement rows stay registered. Losing focus puts
+the full table back.
 
 Settings and theme travel as two JSON documents in
 `Terminal/settings.json` and `Terminal/theme.json`, written by MakiDesk and read
@@ -663,9 +665,9 @@ visible. Prune uses `docker system prune` for the basic action and
 `docker system prune --all --volumes` for "prune all", with the preview computed
 from the inventory because Docker has no dry-run. The helper writes
 `Docker/window.json` and `Docker/settings.json`; MakiDesk writes
-`Docker/theme.json`. `DockerController` watches activation to
-suspend MakiDesk's global shortcuts while the helper is frontmost, mirroring the
-terminal. `Taskfile` builds and bundles it with `docker:build`,
+`Docker/theme.json`. `DockerController` watches activation to suspend MakiDesk's non-window
+shortcuts while the helper is frontmost, mirroring the terminal. Its standard
+Window menu lists the open Docker window. `Taskfile` builds and bundles it with `docker:build`,
 `docker:bundle`, `docker:release` and `docker:run`; `bundle` copies it beside the
 terminal helper and `sign` signs the Docker helper before the outer app.
 
@@ -678,6 +680,10 @@ same AX inventory as any other app and can be tiled, grouped and recalled
 without a special path. It lives in the separate `Browser/` SwiftPM package:
 `MakiBrowser` owns the model and UI, `MakiDeskBrowser` is the executable. The
 root package does not build it; `task browser:bundle` does.
+The standard Window menu lists open browser windows. The MakiDesk palette is
+searchable by both the browser app name and each window title; the helper-open
+shortcut and optional window-arrangement shortcuts remain available while the
+browser is frontmost.
 
 `BrowserStore` is the main-actor model and the only owner of the live WebKit
 objects. The value array `tabs` is observable and persisted; `BrowserTabSession`
@@ -732,6 +738,13 @@ and timestamps in browser settings; it does not store the associated URLs.
 placement record with the display identity. Move and resize events are
 debounced; closing the window flushes the latest frame. If the saved display
 is disconnected, the same size is centered on an available screen.
+
+The browser chrome follows MakiDesk's selected palette. MakiDesk writes a
+`browser-theme.json` document and posts a distributed notification at startup
+and on palette changes; `BrowserStore` owns the notification observer, reloads
+the document off the main thread with at most one pending reload, and updates
+the window appearance and SwiftUI surfaces. The System palette leaves appearance
+to macOS. This affects browser chrome only, not web page styles.
 
 `BrowserFaviconProvider` fetches the site's icon in an ephemeral `URLSession`,
 decodes it off the main thread and extracts a dominant colour; a missing icon

@@ -615,9 +615,10 @@ final class WorkspaceStore {
 
     /// An auxiliary helper is frontmost: keep only its own keys alive so the
     /// helper can receive everything else. Called by `TerminalController` and
-    /// `DockerController`'s workspace observers.
+    /// `DockerController` and `BrowserActivationObserver` workspace observers.
     private var terminalIsFrontmost = false
     private var dockerIsFrontmost = false
+    private var browserIsFrontmost = false
 
     func setTerminalFrontmost(_ frontmost: Bool) {
         terminalIsFrontmost = frontmost
@@ -629,15 +630,22 @@ final class WorkspaceStore {
         applyAuxiliaryShortcutSuspension()
     }
 
+    func setBrowserFrontmost(_ frontmost: Bool) {
+        browserIsFrontmost = frontmost
+        applyAuxiliaryShortcutSuspension()
+    }
+
     private func applyAuxiliaryShortcutSuspension() {
-        var keeping: Set<String> = ["app.terminal", "app.terminalQuake", "app.docker"]
+        var keeping: Set<String> = [
+            "app.terminal", "app.terminalQuake", "app.docker", "app.browser",
+        ]
         let defaults = UserDefaults.standard
         let keepsWindowRows = (defaults.object(forKey: SettingsKey.keepTerminalWindowShortcuts.rawValue)
             as? Bool) ?? true
         if keepsWindowRows {
             keeping.formUnion(ShortcutDefinitions.windowShortcutIDs)
         }
-        shortcutManager?.setSuspended(terminalIsFrontmost || dockerIsFrontmost,
+        shortcutManager?.setSuspended(terminalIsFrontmost || dockerIsFrontmost || browserIsFrontmost,
                                       keeping: keeping)
     }
 
@@ -1044,10 +1052,10 @@ final class WorkspaceStore {
         themeID = value
         Settings.set(value, for: .themeID)
         NotificationCenter.default.post(name: .makiDeskThemeChanged, object: nil)
-        // The terminal follows the palette too; write theme.json and tell a
-        // running helper to reload it.
+        // Helper apps follow the palette too and reload their theme document.
         TerminalController.shared.themeDidChange()
         DockerController.shared.themeDidChange()
+        BrowserLauncher.shared.themeDidChange()
     }
 
     func updateOverlayScale(_ value: Double) {

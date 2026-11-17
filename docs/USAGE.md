@@ -725,13 +725,17 @@ it running, so its shells keep working.
   quake, a minimized window or an app that macOS has hidden stop rendering;
   their shells keep running and consuming output, and drawing resumes when they
   come back.
-- **While the terminal is in front.** MakiDesk suspends its panel, screen and
-  desktop shortcuts, so the shell receives them. `⌃⌥O` and `⌃⌥Q` stay active, so
-  you can always come back or hide the quake. With **Settings ▸ Terminal ▸ Keep
-  window shortcuts while the terminal is in front** on (the default), the
+- **While a helper is in front.** MakiDesk suspends its panel, screen and
+  desktop shortcuts, so Terminal, Docker or Browser receives them.
+  `⌃⌥O`, `⌃⌥Q`, `⌃⌥E` and `⌃⌥⌘W` stay active, so the helpers remain
+  reachable. With **Settings ▸ Terminal ▸ Keep MakiDesk window shortcuts while
+  a helper is in front** on (the default), the
   `⌃⌥` window rows stay active too: `⌃⌥←`/`→`/`↑`/`↓` and the other Window
   commands still arrange the helper window. The helper appears in the Dock and in
   ⌘Tab while its window is open.
+- **Window list and search.** The standard **Window** menu lists open helper
+  windows. MakiDesk's searchable window palette (`⌥Space`) also includes each
+  visible helper window; search by its title or app name.
 - **Find in the scrollback.** `⌘F` opens a find bar over the focused pane, or
   puts the keyboard back in it. Typing searches as you go and the bar reports
   the matches (`3 of 17`, or `No results`); `Return` or `⌘G` moves to the next
@@ -861,7 +865,8 @@ says so in a notice instead of failing silently.
 ## Docker
 
 `⌃⌥E`, or **Docker** in the menu bar's menu, opens **MakiDesk Docker**, a native
-window over the Docker CLI. It is a client, not a container engine: Docker
+window over the Docker CLI. Its **Window** menu offers the normal window
+management commands and lists the open Docker window. It is a client, not a container engine: Docker
 Desktop, OrbStack, colima or Docker Engine must already be installed and
 reachable through the usual `docker` command. Search is on the right of the
 toolbar and filters containers, images, volumes and networks; it is hidden in
@@ -974,6 +979,16 @@ its own Dock/⌘Tab identity, its window is listed by MakiDesk's window switcher
 and can be tiled or grouped like Terminal and Docker, and closing it quits the
 browser without touching MakiDesk.
 
+- **Window list and keyboard sizing.** The **Window** menu lists open browser
+  windows and provides standard minimize, zoom and bring-to-front commands.
+  MakiDesk's `⌃⌥` window shortcuts can arrange or resize the browser window when
+  **Keep MakiDesk window shortcuts while a helper is in front** is enabled in
+  Terminal settings. MakiDesk's searchable window palette (`⌥Space`) matches
+  visible browser windows by title or app name.
+- **Appearance.** The browser chrome follows the palette selected in MakiDesk,
+  including its background and accent; changes apply while the browser is open.
+  The **System** palette follows macOS appearance. Web pages keep their own
+  colors and styles.
 - **Left column.** A narrow vertical rail holds the browser icons: back,
   forward, reload/stop, address, new tab, pin, summary, blocker and settings.
   The resizable column beside it holds the tabs. The compact button reduces it

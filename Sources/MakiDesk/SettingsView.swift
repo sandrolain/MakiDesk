@@ -1314,7 +1314,7 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(theme.subtext)
                 }
-                Toggle("Keep window shortcuts while the terminal is in front",
+                Toggle("Keep MakiDesk window shortcuts while a helper is in front",
                        isOn: Binding(
                         get: { keepTerminalWindowShortcuts },
                         set: { value in
@@ -1322,7 +1322,7 @@ struct SettingsView: View {
                             TerminalController.shared.reapplyShortcutSuspension()
                         }
                        ))
-                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live, as do selection copy and pointer hiding; the scrollback limit is memory per pane and applies to new panes. With the window shortcuts kept, ⌃⌥ arrows and the other Window rows still move the helper window; the panel, screen and desktop rows stay suspended so the shell receives them. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
+                caption("The helper reads these settings and the theme file when it receives a change, so a font or quake adjustment applies without restarting it. An empty font family keeps the built-in monospaced family; an empty shell command starts your login shell. The cursor shape and blink apply live, as do selection copy and pointer hiding; the scrollback limit is memory per pane and applies to new panes. While Terminal, Docker or Browser is in front, MakiDesk suspends its panel, screen and desktop shortcuts so they do not consume the helper's keys. With this option on, ⌃⌥ window shortcuts remain available to resize and arrange the helper windows. The terminal, its sidebar and its title bar follow the MakiDesk theme: changing it in Panels ▸ Look updates them too. The quake panel uses the same setting for its height.")
             }
             agentHooksSection
             sshProfilesSection

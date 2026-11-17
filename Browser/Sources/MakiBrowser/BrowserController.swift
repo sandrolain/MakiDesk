@@ -46,6 +46,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
         let hasSavedFrame = window.setFrameUsingName(Self.frameAutosaveName)
         super.init(window: window)
         window.delegate = self
+        store.onThemeChanged = { [weak self] theme in
+            self?.applyTheme(theme)
+        }
+        applyTheme(store.theme)
         isRestoringPlacement = true
         if let placement = Self.loadPlacement() {
             restore(placement, in: window)
@@ -68,6 +72,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    private func applyTheme(_ theme: BrowserUITheme) {
+        window?.appearance = theme.windowAppearance
+        window?.backgroundColor = theme.windowBackground
+    }
 
     func windowWillClose(_ notification: Notification) {
         shutdown()

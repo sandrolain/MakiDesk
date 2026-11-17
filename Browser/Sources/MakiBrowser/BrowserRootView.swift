@@ -12,7 +12,9 @@ struct BrowserRootView: View {
         .padding(.top, 32)
         .frame(minWidth: 900, minHeight: 600)
         .ignoresSafeArea()
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(store.theme.background)
+        .tint(store.theme.accent)
+        .preferredColorScheme(store.theme.preferredColorScheme)
         .sheet(isPresented: $store.isSettingsVisible) {
             BrowserSettingsView(store: store)
         }
@@ -56,10 +58,16 @@ private struct BrowserSplitView: NSViewRepresentable {
         splitView.dividerStyle = .thin
         splitView.delegate = context.coordinator
 
-        let sidebar = NSHostingView(rootView: BrowserSidebar(store: store))
+        let sidebar = NSHostingView(rootView: BrowserSidebar(store: store)
+            .foregroundStyle(store.theme.text)
+            .tint(store.theme.accent)
+            .preferredColorScheme(store.theme.preferredColorScheme))
         sidebar.setContentHuggingPriority(.defaultLow, for: .horizontal)
         sidebar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let content = NSHostingView(rootView: BrowserContent(store: store))
+        let content = NSHostingView(rootView: BrowserContent(store: store)
+            .foregroundStyle(store.theme.text)
+            .tint(store.theme.accent)
+            .preferredColorScheme(store.theme.preferredColorScheme))
         content.setContentHuggingPriority(.defaultLow, for: .horizontal)
         content.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         splitView.addArrangedSubview(sidebar)
@@ -164,7 +172,7 @@ private struct ExternalLinkChooser: View {
                 .font(.system(size: 16, weight: .semibold))
             Text(request.url.absoluteString)
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(store.theme.subtext)
                 .textSelection(.enabled)
                 .lineLimit(2)
             Button {
@@ -179,7 +187,7 @@ private struct ExternalLinkChooser: View {
                 Divider()
                 Text("Open with another app")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(request.apps) { app in
@@ -240,7 +248,13 @@ private struct BrowserSidebar: View {
                 .scrollIndicators(.hidden)
             }
         }
-        .background(.regularMaterial)
+        .background {
+            if store.theme.followsSystemAppearance {
+                Rectangle().fill(.regularMaterial)
+            } else {
+                store.theme.surface
+            }
+        }
     }
 
     @ViewBuilder
@@ -253,7 +267,7 @@ private struct BrowserSidebar: View {
                     Text("\(tabs.count)")
                 }
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(store.theme.subtext.opacity(0.75))
                 .padding(.horizontal, 8)
                 .padding(.top, phase == .pinned ? 2 : 12)
                 .padding(.bottom, 3)
@@ -378,7 +392,8 @@ private struct BrowserIconRail: View {
                 .frame(width: 34, height: 34)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(BrowserRailButtonStyle(isActive: isActive,
+        .buttonStyle(BrowserRailButtonStyle(theme: store.theme,
+                                            isActive: isActive,
                                             isHovered: hovering == id,
                                             animatePress: animatePress))
         .accessibilityLabel(help)
@@ -388,6 +403,7 @@ private struct BrowserIconRail: View {
 }
 
 private struct BrowserRailButtonStyle: ButtonStyle {
+    let theme: BrowserUITheme
     let isActive: Bool
     let isHovered: Bool
     let animatePress: Bool
@@ -396,8 +412,8 @@ private struct BrowserRailButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(isEnabled
-                             ? (isActive ? Color.accentColor : Color.primary.opacity(0.82))
-                             : Color.secondary.opacity(0.45))
+                             ? (isActive ? theme.accent : theme.text.opacity(0.82))
+                             : theme.subtext.opacity(0.45))
             .background {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(backgroundColor(isEnabled: isEnabled,
@@ -406,7 +422,7 @@ private struct BrowserRailButtonStyle: ButtonStyle {
             .overlay {
                 if isActive && isEnabled {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.28), lineWidth: 1)
+                        .strokeBorder(theme.accent.opacity(0.28), lineWidth: 1)
                 }
             }
             .scaleEffect(animatePress && configuration.isPressed ? 0.94 : 1)
@@ -416,9 +432,9 @@ private struct BrowserRailButtonStyle: ButtonStyle {
 
     private func backgroundColor(isEnabled: Bool, isPressed: Bool) -> Color {
         guard isEnabled else { return .clear }
-        if isPressed { return Color.accentColor.opacity(isActive ? 0.24 : 0.16) }
-        if isActive { return Color.accentColor.opacity(0.13) }
-        if isHovered { return Color.primary.opacity(0.08) }
+        if isPressed { return theme.accent.opacity(isActive ? 0.24 : 0.16) }
+        if isActive { return theme.accent.opacity(0.13) }
+        if isHovered { return theme.text.opacity(0.08) }
         return .clear
     }
 }
@@ -433,12 +449,12 @@ private struct BrowserAddressOverlay: View {
                 Image(systemName: store.selectedTab?.url?.scheme == "https"
                       ? "lock.fill" : "globe")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(store.theme.text)
 
                 TextField("Search or enter address", text: $store.addressText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(store.theme.text)
                     .focused($isAddressFocused)
                     .onSubmit { store.navigate(store.addressText) }
                     .onExitCommand { dismiss() }
@@ -481,7 +497,7 @@ private struct BrowserAddressOverlay: View {
             .frame(height: 46)
 
             if !store.addressSuggestions.isEmpty {
-                Divider().overlay(Color.primary.opacity(0.18))
+                Divider().overlay(store.theme.text.opacity(0.18))
                 VStack(spacing: 0) {
                     ForEach(Array(store.addressSuggestions.enumerated()), id: \.element.id) { index, suggestion in
                         Button {
@@ -490,14 +506,14 @@ private struct BrowserAddressOverlay: View {
                             HStack(spacing: 8) {
                                 Image(systemName: suggestion.systemImage)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(store.theme.subtext)
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(suggestion.title)
                                         .font(.system(size: 12, weight: .medium))
                                         .lineLimit(1)
                                     Text(suggestion.detail)
                                         .font(.system(size: 9.5))
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(store.theme.subtext)
                                         .lineLimit(1)
                                 }
                                 Spacer(minLength: 0)
@@ -507,18 +523,18 @@ private struct BrowserAddressOverlay: View {
                             .background {
                                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                                     .fill(index == store.addressSelectionIndex
-                                          ? Color.accentColor.opacity(0.24) : Color.clear)
+                                          ? store.theme.accent.opacity(0.24) : Color.clear)
                             }
                             .overlay {
                                 if index == store.addressSelectionIndex {
                                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .strokeBorder(Color.accentColor.opacity(0.58), lineWidth: 1)
+                                        .strokeBorder(store.theme.accent.opacity(0.58), lineWidth: 1)
                                 }
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        Divider().overlay(Color.primary.opacity(0.14))
+                        Divider().overlay(store.theme.text.opacity(0.14))
                     }
                 }
             }
@@ -528,19 +544,19 @@ private struct BrowserAddressOverlay: View {
                      ? "Enter an address or search · Return opens · ⌘Return new tab"
                      : "⌘L opens · ↑↓ choose · Return opens · ⌘Return new tab · Esc closes")
                     .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                 Spacer()
                 if let host = store.selectedTab?.url?.host {
                     Text(host)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(store.theme.subtext)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
         }
         .frame(maxWidth: 640)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.98),
+        .background(store.theme.surface.opacity(0.98),
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -584,7 +600,7 @@ private struct BrowserTabRow: View {
             if compact == false {
                 Text(tab.displayTitle)
                     .font(.system(size: 12.5, weight: selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? .primary : .secondary)
+                    .foregroundStyle(selected ? store.theme.text : store.theme.subtext)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
@@ -593,19 +609,19 @@ private struct BrowserTabRow: View {
                 if tab.isPinned {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(store.theme.subtext.opacity(0.75))
                 }
 
                 if store.isPrivateTab(tab.id) {
                     Image(systemName: "eye.slash")
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(store.theme.subtext)
                         .help("Private session")
                 }
 
                 Text(BrowserTimeLabel.string(since: tab.lastUsed, now: store.now))
                     .font(.system(size: 9.5, design: .monospaced))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(store.theme.subtext.opacity(0.75))
                     .lineLimit(1)
 
                 if hovering || selected {
@@ -778,7 +794,7 @@ private struct BrowserContent: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(store.theme.pageBackground)
     }
 
     private func dismissAddress() {
@@ -798,14 +814,14 @@ private struct BrowserContent: View {
                 .id(ObjectIdentifier(session))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if store.isStarted {
-            Color(nsColor: .textBackgroundColor)
+            store.theme.pageBackground
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 8) {
                 ProgressView()
                 Text("Preparing browser…")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -835,17 +851,17 @@ private struct BrowserFindOverlay: View {
             } else if let matchCount = store.findMatchCount, matchCount > 0 {
                 Text(matchCount == 1 ? "1 match" : "\(matchCount) matches")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                     .frame(width: 72, alignment: .leading)
             } else if store.findMatchFound == true {
                 Text("Match found")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                     .frame(width: 72, alignment: .leading)
             } else if store.findMatchFound == false {
                 Text("No matches")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                     .frame(width: 72, alignment: .leading)
             } else {
                 Color.clear.frame(width: 72, height: 1)
@@ -1013,17 +1029,17 @@ private struct BrowserSettingsView: View {
                 }
                 .disabled(settingDefaultBrowser)
                 if let defaultBrowserMessage {
-                    Text(defaultBrowserMessage).font(.caption).foregroundStyle(.secondary)
+                    Text(defaultBrowserMessage).font(.caption).foregroundStyle(store.theme.subtext)
                 }
             }
             .formStyle(.grouped)
 
             Text("The default page is prefilled in the address bar when a new tab opens; it is not loaded automatically.")
                 .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(store.theme.subtext)
             Text("When enabled, inspect this browser from Safari ▸ Develop ▸ MakiDesk Browser.")
                 .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(store.theme.subtext)
 
             HStack {
                 Spacer()
@@ -1052,7 +1068,7 @@ private struct BrowserSummaryPanel: View {
                 Spacer()
                 Text("ON-DEVICE")
                     .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                 Button("Open in ChatGPT") {
                     _ = store.summarizeInChatGPT()
                 }
@@ -1095,7 +1111,7 @@ private struct BrowserSummaryPanel: View {
             case .unavailable(let message), .failed(let message):
                 Text(message)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(store.theme.subtext)
                 Button("Close") { store.cancelSummary() }
                     .controlSize(.small)
             }
@@ -1114,7 +1130,7 @@ private struct BrowserSummaryPanel: View {
     private func progress(_ label: String) -> some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text(label).font(.system(size: 11.5)).foregroundStyle(.secondary)
+            Text(label).font(.system(size: 11.5)).foregroundStyle(store.theme.subtext)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

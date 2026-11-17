@@ -36,6 +36,8 @@ struct MakiDeskApp: App {
         UtilityBarController.shared.start()
         TerminalController.shared.start()
         DockerController.shared.start()
+        BrowserLauncher.shared.syncTheme()
+        BrowserActivationObserver.shared.start()
     }
 
     /// A menu item whose shortcut text sits after the title. The menu has no

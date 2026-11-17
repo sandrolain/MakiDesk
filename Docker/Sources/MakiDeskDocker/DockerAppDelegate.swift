@@ -131,6 +131,22 @@ final class DockerAppDelegate: NSObject, NSApplicationDelegate {
         }
         viewItem.submenu = viewMenu
 
+        let windowItem = NSMenuItem()
+        mainMenu.addItem(windowItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "Minimize",
+                           action: #selector(NSWindow.performMiniaturize(_:)),
+                           keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom",
+                           action: #selector(NSWindow.performZoom(_:)),
+                           keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Bring All to Front",
+                           action: #selector(NSApplication.arrangeInFront(_:)),
+                           keyEquivalent: "")
+        NSApp.windowsMenu = windowMenu
+
         let containerItem = NSMenuItem()
         mainMenu.addItem(containerItem)
         let containerMenu = NSMenu(title: "Container")

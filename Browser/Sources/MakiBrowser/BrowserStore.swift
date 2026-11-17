@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import MakiShared
 import Observation
 import WebKit
 
@@ -15,6 +16,7 @@ final class BrowserStore {
     var tabs: [BrowserTab]
     var selectedTabID: UUID?
     var settings: BrowserSettings
+    var theme: BrowserUITheme
     var sidebarWidth: Double {
         didSet {
             if settings.compactTabs == false, sidebarWidth > 120 {
@@ -58,6 +60,7 @@ final class BrowserStore {
     @ObservationIgnored private let tabStore: BrowserTabStore
     @ObservationIgnored private let settingsStore: BrowserSettingsStore
     @ObservationIgnored private let historyStore: BrowserHistoryStore
+    @ObservationIgnored var onThemeChanged: ((BrowserUITheme) -> Void)?
     @ObservationIgnored private var expandedSidebarWidth: Double = 264
     @ObservationIgnored private let blocker = BrowserAdBlocker()
     @ObservationIgnored private let faviconProvider = BrowserFaviconProvider()
@@ -70,6 +73,14 @@ final class BrowserStore {
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
     @ObservationIgnored private var clockObserver: NSObjectProtocol?
+    @ObservationIgnored private var themeObserver: NSObjectProtocol?
+    @ObservationIgnored private let themeQueue = DispatchQueue(
+        label: "com.makidesk.browser.theme.load",
+        qos: .utility
+    )
+    @ObservationIgnored private var themeRevision = 0
+    @ObservationIgnored private var themeLoadPending = false
+    @ObservationIgnored private var themeLoadInFlight = false
     @ObservationIgnored private var saveWorkItem: DispatchWorkItem?
     @ObservationIgnored private var lastActivityWrite: [UUID: Date] = [:]
     @ObservationIgnored private var hasStarted = false
@@ -101,6 +112,7 @@ final class BrowserStore {
         selectedTabID = payload.selectedTabID
         sidebarWidth = payload.sidebarWidth
         settings = settingsStore.load()
+        theme = BrowserUITheme(document: .fallback)
         expandedSidebarWidth = payload.expandedSidebarWidth
         history = historyStore.load()
         now = Date()
@@ -112,6 +124,8 @@ final class BrowserStore {
         guard !hasStarted else { return }
         hasStarted = true
 
+        installThemeObserver()
+        requestThemeReload()
         blockerList = await blocker.prepare()
         guard !stopped else { return }
         blockerReady = true
@@ -151,6 +165,10 @@ final class BrowserStore {
             NotificationCenter.default.removeObserver(clockObserver)
             self.clockObserver = nil
         }
+        if let themeObserver {
+            DistributedNotificationCenter.default().removeObserver(themeObserver)
+            self.themeObserver = nil
+        }
         summaryController.cancel()
         readerTask?.cancel()
         readerTask = nil
@@ -160,6 +178,48 @@ final class BrowserStore {
         for session in sessions.values { session.stop() }
         sessions.removeAll()
         flush()
+    }
+
+    private func installThemeObserver() {
+        guard themeObserver == nil else { return }
+        themeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: BrowserThemeSync.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.requestThemeReload()
+            }
+        }
+    }
+
+    private func requestThemeReload() {
+        themeRevision &+= 1
+        themeLoadPending = true
+        loadLatestThemeIfNeeded()
+    }
+
+    private func loadLatestThemeIfNeeded() {
+        guard !stopped, themeLoadPending, !themeLoadInFlight else { return }
+        themeLoadPending = false
+        themeLoadInFlight = true
+        let revision = themeRevision
+
+        themeQueue.async { [weak self] in
+            let document = BrowserThemeStore.load()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.themeLoadInFlight = false
+                if !self.stopped, revision == self.themeRevision {
+                    let updatedTheme = BrowserUITheme(document: document)
+                    if self.theme != updatedTheme {
+                        self.theme = updatedTheme
+                        self.onThemeChanged?(updatedTheme)
+                    }
+                }
+                self.loadLatestThemeIfNeeded()
+            }
+        }
     }
 
     func receiveExternalURL(_ url: URL) {

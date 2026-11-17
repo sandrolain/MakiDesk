@@ -54,7 +54,8 @@ minimum size is left where it is instead of being squeezed.
 and listed by its window switcher: vertical tabs ordered by last use, pinned
 tabs that never expire, Active and Old groups with a 24/48-hour rule,
 favicon-tinted rows, a compact favicon-only mode and a relative time in
-five-minute steps. The address bar appears only when asked (`⌘L`) and suggests
+five-minute steps. Its chrome follows the selected MakiDesk palette, while web
+pages keep their own styles. The address bar appears only when asked (`⌘L`) and suggests
 local history, open tabs, direct addresses and search actions navigable with
 ↑/↓, and a rail button copies the current page URL. MakiDesk has no built-in
 password manager; Apple Passwords autofill is not available in the current

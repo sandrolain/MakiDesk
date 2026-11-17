@@ -1799,6 +1799,7 @@ final class TerminalWindowController: NSWindowController,
                                        defer: false)
         panel.isFloatingPanel = true
         panel.level = .floating
+        panel.isExcludedFromWindowsMenu = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.isOpaque = true

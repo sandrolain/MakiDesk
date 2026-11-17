@@ -1,9 +1,51 @@
+import AppKit
 import WebKit
 import XCTest
+import MakiShared
 @testable import MakiBrowser
 
 @MainActor
 final class BrowserTests: XCTestCase {
+    func testCustomThemeSetsBrowserChromeColorsAndAppearance() {
+        let document = TerminalThemeDocument(
+            id: "custom",
+            name: "Custom",
+            background: "#FFFFFF",
+            foreground: "#101010",
+            cursor: "#336699",
+            selectionBackground: "#DDDDDD",
+            selectionForeground: "#101010",
+            surface: "#EEEEEE",
+            subtext: "#555555",
+            accent: "#336699"
+        )
+        let theme = BrowserUITheme(document: document)
+
+        XCTAssertFalse(theme.followsSystemAppearance)
+        XCTAssertFalse(theme.isDark)
+        XCTAssertEqual(theme.preferredColorScheme, .light)
+        XCTAssertEqual(hex(NSColor(theme.background)), "#FFFFFF")
+        XCTAssertEqual(hex(NSColor(theme.surface)), "#EEEEEE")
+        XCTAssertEqual(hex(NSColor(theme.accent)), "#336699")
+    }
+
+    func testSystemThemeLeavesAppearanceToMacOS() {
+        let document = TerminalThemeDocument(
+            id: "system",
+            name: "System",
+            background: "#000000",
+            foreground: "#FFFFFF",
+            cursor: "#336699",
+            selectionBackground: "#333333",
+            selectionForeground: "#FFFFFF"
+        )
+        let theme = BrowserUITheme(document: document)
+
+        XCTAssertTrue(theme.followsSystemAppearance)
+        XCTAssertNil(theme.preferredColorScheme)
+        XCTAssertNil(theme.windowAppearance)
+    }
+
     func testLifecycleBoundaries() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         func tab(age: TimeInterval, pinned: Bool = false) -> BrowserTab {
@@ -18,6 +60,16 @@ final class BrowserTests: XCTestCase {
         XCTAssertTrue(BrowserTabLifecycle.isExpired(tab(age: 48 * 3600), now: now))
         XCTAssertEqual(BrowserTabLifecycle.phase(for: tab(age: 72 * 3600, pinned: true), now: now), .pinned)
         XCTAssertFalse(BrowserTabLifecycle.isExpired(tab(age: 72 * 3600, pinned: true), now: now))
+    }
+
+    private func hex(_ color: NSColor) -> String? {
+        guard let color = color.usingColorSpace(.sRGB) else { return nil }
+        return String(
+            format: "#%02X%02X%02X",
+            Int((color.redComponent * 255).rounded()),
+            Int((color.greenComponent * 255).rounded()),
+            Int((color.blueComponent * 255).rounded())
+        )
     }
 
     func testOrderingIsPinnedThenActiveThenOldAndMRU() {

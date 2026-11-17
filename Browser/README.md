@@ -3,9 +3,11 @@
 A separate regular app, `MakiDeskBrowser.app`, bundled inside MakiDesk in
 `Contents/Applications/`. WebKit, vertical MRU tabs, pinned/active/old groups,
 favicon tint, a per-site content blocker, local address suggestions and
-on-device Foundation Models page summaries. Incoming links can be opened in
-MakiDesk Browser or another installed handler; the chooser uses a three-column
-icon grid and remembers recent external-app choices locally.
+on-device Foundation Models page summaries. Its browser chrome follows the
+selected MakiDesk palette, while web pages keep their own styles. Incoming
+links can be opened in MakiDesk Browser or another installed handler; the
+chooser uses a three-column icon grid and remembers recent external-app choices
+locally.
 
 - `Sources/MakiBrowser/` — model, WebKit sessions, sidebar/window, blocker,
   favicons and summaries.

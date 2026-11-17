@@ -138,6 +138,10 @@ final class BrowserAppDelegate: NSObject, NSApplicationDelegate {
                            action: #selector(NSWindow.performZoom(_:)),
                            keyEquivalent: "")
         windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Bring All to Front",
+                           action: #selector(NSApplication.arrangeInFront(_:)),
+                           keyEquivalent: "")
+        windowMenu.addItem(.separator())
         windowMenu.addItem(withTitle: "Close",
                            action: #selector(NSWindow.performClose(_:)),
                            keyEquivalent: "w")
