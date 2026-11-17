@@ -177,7 +177,14 @@ final class TerminalClient {
         }
         do {
             let messages = try decoder.append(Data(buffer[0..<count]))
-            for message in messages { handleLocked(message) }
+            for message in messages {
+                guard fd >= 0 else { break }
+                handleLocked(message)
+            }
+        } catch TerminalWireError.unsupportedVersion(_) {
+            disconnectLocked()
+            pending.removeAll()
+            report(.terminalVersionMismatch())
         } catch {
             disconnectLocked()
         }
@@ -188,8 +195,7 @@ final class TerminalClient {
         case .welcome:
             handshakeTimer?.cancel()
             handshakeTimer = nil
-            if let version = message.body?.protocolVersion,
-               version != TerminalMessage.wireVersion {
+            if TerminalMessage.isSupportedHandshakeVersion(message.body?.protocolVersion) == false {
                 disconnectLocked()
                 pending.removeAll()
                 report(.terminalVersionMismatch())

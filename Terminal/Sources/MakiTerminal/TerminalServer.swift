@@ -236,7 +236,10 @@ final class TerminalIPCServer {
         }
         do {
             let messages = try decoder.append(Data(buffer[0..<count]))
-            for message in messages { handle(message) }
+            for message in messages {
+                guard clientFD >= 0 else { break }
+                handle(message)
+            }
         } catch {
             disconnectClient()
         }
@@ -256,6 +259,10 @@ final class TerminalIPCServer {
     private func handle(_ message: TerminalMessage) {
         switch message.kind {
         case .hello:
+            guard TerminalMessage.isSupportedHandshakeVersion(message.body?.protocolVersion) else {
+                disconnectClient()
+                return
+            }
             let body = TerminalMessage.Body(
                 protocolVersion: TerminalMessage.wireVersion,
                 appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,

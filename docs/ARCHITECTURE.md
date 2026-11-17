@@ -406,6 +406,12 @@ name), and replies to `hello` with its version and pid. `TerminalClient` keeps
 the connection, retries a launch up to 30 times at 150 ms intervals, and reports
 failure in a notice; none of it blocks the main thread. A development `swift run`
 looks for `dist/MakiDeskTerminal.app`, because it has no app bundle to nest into.
+The envelope `version` is authoritative for every message: a missing value
+defaults to legacy v1, while unsupported versions are rejected on encode and
+decode. The optional handshake `protocolVersion` is a compatibility echo and
+must match when present; app and build versions are informational. JSON
+fixtures in `TerminalWireTests` freeze representative v1 hello, welcome, state
+and command messages; incompatible v1 shape changes require a new wire version.
 The helper binds its socket at the start of application launch, before Ghostty
 initialization and workspace restoration, so the handshake is not delayed by
 creating the first set of terminal surfaces.

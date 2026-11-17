@@ -16,6 +16,59 @@ final class TerminalWireTests: XCTestCase {
         XCTAssertEqual(messages, [message])
     }
 
+    func testVersionOneFixturesPreserveHandshakeStateAndCommandShapes() throws {
+        let requestID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let workspaceID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        let fixtures: [(String, TerminalMessage)] = [
+            (
+                #"{"version":1,"id":"00000000-0000-0000-0000-000000000001","kind":"hello","body":{"protocolVersion":1,"appVersion":"1.2.3","build":"105","pid":42,"bundleIdentifier":"com.makidesk.app"}}"#,
+                TerminalMessage(kind: .hello,
+                                body: .init(protocolVersion: 1,
+                                            appVersion: "1.2.3",
+                                            build: "105",
+                                            pid: 42,
+                                            bundleIdentifier: "com.makidesk.app"),
+                                id: requestID)
+            ),
+            (
+                #"{"version":1,"id":"00000000-0000-0000-0000-000000000001","kind":"welcome","body":{"protocolVersion":1,"appVersion":"1.2.3","build":"105","pid":42,"bundleIdentifier":"com.makidesk.app.terminal"}}"#,
+                TerminalMessage(kind: .welcome,
+                                body: .init(protocolVersion: 1,
+                                            appVersion: "1.2.3",
+                                            build: "105",
+                                            pid: 42,
+                                            bundleIdentifier: "com.makidesk.app.terminal"),
+                                id: requestID)
+            ),
+            (
+                #"{"version":1,"id":"00000000-0000-0000-0000-000000000001","kind":"state","body":{"workspaceCount":2,"quakeVisible":false,"workspaceID":"00000000-0000-0000-0000-000000000002"}}"#,
+                TerminalMessage(kind: .state,
+                                body: .init(workspaceCount: 2,
+                                            quakeVisible: false,
+                                            workspaceID: workspaceID.uuidString),
+                                id: requestID)
+            ),
+            (
+                #"{"version":1,"id":"00000000-0000-0000-0000-000000000001","kind":"dockerExec","body":{"containerID":"abc123","shell":"/bin/sh","title":"Build shell"}}"#,
+                TerminalMessage(kind: .dockerExec,
+                                body: .init(containerID: "abc123",
+                                            shell: "/bin/sh",
+                                            title: "Build shell"),
+                                id: requestID)
+            ),
+        ]
+
+        for (fixture, expected) in fixtures {
+            let fixtureData = Data(fixture.utf8)
+            let message = try TerminalWire.decode(fixtureData)
+            XCTAssertEqual(message, expected)
+
+            let framed = try TerminalWire.frame(message)
+            let payload = Data(framed.dropFirst(4))
+            XCTAssertEqual(try canonicalJSON(payload), try canonicalJSON(fixtureData))
+        }
+    }
+
     func testTheHeaderIsTheBigEndianPayloadLength() throws {
         let message = TerminalMessage(kind: .ping)
         let payload = try JSONEncoder().encode(message)
@@ -117,10 +170,35 @@ final class TerminalWireTests: XCTestCase {
         XCTAssertEqual(message.kind, .ping)
     }
 
+    func testUnsupportedWireVersionIsRejected() {
+        let payload = Data(#"{"version":2,"id":"00000000-0000-0000-0000-000000000001","kind":"ping"}"#.utf8)
+        XCTAssertThrowsError(try TerminalWire.decode(payload)) { error in
+            XCTAssertEqual(error as? TerminalWireError, .unsupportedVersion(2))
+        }
+
+        var outgoing = TerminalMessage(kind: .ping)
+        outgoing.version = 2
+        XCTAssertThrowsError(try TerminalWire.frame(outgoing)) { error in
+            XCTAssertEqual(error as? TerminalWireError, .unsupportedVersion(2))
+        }
+    }
+
+    func testHandshakeVersionIsOptionalForLegacyPeersButMustMatchWhenPresent() {
+        XCTAssertTrue(TerminalMessage.isSupportedHandshakeVersion(nil))
+        XCTAssertTrue(TerminalMessage.isSupportedHandshakeVersion(1))
+        XCTAssertFalse(TerminalMessage.isSupportedHandshakeVersion(2))
+    }
+
     func testTheSocketLivesUnderApplicationSupport() {
         let path = TerminalSocketLocation.socketURL.path
         XCTAssertTrue(path.hasSuffix("MakiDesk/Terminal/terminal.sock"), path)
         XCTAssertTrue(TerminalSocketLocation.directory.path.hasSuffix("MakiDesk/Terminal"),
                       TerminalSocketLocation.directory.path)
+    }
+
+    private func canonicalJSON(_ data: Data) throws -> Data {
+        let object = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        return try JSONSerialization.data(withJSONObject: object,
+                                         options: [.sortedKeys, .fragmentsAllowed])
     }
 }

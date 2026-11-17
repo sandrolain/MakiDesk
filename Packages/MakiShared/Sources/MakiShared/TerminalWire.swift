@@ -9,6 +9,7 @@ import Foundation
 public enum TerminalWireError: Error, Equatable, LocalizedError {
     case frameTooLarge(Int)
     case malformed(String)
+    case unsupportedVersion(Int)
 
     public var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ public enum TerminalWireError: Error, Equatable, LocalizedError {
             return "Terminal message is too large (\(size) bytes)"
         case let .malformed(detail):
             return "Terminal message is malformed: \(detail)"
+        case let .unsupportedVersion(version):
+            return "Terminal wire version \(version) is not supported"
         }
     }
 }
@@ -24,6 +27,9 @@ public enum TerminalWire {
     public static let maximumFrameBytes = 1 << 20
 
     public static func frame(_ message: TerminalMessage) throws -> Data {
+        guard message.version == TerminalMessage.wireVersion else {
+            throw TerminalWireError.unsupportedVersion(message.version)
+        }
         let payload = try JSONEncoder().encode(message)
         guard payload.count <= maximumFrameBytes else {
             throw TerminalWireError.frameTooLarge(payload.count)
@@ -39,11 +45,16 @@ public enum TerminalWire {
     }
 
     public static func decode(_ payload: Data) throws -> TerminalMessage {
+        let message: TerminalMessage
         do {
-            return try JSONDecoder().decode(TerminalMessage.self, from: payload)
+            message = try JSONDecoder().decode(TerminalMessage.self, from: payload)
         } catch {
             throw TerminalWireError.malformed(error.localizedDescription)
         }
+        guard message.version == TerminalMessage.wireVersion else {
+            throw TerminalWireError.unsupportedVersion(message.version)
+        }
+        return message
     }
 }
 

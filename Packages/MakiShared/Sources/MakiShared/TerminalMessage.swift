@@ -11,10 +11,16 @@ public enum AgentState: String, Codable, Sendable, CaseIterable {
 ///
 /// A closed kind and a small optional body: the helper executes only message
 /// kinds it knows, never arbitrary payloads. `id` pairs a reply with its
-/// request; `version` is the wire format, separate from the app versions in the
-/// handshake body.
+/// request; `version` is the authoritative wire format version, separate from
+/// the app versions in the handshake body. `body.protocolVersion` is a
+/// compatibility echo used only during the handshake.
 public struct TerminalMessage: Codable, Equatable, Sendable {
     public static let wireVersion = 1
+
+    /// Missing echoes are accepted for legacy peers; the envelope version is authoritative.
+    public static func isSupportedHandshakeVersion(_ version: Int?) -> Bool {
+        version == nil || version == wireVersion
+    }
 
     public enum Kind: String, Codable, Sendable {
         // Handshake

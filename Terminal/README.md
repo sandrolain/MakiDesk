@@ -131,7 +131,10 @@ identity before the outer app.
   beeps and marks its workspace when that workspace is not in front. Nothing
   is written to disk.
 - **Two-app boundary:** `MakiShared` (framing and messages) and a Unix socket
-  (`0600`) with a handshake, peer pid check, retries and notices. The helper is
+  (`0600`) with a handshake, peer pid check, retries and notices. The envelope
+  `version` is authoritative: missing versions are treated as legacy v1,
+  unsupported versions are rejected, and the optional handshake
+  `protocolVersion` must match when present. The helper is
   `.regular` while its main window is open; closing it hides the window and
   switches to `.accessory`, leaving every surface and process alive. Quit is the
   only action that ends them and it confirms first. Signing is inside-out.
