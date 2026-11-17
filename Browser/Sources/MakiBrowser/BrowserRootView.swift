@@ -6,14 +6,9 @@ struct BrowserRootView: View {
     @Bindable var store: BrowserStore
 
     var body: some View {
-        HSplitView {
-            BrowserSidebar(store: store)
-                .frame(minWidth: store.settings.compactTabs ? 97 : 240,
-                       idealWidth: store.settings.compactTabs ? 97 : CGFloat(store.sidebarWidth),
-                       maxWidth: store.settings.compactTabs ? 97 : 480)
-            BrowserContent(store: store)
-                .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
-        }
+        BrowserSplitView(store: store,
+                         sidebarWidth: store.sidebarWidth,
+                         compactTabs: store.settings.compactTabs)
         .padding(.top, 32)
         .frame(minWidth: 900, minHeight: 600)
         .ignoresSafeArea()
@@ -41,6 +36,117 @@ struct BrowserRootView: View {
             if let window = NSApp.keyWindow,
                window.windowController is BrowserWindowController {
                 window.title = title
+            }
+        }
+    }
+}
+
+private struct BrowserSplitView: NSViewRepresentable {
+    let store: BrowserStore
+    let sidebarWidth: Double
+    let compactTabs: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(store: store)
+    }
+
+    func makeNSView(context: Context) -> NSSplitView {
+        let splitView = NSSplitView()
+        splitView.isVertical = true
+        splitView.dividerStyle = .thin
+        splitView.delegate = context.coordinator
+
+        let sidebar = NSHostingView(rootView: BrowserSidebar(store: store))
+        sidebar.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        sidebar.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let content = NSHostingView(rootView: BrowserContent(store: store))
+        content.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        content.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        splitView.addArrangedSubview(sidebar)
+        splitView.addArrangedSubview(content)
+        context.coordinator.update(width: sidebarWidth, compactTabs: compactTabs, in: splitView)
+        return splitView
+    }
+
+    func updateNSView(_ splitView: NSSplitView, context: Context) {
+        context.coordinator.update(width: sidebarWidth, compactTabs: compactTabs, in: splitView)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSSplitViewDelegate {
+        weak var store: BrowserStore?
+        private var requestedWidth = 264.0
+        private var requestedCompactTabs = false
+        private var lastAppliedWidth: Double?
+        private var lastAppliedCompactTabs: Bool?
+        private var didRestoreWidth = false
+        private var isApplyingWidth = false
+
+        init(store: BrowserStore) {
+            self.store = store
+        }
+
+        func update(width: Double, compactTabs: Bool, in splitView: NSSplitView) {
+            requestedWidth = width
+            requestedCompactTabs = compactTabs
+            guard splitView.bounds.width > 0,
+                  splitView.arrangedSubviews.count > 1 else { return }
+
+            if !didRestoreWidth
+                || lastAppliedCompactTabs != compactTabs
+                || lastAppliedWidth.map({ abs($0 - width) > 0.5 }) == true {
+                applyRequestedWidth(in: splitView)
+            }
+        }
+
+        func splitViewDidResizeSubviews(_ notification: Notification) {
+            guard let splitView = notification.object as? NSSplitView,
+                  splitView.arrangedSubviews.count > 1,
+                  !isApplyingWidth else { return }
+            if !didRestoreWidth {
+                applyRequestedWidth(in: splitView)
+                return
+            }
+
+            let width = Double(splitView.arrangedSubviews[0].frame.width)
+            lastAppliedWidth = width
+            lastAppliedCompactTabs = requestedCompactTabs
+            if abs((store?.sidebarWidth ?? 0) - width) > 0.5 {
+                store?.sidebarWidth = width
+            }
+        }
+
+        func splitView(_ splitView: NSSplitView,
+                       constrainMinCoordinate proposedMinimumPosition: CGFloat,
+                       ofSubviewAt dividerIndex: Int) -> CGFloat {
+            guard dividerIndex == 0 else { return proposedMinimumPosition }
+            return max(proposedMinimumPosition, requestedCompactTabs ? 97 : 240)
+        }
+
+        func splitView(_ splitView: NSSplitView,
+                       constrainMaxCoordinate proposedMaximumPosition: CGFloat,
+                       ofSubviewAt dividerIndex: Int) -> CGFloat {
+            guard dividerIndex == 0 else { return proposedMaximumPosition }
+            let maximum = requestedCompactTabs
+                ? 97
+                : min(480, splitView.bounds.width - 520 - splitView.dividerThickness)
+            return min(proposedMaximumPosition, max(requestedCompactTabs ? 97 : 240, maximum))
+        }
+
+        private func applyRequestedWidth(in splitView: NSSplitView) {
+            guard splitView.bounds.width > 0,
+                  splitView.arrangedSubviews.count > 1 else { return }
+            isApplyingWidth = true
+            splitView.setPosition(CGFloat(requestedWidth), ofDividerAt: 0)
+            splitView.layoutSubtreeIfNeeded()
+            isApplyingWidth = false
+            didRestoreWidth = true
+
+            let width = Double(splitView.arrangedSubviews[0].frame.width)
+            lastAppliedWidth = width
+            lastAppliedCompactTabs = requestedCompactTabs
+            if abs(width - requestedWidth) > 0.5 {
+                store?.sidebarWidth = width
             }
         }
     }
@@ -121,15 +227,6 @@ private struct BrowserSidebar: View {
             }
         }
         .background(.regularMaterial)
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { store.sidebarWidth = Double(proxy.size.width) }
-                    .onChange(of: proxy.size.width) { _, width in
-                        store.sidebarWidth = Double(width)
-                    }
-            }
-        }
     }
 
     @ViewBuilder
@@ -189,9 +286,12 @@ private struct BrowserIconRail: View {
             icon("link", id: "address", help: "Address and search (⌘L)",
                  isActive: store.isAddressVisible) { store.showAddress() }
             icon("doc.on.doc", id: "copy-url", help: "Copy page URL") {
-                guard let url = store.selectedTab?.url else { return }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                store.copyURL()
+            }
+            .disabled(store.selectedTab?.url == nil)
+            icon("magnifyingglass", id: "find", help: "Find in Page (⌘F)",
+                 isActive: store.isFindVisible) {
+                store.showFind()
             }
             .disabled(store.selectedTab?.url == nil)
             icon("plus", id: "new", help: "New Tab (⌘T); private tab (⌥⌘T)") { store.newTab() }
@@ -553,9 +653,7 @@ private struct BrowserTabRow: View {
             store.reload()
         }
         Button("Copy URL") {
-            guard let url = tab.url else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+            store.copyURL(for: tab.id)
         }
         .disabled(tab.url == nil)
         Button("Clear Website Data…") { store.requestSiteDataClear(for: tab.id) }
@@ -614,6 +712,28 @@ private struct BrowserContent: View {
                     BrowserSummaryPanel(store: store)
                         .padding(12)
                 }
+            }
+            if store.isFindVisible {
+                BrowserFindOverlay(store: store)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(12)
+                    .zIndex(3)
+            }
+            if let message = store.noticeText {
+                Label(message, systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
+                    }
+                    .accessibilityLabel("URL copied to clipboard")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(12)
+                    .allowsHitTesting(false)
             }
             if let message = store.errorText {
                 HStack(spacing: 8) {
@@ -675,6 +795,86 @@ private struct BrowserContent: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+private struct BrowserFindOverlay: View {
+    @Bindable var store: BrowserStore
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("Find in Page", text: $store.findText)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 220)
+                .focused($isFocused)
+                .onSubmit { store.findInPage() }
+                .onExitCommand { store.hideFind() }
+                .onChange(of: store.findText) { _, _ in
+                    store.findInPage()
+                }
+
+            if store.isFindSearching {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 44)
+            } else if let matchCount = store.findMatchCount, matchCount > 0 {
+                Text(matchCount == 1 ? "1 match" : "\(matchCount) matches")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 72, alignment: .leading)
+            } else if store.findMatchFound == true {
+                Text("Match found")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 72, alignment: .leading)
+            } else if store.findMatchFound == false {
+                Text("No matches")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 72, alignment: .leading)
+            } else {
+                Color.clear.frame(width: 72, height: 1)
+            }
+
+            Button {
+                store.findInPage(backwards: true)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.plain)
+            .help("Find Previous")
+            .accessibilityLabel("Find Previous")
+            .disabled(store.findText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button {
+                store.findInPage()
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.plain)
+            .help("Find Next")
+            .accessibilityLabel("Find Next")
+            .disabled(store.findText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button {
+                store.hideFind()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.plain)
+            .help("Close Find")
+            .accessibilityLabel("Close Find")
+        }
+        .padding(10)
+        .background(.regularMaterial,
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(.primary.opacity(0.12), lineWidth: 1)
+        }
+        .fixedSize()
+        .onAppear { isFocused = true }
     }
 }
 

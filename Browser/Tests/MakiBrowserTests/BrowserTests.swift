@@ -88,6 +88,12 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(duck?.host, "duckduckgo.com")
     }
 
+    func testFindMatchCountCountsRepeatedCaseInsensitiveMatches() {
+        XCTAssertEqual(BrowserStore.countFindMatches(in: "WebKit finds webkit and WEBKIT.", query: "webkit"), 3)
+        XCTAssertEqual(BrowserStore.countFindMatches(in: "No occurrence here.", query: "webkit"), 0)
+        XCTAssertEqual(BrowserStore.countFindMatches(in: "Any text.", query: ""), 0)
+    }
+
     func testChatGPTHandoffEncodesURLInPromptWithoutSubmitting() throws {
         let pageURL = try XCTUnwrap(URL(string: "https://example.com/a?x=1&y=due"))
         let handoff = try XCTUnwrap(BrowserChatGPTHandoff.url(for: pageURL))
@@ -389,11 +395,46 @@ final class BrowserTests: XCTestCase {
         store.toggleCompactTabs()
         XCTAssertTrue(store.settings.compactTabs)
         XCTAssertEqual(store.sidebarWidth, 97)
-
-        store.toggleCompactTabs()
-        XCTAssertFalse(store.settings.compactTabs)
-        XCTAssertEqual(store.sidebarWidth, 320)
         store.stop()
+
+        let reopenedStore = BrowserStore(
+            tabStore: BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json")),
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+        XCTAssertTrue(reopenedStore.settings.compactTabs)
+        XCTAssertEqual(reopenedStore.sidebarWidth, 97)
+        reopenedStore.toggleCompactTabs()
+        XCTAssertFalse(reopenedStore.settings.compactTabs)
+        XCTAssertEqual(reopenedStore.sidebarWidth, 320)
+        reopenedStore.stop()
+    }
+
+    func testPerTabControlOverridesSurviveRestart() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserTabControls-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let tabStore = BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json"))
+        let settingsStore = BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json"))
+        let historyStore = BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        let store = BrowserStore(tabStore: tabStore,
+                                 settingsStore: settingsStore,
+                                 historyStore: historyStore)
+        let tab = store.newTab(url: try XCTUnwrap(URL(string: "about:blank")))
+
+        store.toggleBlockerForSelectedTab()
+        store.toggleWebInspectorForSelectedTab()
+        store.stop()
+
+        let reopenedStore = BrowserStore(tabStore: tabStore,
+                                         settingsStore: settingsStore,
+                                         historyStore: historyStore)
+        let restoredTab = try XCTUnwrap(reopenedStore.tabs.first(where: { $0.id == tab.id }))
+        XCTAssertFalse(reopenedStore.isBlockerEnabled(for: restoredTab))
+        XCTAssertTrue(reopenedStore.isWebInspectorEnabled(for: tab.id))
+        reopenedStore.stop()
     }
 
     func testSearchEngineSelection() {

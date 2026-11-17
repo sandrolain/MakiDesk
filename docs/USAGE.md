@@ -974,7 +974,10 @@ browser without touching MakiDesk.
   centered with the same 7-point side inset as the icon rail. Both columns have
   8 points of space above their first item.
   A new tab selects itself, shows an empty web view and opens the address
-  overlay prefilled with the configured default page.
+  overlay prefilled with the configured default page. The window position and
+  size, tab-sidebar width, compact mode and browser feature switches are
+  restored when the browser reopens; the expanded sidebar width is retained
+  while compact mode is active.
 - **Vertical tabs.** Tabs are ordered by the last time they were used (most
   recent first). Each row shows the favicon, the title and the time since the
   last use, rounded to five minutes. The row background is tinted with the
@@ -1015,8 +1018,14 @@ browser without touching MakiDesk.
   is searched with the configured engine (Google by default, DuckDuckGo or Bing
   in settings). The shield in the
   overlay toggles the blocker for the site.
-- **Copy URL.** The copy icon in the left rail copies the active tab's current
-  page address to the macOS clipboard. It is disabled for an empty tab.
+- **Find in Page.** `⌘F` or the magnifying-glass icon opens the find panel.
+  The panel shows the number of matches and highlights and scrolls to the
+  current match in the active page; use the
+  arrows (or `⌘G` / `⇧⌘G`) to move between matches. Search wraps at the start
+  or end of the page, and Esc closes the panel and returns focus to the page.
+- **Copy URL.** The copy icon in the left rail or a tab's context menu copies
+  that page address to the macOS clipboard and briefly confirms the copy. The
+  rail icon is disabled for an empty tab.
 - **New tab.** The address panel opens over a dimmed page. A new empty tab
   keeps the panel open until an address or search is submitted; Esc and clicks
   outside cannot leave an empty web view. Once the tab has a page, the panel

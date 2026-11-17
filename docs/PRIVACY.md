@@ -276,9 +276,12 @@ inside MakiDesk. Pages are loaded by WebKit's own WebContent and Networking
 processes; cookies, local storage, cache and the website data store are handled
 by WebKit and stored under the user's WebKit data directory. MakiDesk does not
 add analytics, telemetry or a remote history service. The tab list, pin state,
-last-use timestamps, favicon colour and blocker exceptions are stored in
-`~/Library/Application Support/MakiDesk/browser-tabs.json` and
-`browser-settings.json`. The address suggestions use
+last-use timestamps, favicon colour, and per-tab blocker and Web Inspector
+overrides are stored in `~/Library/Application Support/MakiDesk/browser-tabs.json`.
+Browser feature settings, including the compact sidebar mode, and domain
+blocker exceptions are stored in `browser-settings.json`. The current and
+expanded tab-sidebar widths are stored with the tabs; the browser window frame
+is stored in the browser app's local preferences. The address suggestions use
 `browser-history.json`: a bounded local list of URLs and titles of pages that
 finished loading, kept only to suggest addresses already visited. There is no
 browsing-history screen and no "recently closed" archive. Page content, form

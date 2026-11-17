@@ -16,10 +16,21 @@ final class BrowserStore {
     var selectedTabID: UUID?
     var settings: BrowserSettings
     var sidebarWidth: Double {
-        didSet { scheduleSave() }
+        didSet {
+            if settings.compactTabs == false, sidebarWidth > 120 {
+                expandedSidebarWidth = sidebarWidth
+            }
+            scheduleSave()
+        }
     }
     var now: Date
     var isAddressVisible = false
+    var isFindVisible = false
+    var findText = ""
+    var findMatchFound: Bool?
+    var findMatchCount: Int?
+    var isFindSearching = false
+    var noticeText: String?
     var addressText = ""
     var addressFocusToken = UUID()
     var isSettingsVisible = false
@@ -67,9 +78,11 @@ final class BrowserStore {
     @ObservationIgnored private var provisionalNavigations: Set<UUID> = []
     @ObservationIgnored private var queuedExternalURLs: [URL] = []
     @ObservationIgnored private var privateTabIDs: Set<UUID> = []
-    @ObservationIgnored private var webInspectorOverrides: [UUID: Bool] = [:]
     @ObservationIgnored private var readerTask: Task<Void, Never>?
     @ObservationIgnored private var readerGeneration = UUID()
+    @ObservationIgnored private var findTask: Task<Void, Never>?
+    @ObservationIgnored private var findGeneration = UUID()
+    @ObservationIgnored private var noticeTask: Task<Void, Never>?
 
     struct ExternalApp: Identifiable, Equatable {
         let url: URL
@@ -95,7 +108,7 @@ final class BrowserStore {
         selectedTabID = payload.selectedTabID
         sidebarWidth = payload.sidebarWidth
         settings = settingsStore.load()
-        if payload.sidebarWidth > 120 { expandedSidebarWidth = payload.sidebarWidth }
+        expandedSidebarWidth = payload.expandedSidebarWidth
         history = historyStore.load()
         now = Date()
     }
@@ -148,6 +161,9 @@ final class BrowserStore {
         summaryController.cancel()
         readerTask?.cancel()
         readerTask = nil
+        invalidateFind()
+        noticeTask?.cancel()
+        noticeTask = nil
         for session in sessions.values { session.stop() }
         sessions.removeAll()
         flush()
@@ -323,6 +339,7 @@ final class BrowserStore {
         tabs.append(tab)
         if isPrivate { privateTabIDs.insert(tab.id) }
         if select {
+            if isFindVisible { hideFind() }
             cancelSummary()
             closeReaderMode()
             selectedTabID = tab.id
@@ -348,6 +365,7 @@ final class BrowserStore {
     func select(_ tabID: UUID) {
         guard tabs.contains(where: { $0.id == tabID }) else { return }
         guard selectedTabID != tabID else { return }
+        if isFindVisible { hideFind() }
         selectedTabID = tabID
         isAddressVisible = false
         closeReaderMode()
@@ -362,6 +380,7 @@ final class BrowserStore {
     }
 
     func close(_ tabID: UUID) {
+        if selectedTabID == tabID, isFindVisible { hideFind() }
         if selectedTabID == tabID { closeReaderMode() }
         sessions[tabID]?.stop()
         sessions.removeValue(forKey: tabID)
@@ -370,7 +389,6 @@ final class BrowserStore {
         lastActivityWrite.removeValue(forKey: tabID)
         tabs.removeAll { $0.id == tabID }
         privateTabIDs.remove(tabID)
-        webInspectorOverrides.removeValue(forKey: tabID)
         if summaryTabID == tabID {
             summaryController.cancel()
             summary = .idle
@@ -429,7 +447,6 @@ final class BrowserStore {
             faviconImages.removeValue(forKey: id)
             provisionalNavigations.remove(id)
             privateTabIDs.remove(id)
-            webInspectorOverrides.removeValue(forKey: id)
         }
         if let summaryTabID, expiredIDs.contains(summaryTabID) {
             cancelSummary()
@@ -490,6 +507,10 @@ final class BrowserStore {
     }
 
     func showAddress() {
+        if isFindVisible {
+            isFindVisible = false
+            invalidateFind()
+        }
         addressText = selectedTab?.url?.absoluteString ?? settings.defaultPageURL
         isAddressVisible = true
         addressFocusToken = UUID()
@@ -630,7 +651,7 @@ final class BrowserStore {
     }
 
     func isWebInspectorEnabled(for tabID: UUID) -> Bool {
-        webInspectorOverrides[tabID] ?? settings.webInspectorEnabled
+        tabs.first(where: { $0.id == tabID })?.webInspectorOverride ?? settings.webInspectorEnabled
     }
 
     func toggleWebInspectorForSelectedTab() {
@@ -638,8 +659,10 @@ final class BrowserStore {
               selectedTab?.url != nil,
               let session = sessions[tabID] else { return }
         let enabled = !isWebInspectorEnabled(for: tabID)
-        webInspectorOverrides[tabID] = enabled
+        guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        tabs[index].webInspectorOverride = enabled
         session.webView.isInspectable = enabled
+        scheduleSave()
     }
 
     func setSummaryEnabled(_ enabled: Bool) {
@@ -790,6 +813,7 @@ final class BrowserStore {
 
     func sessionDidStart(tabID: UUID, url: URL?) {
         provisionalNavigations.insert(tabID)
+        if selectedTabID == tabID { invalidateFind() }
         if selectedTabID == tabID, isReaderVisible { closeReaderMode() }
         if selectedTabID == tabID {
             loadingTabID = tabID
@@ -848,6 +872,9 @@ final class BrowserStore {
         if selectedTabID == tabID {
             self.canGoBack = canGoBack
             self.canGoForward = canGoForward
+            if isFindVisible, !findText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                findInPage()
+            }
         }
         scheduleSave()
         loadFavicon(tabID: tabID)
@@ -896,6 +923,115 @@ final class BrowserStore {
         errorText = nil
     }
 
+    func copyURL(for tabID: UUID? = nil) {
+        guard let tab = tabs.first(where: { $0.id == (tabID ?? selectedTabID) }),
+              let url = tab.url else { return }
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(url.absoluteString, forType: .string) else {
+            errorText = "Could not copy the page URL to the clipboard."
+            return
+        }
+        noticeTask?.cancel()
+        noticeText = "URL copied"
+        noticeTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                self?.noticeText = nil
+                self?.noticeTask = nil
+            } catch {
+                return
+            }
+        }
+    }
+
+    func showFind() {
+        isAddressVisible = false
+        isFindVisible = true
+    }
+
+    func hideFind() {
+        isFindVisible = false
+        invalidateFind()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isFindVisible,
+                  let webView = self.selectedSession?.webView else { return }
+            NSApp.keyWindow?.makeFirstResponder(webView)
+        }
+    }
+
+    func findInPage(backwards: Bool = false) {
+        let query = findText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty,
+              let tabID = selectedTabID,
+              let session = sessions[tabID] else {
+            invalidateFind()
+            return
+        }
+        findTask?.cancel()
+        let generation = UUID()
+        findGeneration = generation
+        findMatchFound = nil
+        isFindSearching = true
+        let configuration = WKFindConfiguration()
+        configuration.backwards = backwards
+        configuration.wraps = true
+        findTask = Task { @MainActor [weak self, weak session] in
+            do {
+                let result = try await session?.webView.find(query, configuration: configuration)
+                guard let self,
+                      self.findGeneration == generation else { return }
+                guard self.selectedTabID == tabID,
+                      let session,
+                      self.sessions[tabID] === session else {
+                    self.isFindSearching = false
+                    self.findTask = nil
+                    return
+                }
+                let pageText = try await session.webView.evaluateJavaScript("document.body?.innerText ?? ''") as? String
+                guard self.findGeneration == generation,
+                      self.selectedTabID == tabID,
+                      self.sessions[tabID] === session else { return }
+                let count = Self.countFindMatches(in: pageText ?? "", query: query)
+                self.findMatchCount = count
+                self.findMatchFound = (result?.matchFound ?? false) || count > 0
+                self.isFindSearching = false
+                self.findTask = nil
+            } catch {
+                guard let self, self.findGeneration == generation, !Task.isCancelled else { return }
+                self.isFindSearching = false
+                self.findTask = nil
+                self.errorText = "Could not search the page: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func invalidateFind() {
+        findGeneration = UUID()
+        findTask?.cancel()
+        findTask = nil
+        findMatchFound = nil
+        findMatchCount = nil
+        isFindSearching = false
+    }
+
+    static func countFindMatches(in text: String, query: String) -> Int {
+        guard !query.isEmpty else { return 0 }
+        let source = text as NSString
+        var location = 0
+        var count = 0
+        while location < source.length {
+            let range = source.range(of: query,
+                                     options: [.caseInsensitive],
+                                     range: NSRange(location: location,
+                                                    length: source.length - location))
+            guard range.location != NSNotFound else { break }
+            count += 1
+            location = NSMaxRange(range)
+        }
+        return count
+    }
+
     @discardableResult
     private func updateTabURL(_ url: URL?, at index: Int) -> Bool {
         guard let url, tabs[index].url != url else { return false }
@@ -915,6 +1051,7 @@ final class BrowserStore {
 
     func sessionDidTerminate(tabID: UUID) {
         guard tabs.contains(where: { $0.id == tabID }) else { return }
+        if selectedTabID == tabID { invalidateFind() }
         provisionalNavigations.remove(tabID)
         sessions[tabID]?.stop()
         sessions.removeValue(forKey: tabID)
@@ -1054,7 +1191,8 @@ final class BrowserStore {
             ?? orderedTabs.first(where: { !privateTabIDs.contains($0.id) })?.id
         let payload = BrowserTabsPayload(tabs: persistentTabs,
                                          selectedTabID: persistentSelection,
-                                         sidebarWidth: sidebarWidth)
+                                         sidebarWidth: sidebarWidth,
+                                         expandedSidebarWidth: expandedSidebarWidth)
         _ = tabStore.save(payload)
     }
 }

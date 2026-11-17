@@ -83,9 +83,11 @@ struct BrowserTab: Identifiable, Codable, Equatable {
     var isPinned: Bool
     var faviconURL: URL?
     var faviconColor: BrowserColor?
-    /// A session-only override for this exact tab. `nil` means "use the domain
-    /// and global settings"; it is deliberately not persisted.
+    /// An override for this exact tab. `nil` means "use the domain and global
+    /// settings"; private tabs are excluded from persistence.
     var blockerOverride: Bool?
+    /// Per-tab Web Inspector override; private tabs are excluded from persistence.
+    var webInspectorOverride: Bool?
     /// WebKit's opaque restoration state. It is only kept when the archive
     /// succeeds; a tab restored from a URL alone is still valid.
     var interactionState: Data?
@@ -99,6 +101,7 @@ struct BrowserTab: Identifiable, Codable, Equatable {
          faviconURL: URL? = nil,
          faviconColor: BrowserColor? = nil,
          blockerOverride: Bool? = nil,
+         webInspectorOverride: Bool? = nil,
          interactionState: Data? = nil) {
         self.id = id
         self.url = url
@@ -109,6 +112,7 @@ struct BrowserTab: Identifiable, Codable, Equatable {
         self.faviconURL = faviconURL
         self.faviconColor = faviconColor
         self.blockerOverride = blockerOverride
+        self.webInspectorOverride = webInspectorOverride
         self.interactionState = interactionState
     }
 

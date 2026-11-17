@@ -55,6 +55,24 @@ final class BrowserAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func findInPage(_ sender: Any?) {
+        MainActor.assumeIsolated {
+            controller?.findInPage()
+        }
+    }
+
+    @objc private func findNext(_ sender: Any?) {
+        MainActor.assumeIsolated {
+            controller?.findInPage()
+        }
+    }
+
+    @objc private func findPrevious(_ sender: Any?) {
+        MainActor.assumeIsolated {
+            controller?.findInPage(backwards: true)
+        }
+    }
+
     private func makeMainMenu() -> NSMenu {
         let main = NSMenu()
 
@@ -94,6 +112,20 @@ final class BrowserAppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: "Select All",
                          action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(.separator())
+        let findItem = editMenu.addItem(withTitle: "Find in Page",
+                                        action: #selector(findInPage(_:)),
+                                        keyEquivalent: "f")
+        findItem.target = self
+        let findNextItem = editMenu.addItem(withTitle: "Find Next",
+                                            action: #selector(findNext(_:)),
+                                            keyEquivalent: "g")
+        findNextItem.target = self
+        let findPreviousItem = editMenu.addItem(withTitle: "Find Previous",
+                                                action: #selector(findPrevious(_:)),
+                                                keyEquivalent: "g")
+        findPreviousItem.keyEquivalentModifierMask = [.command, .shift]
+        findPreviousItem.target = self
 
         let windowItem = NSMenuItem()
         main.addItem(windowItem)

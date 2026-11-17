@@ -70,10 +70,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { nil }
 
     func windowWillClose(_ notification: Notification) {
+        shutdown()
+        onClose?()
+    }
+
+    func shutdown() {
         savePlacement()
         removeMonitors()
         store.stop()
-        onClose?()
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -346,8 +350,14 @@ public final class BrowserAppController {
         store.receiveExternalURL(url)
     }
 
+    public func findInPage(backwards: Bool = false) {
+        guard let store = window?.store else { return }
+        store.showFind()
+        store.findInPage(backwards: backwards)
+    }
+
     public func shutdown() {
-        window?.store.stop()
+        window?.shutdown()
         window = nil
     }
 }

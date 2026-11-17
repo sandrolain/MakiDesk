@@ -10,15 +10,19 @@ struct BrowserTabsPayload: Codable, Equatable {
     var tabs: [BrowserTab]
     var selectedTabID: UUID?
     var sidebarWidth: Double
+    var expandedSidebarWidth: Double
 
     init(version: Int = BrowserTabsPayload.currentVersion,
          tabs: [BrowserTab],
          selectedTabID: UUID?,
-         sidebarWidth: Double) {
+         sidebarWidth: Double,
+         expandedSidebarWidth: Double? = nil) {
         self.version = version
         self.tabs = tabs
         self.selectedTabID = selectedTabID
         self.sidebarWidth = sidebarWidth
+        self.expandedSidebarWidth = expandedSidebarWidth
+            ?? (sidebarWidth > 120 ? sidebarWidth : 264)
     }
 
     init(from decoder: Decoder) throws {
@@ -27,6 +31,8 @@ struct BrowserTabsPayload: Codable, Equatable {
         tabs = try container.decodeIfPresent([BrowserTab].self, forKey: .tabs) ?? []
         selectedTabID = try container.decodeIfPresent(UUID.self, forKey: .selectedTabID)
         sidebarWidth = try container.decodeIfPresent(Double.self, forKey: .sidebarWidth) ?? 264
+        expandedSidebarWidth = try container.decodeIfPresent(Double.self, forKey: .expandedSidebarWidth)
+            ?? (sidebarWidth > 120 ? sidebarWidth : 264)
     }
 }
 
