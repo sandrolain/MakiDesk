@@ -153,13 +153,18 @@ final class WorkspaceSplitView: NSSplitView {
 final class TerminalSidebarSplitView: NSView {
     private static let minimumSidebar: CGFloat = 160
     private static let minimumContent: CGFloat = 360
-    private static let defaultSidebar: CGFloat = 220
+    static let defaultSidebar: CGFloat = 220
 
     private let sidebarHolder = NSView()
     private let contentHolder = NSView()
     private let divider = TerminalSidebarDividerView()
     private var sidebarWidthConstraint: NSLayoutConstraint!
     private var sidebarWidth = TerminalSidebarSplitView.defaultSidebar
+    var onSidebarWidthChange: (() -> Void)?
+
+    var currentSidebarWidth: CGFloat {
+        sidebarWidth
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -191,8 +196,7 @@ final class TerminalSidebarSplitView: NSView {
         super.layout()
         let maximum = max(Self.minimumSidebar, bounds.width - 5 - Self.minimumContent)
         if sidebarWidth > maximum {
-            sidebarWidth = maximum
-            sidebarWidthConstraint.constant = maximum
+            setSidebarWidth(maximum)
         }
     }
 
@@ -209,12 +213,20 @@ final class TerminalSidebarSplitView: NSView {
         }
     }
 
-    private func resizeSidebar(by delta: CGFloat) {
-        let maximum = max(Self.minimumSidebar, bounds.width - 5 - Self.minimumContent)
-        let wanted = min(max(sidebarWidth + delta, Self.minimumSidebar), maximum)
+    func setSidebarWidth(_ width: CGFloat, notify: Bool = false) {
+        guard width.isFinite else { return }
+        let maximum = bounds.width > 0
+            ? max(Self.minimumSidebar, bounds.width - 5 - Self.minimumContent)
+            : CGFloat.greatestFiniteMagnitude
+        let wanted = min(max(width, Self.minimumSidebar), maximum)
         guard wanted != sidebarWidth else { return }
         sidebarWidth = wanted
         sidebarWidthConstraint.constant = wanted
+        if notify { onSidebarWidthChange?() }
+    }
+
+    private func resizeSidebar(by delta: CGFloat) {
+        setSidebarWidth(sidebarWidth + delta, notify: true)
     }
 }
 
@@ -281,6 +293,10 @@ final class TerminalWindowController: NSWindowController,
                                       NSOutlineViewDelegate,
                                       NSSplitViewDelegate,
                                       NSWindowDelegate {
+    private static let minimumGitSidebarWidth: CGFloat = 140
+    private static let minimumTerminalContentWidth: CGFloat = 180
+    private static let gitSidebarDividerWidth: CGFloat = 5
+
     private let runtime: GhosttyRuntime
     private let layoutStore = TerminalLayoutStore()
     private let windowStateStore = TerminalWindowStateStore()
@@ -339,9 +355,11 @@ final class TerminalWindowController: NSWindowController,
         set { gitRefreshLifecycle.setEnabled(newValue) }
     }
     private var gitSidebarWidth: NSLayoutConstraint?
+    private var gitSidebarStoredWidth: CGFloat = 280
     private var gitRootTrailingConstraint: NSLayoutConstraint?
     private var gitSidebarContentConstraints: [NSLayoutConstraint] = []
     private let gitSidebar = NSView()
+    private let gitSidebarDivider = TerminalSidebarDividerView()
     private let gitSidebarTitle = NSTextField(labelWithString: "Git changes")
     private let gitOutlineView = NSOutlineView()
     private var gitTreeRoots: [GitSidebarNode] = []
@@ -383,13 +401,8 @@ final class TerminalWindowController: NSWindowController,
         window.minSize = NSSize(width: 560, height: 320)
         super.init(window: window)
         window.delegate = self
-        if TmuxSession.executableURL() == nil {
-            persistenceWarnings.append("tmux is not installed. Workspace layout will be restored, but live shells and running commands cannot survive quitting or a crash.")
-        }
-        if let version = windowStateStore.futureVersionOnDisk {
-            persistenceWarnings.append("The saved Terminal window position uses format version \(version). This version will leave it untouched.")
-        }
-        if let saved = windowStateStore.load()?.frame,
+        let savedWindowState = windowStateStore.load()
+        if let saved = savedWindowState?.frame,
            let frame = TerminalWindowGeometry.restoredFrame(
                saved,
                screens: NSScreen.screens.map(\.visibleFrame)
@@ -398,10 +411,35 @@ final class TerminalWindowController: NSWindowController,
         } else {
             window.center()
         }
+        if let sidebarWidth = savedWindowState?.sidebarWidth {
+            splitView.setSidebarWidth(CGFloat(sidebarWidth))
+        }
+        if let gitSidebarWidth = savedWindowState?.gitSidebarWidth,
+           gitSidebarWidth.isFinite, gitSidebarWidth > 0 {
+            self.gitSidebarStoredWidth = CGFloat(gitSidebarWidth)
+        }
+        splitView.onSidebarWidthChange = { [weak self] in
+            guard let self else { return }
+            self.splitView.layoutSubtreeIfNeeded()
+            self.contentView.layoutSubtreeIfNeeded()
+            if self.gitSidebar.isHidden == false { self.clampGitSidebarWidth() }
+            self.scheduleWindowFrameSave()
+        }
+        if TmuxSession.executableURL() == nil {
+            persistenceWarnings.append("tmux is not installed. Workspace layout will be restored, but live shells and running commands cannot survive quitting or a crash.")
+        }
+        if let version = windowStateStore.futureVersionOnDisk {
+            persistenceWarnings.append("The saved Terminal window state uses format version \(version). This version will leave it untouched.")
+        }
         uiTheme = TerminalUITheme(document: TerminalThemeStore().load())
         buildInterface()
         applyUITheme()
         restoreOrCreate()
+        if savedWindowState?.gitSidebarVisible == true {
+            gitSidebarVisible = true
+            gitSidebarTitle.stringValue = "Git changes"
+            setGitSidebarExpanded(true)
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -540,6 +578,11 @@ final class TerminalWindowController: NSWindowController,
         gitSidebar.wantsLayer = true
         gitSidebar.layer?.backgroundColor = uiTheme.surface.cgColor
         gitSidebar.isHidden = true
+        gitSidebarDivider.translatesAutoresizingMaskIntoConstraints = false
+        gitSidebarDivider.isHidden = true
+        gitSidebarDivider.onDrag = { [weak self] delta in
+            self?.resizeGitSidebar(by: delta)
+        }
         gitSidebarTitle.translatesAutoresizingMaskIntoConstraints = false
         gitSidebarTitle.font = .systemFont(ofSize: 13, weight: .semibold)
         let gitScroll = NSScrollView()
@@ -550,6 +593,7 @@ final class TerminalWindowController: NSWindowController,
         gitOutlineView.headerView = nil
         gitOutlineView.indentationPerLevel = 14
         gitOutlineView.rowSizeStyle = .small
+        gitOutlineView.backgroundColor = uiTheme.surface
         gitOutlineView.dataSource = self
         gitOutlineView.delegate = self
         let gitColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("git-path"))
@@ -557,6 +601,7 @@ final class TerminalWindowController: NSWindowController,
         gitOutlineView.addTableColumn(gitColumn)
         gitOutlineView.outlineTableColumn = gitColumn
         gitScroll.documentView = gitOutlineView
+        contentView.addSubview(gitSidebarDivider)
         gitSidebar.addSubview(gitSidebarTitle)
         gitSidebar.addSubview(gitScroll)
         contentView.addSubview(gitSidebar)
@@ -575,6 +620,10 @@ final class TerminalWindowController: NSWindowController,
             bar.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
             bar.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor),
             bar.heightAnchor.constraint(equalToConstant: 34),
+            gitSidebarDivider.trailingAnchor.constraint(equalTo: gitSidebar.leadingAnchor),
+            gitSidebarDivider.widthAnchor.constraint(equalToConstant: Self.gitSidebarDividerWidth),
+            gitSidebarDivider.topAnchor.constraint(equalTo: contentView.topAnchor),
+            gitSidebarDivider.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             gitSidebar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             gitSidebar.topAnchor.constraint(equalTo: contentView.topAnchor),
             gitSidebar.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
@@ -778,7 +827,7 @@ final class TerminalWindowController: NSWindowController,
         layoutRevision &+= 1
         pendingLayoutWrite = nil
         let layout = TerminalLayout(workspaces: workspaces, selectedIndex: selected)
-        let frameState = window.map { TerminalWindowState(frame: $0.frame) }
+        let frameState = window.map { windowState(for: $0.frame) }
         let canWriteLayout = layoutPersistenceIsReadOnly == false
         let result = persistenceQueue.sync {
             let layoutSaved = canWriteLayout ? layoutStore.save(layout) : true
@@ -792,13 +841,13 @@ final class TerminalWindowController: NSWindowController,
             recordPersistenceWarning("The saved Terminal workspaces use format version \(version). Workspace changes are not being saved.")
         }
         if let version = result.3 {
-            recordPersistenceWarning("The saved Terminal window position uses format version \(version). This version will leave it untouched.")
+            recordPersistenceWarning("The saved Terminal window state uses format version \(version). This version will leave it untouched.")
         }
         if result.0 == false && result.1 == nil {
             recordPersistenceWarning("MakiDesk Terminal could not save the workspace layout. Check available disk space and file permissions; the last saved layout is still intact.")
         }
         if result.2 == false && result.3 == nil {
-            recordPersistenceWarning("MakiDesk Terminal could not save the window position. Check available disk space and file permissions.")
+            recordPersistenceWarning("MakiDesk Terminal could not save the window and sidebar sizes. Check available disk space and file permissions.")
         }
         if (result.0 == false && result.1 == nil)
             || (result.2 == false && result.3 == nil) {
@@ -852,7 +901,7 @@ final class TerminalWindowController: NSWindowController,
         windowFrameTimer?.invalidate()
         windowFrameTimer = nil
         guard let window else { return }
-        let state = TerminalWindowState(frame: window.frame)
+        let state = windowState(for: window.frame)
         persistenceQueue.async { [weak self] in
             guard let self else { return }
             let saved = self.windowStateStore.save(state)
@@ -860,12 +909,19 @@ final class TerminalWindowController: NSWindowController,
             DispatchQueue.main.async { [weak self] in
                 guard let self, revision == self.windowFrameRevision else { return }
                 if let futureVersion {
-                    self.recordPersistenceWarning("The saved Terminal window position uses format version \(futureVersion). This version will leave it untouched.")
+                    self.recordPersistenceWarning("The saved Terminal window state uses format version \(futureVersion). This version will leave it untouched.")
                 } else if saved == false {
-                    self.recordPersistenceWarning("MakiDesk Terminal could not save the window position. Check available disk space and file permissions.")
+                    self.recordPersistenceWarning("MakiDesk Terminal could not save the window and sidebar sizes. Check available disk space and file permissions.")
                 }
             }
         }
+    }
+
+    private func windowState(for frame: CGRect) -> TerminalWindowState {
+        TerminalWindowState(frame: frame,
+                            sidebarWidth: Double(splitView.currentSidebarWidth),
+                            gitSidebarWidth: Double(gitSidebarStoredWidth),
+                            gitSidebarVisible: gitSidebarVisible)
     }
 
     @objc func closeWorkspaceAction(_ sender: Any?) {
@@ -1313,12 +1369,15 @@ final class TerminalWindowController: NSWindowController,
         if gitSidebarVisible { setGitSidebarExpanded(true) }
         else { setGitSidebarExpanded(false) }
         gitSidebarTitle.stringValue = "Git changes"
+        scheduleWindowFrameSave()
         refreshGitSidebar()
     }
 
     private func setGitSidebarExpanded(_ expanded: Bool) {
+        if expanded { clampGitSidebarWidth() }
         gitSidebar.isHidden = !expanded
-        gitSidebarWidth?.constant = expanded ? 280 : 0
+        gitSidebarDivider.isHidden = !expanded
+        gitSidebarWidth?.constant = expanded ? gitSidebarStoredWidth : 0
         if expanded {
             NSLayoutConstraint.activate(gitSidebarContentConstraints)
         } else {
@@ -1327,12 +1386,37 @@ final class TerminalWindowController: NSWindowController,
         if let root = currentRootView {
             gitRootTrailingConstraint?.isActive = false
             let constraint = expanded
-                ? root.trailingAnchor.constraint(equalTo: gitSidebar.leadingAnchor)
+                ? root.trailingAnchor.constraint(equalTo: gitSidebarDivider.leadingAnchor)
                 : root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
             gitRootTrailingConstraint = constraint
             constraint.isActive = true
         }
         contentView.layoutSubtreeIfNeeded()
+    }
+
+    private func resizeGitSidebar(by delta: CGFloat) {
+        guard gitSidebarVisible, contentView.bounds.width > 0 else { return }
+        let maximum = max(Self.minimumGitSidebarWidth,
+                          contentView.bounds.width - Self.minimumTerminalContentWidth
+                            - Self.gitSidebarDividerWidth)
+        let wanted = min(max(gitSidebarStoredWidth - delta, Self.minimumGitSidebarWidth),
+                         maximum)
+        guard wanted != gitSidebarStoredWidth else { return }
+        gitSidebarStoredWidth = wanted
+        gitSidebarWidth?.constant = wanted
+        scheduleWindowFrameSave()
+    }
+
+    private func clampGitSidebarWidth() {
+        guard contentView.bounds.width > 0 else { return }
+        let maximum = max(Self.minimumGitSidebarWidth,
+                          contentView.bounds.width - Self.minimumTerminalContentWidth
+                            - Self.gitSidebarDividerWidth)
+        let wanted = min(max(gitSidebarStoredWidth, Self.minimumGitSidebarWidth), maximum)
+        guard wanted != gitSidebarStoredWidth else { return }
+        gitSidebarStoredWidth = wanted
+        gitSidebarWidth?.constant = wanted
+        scheduleWindowFrameSave()
     }
 
     private func showGitSidebarMessage(_ message: String) {
@@ -1732,6 +1816,9 @@ final class TerminalWindowController: NSWindowController,
         codexUsageUpdated.textColor = uiTheme.subtext.withAlphaComponent(0.75)
         codexRefreshButton.contentTintColor = uiTheme.subtext
         contentView.layer?.backgroundColor = uiTheme.background.cgColor
+        gitSidebar.layer?.backgroundColor = uiTheme.surface.cgColor
+        gitSidebarTitle.textColor = uiTheme.text
+        gitOutlineView.backgroundColor = uiTheme.surface
         applyQuakeAppearance()
         addButton?.contentTintColor = uiTheme.subtext
         closeButton.contentTintColor = uiTheme.subtext
@@ -1794,7 +1881,7 @@ final class TerminalWindowController: NSWindowController,
         contentView.addSubview(root)
         let rootTrailing = gitSidebar.isHidden
             ? root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
-            : root.trailingAnchor.constraint(equalTo: gitSidebar.leadingAnchor)
+            : root.trailingAnchor.constraint(equalTo: gitSidebarDivider.leadingAnchor)
         gitRootTrailingConstraint?.isActive = false
         gitRootTrailingConstraint = rootTrailing
         NSLayoutConstraint.activate([
@@ -1935,6 +2022,7 @@ final class TerminalWindowController: NSWindowController,
 
     func windowDidResize(_ notification: Notification) {
         guard let resized = notification.object as? NSWindow, resized === window else { return }
+        if gitSidebar.isHidden == false { clampGitSidebarWidth() }
         scheduleWindowFrameSave()
     }
 
@@ -2147,9 +2235,18 @@ final class TerminalWindowController: NSWindowController,
         let cell = NSTextField(labelWithString: node.status.map { "\(node.name)  \($0)" } ?? node.name)
         cell.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         cell.lineBreakMode = .byTruncatingMiddle
-        cell.textColor = node.status == nil ? uiTheme.subtext : uiTheme.text
+        cell.textColor = node.status.map { gitChangeColor(for: $0) } ?? uiTheme.subtext
         cell.toolTip = node.name
         return cell
+    }
+
+    private func gitChangeColor(for status: String) -> NSColor {
+        switch GitChangedFileChangeKind(status: status) {
+        case .deleted: return .systemRed
+        case .modified: return .systemYellow
+        case .added: return .systemGreen
+        case .other: return uiTheme.text
+        }
     }
 
     private static func makeGitTree(_ tree: [GitChangedFileTreeNode]) -> [GitSidebarNode] {

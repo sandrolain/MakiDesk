@@ -41,13 +41,23 @@ public struct TerminalWindowState: Codable, Equatable, Sendable {
     public var y: Double
     public var width: Double
     public var height: Double
+    public var sidebarWidth: Double?
+    public var gitSidebarWidth: Double?
+    public var gitSidebarVisible: Bool?
 
-    public init(version: Int = TerminalWindowState.currentVersion, frame: CGRect) {
+    public init(version: Int = TerminalWindowState.currentVersion,
+                frame: CGRect,
+                sidebarWidth: Double? = nil,
+                gitSidebarWidth: Double? = nil,
+                gitSidebarVisible: Bool? = nil) {
         self.version = version
         self.x = frame.origin.x
         self.y = frame.origin.y
         self.width = frame.width
         self.height = frame.height
+        self.sidebarWidth = sidebarWidth
+        self.gitSidebarWidth = gitSidebarWidth
+        self.gitSidebarVisible = gitSidebarVisible
     }
 
     public var frame: CGRect {

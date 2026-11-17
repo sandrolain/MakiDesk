@@ -451,7 +451,11 @@ working directory on a worker queue; it renders an expandable path tree and
 hides when the directory is outside a repository. While visible it refreshes
 every five seconds and stops its timer when the window is hidden. Collapsing the
 sidebar removes its content constraints and attaches the pane container to the
-content view's trailing edge without rebuilding terminal surfaces.
+content view's trailing edge without rebuilding terminal surfaces. A separate
+constraint-backed divider resizes the Git sidebar; the workspace sidebar keeps
+its own draggable divider. Both widths are saved with the main window frame in
+`Terminal/window.json` and restored when the helper reopens, along with whether
+the Git sidebar was open.
 Without tmux, the original command runs directly and only layout state can be
 restored.
 Debounced layout and frame writes run on a serial worker queue; confirmed Quit
@@ -460,7 +464,9 @@ last pane of the last workspace starts a fresh shell instead of leaving an empty
 window. The main window's frame is saved (debounced) to
 `Terminal/window.json` and restored only when at least a title-bar-sized part of
 it still meets a `visibleFrame`; an unplugged display therefore yields a
-centered window. The helper's surface callbacks forward title, cwd and close
+centered window. The state also stores the workspace and Git sidebar widths.
+It preserves the Git sidebar's open/closed choice as well.
+The helper's surface callbacks forward title, cwd and close
 events to the window controller; the focused surface answers clipboard requests.
 
 `⌃⌥O` and the menu bar item call `TerminalController`, which sends `showMain` or

@@ -55,9 +55,9 @@ identity before the outer app.
   and window-state files are kept read-only; the helper warns when it cannot
   persist changes. Debounced layout and frame writes run off the UI thread, and
   quitting flushes the latest state before closing. Scrollback is not saved.
-  `Terminal/window.json` holds the main window's frame; it is restored only
-  when a title-bar-sized part still meets a display, otherwise the window is
-  centered.
+  `Terminal/window.json` holds the main window's frame and both sidebar widths;
+  they are restored when the window returns, and the frame is used only when a
+  title-bar-sized part still meets a display, otherwise the window is centered.
 - **SSH profiles:** settings.json entries become `ssh` command lines in a new
   workspace from the sidebar's + menu; keys and prompts stay with ssh.
 - **tmux:** when installed, each pane uses a stable `tmux new-session -A`
@@ -78,7 +78,11 @@ identity before the outer app.
   expandable path tree and collapses outside a repository. For tmux panes it
   reads the live pane directory; Git status is read locally on a worker and is
   not persisted. The sidebar distinguishes a missing repository from Git
-  failures and pauses periodic refresh while its window is hidden.
+  failures and pauses periodic refresh while its window is hidden. Its divider
+  is draggable and follows the selected helper theme; both sidebar widths are
+  restored from `window.json`. Changed-file rows are green for added or
+  untracked files, yellow for modified or renamed files, and red for deletions.
+  The helper restores whether this sidebar was open or closed on the last run.
 - **Settings and theme:** `Terminal/settings.json` (font, cursor shape and
   blink, scrollback size, selection copy, pointer hiding, shell command,
   quake height) and `Terminal/theme.json`

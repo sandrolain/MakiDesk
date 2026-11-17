@@ -682,6 +682,8 @@ it running, so its shells keep working.
   directly, and `⌃⌘←` / `⌃⌘→` step to the previous or next one, wrapping at
   the ends. **Workspace ▸ Move Focused Pane to New Workspace** detaches the
   focused terminal from a multi-pane workspace while keeping its shell alive.
+  Both the workspace and Git sidebars have draggable dividers; their widths are
+  remembered when the helper reopens.
 - **Splits.** `⌘D` splits the focused pane side by side, `⇧⌘D` stacks a second
   one; `⌘W` closes the focused pane, or the whole workspace when it holds a
   single terminal, and hides the window when it is also the last workspace.
@@ -696,9 +698,10 @@ it running, so its shells keep working.
 - **Restore.** Workspace titles, split trees, the selection, each pane's last
   directory and a pane's command (an SSH session, for instance) are saved in
   `~/Library/Application Support/MakiDesk/Terminal/workspaces.json` and restored
-  on the next launch. The main window reopens at its last size and position
-  (`Terminal/window.json`) when enough of that frame still meets a display;
-  otherwise it is centered. When tmux is installed, each pane runs in its own
+  on the next launch. The main window reopens at its last size and position,
+  and both sidebar widths are restored from `Terminal/window.json`, when
+  enough of the frame still meets a display; otherwise it is centered. When
+  tmux is installed, each pane runs in its own
   stable tmux session; quitting or crashing the helper detaches the UI, and the
   next launch reattaches to the same processes and screen. Saved workspaces are
   migrated to tmux on launch. If a crash happens before the layout write, the
@@ -802,7 +805,10 @@ it running, so its shells keep working.
   the workspace sidebar to show or hide Git changes for the focused pane. The
   panel shows changed and untracked paths in an expandable file tree, refreshes every
   five seconds while open, and uses the live tmux pane directory when available.
-  It disappears outside a Git repository.
+  It follows the Terminal theme; drag its divider to resize it. Added and
+  untracked files are green, modified or renamed files are yellow, and deleted
+  files are red. The helper remembers whether it was open on the previous run;
+  it disappears outside a Git repository.
   **Settings ▸ Terminal ▸ Show tmux status bar**
   controls the status line in managed and attached tmux sessions. Since tmux
   stores this option per session, it also affects other clients attached to

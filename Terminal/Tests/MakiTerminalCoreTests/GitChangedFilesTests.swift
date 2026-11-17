@@ -14,6 +14,16 @@ final class GitChangedFilesTests: XCTestCase {
         ])
     }
 
+    func testClassifiesGitChangeKinds() {
+        XCTAssertEqual(GitChangedFile(path: "deleted.swift", status: " D").changeKind, .deleted)
+        XCTAssertEqual(GitChangedFile(path: "staged-delete.swift", status: "AD").changeKind, .deleted)
+        XCTAssertEqual(GitChangedFile(path: "modified.swift", status: " M").changeKind, .modified)
+        XCTAssertEqual(GitChangedFile(path: "renamed.swift", status: "R ").changeKind, .modified)
+        XCTAssertEqual(GitChangedFile(path: "added.swift", status: "A ").changeKind, .added)
+        XCTAssertEqual(GitChangedFile(path: "untracked.swift", status: "??").changeKind, .added)
+        XCTAssertEqual(GitChangedFile(path: "unmerged.swift", status: "UU").changeKind, .other)
+    }
+
     func testBuildsSortedIndentedTree() {
         let files = [
             GitChangedFile(path: "Sources/Z.swift", status: " M"),

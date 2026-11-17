@@ -56,9 +56,27 @@ final class TerminalWindowStateTests: XCTestCase {
     func testTheStateRoundTrips() {
         let store = TerminalWindowStateStore(fileURL: directory.appendingPathComponent("window.json"))
         let frame = CGRect(x: -100, y: 40, width: 1024, height: 700)
-        XCTAssertTrue(store.save(TerminalWindowState(frame: frame)))
+        XCTAssertTrue(store.save(TerminalWindowState(frame: frame,
+                                                     sidebarWidth: 248,
+                                                     gitSidebarWidth: 312,
+                                                     gitSidebarVisible: true)))
         XCTAssertEqual(store.load()?.frame, frame)
+        XCTAssertEqual(store.load()?.sidebarWidth, 248)
+        XCTAssertEqual(store.load()?.gitSidebarWidth, 312)
+        XCTAssertEqual(store.load()?.gitSidebarVisible, true)
         XCTAssertEqual(store.load()?.version, TerminalWindowState.currentVersion)
+    }
+
+    func testOlderWindowStateWithoutSidebarWidthsStillLoads() throws {
+        let url = directory.appendingPathComponent("window.json")
+        let json = #"{"version":1,"x":10,"y":20,"width":900,"height":600}"#
+        try Data(json.utf8).write(to: url)
+
+        let state = TerminalWindowStateStore(fileURL: url).load()
+        XCTAssertEqual(state?.frame, CGRect(x: 10, y: 20, width: 900, height: 600))
+        XCTAssertNil(state?.sidebarWidth)
+        XCTAssertNil(state?.gitSidebarWidth)
+        XCTAssertNil(state?.gitSidebarVisible)
     }
 
     func testAMissingFileHasNoFrame() {

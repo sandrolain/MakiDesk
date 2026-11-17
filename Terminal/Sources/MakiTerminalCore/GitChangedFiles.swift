@@ -3,6 +3,30 @@ import Foundation
 public struct GitChangedFile: Equatable, Sendable {
     public let path: String
     public let status: String
+
+    public var changeKind: GitChangedFileChangeKind {
+        GitChangedFileChangeKind(status: status)
+    }
+}
+
+public enum GitChangedFileChangeKind: Equatable, Sendable {
+    case added
+    case modified
+    case deleted
+    case other
+
+    public init(status: String) {
+        if status.contains("D") {
+            self = .deleted
+        } else if status == "??" || status.contains("A") {
+            self = .added
+        } else if status.contains("M") || status.contains("T")
+                    || status.contains("R") || status.contains("C") {
+            self = .modified
+        } else {
+            self = .other
+        }
+    }
 }
 
 public struct GitChangedFileTreeNode: Equatable, Sendable {
