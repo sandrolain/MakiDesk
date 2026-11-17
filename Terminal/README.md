@@ -1,9 +1,8 @@
 # MakiDesk Terminal — F0 spike and F1 work in progress
 
-The terminal helper: a separate app that owns shells, workspaces and split panes
-while MakiDesk launches it and configures it. The design lives in
-`refs/docs/analisi-terminale-2026-11-07.md`; this file records what the code
-actually does.
+The terminal helper is a separate app that owns shells, workspaces and split
+panes while MakiDesk launches it and configures it. This file records what the
+code actually does.
 
 The package is deliberately apart from the root package: `swift build` at the
 repository root must keep working without the GhosttyKit binary.

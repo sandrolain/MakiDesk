@@ -25,7 +25,7 @@ Read only the relevant paths before editing:
 
 Swift files above are under `Sources/MakiDesk/` unless marked; the Docker and browser helpers are separate packages. Tests are under `Tests/MakiDeskTests/`, `Docker/Tests/MakiDockerCoreTests/` and `Browser/Tests/MakiBrowserTests/`. Package/dependency configuration is in `Package.swift`, `Docker/Package.swift`, `Browser/Package.swift` and `Package.resolved`; bundling/signing commands are in `Taskfile.yml`; app metadata is in `Resources/Info.plist`, `Docker/Resources/Info.plist` and `Browser/Resources/Info.plist`.
 
-For performance, lifecycle, refactoring or shortcut work, read the findings, the implementation ledger and the six-phase plan in [the 2026-10-31 analysis](refs/docs/analisi-integrazioni-e-scorciatoie-2026-10-31.md); it carries the still-open items (N13, N15, N17) and supersedes the two ledgers listed in it. Those two (2026-10-26, 2026-10-28) were removed from the tree in `d66261d` and are still readable with `git show d66261d^:docs/<name>`. Verify historical claims against current code.
+For performance, lifecycle, refactoring or shortcut work, inspect the current implementation and tests in the relevant paths below. Verify historical claims against current code.
 
 ## Workflow and change scope
 
@@ -36,6 +36,7 @@ For performance, lifecycle, refactoring or shortcut work, read the findings, the
 - Keep model/discovery in the index and store, AX primitives in the controller, presentation in panels, and pure layout logic independent of AppKit I/O. Avoid growing `WorkspaceStore` or `ShelfController` with unrelated responsibilities.
 - Preserve persisted keys, defaults and formats unless the task requires a compatible migration.
 - **Keep the user-facing docs current with every new integration or behaviour change, in the same commit.** A new panel, command, setting or shortcut goes into `docs/USAGE.md` (the section and the shortcut/menu lists it belongs to), architecture, lifecycle or performance-relevant changes into `docs/ARCHITECTURE.md`, anything that touches data, permissions or network into `docs/PRIVACY.md`, and `README.md` gets its line in the feature list. A change that leaves those documents stale is not finished; state in the reply what was updated.
+- Prefix dated analysis and reference document filenames with `YYYY-MM-DD_`. Use the date stated in the document; if none is stated, use the file creation date.
 - Do not upgrade dependencies, regenerate lockfiles, change signing identity or mix broad refactoring into a bug fix without a task-related reason.
 
 ## Responsiveness and concurrency invariants
