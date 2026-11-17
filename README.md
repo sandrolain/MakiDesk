@@ -63,8 +63,9 @@ page summaries use the on-device model or can open the page URL in ChatGPT. It i
 not a second browser engine. It can be selected as the macOS default browser;
 incoming links show a chooser for MakiDesk Browser, another installed app or
 cancellation, which is useful for sites authenticated in another browser. It
-also has private tabs with ephemeral site data, an adjustable Reader view,
-per-site data clearing and a per-tab Safari Web Inspector toggle.
+shows larger app icons in a three-column chooser and remembers external apps in
+last-used order. It also has private tabs with ephemeral site data, an adjustable
+Reader view, per-site data clearing and a per-tab Safari Web Inspector toggle.
 
 ### A pointer you can find
 

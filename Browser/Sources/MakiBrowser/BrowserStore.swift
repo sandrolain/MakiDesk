@@ -84,17 +84,10 @@ final class BrowserStore {
     @ObservationIgnored private var findGeneration = UUID()
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
 
-    struct ExternalApp: Identifiable, Equatable {
-        let url: URL
-        let name: String
-        let bundleIdentifier: String?
-        var id: String { url.standardizedFileURL.path }
-    }
-
     struct BrowserExternalOpenRequest: Identifiable, Equatable {
         let id = UUID()
         let url: URL
-        let apps: [ExternalApp]
+        let apps: [BrowserExternalApp]
     }
 
     init(tabStore: BrowserTabStore = BrowserTabStore(),
@@ -190,14 +183,23 @@ final class BrowserStore {
         externalOpenRequest = nil
     }
 
-    func openExternalURL(in app: ExternalApp) {
+    func openExternalURL(in app: BrowserExternalApp) {
         guard let request = externalOpenRequest else { return }
         let configuration = NSWorkspace.OpenConfiguration()
         NSWorkspace.shared.open([request.url], withApplicationAt: app.url,
                                 configuration: configuration) { [weak self] _, error in
-            guard let error else { return }
             Task { @MainActor [weak self] in
-                self?.errorText = "Could not open link in \(app.name): \(error.localizedDescription)"
+                guard let self else { return }
+                if let error {
+                    self.errorText = "Could not open link in \(app.name): \(error.localizedDescription)"
+                    return
+                }
+                var lastUsed = self.settings.externalAppLastUsed
+                BrowserExternalAppOrdering.recordUse(of: app, at: Date(), into: &lastUsed)
+                self.settings.externalAppLastUsed = lastUsed
+                if self.settingsStore.save(self.settings) == false {
+                    self.errorText = "The link opened, but the app's recent-use order could not be saved."
+                }
             }
         }
         externalOpenRequest = nil
@@ -210,17 +212,22 @@ final class BrowserStore {
     }
 
     private func presentExternalURL(_ url: URL) {
-        let apps = NSWorkspace.shared.urlsForApplications(toOpen: url).compactMap { appURL -> ExternalApp? in
+        let apps = NSWorkspace.shared.urlsForApplications(toOpen: url).compactMap { appURL -> BrowserExternalApp? in
             let bundle = Bundle(url: appURL)
             guard appURL.standardizedFileURL != Bundle.main.bundleURL.standardizedFileURL,
                   bundle?.bundleIdentifier != Bundle.main.bundleIdentifier else { return nil }
-            return ExternalApp(url: appURL,
-                               name: bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-                                   ?? bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
-                                   ?? appURL.deletingPathExtension().lastPathComponent,
-                               bundleIdentifier: bundle?.bundleIdentifier)
+            return BrowserExternalApp(
+                url: appURL,
+                name: bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                    ?? bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
+                    ?? appURL.deletingPathExtension().lastPathComponent,
+                bundleIdentifier: bundle?.bundleIdentifier
+            )
         }
-        externalOpenRequest = BrowserExternalOpenRequest(url: url, apps: apps)
+        externalOpenRequest = BrowserExternalOpenRequest(
+            url: url,
+            apps: BrowserExternalAppOrdering.ordered(apps, lastUsed: settings.externalAppLastUsed)
+        )
     }
 
     // MARK: - Derived state

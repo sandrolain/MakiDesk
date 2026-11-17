@@ -1042,9 +1042,10 @@ browser without touching MakiDesk.
   macOS to make MakiDesk Browser the default for HTTP and HTTPS links. macOS
   may ask you to confirm. When a link arrives from another app, a chooser lets
   you open it in MakiDesk Browser, choose another installed app that handles
-  web links, or cancel. The choice applies to that link; cookies and login
-  sessions are not transferred. The default page is prefilled, not loaded
-  automatically.
+  web links, or cancel. Other apps appear as larger icons in a three-column
+  grid and are ordered by recent use; successful choices are remembered across
+  launches. The choice applies to that link; cookies and login sessions are not
+  transferred. The default page is prefilled, not loaded automatically.
 - **Web Inspector.** The `{}` button in the icon rail enables or disables
   inspection for the current tab. Then select that page in Safari's **Develop**
   menu. The Settings option **Allow Safari Web Inspector** sets the default for

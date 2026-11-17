@@ -128,6 +128,58 @@ final class BrowserTests: XCTestCase {
         store.stop()
     }
 
+    func testExternalAppChoicesOrderByLastUseThenName() {
+        let older = BrowserExternalApp(url: URL(fileURLWithPath: "/Applications/Safari.app"),
+                                       name: "Safari",
+                                       bundleIdentifier: "com.apple.Safari")
+        let recent = BrowserExternalApp(url: URL(fileURLWithPath: "/Applications/Firefox.app"),
+                                        name: "Firefox",
+                                        bundleIdentifier: "org.mozilla.firefox")
+        let unusedB = BrowserExternalApp(url: URL(fileURLWithPath: "/Applications/Zulu.app"),
+                                         name: "Zulu",
+                                         bundleIdentifier: "com.example.zulu")
+        let unusedA = BrowserExternalApp(url: URL(fileURLWithPath: "/Applications/Arc.app"),
+                                         name: "Arc",
+                                         bundleIdentifier: "company.thebrowser.Browser")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        let ordered = BrowserExternalAppOrdering.ordered(
+            [older, unusedB, recent, unusedA],
+            lastUsed: [
+                older.usageKey: now.addingTimeInterval(-60),
+                recent.usageKey: now
+            ]
+        )
+
+        XCTAssertEqual(ordered.map(\.name), ["Firefox", "Safari", "Arc", "Zulu"])
+    }
+
+    func testExternalAppUsageIsBoundedAndPersistsAcrossSettingsReload() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserExternalAppUsage-\(UUID().uuidString)",
+                                   isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var usage = Dictionary(uniqueKeysWithValues: (0..<BrowserExternalAppOrdering.maximumRememberedApps)
+            .map { index in
+                ("com.example.\(index)", now.addingTimeInterval(-Double(index + 1)))
+            })
+        let app = BrowserExternalApp(url: URL(fileURLWithPath: "/Applications/New Browser.app"),
+                                     name: "New Browser",
+                                     bundleIdentifier: "com.example.new")
+        BrowserExternalAppOrdering.recordUse(of: app, at: now, into: &usage)
+
+        XCTAssertEqual(usage.count, BrowserExternalAppOrdering.maximumRememberedApps)
+        XCTAssertEqual(usage[app.usageKey], now)
+        XCTAssertNil(usage["com.example.79"])
+
+        let settingsStore = BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json"))
+        XCTAssertTrue(settingsStore.save(BrowserSettings(externalAppLastUsed: usage)))
+        XCTAssertEqual(settingsStore.load().externalAppLastUsed, usage)
+    }
+
     func testPrivateTabsAreExcludedFromPersistedTabSnapshot() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("MakiBrowserPrivate-\(UUID().uuidString)", isDirectory: true)
@@ -156,6 +208,7 @@ final class BrowserTests: XCTestCase {
         let data = Data(#"{"blockerEnabledByDefault":true,"disabledBlockerDomains":[],"summaryEnabled":true,"defaultPageURL":"https://www.google.com","searchEngine":"google","compactTabs":false}"#.utf8)
         let settings = try JSONDecoder().decode(BrowserSettings.self, from: data)
         XCTAssertFalse(settings.webInspectorEnabled)
+        XCTAssertTrue(settings.externalAppLastUsed.isEmpty)
 
         var enabled = settings
         enabled.webInspectorEnabled = true

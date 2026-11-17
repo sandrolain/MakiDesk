@@ -723,7 +723,10 @@ queues them in `BrowserStore` until the user chooses MakiDesk Browser, an
 installed URL handler, or cancellation. The settings action requests default
 HTTP and HTTPS handlers through `NSWorkspace`; system consent remains under
 macOS control. The link is opened in a new tab only after the user chooses
-MakiDesk Browser.
+MakiDesk Browser. External handlers are displayed in a three-column icon grid,
+ordered by their last successful selection with alphabetical fallback. The
+bounded usage map stores bundle identifiers (or app paths when unavailable)
+and timestamps in browser settings; it does not store the associated URLs.
 
 `BrowserWindowController` restores the saved AppKit frame and keeps a small
 placement record with the display identity. Move and resize events are

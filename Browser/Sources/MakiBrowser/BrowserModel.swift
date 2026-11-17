@@ -201,6 +201,57 @@ enum BrowserAddressSuggestion: Identifiable, Equatable {
     }
 }
 
+struct BrowserExternalApp: Identifiable, Equatable, Sendable {
+    let url: URL
+    let name: String
+    let bundleIdentifier: String?
+
+    var id: String { url.standardizedFileURL.path }
+
+    var usageKey: String {
+        guard let bundleIdentifier, !bundleIdentifier.isEmpty else { return id }
+        return bundleIdentifier
+    }
+}
+
+enum BrowserExternalAppOrdering {
+    static let maximumRememberedApps = 80
+
+    static func ordered(_ apps: [BrowserExternalApp],
+                        lastUsed: [String: Date]) -> [BrowserExternalApp] {
+        apps.sorted { lhs, rhs in
+            switch (lastUsed[lhs.usageKey], lastUsed[rhs.usageKey]) {
+            case let (left?, right?) where left != right:
+                return left > right
+            case (_?, nil):
+                return true
+            case (nil, _?):
+                return false
+            default:
+                break
+            }
+
+            let nameOrder = lhs.name.localizedStandardCompare(rhs.name)
+            if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
+            return lhs.id < rhs.id
+        }
+    }
+
+    static func recordUse(of app: BrowserExternalApp,
+                          at date: Date,
+                          into lastUsed: inout [String: Date]) {
+        lastUsed[app.usageKey] = date
+        guard lastUsed.count > maximumRememberedApps else { return }
+        let kept = lastUsed.sorted { lhs, rhs in
+            if lhs.value != rhs.value { return lhs.value > rhs.value }
+            return lhs.key < rhs.key
+        }
+        lastUsed = Dictionary(uniqueKeysWithValues:
+            kept.prefix(maximumRememberedApps).map { ($0.key, $0.value) }
+        )
+    }
+}
+
 struct BrowserSettings: Codable, Equatable {
     var blockerEnabledByDefault: Bool
     var disabledBlockerDomains: Set<String>
@@ -210,6 +261,7 @@ struct BrowserSettings: Codable, Equatable {
     var searchEngine: BrowserSearchEngine
     var compactTabs: Bool
     var webInspectorEnabled: Bool
+    var externalAppLastUsed: [String: Date]
 
     init(blockerEnabledByDefault: Bool = true,
          disabledBlockerDomains: Set<String> = [],
@@ -217,7 +269,8 @@ struct BrowserSettings: Codable, Equatable {
          defaultPageURL: String = "https://www.google.com",
          searchEngine: BrowserSearchEngine = .google,
          compactTabs: Bool = false,
-         webInspectorEnabled: Bool = false) {
+         webInspectorEnabled: Bool = false,
+         externalAppLastUsed: [String: Date] = [:]) {
         self.blockerEnabledByDefault = blockerEnabledByDefault
         self.disabledBlockerDomains = disabledBlockerDomains
         self.summaryEnabled = summaryEnabled
@@ -225,6 +278,7 @@ struct BrowserSettings: Codable, Equatable {
         self.searchEngine = searchEngine
         self.compactTabs = compactTabs
         self.webInspectorEnabled = webInspectorEnabled
+        self.externalAppLastUsed = externalAppLastUsed
     }
 
     init(from decoder: Decoder) throws {
@@ -236,6 +290,8 @@ struct BrowserSettings: Codable, Equatable {
         searchEngine = try container.decodeIfPresent(BrowserSearchEngine.self, forKey: .searchEngine) ?? .google
         compactTabs = try container.decodeIfPresent(Bool.self, forKey: .compactTabs) ?? false
         webInspectorEnabled = try container.decodeIfPresent(Bool.self, forKey: .webInspectorEnabled) ?? false
+        externalAppLastUsed = try container.decodeIfPresent([String: Date].self,
+                                                             forKey: .externalAppLastUsed) ?? [:]
     }
 }
 

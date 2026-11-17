@@ -279,7 +279,10 @@ add analytics, telemetry or a remote history service. The tab list, pin state,
 last-use timestamps, favicon colour, and per-tab blocker and Web Inspector
 overrides are stored in `~/Library/Application Support/MakiDesk/browser-tabs.json`.
 Browser feature settings, including the compact sidebar mode, and domain
-blocker exceptions are stored in `browser-settings.json`. The current and
+blocker exceptions are stored in `browser-settings.json`. The external-link
+chooser also stores a bounded map of selected app bundle identifiers (or app
+paths when no identifier exists) to last-use timestamps, so recent choices can
+be shown first; it does not associate those records with URLs. The current and
 expanded tab-sidebar widths are stored with the tabs; the browser window frame
 is stored in the browser app's local preferences. The address suggestions use
 `browser-history.json`: a bounded local list of URLs and titles of pages that

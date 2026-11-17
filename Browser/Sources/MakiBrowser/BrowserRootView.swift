@@ -156,6 +156,7 @@ private struct ExternalLinkChooser: View {
     @Bindable var store: BrowserStore
     let request: BrowserStore.BrowserExternalOpenRequest
     @Environment(\.dismiss) private var dismiss
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -179,21 +180,34 @@ private struct ExternalLinkChooser: View {
                 Text("Open with another app")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
-                ForEach(request.apps) { app in
-                    Button {
-                        store.openExternalURL(in: app)
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path))
-                                .resizable().frame(width: 20, height: 20)
-                            Text(app.name)
-                            Spacer()
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(request.apps) { app in
+                            Button {
+                                store.openExternalURL(in: app)
+                                dismiss()
+                            } label: {
+                                VStack(spacing: 8) {
+                                    Image(nsImage: NSWorkspace.shared.icon(forFile: app.url.path))
+                                        .resizable()
+                                        .frame(width: 48, height: 48)
+                                        .accessibilityHidden(true)
+                                    Text(app.name)
+                                        .font(.caption)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.center)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 90)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .help("Open link in \(app.name)")
+                            .accessibilityLabel("Open link in \(app.name)")
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
                 }
+                .frame(maxHeight: 300)
             }
             HStack {
                 Spacer()
