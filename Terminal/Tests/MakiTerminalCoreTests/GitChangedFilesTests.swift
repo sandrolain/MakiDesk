@@ -29,4 +29,28 @@ final class GitChangedFilesTests: XCTestCase {
             "  Z.swift[ M]",
         ])
     }
+
+    func testBuildsSortedImmutableTree() {
+        let files = [
+            GitChangedFile(path: "Sources/Z.swift", status: " M"),
+            GitChangedFile(path: "README.md", status: "??"),
+            GitChangedFile(path: "Sources/Core/A.swift", status: "A "),
+        ]
+
+        XCTAssertEqual(GitChangedFilesParser.tree(files), [
+            GitChangedFileTreeNode(
+                name: "Sources",
+                isDirectory: true,
+                children: [
+                    GitChangedFileTreeNode(
+                        name: "Core",
+                        isDirectory: true,
+                        children: [GitChangedFileTreeNode(name: "A.swift", status: "A ")]
+                    ),
+                    GitChangedFileTreeNode(name: "Z.swift", status: " M"),
+                ]
+            ),
+            GitChangedFileTreeNode(name: "README.md", status: "??"),
+        ])
+    }
 }

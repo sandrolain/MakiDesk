@@ -5,7 +5,37 @@ public struct GitChangedFile: Equatable, Sendable {
     public let status: String
 }
 
+public struct GitChangedFileTreeNode: Equatable, Sendable {
+    public let name: String
+    public let status: String?
+    public let isDirectory: Bool
+    public let children: [GitChangedFileTreeNode]
+
+    public init(name: String,
+                status: String? = nil,
+                isDirectory: Bool = false,
+                children: [GitChangedFileTreeNode] = []) {
+        self.name = name
+        self.status = status
+        self.isDirectory = isDirectory
+        self.children = children
+    }
+}
+
 public enum GitChangedFilesParser {
+    private final class TreeBuilderNode {
+        let name: String
+        var status: String?
+        var isDirectory: Bool
+        var children: [String: TreeBuilderNode] = [:]
+
+        init(name: String, status: String?, isDirectory: Bool) {
+            self.name = name
+            self.status = status
+            self.isDirectory = isDirectory
+        }
+    }
+
     /// Parses porcelain v1 NUL records, including the extra source path on renames.
     public static func parse(_ data: Data) -> [GitChangedFile] {
         let fields = data.split(separator: 0, omittingEmptySubsequences: true)
@@ -21,6 +51,50 @@ public enum GitChangedFilesParser {
             if status.contains("R") || status.contains("C") { index += 1 }
         }
         return result
+    }
+
+    /// Builds an immutable tree so callers can prepare large results off the UI queue.
+    public static func tree(_ files: [GitChangedFile]) -> [GitChangedFileTreeNode] {
+        let root = TreeBuilderNode(name: "", status: nil, isDirectory: true)
+
+        for file in files {
+            let components = file.path.split(separator: "/").map(String.init)
+            guard components.isEmpty == false else { continue }
+            var parent = root
+
+            for (index, name) in components.enumerated() {
+                let isDirectory = index < components.count - 1
+                let node: TreeBuilderNode
+                if let existing = parent.children[name] {
+                    node = existing
+                    if isDirectory == false { node.status = file.status }
+                } else {
+                    node = TreeBuilderNode(name: name,
+                                           status: isDirectory ? nil : file.status,
+                                           isDirectory: isDirectory)
+                    parent.children[name] = node
+                }
+                node.isDirectory = isDirectory
+                parent = node
+            }
+        }
+
+        func freeze(_ nodes: [String: TreeBuilderNode]) -> [GitChangedFileTreeNode] {
+            nodes.values
+                .sorted { lhs, rhs in
+                    if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+                    let comparison = lhs.name.localizedStandardCompare(rhs.name)
+                    return comparison == .orderedSame ? lhs.name < rhs.name : comparison == .orderedAscending
+                }
+                .map { node in
+                    GitChangedFileTreeNode(name: node.name,
+                                           status: node.status,
+                                           isDirectory: node.isDirectory,
+                                           children: freeze(node.children))
+                }
+        }
+
+        return freeze(root.children)
     }
 
     public static func treeLines(_ files: [GitChangedFile]) -> [String] {

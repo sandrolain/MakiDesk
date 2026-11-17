@@ -78,7 +78,8 @@ identity before the outer app.
   changed and untracked files for the focused pane's Git repository as an
   expandable path tree and collapses outside a repository. For tmux panes it
   reads the live pane directory; Git status is read locally on a worker and is
-  not persisted.
+  not persisted. The sidebar distinguishes a missing repository from Git
+  failures and pauses periodic refresh while its window is hidden.
 - **Settings and theme:** `Terminal/settings.json` (font, cursor shape and
   blink, scrollback size, selection copy, pointer hiding, shell command,
   quake height) and `Terminal/theme.json`

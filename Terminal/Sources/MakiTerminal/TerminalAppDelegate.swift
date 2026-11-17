@@ -202,7 +202,7 @@ final class TerminalAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func hideMain() {
-        terminal?.window?.orderOut(nil)
+        terminal?.hideMainWindow()
         NSApp.setActivationPolicy(.accessory)
     }
 

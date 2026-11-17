@@ -330,11 +330,14 @@ final class TerminalWindowController: NSWindowController,
     }
     private var activeSearch: ActiveSearch?
     private var searchDebounce: Timer?
-    private var gitRefreshGeneration: UInt64 = 0
+    private var gitRefreshLifecycle = GitSidebarRefreshLifecycle()
     private var gitRefreshTimer: Timer?
     private var gitRefreshInFlight = false
     private var gitRefreshPending = false
-    private var gitSidebarVisible = false
+    private var gitSidebarVisible: Bool {
+        get { gitRefreshLifecycle.isEnabled }
+        set { gitRefreshLifecycle.setEnabled(newValue) }
+    }
     private var gitSidebarWidth: NSLayoutConstraint?
     private var gitRootTrailingConstraint: NSLayoutConstraint?
     private var gitSidebarContentConstraints: [NSLayoutConstraint] = []
@@ -1304,6 +1307,7 @@ final class TerminalWindowController: NSWindowController,
         gitRefreshTimer?.invalidate()
         gitRefreshTimer = nil
         if gitSidebarVisible {
+            gitRefreshLifecycle.setWindowVisible(window?.isVisible == true)
             startGitRefreshTimerIfNeeded()
         }
         if gitSidebarVisible { setGitSidebarExpanded(true) }
@@ -1338,14 +1342,14 @@ final class TerminalWindowController: NSWindowController,
     }
 
     private func refreshGitSidebar() {
-        gitRefreshGeneration &+= 1
-        let generation = gitRefreshGeneration
-        guard gitSidebarVisible, selected < workspaces.count else {
+        guard gitRefreshLifecycle.shouldRefresh, window?.isVisible == true,
+              selected < workspaces.count else {
             gitTreeRoots = []
             gitOutlineView.reloadData()
             setGitSidebarExpanded(false)
             return
         }
+        let generation = gitRefreshLifecycle.beginRequest()
         let workspace = workspaces[selected]
         let pane = workspace.focusedPane
         let savedDirectory = workspace.directory(for: pane)
@@ -1368,12 +1372,18 @@ final class TerminalWindowController: NSWindowController,
                 TmuxSession.currentPaneDirectory(target: $0)
             } ?? savedDirectory
             let result = directory.flatMap(GitStatusReader.read(directory:))
+            let tree: [GitChangedFileTreeNode]
+            if case let .success(_, files)? = result {
+                tree = GitChangedFilesParser.tree(files)
+            } else {
+                tree = []
+            }
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.gitRefreshInFlight = false
                 let refreshAgain = self.gitRefreshPending
                 self.gitRefreshPending = false
-                guard self.gitRefreshGeneration == generation,
+                guard self.gitRefreshLifecycle.canPublish(generation),
                       self.gitSidebarVisible, self.selected < self.workspaces.count,
                       self.workspaces[self.selected].focusedPane == pane else {
                     if refreshAgain { self.refreshGitSidebar() }
@@ -1385,18 +1395,28 @@ final class TerminalWindowController: NSWindowController,
                     return
                 }
                 guard let result else {
-                    self.setGitSidebarExpanded(false)
+                    self.showGitSidebarMessage("Git status unavailable")
                     if refreshAgain { self.refreshGitSidebar() }
                     return
                 }
-                self.gitSidebarTitle.stringValue = "Git changes · \(URL(fileURLWithPath: result.root).lastPathComponent)"
-                self.gitTreeRoots = Self.makeGitTree(result.files)
-                if self.gitTreeRoots.isEmpty {
-                    self.gitTreeRoots = [GitSidebarNode(name: "Working tree clean")]
+                switch result {
+                case .notRepository:
+                    self.gitTreeRoots = []
+                    self.gitOutlineView.reloadData()
+                    self.setGitSidebarExpanded(false)
+                case let .success(root, _):
+                    self.gitSidebarTitle.stringValue =
+                        "Git changes · \(URL(fileURLWithPath: root).lastPathComponent)"
+                    self.gitTreeRoots = Self.makeGitTree(tree)
+                    if self.gitTreeRoots.isEmpty {
+                        self.gitTreeRoots = [GitSidebarNode(name: "Working tree clean")]
+                    }
+                    self.gitOutlineView.reloadData()
+                    self.gitOutlineView.expandItem(nil, expandChildren: true)
+                    self.setGitSidebarExpanded(self.gitSidebarVisible)
+                case let .failure(failure):
+                    self.showGitSidebarMessage(Self.message(for: failure))
                 }
-                self.gitOutlineView.reloadData()
-                self.gitOutlineView.expandItem(nil, expandChildren: true)
-                self.setGitSidebarExpanded(self.gitSidebarVisible)
                 if refreshAgain { self.refreshGitSidebar() }
             }
         }
@@ -1412,6 +1432,32 @@ final class TerminalWindowController: NSWindowController,
     private func stopGitRefreshTimer() {
         gitRefreshTimer?.invalidate()
         gitRefreshTimer = nil
+    }
+
+    private static func message(for failure: GitStatusReadFailure) -> String {
+        switch failure {
+        case .directoryUnavailable: return "Git directory unavailable"
+        case .commandFailed: return "Git status failed"
+        case .outputTooLarge: return "Git status output is too large"
+        case .couldNotStart: return "Git could not be started"
+        }
+    }
+
+    private func setGitWindowVisible(_ visible: Bool) {
+        gitRefreshLifecycle.setWindowVisible(visible)
+        if visible {
+            startGitRefreshTimerIfNeeded()
+            refreshGitSidebar()
+        } else {
+            stopGitRefreshTimer()
+            gitRefreshPending = false
+        }
+    }
+
+    func hideMainWindow() {
+        setGitWindowVisible(false)
+        window?.orderOut(nil)
+        updateRendererVisibility()
     }
 
     func updateDirectory(for view: TerminalSurfaceView, path: String) {
@@ -1854,15 +1900,13 @@ final class TerminalWindowController: NSWindowController,
     /// shows the same window again. Only Quit ends the sessions.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === window else { return true }
-        stopGitRefreshTimer()
-        window?.orderOut(nil)
-        updateRendererVisibility()
+        hideMainWindow()
         NSApp.setActivationPolicy(.accessory)
         return false
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
-        startGitRefreshTimerIfNeeded()
+        setGitWindowVisible(window?.isVisible == true)
         clearAttention(for: selected)
         if workspaces.indices.contains(selected) {
             let id = workspaces[selected].id
@@ -2108,35 +2152,14 @@ final class TerminalWindowController: NSWindowController,
         return cell
     }
 
-    private static func makeGitTree(_ files: [GitChangedFile]) -> [GitSidebarNode] {
-        var roots: [GitSidebarNode] = []
-        for file in files.sorted(by: { $0.path.localizedStandardCompare($1.path) == .orderedAscending }) {
-            let components = file.path.split(separator: "/").map(String.init)
-            guard components.isEmpty == false else { continue }
-            var siblings = roots
-            var parent: GitSidebarNode?
-            for (index, name) in components.enumerated() {
-                let isFile = index == components.count - 1
-                let node: GitSidebarNode
-                if let existing = siblings.first(where: { $0.name == name }) {
-                    node = existing
-                    if isFile { node.status = file.status }
-                } else {
-                    node = GitSidebarNode(name: name, status: isFile ? file.status : nil,
-                                          isDirectory: !isFile)
-                    siblings.append(node)
-                    siblings.sort { lhs, rhs in
-                        if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
-                        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-                    }
-                }
-                parent?.children = siblings
-                if parent == nil { roots = siblings }
-                parent = node
-                siblings = node.children
-            }
+    private static func makeGitTree(_ tree: [GitChangedFileTreeNode]) -> [GitSidebarNode] {
+        tree.map { node in
+            let result = GitSidebarNode(name: node.name,
+                                        status: node.status,
+                                        isDirectory: node.isDirectory)
+            result.children = makeGitTree(node.children)
+            return result
         }
-        return roots
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int {
