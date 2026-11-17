@@ -3,6 +3,13 @@ import Foundation
 /// The tmux preset (F3 L2): a session named after the workspace, attached or
 /// created, so closing and reopening the pane returns to the same session.
 public enum TmuxSession {
+    private static let enumerationTimeout: TimeInterval = 5
+    private static let commandTimeout: TimeInterval = 2
+    private static let sessionOutputLimit = 1024 * 1024
+    private static let diagnosticOutputLimit = 16 * 1024
+    private static let maximumEnumeratedSessions = 512
+    private static let maximumStatusRetries = 5
+
     public struct UnattachedSession: Equatable, Sendable, Identifiable {
         /// Stable tmux target (for example `$3`), safe even when a name has shell syntax.
         public let target: String
@@ -20,66 +27,81 @@ public enum TmuxSession {
     public static func currentPaneDirectory(target: String,
                                             executable: URL? = executableURL()) -> String? {
         guard target.isEmpty == false, let executable else { return nil }
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = executable
-        process.arguments = ["display-message", "-p", "-t", target, "#{pane_current_path}"]
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            let timeout = DispatchWorkItem {
-                if process.isRunning { process.terminate() }
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2,
-                                                          execute: timeout)
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            timeout.cancel()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0,
-                  let directory = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                  directory.isEmpty == false else { return nil }
-            return directory
-        } catch {
+        guard case let .success(data) = TmuxProcessRunner.run(
+            executable: executable,
+            arguments: ["display-message", "-p", "-t", target, "#{pane_current_path}"],
+            timeout: commandTimeout,
+            maximumOutputBytes: diagnosticOutputLimit
+        ) else {
             return nil
         }
+        guard let directory = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              directory.isEmpty == false else { return nil }
+        return directory
     }
 
     /// Returns sessions without attached clients. Call away from the main queue.
-    public static func unattachedSessions() -> [UnattachedSession] {
-        guard let executable = executableURL() else { return [] }
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = executable
-        process.arguments = ["list-sessions", "-F", "#{session_id}\t#{session_name}\t#{session_attached}"]
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0,
-                  let text = String(data: data, encoding: .utf8) else { return [] }
-            return text.split(whereSeparator: \.isNewline).compactMap { line in
-                let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
-                guard fields.count == 3, fields[2] == "0" else { return nil }
-                return UnattachedSession(target: String(fields[0]), name: String(fields[1]))
+    public static func unattachedSessions(
+        executable: URL? = executableURL()
+    ) -> Result<[UnattachedSession], TmuxCommandFailure> {
+        guard let executable else { return .failure(.executableUnavailable) }
+        switch TmuxProcessRunner.run(
+            executable: executable,
+            arguments: ["list-sessions", "-F", "#{session_id}\t#{session_name}\t#{session_attached}"],
+            timeout: enumerationTimeout,
+            maximumOutputBytes: sessionOutputLimit
+        ) {
+        case let .success(data):
+            guard let text = String(data: data, encoding: .utf8) else {
+                return .failure(.invalidOutput)
             }
-        } catch { return [] }
+            var sessions: [UnattachedSession] = []
+            for line in text.split(whereSeparator: \.isNewline) {
+                let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+                guard fields.count == 3, fields[2] == "0" || fields[2] == "1" else {
+                    return .failure(.invalidOutput)
+                }
+                if fields[2] == "0" {
+                    sessions.append(UnattachedSession(target: String(fields[0]),
+                                                      name: String(fields[1])))
+                    guard sessions.count <= maximumEnumeratedSessions else {
+                        return .failure(.tooManySessions)
+                    }
+                }
+            }
+            return .success(sessions)
+        case let .failure(.commandFailed(_, diagnostic))
+            where TmuxProcessRunner.isNoServerDiagnostic(diagnostic):
+            return .success([])
+        case let .failure(error):
+            return .failure(error)
+        }
     }
 
     /// Applies the preference to a session attached by this terminal. Retries
     /// are invalidated when a newer settings value is requested.
-    public static func setStatusBarVisible(_ visible: Bool, sessionName: String, attempt: Int = 0) {
-        guard let executable = executableURL() else { return }
+    public static func setStatusBarVisible(
+        _ visible: Bool,
+        sessionName: String,
+        attempt: Int = 0,
+        executable: URL? = executableURL(),
+        completion: ((Result<Void, TmuxCommandFailure>) -> Void)? = nil
+    ) {
         statusLock.lock()
         let generation = (statusGenerations[sessionName] ?? 0) &+ 1
         statusGenerations[sessionName] = generation
         statusLock.unlock()
+        guard let executable else {
+            publishStatusResult(.failure(.executableUnavailable),
+                                sessionName: sessionName,
+                                generation: generation,
+                                completion: completion)
+            return
+        }
         statusQueue.async {
             applyStatusBar(visible, sessionName: sessionName, executable: executable,
-                           attempt: attempt, generation: generation)
+                           attempt: attempt, generation: generation, completion: completion)
         }
     }
 
@@ -90,24 +112,55 @@ public enum TmuxSession {
     }
 
     private static func applyStatusBar(_ visible: Bool, sessionName: String,
-                                       executable: URL, attempt: Int, generation: UInt64) {
+                                       executable: URL, attempt: Int, generation: UInt64,
+                                       completion: ((Result<Void, TmuxCommandFailure>) -> Void)?) {
         guard statusRequestIsCurrent(sessionName, generation: generation) else { return }
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = ["set-option", "-t", sessionName, "status", visible ? "on" : "off"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            process.waitUntilExit()
-            if process.terminationStatus != 0, attempt < 10,
+        let result = TmuxProcessRunner.run(
+            executable: executable,
+            arguments: ["set-option", "-t", sessionName, "status", visible ? "on" : "off"],
+            timeout: commandTimeout,
+            maximumOutputBytes: diagnosticOutputLimit
+        )
+        switch result {
+        case .success:
+            publishStatusResult(.success(()), sessionName: sessionName,
+                                generation: generation, completion: completion)
+        case let .failure(error):
+            if shouldRetry(error), attempt < maximumStatusRetries,
                statusRequestIsCurrent(sessionName, generation: generation) {
                 statusQueue.asyncAfter(deadline: .now() + 0.4) {
                     applyStatusBar(visible, sessionName: sessionName, executable: executable,
-                                   attempt: attempt + 1, generation: generation)
+                                   attempt: attempt + 1, generation: generation,
+                                   completion: completion)
                 }
+            } else {
+                publishStatusResult(.failure(error), sessionName: sessionName,
+                                    generation: generation, completion: completion)
             }
-        } catch { }
+        }
+    }
+
+    private static func shouldRetry(_ failure: TmuxCommandFailure) -> Bool {
+        switch failure {
+        case .timedOut, .outputReadFailed, .commandFailed:
+            return true
+        case .executableUnavailable, .outputTooLarge, .couldNotStart,
+             .invalidOutput, .tooManySessions:
+            return false
+        }
+    }
+
+    private static func publishStatusResult(
+        _ result: Result<Void, TmuxCommandFailure>,
+        sessionName: String,
+        generation: UInt64,
+        completion: ((Result<Void, TmuxCommandFailure>) -> Void)?
+    ) {
+        guard let completion else { return }
+        DispatchQueue.main.async {
+            guard statusRequestIsCurrent(sessionName, generation: generation) else { return }
+            completion(result)
+        }
     }
     public struct ExistingPaneSession: Equatable, Sendable {
         public let paneID: PaneID
@@ -214,73 +267,98 @@ public enum TmuxSession {
         guard let name = sessionName(in: command),
               let executable = executableURL() else { return }
         DispatchQueue.global(qos: .utility).async {
-            let process = Process()
-            process.executableURL = executable
-            process.arguments = ["kill-session", "-t", name]
-            do {
-                try process.run()
-                process.waitUntilExit()
-            } catch {
-                // A stale session is already gone; closing the pane remains complete.
-            }
+            _ = TmuxProcessRunner.run(executable: executable,
+                                      arguments: ["kill-session", "-t", name],
+                                      timeout: commandTimeout,
+                                      maximumOutputBytes: diagnosticOutputLimit)
         }
     }
 
     /// Lists orphaned per-pane sessions so a crash before the layout's
     /// debounced write does not make a live tmux session unreachable. Call on
     /// a worker queue; launching or querying tmux may block.
-    public static func existingPaneSessions() -> [ExistingPaneSession] {
-        guard let executable = executableURL() else { return [] }
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = executable
-        process.arguments = ["list-sessions", "-F", "#{session_name}"]
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0,
-                  let names = String(data: data, encoding: .utf8) else { return [] }
-            let paneIDs = names.split(whereSeparator: \.isNewline).compactMap { rawName -> PaneID? in
-                let name = String(rawName)
-                let prefix = "makidesk-pane-"
-                guard name.hasPrefix(prefix),
-                      let id = UUID(uuidString: String(name.dropFirst(prefix.count))) else {
-                    return nil
-                }
-                return PaneID(raw: id)
+    public static func existingPaneSessions(
+        executable: URL? = executableURL()
+    ) -> Result<[ExistingPaneSession], TmuxCommandFailure> {
+        guard let executable else { return .failure(.executableUnavailable) }
+        let deadline = ProcessInfo.processInfo.systemUptime + enumerationTimeout
+        let listResult = TmuxProcessRunner.run(
+            executable: executable,
+            arguments: ["list-sessions", "-F", "#{session_name}"],
+            timeout: enumerationTimeout,
+            maximumOutputBytes: sessionOutputLimit
+        )
+        let names: String
+        switch listResult {
+        case let .success(data):
+            guard let decoded = String(data: data, encoding: .utf8) else {
+                return .failure(.invalidOutput)
             }
-            return paneIDs.map { paneID in
-                ExistingPaneSession(paneID: paneID,
-                                    workspaceID: workspaceID(for: paneID,
-                                                             executable: executable))
-            }
-        } catch {
-            return []
+            names = decoded
+        case let .failure(.commandFailed(_, diagnostic))
+            where TmuxProcessRunner.isNoServerDiagnostic(diagnostic):
+            return .success([])
+        case let .failure(error):
+            return .failure(error)
         }
+
+        var paneIDs: [PaneID] = []
+        for rawName in names.split(whereSeparator: \.isNewline) {
+            let name = String(rawName)
+            let prefix = "makidesk-pane-"
+            guard name.hasPrefix(prefix),
+                  let id = UUID(uuidString: String(name.dropFirst(prefix.count))) else {
+                continue
+            }
+            paneIDs.append(PaneID(raw: id))
+            guard paneIDs.count <= maximumEnumeratedSessions else {
+                return .failure(.tooManySessions)
+            }
+        }
+
+        var sessions: [ExistingPaneSession] = []
+        for paneID in paneIDs {
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            guard remaining > 0 else { return .failure(.timedOut) }
+            switch workspaceID(for: paneID, executable: executable,
+                               timeout: min(commandTimeout, remaining)) {
+            case let .success(workspaceID):
+                sessions.append(ExistingPaneSession(paneID: paneID,
+                                                    workspaceID: workspaceID))
+            case .failure(.commandFailed):
+                sessions.append(ExistingPaneSession(paneID: paneID, workspaceID: nil))
+            case let .failure(error):
+                return .failure(error)
+            }
+        }
+        return .success(sessions)
     }
 
-    private static func workspaceID(for paneID: PaneID, executable: URL) -> UUID? {
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = executable
-        process.arguments = ["show-environment", "-t", name(for: paneID),
-                             "MAKIDESK_WORKSPACE_ID"]
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0,
-                  let value = String(data: data, encoding: .utf8),
-                  let raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .split(separator: "=", maxSplits: 1).last else { return nil }
-            return UUID(uuidString: String(raw))
-        } catch {
-            return nil
+    private static func workspaceID(
+        for paneID: PaneID,
+        executable: URL,
+        timeout: TimeInterval
+    ) -> Result<UUID?, TmuxCommandFailure> {
+        switch TmuxProcessRunner.run(
+            executable: executable,
+            arguments: ["show-environment", "-t", name(for: paneID),
+                        "MAKIDESK_WORKSPACE_ID"],
+            timeout: timeout,
+            maximumOutputBytes: diagnosticOutputLimit
+        ) {
+        case let .success(data):
+            guard let value = String(data: data, encoding: .utf8) else {
+                return .failure(.invalidOutput)
+            }
+            guard let raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(separator: "=", maxSplits: 1).last else {
+                return .success(nil)
+            }
+            return .success(UUID(uuidString: String(raw)))
+        case .failure(.commandFailed):
+            return .success(nil)
+        case let .failure(error):
+            return .failure(error)
         }
     }
 }

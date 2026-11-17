@@ -705,9 +705,19 @@ final class TerminalWindowController: NSWindowController,
         recoveryGeneration &+= 1
         let generation = recoveryGeneration
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let sessions = TmuxSession.existingPaneSessions()
+            let result = TmuxSession.existingPaneSessions()
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.recoveryGeneration == generation else { return }
+                let sessions: [TmuxSession.ExistingPaneSession]
+                switch result {
+                case let .success(found):
+                    sessions = found
+                case let .failure(error):
+                    self.recordPersistenceWarning(
+                        "Could not check for orphaned tmux sessions: \(error.userMessage)."
+                    )
+                    return
+                }
                 let knownPaneIDs = Set(self.workspaces.flatMap(\.paneIDs))
                 let orphaned = sessions.filter { knownPaneIDs.contains($0.paneID) == false }
                 guard orphaned.isEmpty == false else { return }
@@ -994,15 +1004,17 @@ final class TerminalWindowController: NSWindowController,
     @objc private func showUnattachedTmuxSessions(_ sender: NSMenuItem) {
         guard let button = sender.representedObject as? NSButton else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self, weak button] in
-            let sessions = TmuxSession.unattachedSessions()
+            let result = TmuxSession.unattachedSessions()
             DispatchQueue.main.async {
                 guard let self, let button else { return }
                 let menu = NSMenu()
-                if sessions.isEmpty {
-                    let empty = NSMenuItem(title: "No unattached tmux sessions", action: nil, keyEquivalent: "")
+                switch result {
+                case let .success(sessions) where sessions.isEmpty:
+                    let empty = NSMenuItem(title: "No unattached tmux sessions",
+                                           action: nil, keyEquivalent: "")
                     empty.isEnabled = false
                     menu.addItem(empty)
-                } else {
+                case let .success(sessions):
                     for session in sessions {
                         let item = NSMenuItem(title: session.name,
                                               action: #selector(self.attachTmuxSession(_:)),
@@ -1011,6 +1023,14 @@ final class TerminalWindowController: NSWindowController,
                         item.representedObject = session
                         menu.addItem(item)
                     }
+                case let .failure(error):
+                    let failed = NSMenuItem(
+                        title: "Could not list tmux sessions: \(error.userMessage)",
+                        action: nil,
+                        keyEquivalent: ""
+                    )
+                    failed.isEnabled = false
+                    menu.addItem(failed)
                 }
                 menu.popUp(positioning: nil,
                            at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
@@ -1038,9 +1058,18 @@ final class TerminalWindowController: NSWindowController,
             for pane in workspace.paneIDs {
                 guard let command = workspace.command(for: pane),
                       let name = TmuxSession.target(in: command) else { continue }
-                TmuxSession.setStatusBarVisible(terminalSettings.showTmuxStatusBar,
-                                                sessionName: name)
+                setTmuxStatusBarVisible(terminalSettings.showTmuxStatusBar,
+                                        sessionName: name)
             }
+        }
+    }
+
+    private func setTmuxStatusBarVisible(_ visible: Bool, sessionName: String) {
+        TmuxSession.setStatusBarVisible(visible, sessionName: sessionName) { [weak self] result in
+            guard case let .failure(error) = result else { return }
+            self?.recordPersistenceWarning(
+                "Could not update the tmux status bar: \(error.userMessage)."
+            )
         }
     }
 
@@ -1941,8 +1970,8 @@ final class TerminalWindowController: NSWindowController,
         if selected < workspaces.count,
            let command = workspaces[selected].command(for: pane),
            let sessionName = TmuxSession.target(in: command) {
-            TmuxSession.setStatusBarVisible(terminalSettings.showTmuxStatusBar,
-                                            sessionName: sessionName)
+            setTmuxStatusBarVisible(terminalSettings.showTmuxStatusBar,
+                                    sessionName: sessionName)
         }
         return host
     }

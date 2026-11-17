@@ -445,9 +445,11 @@ The workspace list marks tmux-backed panes separately, and its + menu can
 enumerate unattached tmux sessions by stable session ID and attach them into a
 new workspace without wrapping the command in a second managed session.
 Terminal settings control tmux's status line on managed and attached sessions;
-the option is session-wide and therefore shared with other tmux clients. The optional
-Git sidebar runs `git rev-parse` and porcelain status for the focused pane's
-working directory on a worker queue; it renders an expandable path tree and
+the option is session-wide and therefore shared with other tmux clients. tmux
+commands run through a bounded process runner; session enumeration returns
+errors separately from an empty list, and status-bar retries are timed and
+revision-checked. The optional Git sidebar runs `git rev-parse` and porcelain
+status for the focused pane's working directory on a worker queue; it renders an expandable path tree and
 hides when the directory is outside a repository. While visible it refreshes
 every five seconds and stops its timer when the window is hidden. Collapsing the
 sidebar removes its content constraints and attaches the pane container to the

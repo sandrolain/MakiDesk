@@ -71,9 +71,12 @@ identity before the outer app.
   `MAKIDESK_TERMINAL=1` and `MAKIDESK_WORKSPACE_ID` in their environment.
 - **tmux and Git controls:** workspace rows distinguish tmux panes from
   ordinary shells. The + menu can list and attach tmux sessions that have no
-  attached clients, targeting them by stable session ID. Terminal settings can
-  show or hide tmux's status bar for managed and attached sessions; on external
-  sessions the option is shared with other clients. The right sidebar shows
+  attached clients, targeting them by stable session ID; an empty list is
+  distinct from a tmux command failure. Enumeration and status changes have
+  bounded timeouts and output, and a newer status preference supersedes stale
+  retries. Terminal settings can show or hide tmux's status bar for managed
+  and attached sessions; on external sessions the option is shared with other
+  clients. The right sidebar shows
   changed and untracked files for the focused pane's Git repository as an
   expandable path tree and collapses outside a repository. For tmux panes it
   reads the live pane directory; Git status is read locally on a worker and is

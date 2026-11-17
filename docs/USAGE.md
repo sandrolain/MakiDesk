@@ -801,8 +801,9 @@ it running, so its shells keep working.
   says so when tmux is not installed (`brew install tmux`).
 - **tmux sessions and Git changes.** Each workspace row labels its focused
   pane as `MUX` or `SH`. The **+** menu can list sessions without an attached
-  client and attach one as a new workspace. Use the connected-nodes button in
-  the workspace sidebar to show or hide Git changes for the focused pane. The
+  client and attach one as a new workspace. An empty list is reported
+  separately from a tmux error. Use the connected-nodes button in the
+  workspace sidebar to show or hide Git changes for the focused pane. The
   panel shows changed and untracked paths in an expandable file tree, refreshes every
   five seconds while open, and uses the live tmux pane directory when available.
   It follows the Terminal theme; drag its divider to resize it. Added and
