@@ -1,5 +1,81 @@
 import Foundation
 
+struct BrowserNavigationFailure: Equatable {
+    enum Kind: Equatable {
+        case offline
+        case serverNotFound
+        case serverUnavailable
+        case certificate
+        case secureConnection
+        case other
+    }
+
+    let kind: Kind
+    let detail: String
+    let url: URL?
+
+    init(error: Error, url: URL? = nil) {
+        let failure = error as NSError
+        detail = failure.localizedDescription
+        self.url = url
+        guard failure.domain == NSURLErrorDomain else {
+            kind = .other
+            return
+        }
+
+        switch failure.code {
+        case NSURLErrorNotConnectedToInternet, NSURLErrorDataNotAllowed:
+            kind = .offline
+        case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed:
+            kind = .serverNotFound
+        case NSURLErrorCannotConnectToHost, NSURLErrorTimedOut,
+             NSURLErrorNetworkConnectionLost, NSURLErrorCannotLoadFromNetwork:
+            kind = .serverUnavailable
+        case NSURLErrorServerCertificateHasBadDate,
+             NSURLErrorServerCertificateUntrusted,
+             NSURLErrorServerCertificateHasUnknownRoot,
+             NSURLErrorServerCertificateNotYetValid,
+             NSURLErrorClientCertificateRejected,
+             NSURLErrorClientCertificateRequired:
+            kind = .certificate
+        case NSURLErrorSecureConnectionFailed:
+            kind = .secureConnection
+        default:
+            kind = .other
+        }
+    }
+
+    var title: String {
+        switch kind {
+        case .offline: return "You’re Not Connected to the Internet"
+        case .serverNotFound: return "Server Not Found"
+        case .serverUnavailable: return "The Server Isn’t Responding"
+        case .certificate: return "The Website Certificate Isn’t Valid"
+        case .secureConnection: return "Secure Connection Failed"
+        case .other: return "This Page Couldn’t Be Loaded"
+        }
+    }
+
+    var message: String {
+        switch kind {
+        case .offline: return "Check your network connection, then try again."
+        case .serverNotFound: return "MakiDesk couldn’t find this server. Check the address or try again later."
+        case .serverUnavailable: return "The server may be offline or taking too long to respond."
+        case .certificate: return "The website sent a certificate that could not be verified. MakiDesk stopped the connection to protect your data."
+        case .secureConnection: return "The website couldn’t establish a secure connection. Its certificate or security settings may be invalid."
+        case .other: return "A network or browser error prevented this page from loading."
+        }
+    }
+
+    var symbol: String {
+        switch kind {
+        case .offline, .serverNotFound, .serverUnavailable: return "wifi.slash"
+        case .certificate, .secureConnection: return "lock.trianglebadge.exclamationmark"
+        case .other: return "exclamationmark.icloud"
+        }
+    }
+}
+
 enum BrowserChatGPTHandoff {
     static func url(for pageURL: URL) -> URL? {
         guard let scheme = pageURL.scheme?.lowercased(),

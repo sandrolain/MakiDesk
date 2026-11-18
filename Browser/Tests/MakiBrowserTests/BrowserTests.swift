@@ -379,7 +379,7 @@ final class BrowserTests: XCTestCase {
         store.stop()
     }
 
-    func testNavigationErrorsIgnoreCancellationAndCanBeDismissed() throws {
+    func testNavigationFailuresIgnoreCancellationAndExposeErrorPageState() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("MakiBrowserErrors-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -392,16 +392,17 @@ final class BrowserTests: XCTestCase {
         let tab = BrowserTab()
         store.tabs = [tab]
         store.selectedTabID = tab.id
+        let session = try XCTUnwrap(store.ensureSession(for: tab.id))
 
-        store.sessionDidFail(tabID: tab.id,
+        store.sessionDidFail(session,
                              error: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
         XCTAssertNil(store.errorText)
-        store.sessionDidFail(tabID: tab.id,
+        XCTAssertNil(store.selectedNavigationFailure)
+        store.sessionDidFail(session,
                              error: NSError(domain: "BrowserTests", code: 1,
                                             userInfo: [NSLocalizedDescriptionKey: "Could not load page"]))
-        XCTAssertEqual(store.errorText, "Could not load page")
-        store.dismissNavigationError()
-        XCTAssertNil(store.errorText)
+        XCTAssertEqual(store.selectedNavigationFailure?.kind, .other)
+        XCTAssertEqual(store.selectedNavigationFailure?.detail, "Could not load page")
         store.stop()
     }
 
@@ -454,6 +455,64 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(loaded.tabs.map(\.title), ["active", "pinned"])
         XCTAssertEqual(loaded.selectedTabID, active.id)
         XCTAssertEqual(loaded.sidebarWidth, 280)
+    }
+
+    func testPinnedTabsCannotBeClosedAndCloseAllOldTabsPreservesThem() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserCloseOld-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let now = Date()
+        let pinned = BrowserTab(title: "Pinned", lastUsed: now.addingTimeInterval(-100 * 3600), isPinned: true)
+        let active = BrowserTab(title: "Active", lastUsed: now.addingTimeInterval(-3600))
+        let old = BrowserTab(title: "Old", lastUsed: now.addingTimeInterval(-30 * 3600))
+        let tabStore = BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json"))
+        XCTAssertTrue(tabStore.save(BrowserTabsPayload(tabs: [pinned, active, old],
+                                                       selectedTabID: old.id,
+                                                       sidebarWidth: 264)))
+        let store = BrowserStore(
+            tabStore: tabStore,
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+
+        store.close(pinned.id)
+        XCTAssertTrue(store.tabs.contains(where: { $0.id == pinned.id }))
+        store.closeAllOldTabs()
+
+        XCTAssertEqual(Set(store.tabs.map(\.id)), Set([pinned.id, active.id]))
+        XCTAssertTrue(store.pinnedTabs.contains(where: { $0.id == pinned.id }))
+        XCTAssertTrue(store.oldTabs.isEmpty)
+        store.stop()
+    }
+
+    func testAutomaticTickClosesExpiredTabsButKeepsPinnedTabs() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MakiBrowserExpiryTick-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let now = Date()
+        let active = BrowserTab(title: "Active", lastUsed: now)
+        let becomesExpired = BrowserTab(title: "Old", lastUsed: now.addingTimeInterval(-30 * 3600))
+        let pinned = BrowserTab(title: "Pinned", lastUsed: now.addingTimeInterval(-100 * 3600), isPinned: true)
+        let tabStore = BrowserTabStore(fileURL: directory.appendingPathComponent("tabs.json"))
+        XCTAssertTrue(tabStore.save(BrowserTabsPayload(tabs: [active, becomesExpired, pinned],
+                                                       selectedTabID: becomesExpired.id,
+                                                       sidebarWidth: 264)))
+        let store = BrowserStore(
+            tabStore: tabStore,
+            settingsStore: BrowserSettingsStore(fileURL: directory.appendingPathComponent("settings.json")),
+            historyStore: BrowserHistoryStore(fileURL: directory.appendingPathComponent("history.json"))
+        )
+
+        store.tick(now: now.addingTimeInterval(19 * 3600))
+
+        XCTAssertFalse(store.tabs.contains(where: { $0.id == becomesExpired.id }))
+        XCTAssertTrue(store.tabs.contains(where: { $0.id == active.id }))
+        XCTAssertTrue(store.tabs.contains(where: { $0.id == pinned.id }))
+        store.stop()
     }
 
     func testNewTabSelectsAnEmptyTabAndPrefillsTheDefaultPage() throws {

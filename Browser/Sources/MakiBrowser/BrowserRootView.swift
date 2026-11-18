@@ -175,13 +175,30 @@ private struct ExternalLinkChooser: View {
                 .foregroundStyle(store.theme.subtext)
                 .textSelection(.enabled)
                 .lineLimit(2)
+            Text("Open with MakiDesk or another app")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(store.theme.subtext)
             Button {
                 store.openExternalURLInBrowser()
                 dismiss()
             } label: {
-                Label("Open in MakiDesk Browser", systemImage: "safari")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 8) {
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundleURL.path))
+                        .resizable()
+                        .frame(width: 48, height: 48)
+                        .accessibilityHidden(true)
+                    Text("MakiDesk Browser")
+                        .font(.caption)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity, minHeight: 90)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .help("Open link in MakiDesk Browser")
+            .accessibilityLabel("Open link in MakiDesk Browser")
             .disabled(!store.isStarted)
             if !request.apps.isEmpty {
                 Divider()
@@ -287,6 +304,7 @@ private struct BrowserSidebar: View {
 private struct BrowserIconRail: View {
     @Bindable var store: BrowserStore
     @State private var hovering: String?
+    @State private var isConfirmingCloseOldTabs = false
 
     private var inspectorEnabled: Bool {
         guard let tabID = store.selectedTabID else { return false }
@@ -307,9 +325,15 @@ private struct BrowserIconRail: View {
             icon("chevron.right", id: "forward", help: "Forward", isActive: false) { store.goForward() }
                 .disabled(store.canGoForward == false)
             icon(store.isLoading ? "xmark" : "arrow.clockwise",
-                 id: "reload", help: store.isLoading ? "Stop loading" : "Reload page",
+                 id: "reload", help: store.isLoading ? "Stop loading" : "Reload page (⌘R)",
                  isActive: store.isLoading) {
                 store.isLoading ? store.stopLoading() : store.reload()
+            }
+            .contextMenu {
+                Button("Reload Ignoring Cache (⌘⌥R)") {
+                    store.reloadIgnoringCache()
+                }
+                .disabled(store.selectedTab?.url == nil)
             }
             icon("link", id: "address", help: "Address and search (⌘L)",
                  isActive: store.isAddressVisible) { store.showAddress() }
@@ -336,6 +360,12 @@ private struct BrowserIconRail: View {
                 if let id = store.selectedTabID { store.togglePin(id) }
             }
             .disabled(store.selectedTab == nil)
+
+            icon("trash", id: "close-old-tabs",
+                 help: "Close all old tabs (\(store.oldTabs.count))") {
+                isConfirmingCloseOldTabs = true
+            }
+            .disabled(store.oldTabs.isEmpty)
 
             icon("doc.text", id: "reader", help: "Reader mode") {
                 store.openReaderMode()
@@ -381,6 +411,16 @@ private struct BrowserIconRail: View {
         .frame(width: 48)
         .padding(.top, 8)
         .padding(.bottom, 8)
+        .confirmationDialog("Close all old tabs?",
+                            isPresented: $isConfirmingCloseOldTabs,
+                            titleVisibility: .visible) {
+            Button("Close \(store.oldTabs.count) Old Tabs", role: .destructive) {
+                store.closeAllOldTabs()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This closes every unpinned tab in Old. Pinned tabs are kept.")
+        }
     }
 
     private func icon(_ symbol: String, id: String, help: String, isActive: Bool = false,
@@ -624,7 +664,7 @@ private struct BrowserTabRow: View {
                     .foregroundStyle(store.theme.subtext.opacity(0.75))
                     .lineLimit(1)
 
-                if hovering || selected {
+                if (hovering || selected), !tab.isPinned {
                     Button {
                         store.close(tab.id)
                     } label: {
@@ -705,7 +745,10 @@ private struct BrowserTabRow: View {
         }
         .disabled(store.settings.summaryEnabled == false)
         Divider()
-        Button("Close Tab") { store.close(tab.id) }
+        Button(tab.isPinned ? "Close Tab (Unpin First)" : "Close Tab") {
+            store.close(tab.id)
+        }
+        .disabled(tab.isPinned)
     }
 
     private var accessibilityLabel: String {
@@ -809,22 +852,92 @@ private struct BrowserContent: View {
 
     @ViewBuilder
     private var webContent: some View {
-        if let session = store.selectedSession {
-            BrowserWebViewContainer(webView: session.webView)
-                .id(ObjectIdentifier(session))
+        ZStack {
+            if let session = store.selectedSession {
+                BrowserWebViewContainer(webView: session.webView)
+                    .id(ObjectIdentifier(session))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(store.selectedNavigationFailure == nil)
+                    .accessibilityHidden(store.selectedNavigationFailure != nil)
+            } else if store.isStarted {
+                store.theme.pageBackground
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text("Preparing browser…")
+                        .font(.caption)
+                        .foregroundStyle(store.theme.subtext)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if store.isStarted {
-            store.theme.pageBackground
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            VStack(spacing: 8) {
-                ProgressView()
-                Text("Preparing browser…")
-                    .font(.caption)
-                    .foregroundStyle(store.theme.subtext)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if let failure = store.selectedNavigationFailure {
+                BrowserNavigationErrorPage(failure: failure,
+                                           url: failure.url ?? store.selectedTab?.url,
+                                           theme: store.theme,
+                                           canGoBack: store.canGoBack,
+                                           retry: { store.reload() },
+                                           goBack: { store.goBack() })
+                    .zIndex(1)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct BrowserNavigationErrorPage: View {
+    let failure: BrowserNavigationFailure
+    let url: URL?
+    let theme: BrowserUITheme
+    let canGoBack: Bool
+    let retry: () -> Void
+    let goBack: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: failure.symbol)
+                .font(.system(size: 34, weight: .regular))
+                .foregroundStyle(theme.accent)
+                .accessibilityHidden(true)
+            Text(failure.title)
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(theme.text)
+                .multilineTextAlignment(.center)
+            if let address = url?.host ?? url?.absoluteString {
+                Text(address)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(theme.subtext)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+            Text(failure.message)
+                .font(.system(size: 13))
+                .foregroundStyle(theme.subtext)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(failure.detail)
+                .font(.system(size: 11))
+                .foregroundStyle(theme.subtext.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                if canGoBack {
+                    Button("Go Back", action: goBack)
+                        .buttonStyle(.bordered)
+                }
+                Button("Reload", action: retry)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: 460)
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(theme.pageBackground)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Page loading error")
     }
 }
 

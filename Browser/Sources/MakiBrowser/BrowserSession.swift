@@ -19,6 +19,7 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     private weak var store: BrowserStore?
     private var stateObservations: [NSKeyValueObservation] = []
     private var stateUpdateTask: Task<Void, Never>?
+    private var activeNavigationID: ObjectIdentifier?
 
     init(tabID: UUID,
          configuration: WKWebViewConfiguration,
@@ -43,6 +44,7 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     func stop() {
         stateUpdateTask?.cancel()
         stateUpdateTask = nil
+        activeNavigationID = nil
         stateObservations.removeAll()
         webView.stopLoading()
         webView.navigationDelegate = nil
@@ -100,15 +102,20 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     // MARK: - Navigation
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        store?.sessionDidStart(tabID: tabID, url: webView.url)
+        if let navigation { activeNavigationID = ObjectIdentifier(navigation) }
+        else { activeNavigationID = nil }
+        store?.sessionDidStart(self, url: webView.url)
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        store?.sessionDidCommit(tabID: tabID, url: webView.url)
+        guard isCurrentNavigation(navigation) else { return }
+        store?.sessionDidCommit(self, url: webView.url)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        store?.sessionDidFinish(tabID: tabID,
+        guard isCurrentNavigation(navigation) else { return }
+        activeNavigationID = nil
+        store?.sessionDidFinish(self,
                                 url: webView.url,
                                 title: webView.title,
                                 canGoBack: webView.canGoBack,
@@ -116,13 +123,17 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        store?.sessionDidFail(tabID: tabID, error: error)
+        guard navigation == nil || isCurrentNavigation(navigation) else { return }
+        activeNavigationID = nil
+        store?.sessionDidFail(self, error: error)
     }
 
     func webView(_ webView: WKWebView,
                  didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: Error) {
-        store?.sessionDidFail(tabID: tabID, error: error)
+        guard navigation == nil || isCurrentNavigation(navigation) else { return }
+        activeNavigationID = nil
+        store?.sessionDidFail(self, error: error)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -137,5 +148,10 @@ final class BrowserTabSession: NSObject, WKNavigationDelegate, WKUIDelegate {
             store?.sessionDidRequestNewTab(url: url)
         }
         return nil
+    }
+
+    private func isCurrentNavigation(_ navigation: WKNavigation?) -> Bool {
+        guard let navigation else { return false }
+        return activeNavigationID == ObjectIdentifier(navigation)
     }
 }

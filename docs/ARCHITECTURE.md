@@ -701,12 +701,26 @@ changes refresh the row's title, favicon and blocker exception; same-document
 URL/title changes such as SPA routes update the row and address state. A tab is
 created lazily when selected, and a session is stopped when
 the tab closes or the app quits. `BrowserTabLifecycle` is pure: pinned tabs
-never expire, a tab younger than 24 hours is Active, from 24 to 48 hours it is
-Old, and at 48 hours it is closed; `BrowserTabLifecycle.ordered` is the MRU sort
+never expire and `BrowserStore.close(_:)` refuses to remove them, a tab younger
+than 24 hours is Active, from 24 to 48 hours it is Old, and at 48 hours it is
+closed; `BrowserTabLifecycle.ordered` is the MRU sort
 used by the sidebar and `⌘1…9`. One `Timer` with a five-minute interval and a
 60-second tolerance drives the labels and the transitions; there is no timer per
-row, and wake/clock changes force a recalculation. Page interaction updates
+row, and wake/clock changes force a recalculation. The icon rail offers a
+confirmed `closeAllOldTabs` action, which uses the same protected close path.
+Page interaction updates
 `lastUsed` through a local event monitor, throttled to once a minute.
+
+`⌘R` calls `WKWebView.reload()`; `⌘⌥R` and the reload button's context menu
+call `reloadFromOrigin()` to bypass the local cache. Navigation failures are
+classified into offline, missing server, unresponsive server, certificate,
+secure-connection and generic cases. The transient failure is keyed by tab and
+covers the mounted WebKit view with a recovery screen; it is cleared when a new
+navigation starts or succeeds. Recovery commands clear the overlay state and
+act on that still-mounted view. `BrowserTabSession` tracks the current
+`WKNavigation` identity and `BrowserStore` checks that the session is still
+current before publishing a failure, so an older request cannot cover a newer
+page.
 
 The left column is an icon rail plus a resizable tab column in an `HSplitView`;
 the rail holds navigation, address, new tab, pin, summary, blocker, compact-mode
@@ -733,7 +747,8 @@ the removed view for the same tab.
 The helper registers for HTTP and HTTPS URL events in its bundle metadata.
 `BrowserAppDelegate` passes incoming links to `BrowserAppController`, which
 queues them in `BrowserStore` until the user chooses MakiDesk Browser, an
-installed URL handler, or cancellation. The settings action requests default
+installed URL handler, or cancellation. The MakiDesk Browser choice uses its
+48 pt app icon, matching the other chooser entries. The settings action requests default
 HTTP and HTTPS handlers through `NSWorkspace`; system consent remains under
 macOS control. The link is opened in a new tab only after the user chooses
 MakiDesk Browser. External handlers are displayed in a three-column icon grid,
@@ -767,9 +782,9 @@ of visited addresses. The omnibox combines those local matches with open tabs
 and a direct-visit option; search suggestions are local actions that navigate
 only after selection, so partial queries are not sent to a provider while typing.
 
-Navigation failures are displayed in a dismissible page overlay. WebKit's
-cancelled-navigation error is ignored so the Stop action does not look like a
-failure.
+Navigation failures replace the WebKit view with a typed recovery screen.
+WebKit's cancelled-navigation error is ignored so the Stop action does not look
+like a failure.
 
 Tabs, pin state, last use, favicon colour, blocker exceptions and the address
 history are written atomically to `browser-tabs.json`, `browser-settings.json`

@@ -40,6 +40,7 @@ final class BrowserStore {
     var summary: BrowserSummaryState = .idle
     var summaryTabID: UUID?
     var errorText: String?
+    private(set) var navigationFailures: [UUID: BrowserNavigationFailure] = [:]
     var loadingTabID: UUID?
     var canGoBack = false
     var canGoForward = false
@@ -318,6 +319,10 @@ final class BrowserStore {
         return sessions[selectedTabID]
     }
 
+    var selectedNavigationFailure: BrowserNavigationFailure? {
+        selectedTabID.flatMap { navigationFailures[$0] }
+    }
+
     var isLoading: Bool {
         selectedTabID != nil && loadingTabID == selectedTabID
     }
@@ -447,11 +452,15 @@ final class BrowserStore {
     }
 
     func close(_ tabID: UUID) {
+        // Pinning is a close guard as well as an expiry exemption. Keep the
+        // invariant here so clicks, context menus and ⌘W share the same rule.
+        guard let tab = tabs.first(where: { $0.id == tabID }), !tab.isPinned else { return }
         if selectedTabID == tabID, isFindVisible { hideFind() }
         if selectedTabID == tabID { closeReaderMode() }
         sessions[tabID]?.stop()
         sessions.removeValue(forKey: tabID)
         faviconImages.removeValue(forKey: tabID)
+        navigationFailures.removeValue(forKey: tabID)
         provisionalNavigations.remove(tabID)
         lastActivityWrite.removeValue(forKey: tabID)
         tabs.removeAll { $0.id == tabID }
@@ -485,6 +494,11 @@ final class BrowserStore {
         close(selectedTabID)
     }
 
+    func closeAllOldTabs() {
+        let ids = oldTabs.map(\.id)
+        for id in ids { close(id) }
+    }
+
     func togglePin(_ tabID: UUID) {
         guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
         tabs[index].isPinned.toggle()
@@ -512,6 +526,7 @@ final class BrowserStore {
             sessions[id]?.stop()
             sessions.removeValue(forKey: id)
             faviconImages.removeValue(forKey: id)
+            navigationFailures.removeValue(forKey: id)
             provisionalNavigations.remove(id)
             privateTabIDs.remove(id)
         }
@@ -547,8 +562,8 @@ final class BrowserStore {
         summaryController.cancel()
         summary = .idle
         summaryTabID = nil
-        if let selectedTabID, let session = sessions[selectedTabID] {
-            session.load(url)
+        if let selectedTabID, sessions[selectedTabID] != nil {
+            performSelectedWebViewNavigation { $0.load(URLRequest(url: url)) }
             touch(selectedTabID, force: true)
         } else {
             _ = newTab(url: url, title: url.host ?? url.absoluteString)
@@ -558,15 +573,30 @@ final class BrowserStore {
     }
 
     func goBack() {
-        selectedSession?.webView.goBack()
+        performSelectedWebViewNavigation { $0.goBack() }
     }
 
     func goForward() {
-        selectedSession?.webView.goForward()
+        performSelectedWebViewNavigation { $0.goForward() }
     }
 
     func reload() {
-        selectedSession?.webView.reload()
+        performSelectedWebViewNavigation { $0.reload() }
+    }
+
+    func reloadIgnoringCache() {
+        performSelectedWebViewNavigation { $0.reloadFromOrigin() }
+    }
+
+    /// The error screen covers the WKWebView but leaves its session mounted.
+    /// Clear the overlay state before issuing the next navigation.
+    private func performSelectedWebViewNavigation(_ action: @escaping (WKWebView) -> Void) {
+        guard let tabID = selectedTabID,
+              let session = sessions[tabID] else { return }
+        if navigationFailures.removeValue(forKey: tabID) != nil {
+            errorText = nil
+        }
+        action(session.webView)
     }
 
     func stopLoading() {
@@ -753,6 +783,7 @@ final class BrowserStore {
         guard tabs.contains(where: { $0.id == tabID }) else { return }
         rebuilding.insert(tabID)
         provisionalNavigations.remove(tabID)
+        navigationFailures.removeValue(forKey: tabID)
         sessions[tabID]?.stop()
         sessions.removeValue(forKey: tabID)
         sessionRevision &+= 1
@@ -880,6 +911,7 @@ final class BrowserStore {
 
     func sessionDidStart(tabID: UUID, url: URL?) {
         provisionalNavigations.insert(tabID)
+        navigationFailures.removeValue(forKey: tabID)
         if selectedTabID == tabID { invalidateFind() }
         if selectedTabID == tabID, isReaderVisible { closeReaderMode() }
         if selectedTabID == tabID {
@@ -894,9 +926,15 @@ final class BrowserStore {
         touch(tabID, force: true)
     }
 
+    func sessionDidStart(_ session: BrowserTabSession, url: URL?) {
+        guard sessions[session.tabID] === session else { return }
+        sessionDidStart(tabID: session.tabID, url: url)
+    }
+
     func sessionDidCommit(tabID: UUID, url: URL?) {
         guard let index = tabs.firstIndex(where: { $0.id == tabID }) else { return }
         provisionalNavigations.remove(tabID)
+        navigationFailures.removeValue(forKey: tabID)
         let oldDomain = tabs[index].url.flatMap(BrowserDomain.registrableDomain)
         let newDomain = url.flatMap(BrowserDomain.registrableDomain)
         let oldEnabled = BrowserBlockerPolicy.isEnabled(settings: settings,
@@ -917,12 +955,18 @@ final class BrowserStore {
         }
     }
 
+    func sessionDidCommit(_ session: BrowserTabSession, url: URL?) {
+        guard sessions[session.tabID] === session else { return }
+        sessionDidCommit(tabID: session.tabID, url: url)
+    }
+
     func sessionDidFinish(tabID: UUID,
                           url: URL?,
                           title: String?,
                           canGoBack: Bool,
                           canGoForward: Bool) {
         provisionalNavigations.remove(tabID)
+        navigationFailures.removeValue(forKey: tabID)
         if selectedTabID == tabID { loadingTabID = nil }
         if let index = tabs.firstIndex(where: { $0.id == tabID }) {
             updateTabURL(url, at: index)
@@ -945,6 +989,19 @@ final class BrowserStore {
         }
         scheduleSave()
         loadFavicon(tabID: tabID)
+    }
+
+    func sessionDidFinish(_ session: BrowserTabSession,
+                          url: URL?,
+                          title: String?,
+                          canGoBack: Bool,
+                          canGoForward: Bool) {
+        guard sessions[session.tabID] === session else { return }
+        sessionDidFinish(tabID: session.tabID,
+                         url: url,
+                         title: title,
+                         canGoBack: canGoBack,
+                         canGoForward: canGoForward)
     }
 
     func sessionDidObserve(_ session: BrowserTabSession, state: BrowserNavigationState) {
@@ -976,14 +1033,20 @@ final class BrowserStore {
         if didChange { scheduleSave() }
     }
 
-    func sessionDidFail(tabID: UUID, error: Error) {
+    func sessionDidFail(_ session: BrowserTabSession, error: Error) {
+        let tabID = session.tabID
+        guard sessions[tabID] === session else { return }
         provisionalNavigations.remove(tabID)
+        let failure = error as NSError
+        guard failure.domain != NSURLErrorDomain || failure.code != NSURLErrorCancelled else {
+            if selectedTabID == tabID { loadingTabID = nil }
+            return
+        }
         if selectedTabID == tabID {
             loadingTabID = nil
-            let failure = error as NSError
-            guard failure.domain != NSURLErrorDomain || failure.code != NSURLErrorCancelled else { return }
-            errorText = error.localizedDescription
         }
+        navigationFailures[tabID] = BrowserNavigationFailure(error: error,
+                                                             url: session.webView.url)
     }
 
     func dismissNavigationError() {

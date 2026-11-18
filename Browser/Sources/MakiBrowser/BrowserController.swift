@@ -206,9 +206,17 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let characters = event.charactersIgnoringModifiers?.lowercased() ?? ""
 
-            if flags == [.command, .option], characters == "t" {
-                self.store.newPrivateTab()
-                return nil
+            if flags == [.command, .option] {
+                switch characters {
+                case "t":
+                    self.store.newPrivateTab()
+                    return nil
+                case "r":
+                    self.store.reloadIgnoringCache()
+                    return nil
+                default:
+                    break
+                }
             }
 
             if self.store.isAddressVisible {
@@ -253,6 +261,9 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
                     self.store.newTab()
                     return nil
                 case "w":
+                    // ⌘W closes the selected tab; a pinned tab stays open,
+                    // including when it is the browser's only tab.
+                    if self.store.selectedTab?.isPinned == true { return nil }
                     if self.store.tabs.count <= 1 {
                         window.performClose(nil)
                     } else {

@@ -52,11 +52,13 @@ minimum size is left where it is instead of being squeezed.
 
 `⌃⌥⌘W` opens **MakiDesk Browser**, a separate WebKit app bundled with MakiDesk
 and listed by its window switcher: vertical tabs ordered by last use, pinned
-tabs that never expire, Active and Old groups with a 24/48-hour rule,
+tabs protected from closing, Active and Old groups with a 24/48-hour rule,
 favicon-tinted rows, a compact favicon-only mode and a relative time in
-five-minute steps. Its chrome follows the selected MakiDesk palette, while web
-pages keep their own styles. The address bar appears only when asked (`⌘L`) and suggests
-local history, open tabs, direct addresses and search actions navigable with
+five-minute steps. `⌘R` reloads; `⌘⌥R` reloads without using the cache. Network
+and certificate failures get a dedicated recovery screen. Its chrome follows
+the selected MakiDesk palette, while web pages keep their own styles. The
+address bar appears only when asked (`⌘L`) and suggests local history, open tabs,
+direct addresses and search actions navigable with
 ↑/↓, and a rail button copies the current page URL. MakiDesk has no built-in
 password manager; Apple Passwords autofill is not available in the current
 local build. Blocking is on by default and can be turned off for one site or one tab;
@@ -64,7 +66,7 @@ page summaries use the on-device model or can open the page URL in ChatGPT. It i
 not a second browser engine. It can be selected as the macOS default browser;
 incoming links show a chooser for MakiDesk Browser, another installed app or
 cancellation, which is useful for sites authenticated in another browser. It
-shows larger app icons in a three-column chooser and remembers external apps in
+shows app-sized icons in a three-column chooser and remembers external apps in
 last-used order. It also has private tabs with ephemeral site data, an adjustable
 Reader view, per-site data clearing and a per-tab Safari Web Inspector toggle.
 

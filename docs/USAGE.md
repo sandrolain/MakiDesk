@@ -1008,13 +1008,20 @@ browser without touching MakiDesk.
   it changes site or route. Sections: **Pinned**, **Active**, **Old**.
 - **24 and 48 hours.** A tab with no use for 24 hours moves from Active to Old;
   after 48 hours it is closed and forgotten. Pinned tabs never expire and stay
-  at the top, still ordered by use. Activating an Old tab brings it back to
-  Active. The clock is deliberately loose: one timer checks every five minutes,
-  so a transition can be up to five minutes late rather than waking the app
-  continuously. Switching tabs, typing, clicking or scrolling in the page
-  counts as use; the timestamp is written at most once a minute.
+  at the top, still ordered by use; they are also protected from manual close
+  actions until unpinned. Activating an Old tab brings it back to Active. The
+  clock is deliberately loose: one timer checks every five minutes, with a
+  60-second tolerance, so automatic closing can be about six minutes late
+  rather than waking the app continuously. Expired tabs are also removed when
+  the browser starts, and wake or clock changes trigger an immediate check.
+  Switching tabs, typing, clicking or scrolling in the page
+  counts as use; the timestamp is written at most once a minute. Use the trash
+  button in the icon rail to close every tab in Old at once; MakiDesk asks for
+  confirmation and keeps pinned tabs.
 - **Pin.** Pin or unpin a tab from its context menu or with `⇧⌘P`. Unpinning a
-  tab that is already older than 48 hours closes it on the next check.
+  tab that is already older than 48 hours closes it on the next check. While
+  pinned, the close button is hidden and **Close Tab** is disabled in the menu;
+  unpin it first to close it manually.
 - **Private tab.** Choose **New Private Tab** from the plus button's menu or
   press `⌥⌘T`. Private tabs use a temporary WebKit data store, do not add
   entries to address history and are omitted from saved tabs when the browser
@@ -1057,8 +1064,9 @@ browser without touching MakiDesk.
   macOS to make MakiDesk Browser the default for HTTP and HTTPS links. macOS
   may ask you to confirm. When a link arrives from another app, a chooser lets
   you open it in MakiDesk Browser, choose another installed app that handles
-  web links, or cancel. Other apps appear as larger icons in a three-column
-  grid and are ordered by recent use; successful choices are remembered across
+  web links, or cancel. MakiDesk Browser uses an app-sized icon like the other
+  choices; other apps appear in a three-column grid, ordered by recent use.
+  Successful choices are remembered across
   launches. The choice applies to that link; cookies and login sessions are not
   transferred. The default page is prefilled, not loaded automatically.
 - **Web Inspector.** The `{}` button in the icon rail enables or disables
@@ -1070,9 +1078,11 @@ browser without touching MakiDesk.
   longer available, it opens centered on an available display.
 - **Navigation.** The icon rail has back, forward and reload/stop. `⌘T` new tab,
   `⌘W` close tab (the last one closes the window), `⇧⌘W` close window, `⌘R`
-  reload, `⌘.` stop, `⌘[` / `⌘]` back and forward, `⌘1…9` choose a tab,
-  `⌃Tab` / `⌃⇧Tab` cycle. Failed navigations show a dismissible message over
-  the page; stopping a load does not show an error.
+  reload, `⌘⌥R` reload ignoring the cache, `⌘.` stop, `⌘[` / `⌘]` back and
+  forward, `⌘1…9` choose a tab, `⌃Tab` / `⌃⇧Tab` cycle. A failed navigation
+  replaces the web view with an error page identifying common network and
+  certificate problems, with **Reload** and **Go Back** actions. Stopping a
+  load does not show an error.
 - **Ad blocker.** Blocking is on by default and uses WebKit's content-blocker
   API, not JavaScript injected into the page. Disable it for the current site
   (persisted) or only for the current tab (until the tab navigates) from the
