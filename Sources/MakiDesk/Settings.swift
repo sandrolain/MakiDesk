@@ -99,6 +99,12 @@ enum SettingsDefaults {
         .timerSoundEnabled: true,
         .timerSoundName: TimerSettings.defaultSound,
 
+        // Keyboard sound feedback is opt-in; the monitor never starts from a
+        // default or asks for Input Monitoring during launch.
+        .keyboardSoundsEnabled: false,
+        .keyboardSoundsPreset: KeyboardSoundPreset.soft.rawValue,
+        .keyboardSoundsVolume: 0.35,
+
         // Notes: the editor's own size and the split view's starting width.
         .notesFontSize: 13.0,
         .notesSidebarWidth: 230.0,
@@ -107,12 +113,12 @@ enum SettingsDefaults {
         .clipboardKeepsImages: true,
         .clipboardImageBudgetMB: 32,
 
-        // Utility bar (F1): opens on approach, 46 pt, every button, labels by
+        // Utility bar (F1): opens on approach, 78 pt, every button, labels by
         // width. `utilityBarHiddenItems` is the old comma-separated hidden
         // list: the buttons now live in utility-bar.json, and this key is read
         // once to migrate a pre-file choice, then removed.
         .utilityBarEnabled: true,
-        .utilityBarHeight: 46,
+        .utilityBarHeight: 78,
         .utilityBarHiddenItems: "",
         .utilityBarLabels: BarLabelMode.auto.rawValue,
 

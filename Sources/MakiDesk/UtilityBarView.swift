@@ -20,7 +20,7 @@ struct UtilityBarView: View {
     /// The buttons grow with the bar, within limits: a taller bar should feel
     /// roomier, not merely padded.
     private var controlHeight: CGFloat {
-        min(max(model.height - 14, 24), 38)
+        min(max((model.height - 18) / 2, 22), 38)
     }
 
     var body: some View {
@@ -32,17 +32,25 @@ struct UtilityBarView: View {
             let utility = shown.filter { $0.zone == .utility }
             let toggles = shown.filter { $0.zone == .toggle }
             let infoItems = shown.filter { $0.zone == .info }
-            HStack(spacing: 2) {
-                zone(utility, plan: plan, labels: labels)
-                if utility.isEmpty == false, toggles.isEmpty == false { divider }
-                zone(toggles, plan: plan, labels: labels)
-                Spacer(minLength: 6)
-                infoZone(infoItems, plan: plan, labels: labels)
-                if infoItems.isEmpty == false { divider }
-                rightZone(plan: plan)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    groupLabel("Panels & tools")
+                    zone(utility, plan: plan, labels: labels)
+                    Spacer(minLength: 4)
+                    rightZone(plan: plan)
+                }
+                HStack(spacing: 4) {
+                    groupLabel("Window controls")
+                    zone(toggles, plan: plan, labels: labels)
+                    if toggles.isEmpty == false, infoItems.isEmpty == false { divider }
+                    if infoItems.isEmpty == false { groupLabel("System status") }
+                    infoZone(infoItems, plan: plan, labels: labels)
+                    Spacer(minLength: 0)
+                }
             }
-            .padding(.horizontal, 8)
-            .frame(width: proxy.size.width, height: model.height)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(width: proxy.size.width, height: model.height, alignment: .leading)
             .makiSurface(.chrome, theme: theme, fill: theme.raisedSurface)
             .onAppear {
                 width = proxy.size.width
@@ -109,13 +117,25 @@ struct UtilityBarView: View {
             .padding(.horizontal, 4)
     }
 
+    private func groupLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(theme.subtext.opacity(0.8))
+            .lineLimit(1)
+            .padding(.horizontal, 4)
+    }
+
     // MARK: - Controls
 
     private func control(_ item: BarItem, labels: Bool, overflowCount: Int = 0,
                          now: Date = Date()) -> some View {
         Button {
             selected = item.id
-            controller.activate(item)
+            if case .overflow = item.kind {
+                showOverflowMenu()
+            } else {
+                controller.activate(item)
+            }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: symbol(for: item))
@@ -260,18 +280,28 @@ struct UtilityBarView: View {
     // MARK: - Plan and keyboard
 
     private func plan(for width: CGFloat, labels: Bool) -> BarLayout.Plan {
-        let items = store.barConfiguration.resolvedItems().map {
-            BarLayoutItem(id: $0.id, priority: $0.priority,
-                          width: $0.width(labels: labels, badge: badge(for: $0)))
+        let configured = store.barConfiguration.resolvedItems()
+        func layout(_ items: [BarItem], reserve: CGFloat) -> BarLayout.Plan {
+            let measured = items.map {
+                BarLayoutItem(id: $0.id, priority: $0.priority,
+                              width: $0.width(labels: labels, badge: badge(for: $0)))
+            }
+            return BarLayout.plan(measured, available: width, reserve: reserve)
         }
-        // The right-hand controls are never planned away, so their width, the
-        // spacing, the two dividers and the side padding are taken out first.
-        // The chevron's own count is not known until the plan is made, so its
-        // widest usual badge is reserved up front.
-        let right = BarItemCatalog.right.reduce(0) { $0 + $1.width(labels: false) }
-        let count = CGFloat(items.count + BarItemCatalog.right.count)
-        let reserve = right + 24 + count * 2 + 18 + 6 + 16
-        return BarLayout.plan(items, available: width, reserve: reserve)
+        // The wider, two-row bar gives each contextual group its own width
+        // budget. Reserve the right controls on row one and the group labels on
+        // both rows; the overflow indicator is reserved before its count is known.
+        let utility = layout(configured.filter { $0.zone == .utility }, reserve: 180)
+        let status = layout(configured.filter { $0.zone == .toggle || $0.zone == .info }, reserve: 210)
+        return BarLayout.Plan(visible: utility.visible + status.visible,
+                              overflow: utility.overflow + status.overflow)
+    }
+
+    private func showOverflowMenu() {
+        let items = store.barConfiguration.resolvedItems()
+        let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        let plan = plan(for: width, labels: model.showsLabels(at: width))
+        controller.popOverflow(plan.overflow.compactMap { byID[$0] })
     }
 
     private func orderedIDs(labels: Bool) -> [String] {
@@ -306,9 +336,7 @@ struct UtilityBarView: View {
         guard let item = items.first(where: { $0.id == selected })
                 ?? BarItemCatalog.right.first(where: { $0.id == selected }) else { return }
         if case .overflow = item.kind {
-            let plan = plan(for: width, labels: model.showsLabels(at: width))
-            let byID = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
-            controller.popOverflow(plan.overflow.compactMap { byID[$0] })
+            showOverflowMenu()
         } else {
             controller.activate(item)
         }

@@ -80,6 +80,15 @@ click ripples can be enabled as well. It stops by itself unless you asked for no
 limit, and is never left on. The system pointer is never replaced: the effect is
 drawn around it, not over it.
 
+### Optional keyboard sound feedback
+
+Turn on **Keyboard Sounds** in its own Settings section to hear a short,
+locally generated sound as you type. Choose Soft, Crisp, Low or the playful
+Quack preset, set the volume, and use the System menu for a quick mute. MakiDesk
+asks for Input Monitoring only when you enable the feature; the passive listener
+reacts to key-down events without reading characters, modifiers or the frontmost
+app.
+
 ### A switcher you will actually use
 
 `⌥⇥` opens live previews of every window; `⌥Space` adds a search field that
@@ -241,8 +250,9 @@ running something else. Every row is an action MakiDesk already has.
 Rest the pointer on the menu bar and a strip drops down: the everyday panels,
 the capture tools, the Ports window, the presentation toggles, and the figures
 worth glancing at — free disk, CPU, the windows in the switcher and the
-countdown on Timer. Untick the buttons you never use. It appears after a
-quarter of a second, retreats when the pointer leaves, takes no room from
+countdown on Timer. Its taller two-row layout groups panels and tools, window
+controls, and system status. Untick the buttons you never use. It appears after
+a quarter of a second, retreats when the pointer leaves, takes no room from
 windows and never takes the keyboard by itself. The pin keeps it out; `⌃⌥B`
 opens it from the keyboard (arrows choose, Return runs, Esc closes), and
 `utility bar`, `bar show`, `bar hide` and `bar pin` do the same from the command

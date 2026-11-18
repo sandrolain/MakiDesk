@@ -14,6 +14,7 @@ struct MakiDeskApp: App {
 
     @State private var system = SystemMonitor.shared
     @State private var pointerEffects = PointerEffectController.shared
+    @State private var keyboardSounds = KeyboardSoundController.shared
 
     @NSApplicationDelegateAdaptor(MakiDeskAppDelegate.self) private var appDelegate
 
@@ -33,6 +34,7 @@ struct MakiDeskApp: App {
         ShelfController.shared.start()
         IdlePerformanceMetrics.shared.start()
         SystemMonitor.shared.start()
+        KeyboardSoundController.shared.start()
         UtilityBarController.shared.start()
         TerminalController.shared.start()
         DockerController.shared.start()
@@ -492,6 +494,17 @@ struct MakiDeskApp: App {
                     Button("Turn On CPU Alerts") { system.updateCPUAlertsEnabled(true) }
                 }
                 Divider()
+                Toggle("Keyboard Sounds", isOn: Binding(
+                    get: { keyboardSounds.isEnabled },
+                    set: { keyboardSounds.setEnabled($0) }
+                ))
+                Button("Configure Keyboard Sounds…") { openKeyboardSoundsSettingsTab() }
+                if keyboardSounds.isEnabled && !keyboardSounds.permissionGranted {
+                    Button("Input Monitoring Settings…") {
+                        keyboardSounds.openInputMonitoringSettings()
+                    }
+                }
+                Divider()
                 Button("Ports…") { store.applyShortcut(.openPorts) }
                 Divider()
                 Button("MakiDesk Settings…") { openSystemSettingsTab() }
@@ -552,6 +565,12 @@ struct MakiDeskApp: App {
         SettingsController.shared.show()
     }
 
+    private func openKeyboardSoundsSettingsTab() {
+        UserDefaults.standard.set(SettingsView.SettingsTab.keyboardSounds.rawValue,
+                                  forKey: SettingsView.SettingsTab.defaultsKey)
+        SettingsController.shared.show()
+    }
+
     /// The first launch opens Settings, where the permissions are explained.
     private func openSetupOnFirstRun() {
         guard !Self.didAttemptFirstRun else { return }
@@ -574,6 +593,7 @@ final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             NotesStore.shared.flushIfNeeded(cleanClose: true)
             TimerController.shared.shutdown()
+            KeyboardSoundController.shared.shutdown()
             ChecklistStore.shared.flushBlocking()
             ShelfController.shared.shutdown()
             ScreenshotLibraryController.shared.shutdown()

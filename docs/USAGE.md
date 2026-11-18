@@ -1500,6 +1500,20 @@ the window opens and on **Refresh**; nothing polls while it is closed.
 - lsof normally sees the ports of the current user; system daemons it cannot
   inspect are simply absent.
 
+## Keyboard sound feedback
+
+Open **Settings ▸ Keyboard Sounds** and turn on **Play sounds as I type**.
+MakiDesk then asks for **Input Monitoring**. Choose the Soft, Crisp, Low or
+Quack synthesized sound and adjust its volume. The **System** menu has a
+Keyboard Sounds switch for quick mute and a **Configure Keyboard Sounds…**
+shortcut to this section; **Try** previews the selected sound.
+
+The listener is passive and runs only while the setting is on. It responds to
+key-down events without reading characters, modifiers, typed text or the app in
+front. Sound is generated locally; no sample pack is downloaded or stored. If
+permission is not granted yet, enable MakiDesk in **System Settings ▸ Privacy &
+Security ▸ Input Monitoring**, then return to MakiDesk.
+
 ## Notifications
 
 MakiDesk reports results with a small notice. Each one carries a state that
@@ -1553,11 +1567,13 @@ reopening Settings starts at the first one.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
   width, corner and display), the countdown card (visibility, opacity, corner
   and display), the window switcher/search appearance (including the groups
-  column and its announcements), the utility bar (pointer reveal, height,
-  labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
+  column and its announcements), the utility bar (pointer reveal, taller two-row
+  layout, labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
   macOS saves, and text recognition quality and correction. The display choice
   *Active display* is the monitor of the last window focus or pointer move;
   *Mouse pointer* pins a card to wherever the pointer is at that moment.
+- **Keyboard Sounds** — opt-in key feedback, synthesized preset, volume and
+  Input Monitoring permission.
 - **Terminal** — font family and size, shell command, quake height and SSH
   profiles; the terminal follows the theme chosen in Panels ▸ Look and applies
   changes without a restart.

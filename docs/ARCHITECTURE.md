@@ -63,7 +63,8 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ListeningPorts.swift`                                                                                          | Pure `lsof -Fpcn` parser, injectable reader, list model; reads on open/refresh, never polls.                                                                            |
 | `PortsWindow.swift`                                                                                             | Ports window: filter, addresses, confirmed `SIGTERM` termination.                                                                                                       |
 | `SystemNotifier.swift`                                                                                          | Opt-in `UNUserNotificationCenter` copy of a notice; permission asked only when the option is switched on.                                                               |
-| `ShortcutManager.swift`                                                                                         | Carbon global hot keys (no Input Monitoring).                                                                                                                           |
+| `KeyboardSoundController.swift`                                                                                | Opt-in listen-only key-down tap, bounded event handoff, synthesized presets and serial audio playback.                                                                    |
+| `ShortcutManager.swift`                                                                                         | Carbon global hot keys; these registrations remain independent of the optional keyboard-sound event tap.                                                                |
 | `NotesStore.swift`                                                                                              | Notes, drafts, session, external-file baselines, Trash.                                                                                                                 |
 | `Confirmation.swift`                                                                                            | The modals as values: one wording, one presenter; no file builds an `NSAlert` by hand.                                                                                  |
 | `StoredJSONFile.swift`                                                                                          | The JSON-file mechanics four stores repeated: the path, the atomic write, the quarantine of an unreadable file.                                                         |
@@ -351,11 +352,17 @@ loaded at start and re-read with one `stat` when the bar appears, so an edit
 applies without a relaunch; a corrupt file is quarantined as `.bak` and a newer
 one is used read-only. Ids missing from the file are appended visible, so a new
 catalog button needs no migration; the old comma-separated hidden list is read
-once and then removed. The right-hand controls never leave the bar. `BarLayout`
-picks what fits from the widths the view also uses, badges included (least
-important first, rightmost on a tie), and the remainder becomes an `NSMenu`
-anchored under the chevron rather than at the pointer, because a passive panel
-must not become key and a keyboard session can open it from another display. The Timer button carries the nearest countdown as
+once and then removed. The right-hand controls never leave the bar.
+`UtilityBarView` uses two rows: workspace panels and tools above, window
+controls and system status below. The height range is 64–96 pt, leaving the
+controls readable in both rows. Each row gets an independent width plan, and
+the unplaced controls from either row share the More menu. `BarLayout` picks
+what fits from the widths the view also uses, badges included (least important
+first, rightmost on a tie), and the remainder becomes an `NSMenu` anchored under
+the chevron rather than at the pointer, because a passive panel must not become
+key and a keyboard session can open it from another display. Mouse and keyboard
+activation both call the same overflow presentation path. The Timer button
+carries the nearest countdown as
 its badge; a second info control with the same name was removed. `⌃⌥B` is the one
 keyboard session: the panel's `canBecomeKey` is true only then, arrows move the
 selection, Esc closes, and `PanelFocusReturn` gives the keyboard back. Its
@@ -1047,10 +1054,30 @@ it. Notices go through `HUDController`; the optional second copy is posted by
 app so `swift run` and the test runner never touch it. No process name, path or
 command line is logged.
 
+## Keyboard sound feedback
+
+`KeyboardSoundController` owns the opt-in setting and Input Monitoring state.
+It does not request access on launch: the user must turn the feature on first.
+The listen-only Core Graphics event tap runs its run loop on a dedicated thread
+and subscribes only to key-down event types. Its callback reads no event fields;
+it transfers a capped count of signals to one serial audio queue, with at most
+one drain scheduled. That queue owns the `AVAudioEngine`, generated PCM buffer,
+preset and volume. Turning the feature off clears queued signals, invalidates
+the tap, stops audio, and persists the disabled setting. Permission is checked
+again when MakiDesk becomes active so a grant made in System Settings can start
+the feature without polling.
+
+The presets are synthesized locally; there are no soundpack files or network
+requests. Neither the listener nor the audio path stores key codes, characters,
+modifiers, text, application identity or per-key timestamps.
+
 ## Permissions
 
 - **Accessibility** — AX window discovery/frames, `CGEvent` for clipboard paste,
   the shelf's global shake monitor. No Input Monitoring entitlement is requested.
+- **Input Monitoring** — optional, only for Keyboard Sounds; requested after the
+  user enables it. The event tap uses listen-only mode and does not inspect key
+  data beyond the event type.
 - **Screen Recording** — ScreenCaptureKit previews and the content measure.
 - **No sandbox** — the app is distributed outside the Mac App Store. A sandboxed
   build would not be able to drive other apps' windows this way.

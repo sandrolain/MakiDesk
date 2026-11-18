@@ -14,6 +14,9 @@ enum SettingsKey: String, CaseIterable, Sendable {
     /// A macOS tiling preference: read only, never written.
     case enableTilingOptionAccelerator = "EnableTilingOptionAccelerator"
     case idlePerformanceDiagnostics = "IdlePerformanceDiagnostics"
+    case keyboardSoundsEnabled = "keyboardSoundsEnabled"
+    case keyboardSoundsPreset = "keyboardSoundsPreset"
+    case keyboardSoundsVolume = "keyboardSoundsVolume"
     case keepTerminalWindowShortcuts = "keepTerminalWindowShortcuts"
     case animationDuration = "animationDuration"
     case animationsEnabled = "animationsEnabled"

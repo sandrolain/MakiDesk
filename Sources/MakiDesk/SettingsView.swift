@@ -10,7 +10,7 @@ struct SettingsView: View {
         /// window and `@AppStorage` reads it here, so the literal lives once.
         static let defaultsKey = SettingsKey.settingsTab.rawValue
 
-        case general, windows, layouts, panels, terminal, notifications, groups, system, dropzones
+        case general, windows, layouts, panels, keyboardSounds, terminal, notifications, groups, system, dropzones
 
         var id: String { rawValue }
 
@@ -20,6 +20,7 @@ struct SettingsView: View {
             case .windows: return "Windows"
             case .layouts: return "Layouts"
             case .panels: return "Panels"
+            case .keyboardSounds: return "Keyboard Sounds"
             case .terminal: return "Terminal"
             case .notifications: return "Notifications"
             case .groups: return "Groups"
@@ -35,6 +36,7 @@ struct SettingsView: View {
             case .windows: return "macwindow"
             case .layouts: return "rectangle.split.3x1"
             case .panels: return "rectangle.on.rectangle"
+            case .keyboardSounds: return "keyboard"
             case .terminal: return "terminal"
             case .notifications: return "bell"
             case .groups: return "square.grid.2x2"
@@ -122,6 +124,7 @@ struct SettingsView: View {
         .init(title: "Notes and clipboard", keywords: "notes clipboard history privacy", tab: .panels),
         .init(title: "Shelf", keywords: "shelf drag drop files", tab: .panels),
         .init(title: "Timers and checklist", keywords: "timer countdown checklist reminders", tab: .panels),
+        .init(title: "Keyboard sounds", keywords: "keyboard typing sound input monitoring quack", tab: .keyboardSounds),
         .init(title: "Notifications", keywords: "notification hud banner sound", tab: .notifications),
         .init(title: "Permissions", keywords: "accessibility screen recording permission", tab: .general),
         .init(title: "Dropzones", keywords: "dropzone automation action", tab: .dropzones),
@@ -172,6 +175,7 @@ struct SettingsView: View {
     }
 
     @State private var system = SystemMonitor.shared
+    @State private var keyboardSounds = KeyboardSoundController.shared
 
     private var systemDiskMode: Binding<DiskMenuBarMode> {
         Binding(get: { system.diskMenuBarMode }, set: { system.updateDiskMenuBarMode($0) })
@@ -456,6 +460,7 @@ struct SettingsView: View {
                         case .windows: windowsTab
                         case .layouts: layoutsTab
                         case .panels: panelsTab
+                        case .keyboardSounds: keyboardSoundsTab
                         case .terminal: terminalTab
                         case .notifications: notificationsTab
                         case .groups: groupsTab
@@ -472,6 +477,45 @@ struct SettingsView: View {
             }
             .id(settingsTab)
             .transition(.opacity)
+        }
+    }
+
+    private var keyboardSoundsTab: some View {
+        SettingsSection("Keyboard Sounds") {
+            Toggle("Play sounds as I type", isOn: Binding(
+                get: { keyboardSounds.isEnabled },
+                set: { keyboardSounds.setEnabled($0) }
+            ))
+            Picker("Sound", selection: Binding(
+                get: { keyboardSounds.preset },
+                set: { keyboardSounds.setPreset($0) }
+            )) {
+                ForEach(KeyboardSoundPreset.allCases) { preset in
+                    Text(preset.title).tag(preset)
+                }
+            }
+            .disabled(!keyboardSounds.isEnabled)
+            SliderRow(title: "Volume",
+                      value: Binding(get: { keyboardSounds.volume },
+                                     set: { keyboardSounds.setVolume($0) }),
+                      range: 0...1, step: 0.05, unit: "%", percent: true)
+                .disabled(!keyboardSounds.isEnabled)
+            HStack(spacing: 10) {
+                Label(keyboardSounds.permissionMessage,
+                      systemImage: keyboardSounds.isListening
+                        ? "checkmark.circle.fill" : "keyboard")
+                    .font(.caption)
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                if keyboardSounds.isEnabled && !keyboardSounds.permissionGranted {
+                    Button("Input Monitoring Settings…") {
+                        keyboardSounds.openInputMonitoringSettings()
+                    }
+                }
+                Button("Try") { keyboardSounds.preview() }
+                    .disabled(!keyboardSounds.isEnabled || !keyboardSounds.permissionGranted)
+            }
+            caption("Choose a synthesized key sound, including Quack, and set its volume. MakiDesk hears only key-down events; it does not read characters, modifiers or the active app. Turning this on asks for Input Monitoring. The listener runs only while enabled and is removed when MakiDesk quits. The System menu has a quick on/off switch.")
         }
     }
 

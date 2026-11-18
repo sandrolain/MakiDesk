@@ -18,17 +18,19 @@ titles, previews, notes, clipboard contents, recognized text or files anywhere.
 
 ## Permissions
 
-MakiDesk is not sandboxed and is distributed outside the Mac App Store. It asks
-for two macOS TCC permissions:
+MakiDesk is not sandboxed and is distributed outside the Mac App Store. It uses
+macOS privacy permissions only for the features that need them:
 
 | Permission | Why |
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
+| **Input Monitoring** | Optional keyboard sound feedback. Requested only when you turn on Keyboard Sounds; the passive listener receives key-down events while enabled. |
 | **Apple Intelligence** | Rewriting notes uses the on-device model only: no network, no account, no content in logs. The notice under Settings ▸ Panels ▸ Tools says when it is unavailable. |
 | **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, the area selected for text recognition, the annotated captures and screen recordings (T40). A recording can include the system's own sound; the microphone is never used. |
 
-Both are granted by you in **System Settings ▸ Privacy & Security** and can be
-revoked there at any time. The app does not request Input Monitoring, Full Disk
+These permissions are granted by you in **System Settings ▸ Privacy & Security**
+and can be revoked there at any time. Input Monitoring is requested only after
+you explicitly enable Keyboard Sounds. The app does not request Full Disk
 Access, Contacts, Calendar, Microphone, Camera or Automation.
 
 The pointer effects add no permission at all: `⌃⌥⇧P` and `⌃⌥⇧X` read the pointer
@@ -63,6 +65,10 @@ identity asks again. A Developer ID-signed public release behaves best here.
   is on, to place a transparent panel around the pointer. It is used in memory
   only; the position is never recorded, logged or written, and nothing samples
   the pointer or stays on screen once the feature is off.
+- **Keyboard event type**, only while Keyboard Sounds is enabled: a passive tap
+  notices key-down events and plays a locally generated sound. It does not read
+  key codes, characters, modifiers, typed text or the frontmost app. A bounded
+  in-memory count coalesces bursts; no key data is logged, persisted or sent.
 - **Window images** through ScreenCaptureKit, only while previews or the
   content measure are in use. The images are downscaled and kept **in memory**;
   they are used for the switcher cards, the overlay and the edge-energy score,
