@@ -668,7 +668,9 @@ list as it arrives, so the first paint does not wait for disk usage; a generatio
 check discards a superseded result, and the refresh task exists only while the
 window is visible and the app is active. Logs are a separate `DockerLogStream`
 process with a bounded `DockerLogBuffer`; stats poll only while their tab is
-visible. Prune uses `docker system prune` for the basic action and
+visible. Resource search state is held independently for containers, images,
+volumes and networks, and each section owns the placement of its search field;
+Cleanup has no search control. Prune uses `docker system prune` for the basic action and
 `docker system prune --all --volumes` for "prune all", with the preview computed
 from the inventory because Docker has no dry-run. The helper writes
 `Docker/window.json` and `Docker/settings.json`; MakiDesk writes

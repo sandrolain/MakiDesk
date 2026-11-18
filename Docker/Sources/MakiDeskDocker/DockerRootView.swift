@@ -112,42 +112,11 @@ struct DockerRootView: View {
             .help("Docker settings")
         }
         ToolbarItem(placement: .primaryAction) {
-            HStack(spacing: 9) {
-                if store.section != .cleanup {
-                    HStack(spacing: 7) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(store.theme.subtext)
-                            .accessibilityHidden(true)
-                        TextField("Search \(store.section.title.lowercased())", text: $store.search)
-                            .textFieldStyle(.plain)
-                            .accessibilityLabel("Search \(store.section.title.lowercased())")
-                            .help("Filter \(store.section.title.lowercased())")
-                        if store.search.isEmpty == false {
-                            Button { store.search = "" } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(store.theme.subtext)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Clear search")
-                            .accessibilityLabel("Clear search")
-                        }
-                    }
-                    .padding(.horizontal, 9)
-                    .frame(width: 220, height: 26)
-                    .background(store.theme.surface,
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .stroke(store.theme.border.opacity(0.7), lineWidth: 1)
-                    }
-                }
-
-                if store.isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                        .frame(width: 16, height: 16)
-                        .accessibilityLabel("Refreshing Docker")
-                }
+            if store.isRefreshing {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 16, height: 16)
+                    .accessibilityLabel("Refreshing Docker")
             }
         }
     }
@@ -352,8 +321,8 @@ struct DockerContainersView: View {
                 subtitle: "\(store.containers.filter(\.isRunning).count) running · \(store.containers.count) total",
                 store: store
             )
-            HStack {
-                if selectedIDs.isEmpty == false {
+            if selectedIDs.isEmpty == false {
+                HStack {
                     Text("\(selectedIDs.count) selected")
                         .font(.callout)
                         .foregroundStyle(store.theme.subtext)
@@ -368,20 +337,16 @@ struct DockerContainersView: View {
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         store.performBulk(.remove, ids: selectedIDs)
                     }
+                    Spacer()
                 }
-                Spacer()
-                Menu {
-                    Picker("Sort by", selection: $sortOrder) {
-                        ForEach(DockerContainerSortOrder.allCases, id: \.self) { order in
-                            Text(order.title).tag(order)
-                        }
-                    }
-                } label: {
-                    Label(sortOrder.title, systemImage: "arrow.up.arrow.down")
-                }
-                .menuStyle(.borderlessButton)
-                .help("Sort containers within each group")
-
+                .padding(.horizontal, 14)
+                .padding(.top, 5)
+                .background(store.theme.surface)
+            }
+            HStack {
+                DockerSectionSearch(text: $store.containerSearch,
+                                    placeholder: "Search containers",
+                                    theme: store.theme)
                 Menu {
                     Picker("State", selection: $store.containerStateFilter) {
                         ForEach(DockerContainerStateFilter.allCases, id: \.self) { filter in
@@ -408,9 +373,22 @@ struct DockerContainersView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .help("Filter containers by state, health, or source")
+
+                Menu {
+                    Picker("Sort by", selection: $sortOrder) {
+                        ForEach(DockerContainerSortOrder.allCases, id: \.self) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                } label: {
+                    Label(sortOrder.title, systemImage: "arrow.up.arrow.down")
+                }
+                .menuStyle(.borderlessButton)
+                .help("Sort containers within each group")
+                Spacer()
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 4)
+            .frame(height: 30)
             .frame(maxWidth: .infinity)
             .background(store.theme.surface)
             Divider().overlay(store.theme.border)
@@ -433,8 +411,7 @@ struct DockerContainersView: View {
                     }
                     ForEach(composeGroups) { group in
                         Section {
-                            let isSearching = store.search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                            if store.isGroupCollapsed(group.id) == false || isSearching {
+                            if store.isGroupCollapsed(group.id) == false || store.isSearchingContainers {
                                 ForEach(sortedContainers(in: group)) { container in
                                     containerRow(container, indent: 18)
                                 }

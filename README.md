@@ -291,8 +291,9 @@ the app bundle.
 `⌃⌥E` opens **MakiDesk Docker**, a native window over the Docker CLI. Containers
 are grouped by Compose project, with start/stop/restart/delete and a terminal
 that opens in MakiDesk Terminal; images, volumes and networks show their size and
-usage with filters for state, health, usage and resource type; logs and stats
-update while you watch them. The container overview links common published
+usage with filters for state, health, usage and resource type; each resource
+section has its own search field. Logs and stats update while you watch them.
+The container overview links common published
 HTTP/HTTPS ports to the default browser. **Cleanup** previews what a
 prune would reclaim and separates the safe prune from the one that also removes
 unused volumes. It can also pull/build/tag/push/save images, transfer files,

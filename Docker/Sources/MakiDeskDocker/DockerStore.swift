@@ -98,7 +98,10 @@ final class DockerStore {
     var actionError: String?
     var actionMessage: String?
     var lastUpdated: Date?
-    var search = ""
+    var containerSearch = ""
+    var imageSearch = ""
+    var volumeSearch = ""
+    var networkSearch = ""
     var showStopped = true
     var containerStateFilter: DockerContainerStateFilter = .defaultVisibility
     var containerHealthFilter: DockerContainerHealthFilter = .all
@@ -458,8 +461,15 @@ final class DockerStore {
 
     // MARK: - Filtering
 
-    private var query: String {
-        search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    private var containerQuery: String { normalizedQuery(containerSearch) }
+    private var imageQuery: String { normalizedQuery(imageSearch) }
+    private var volumeQuery: String { normalizedQuery(volumeSearch) }
+    private var networkQuery: String { normalizedQuery(networkSearch) }
+
+    var isSearchingContainers: Bool { containerQuery.isEmpty == false }
+
+    private func normalizedQuery(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     var filteredGroups: [DockerContainerGroup] {
@@ -468,7 +478,7 @@ final class DockerStore {
                 containerStateFilter.includes(container, showStopped: showStopped)
                     && containerHealthFilter.includes(container.health)
                     && containerSourceFilter.includes(container)
-                    && (query.isEmpty || container.matches.contains(query))
+                    && (containerQuery.isEmpty || container.matches.contains(containerQuery))
             }
             guard members.isEmpty == false else { return nil }
             return DockerContainerGroup(id: group.id,
@@ -481,21 +491,21 @@ final class DockerStore {
     var filteredImages: [DockerImage] {
         images.filter { image in
             imageFilter.includes(image)
-                && (query.isEmpty || image.matches.contains(query))
+                && (imageQuery.isEmpty || image.matches.contains(imageQuery))
         }
     }
 
     var filteredVolumes: [DockerVolume] {
         volumes.filter { volume in
             volumeFilter.includes(volume)
-                && (query.isEmpty || volume.matches.contains(query))
+                && (volumeQuery.isEmpty || volume.matches.contains(volumeQuery))
         }
     }
 
     var filteredNetworks: [DockerNetwork] {
         networks.filter { network in
             networkFilter.includes(network)
-                && (query.isEmpty || network.matches.contains(query))
+                && (networkQuery.isEmpty || network.matches.contains(networkQuery))
         }
     }
 

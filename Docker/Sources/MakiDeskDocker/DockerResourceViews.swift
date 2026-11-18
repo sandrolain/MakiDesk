@@ -7,6 +7,41 @@ private func dockerTableHeader(_ title: String, theme: DockerUITheme) -> Text {
         .foregroundColor(theme.text)
 }
 
+struct DockerSectionSearch: View {
+    @Binding var text: String
+    let placeholder: String
+    let theme: DockerUITheme
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(theme.subtext)
+                .accessibilityHidden(true)
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .accessibilityLabel(placeholder)
+                .help(placeholder)
+            if text.isEmpty == false {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(theme.subtext)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(minWidth: 130, maxWidth: 230)
+        .frame(height: 26)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(theme.border.opacity(0.7), lineWidth: 1)
+        }
+    }
+}
+
 struct DockerImagesView: View {
     @Bindable var store: DockerStore
     @State private var sortOrder = [KeyPathComparator<DockerImage>(\.primaryTag)]
@@ -23,6 +58,9 @@ struct DockerImagesView: View {
                 store: store
             )
             HStack {
+                DockerSectionSearch(text: $store.imageSearch,
+                                    placeholder: "Search images",
+                                    theme: store.theme)
                 Spacer()
                 Menu {
                     Picker("Images", selection: $store.imageFilter) {
@@ -45,6 +83,7 @@ struct DockerImagesView: View {
                 .padding(.trailing, 12)
             }
             .frame(height: 30)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
             .background(store.theme.surface)
             Divider().overlay(store.theme.border)
@@ -144,6 +183,9 @@ struct DockerVolumesView: View {
                 store: store
             )
             HStack {
+                DockerSectionSearch(text: $store.volumeSearch,
+                                    placeholder: "Search volumes",
+                                    theme: store.theme)
                 Spacer()
                 Menu {
                     Picker("Volumes", selection: $store.volumeFilter) {
@@ -164,6 +206,7 @@ struct DockerVolumesView: View {
                     .padding(.trailing, 12)
             }
             .frame(height: 30)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
             .background(store.theme.surface)
             Divider().overlay(store.theme.border)
@@ -261,6 +304,9 @@ struct DockerNetworksView: View {
                 store: store
             )
             HStack {
+                DockerSectionSearch(text: $store.networkSearch,
+                                    placeholder: "Search networks",
+                                    theme: store.theme)
                 Spacer()
                 Menu {
                     Picker("Networks", selection: $store.networkFilter) {
@@ -281,6 +327,7 @@ struct DockerNetworksView: View {
                     .padding(.trailing, 12)
             }
             .frame(height: 30)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity)
             .background(store.theme.surface)
             Divider().overlay(store.theme.border)

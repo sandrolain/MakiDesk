@@ -868,9 +868,10 @@ says so in a notice instead of failing silently.
 window over the Docker CLI. Its **Window** menu offers the normal window
 management commands and lists the open Docker window. It is a client, not a container engine: Docker
 Desktop, OrbStack, colima or Docker Engine must already be installed and
-reachable through the usual `docker` command. Search is on the right of the
-toolbar and filters containers, images, volumes and networks; it is hidden in
-**Cleanup**, where it has no effect.
+reachable through the usual `docker` command. Each resource section has its
+own search field beside that section's filters and actions. Searches for
+containers, images, volumes and networks stay independent when switching
+sections; **Cleanup** has no search field.
 
 - **Containers.** The list groups containers by Compose project and puts
   containers without a project under **Standalone**. Compose groups start
