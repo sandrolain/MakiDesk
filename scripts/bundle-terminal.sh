@@ -21,8 +21,8 @@ mkdir -p "$APP/Contents/Resources/bin"
 cp "$BIN_DIR/makidesk" "$APP/Contents/Resources/bin/makidesk"
 chmod +x "$APP/Contents/Resources/bin/makidesk"
 cp "$ROOT/Terminal/Resources/Info.plist" "$APP/Contents/Info.plist"
-if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
-  cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+if [ -f "$ROOT/Resources/AppIcons/Terminal.icns" ]; then
+  cp "$ROOT/Resources/AppIcons/Terminal.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 codesign --force --sign - "$APP/Contents/Resources/bin/makidesk" >/dev/null 2>&1

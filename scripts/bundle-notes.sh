@@ -12,8 +12,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/MakiDesk" "$APP/Contents/MacOS/MakiDeskNotes"
 cp "$ROOT/Notes/Resources/Info.plist" "$APP/Contents/Info.plist"
-if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
-  cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+if [ -f "$ROOT/Resources/AppIcons/Notes.icns" ]; then
+  cp "$ROOT/Resources/AppIcons/Notes.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 CERT_NAME="MakiDesk Local Signing"

@@ -15,8 +15,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/MakiDeskBrowser" "$APP/Contents/MacOS/MakiDeskBrowser"
 cp "$ROOT/Browser/Resources/Info.plist" "$APP/Contents/Info.plist"
-if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
-  cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+if [ -f "$ROOT/Resources/AppIcons/Browser.icns" ]; then
+  cp "$ROOT/Resources/AppIcons/Browser.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 CERT_NAME="MakiDesk Local Signing"

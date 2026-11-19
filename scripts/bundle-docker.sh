@@ -15,8 +15,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/MakiDeskDocker" "$APP/Contents/MacOS/MakiDeskDocker"
 cp "$ROOT/Docker/Resources/Info.plist" "$APP/Contents/Info.plist"
-if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
-  cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+if [ -f "$ROOT/Resources/AppIcons/Docker.icns" ]; then
+  cp "$ROOT/Resources/AppIcons/Docker.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 codesign --force --sign - "$APP" >/dev/null 2>&1
