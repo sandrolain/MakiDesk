@@ -104,7 +104,12 @@ final class DockerAppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         _ = menu(appMenu, "Settings…", #selector(openSettings(_:)), ",", [.command])
         appMenu.addItem(.separator())
-        _ = menu(appMenu, "Quit MakiDesk Docker", #selector(NSApplication.terminate(_:)), "q", [.command])
+        let quitItem = NSMenuItem(title: "Quit MakiDesk Docker",
+                                  action: #selector(NSApplication.terminate(_:)),
+                                  keyEquivalent: "q")
+        quitItem.target = NSApp
+        quitItem.keyEquivalentModifierMask = [.command]
+        appMenu.addItem(quitItem)
         appItem.submenu = appMenu
 
         let makiItem = NSMenuItem()
@@ -161,6 +166,8 @@ final class DockerAppDelegate: NSObject, NSApplicationDelegate {
         addContainerAction(containerMenu, .kill)
         addContainerAction(containerMenu, .remove)
         containerItem.submenu = containerMenu
+
+        NSApp.mainMenu = mainMenu
     }
 
     private func menu(_ menu: NSMenu, _ title: String, _ action: Selector,

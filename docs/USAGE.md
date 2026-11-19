@@ -894,6 +894,10 @@ own search field beside that section's filters and actions. Searches for
 containers, images, volumes and networks stay independent when switching
 sections; **Cleanup** has no search field.
 
+- **Close and quit.** `⌘W` hides the Docker window and leaves the helper
+  running for the next open. `⌘Q` quits MakiDesk Docker; if a Docker action is
+  still running, it asks before quitting.
+
 - **Containers.** The list groups containers by Compose project and puts
   containers without a project under **Standalone**. Compose groups start
   collapsed; open one with its chevron, and its containers are indented under
