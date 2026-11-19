@@ -430,7 +430,7 @@ final class NotesStore {
     // MARK: - Tabs
 
     @discardableResult
-    func newNote(language: NotesLanguage = .plain) -> Note {
+    func newNote(language: NotesLanguage = .markdown) -> Note {
         loadIfNeeded()
         let now = Date()
         let note = Note(id: UUID(), text: "", externalURL: nil, externalBaseline: nil,

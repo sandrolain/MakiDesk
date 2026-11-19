@@ -43,7 +43,7 @@ through Accessibility.
    setup window). Grant **Accessibility** so MakiDesk can read and move other
    apps' windows, and **Screen Recording** for live previews and the
    content-weighted layout.
-3. Press `⌥⇥` for the window switcher, `⌥N` for notes, or use the window
+3. Press `⌥⇥` for the window switcher, `⌃⌥N` for MakiDesk Notes, or use the window
    shortcuts below from any app.
 
 Windows opened by a shortcut or the menu — Notes, Screenshots, Keyboard
@@ -406,8 +406,10 @@ peek is written to disk.
 
 ## Notes
 
-`⌥N` opens the notes panel. It is a plain-text scratchpad that keeps your work
-even when you never save it to a file.
+`⌃⌥N` opens **MakiDesk Notes**, a separate app window that appears in the Dock,
+⌘Tab and the window switcher. Its normal MakiDesk window shortcuts remain
+available while Notes is frontmost. It is a Markdown-first scratchpad that
+keeps your work even when you never save it to a file.
 
 - **The sidebar is the only list.** It shows every note with a search field.
   The current note has an accent tint and a left bar; a file with unsaved
@@ -418,7 +420,12 @@ even when you never save it to a file.
   a draft goes to the Trash, an external file is left untouched, and a file
   with unsaved changes (or a missing file) asks first.
 - **Find** `⌘F`, new `⌘T`, open `⌘O`, switch with `⌘1…9`, change the font with
-  `⌘+` / `⌘−`.
+  `⌘+` / `⌘−`. Arrange Notes like any other window with `⌃⌥` and the window
+  shortcuts above; its size and position are remembered.
+- **New notes start as Markdown.** The language popup can change the syntax at
+  any time; opening a file still selects syntax from its extension. While a
+  restored note's body loads, its editor and status stay blank until the text
+  is ready.
 - **Markdown without a model**: the Format button (or `⌘B` bold, `⌘I` italic,
   `⇧⌘K` code, `⌘K` link) wraps the selection or the word under the cursor and
   toggles it again. The menu adds bulleted, numbered and checkbox lists, quotes,
@@ -446,7 +453,7 @@ even when you never save it to a file.
 - **External files** opened as drafts survive a restart; if the file moves or
   disappears, the draft stays and is marked *Not available* / *file missing*.
 - **Text sent to Notes** from OCR or the shelf arrives as a **new note** and
-  opens the panel; the note you were editing is left untouched, and empty text
+  opens the Notes app; the note you were editing is left untouched, and empty text
   creates nothing. The clipboard panel's paste fallback still goes at the
   cursor, and a note restored at launch waits for its body instead of being
   overwritten.
@@ -726,12 +733,12 @@ it running, so its shells keep working.
   their shells keep running and consuming output, and drawing resumes when they
   come back.
 - **While a helper is in front.** MakiDesk suspends its panel, screen and
-  desktop shortcuts, so Terminal, Docker or Browser receives them.
-  `⌃⌥O`, `⌃⌥Q`, `⌃⌥E` and `⌃⌥⌘W` stay active, so the helpers remain
+  desktop shortcuts, so Terminal, Docker, Browser or Notes receives them.
+  `⌃⌥O`, `⌃⌥Q`, `⌃⌥E`, `⌃⌥N` and `⌃⌥⌘W` stay active, so the helpers remain
   reachable. With **Settings ▸ Terminal ▸ Keep MakiDesk window shortcuts while
   a helper is in front** on (the default), the
   `⌃⌥` window rows stay active too: `⌃⌥←`/`→`/`↑`/`↓` and the other Window
-  commands still arrange the helper window. The helper appears in the Dock and in
+  commands still arrange the helper window. Each helper appears in the Dock and in
   ⌘Tab while its window is open.
 - **Window list and search.** The standard **Window** menu lists open helper
   windows. MakiDesk's searchable window palette (`⌥Space`) also includes each
@@ -827,7 +834,7 @@ it running, so its shells keep working.
 - **MakiDesk menu.** While the helper is in front, its own menu bar has
   **Open MakiDesk** and **Terminal Settings…**. The second opens Settings ▸
   Terminal directly, or offers to launch MakiDesk when it is not running.
-  **New Note in MakiDesk** (`⌘N`) opens Notes in the main app. The gear button
+  **New Note in MakiDesk** (`⌘N`) opens MakiDesk Notes. The gear button
   below the workspace list opens Terminal settings.
 - **Agent status.** The selected workspace's sidebar footer shows the latest
   agent state and optional status label. Workspace rows retain their coloured
@@ -1618,8 +1625,8 @@ dropzones should go too; settings always reset.
 
 The full list is in the **Keyboard Shortcuts…** window (menu or Settings ▸
 General), searchable by name or key, with the current theme. Four prefixes say
-where a key acts: **`⌥`** the five panels opened all day (`⌥⇥`, `⌥Space`, `⌥N`,
-`⌥V`), **`⌃⌥`** the window and the layouts (`⌃⌥←`, `⌃⌥G`), **`⌃⌥⇧`** the screen
+where a key acts: **`⌥`** the everyday panels (`⌥⇥`, `⌥Space`, `⌥V`), **`⌃⌥`**
+the window and the layouts (`⌃⌥←`, `⌃⌥G`), **`⌃⌥⇧`** the screen
 (`⌃⌥⇧S`, `⌃⌥⇧O`, `⌃⌥⇧M`), **`⌃⌥⌘`** the desktop (`⌃⌥⌘V`, `⌃⌥⌘A`, `⌃⌥⌘Z`). The
 same letter may appear under two prefixes, because the prefix says where. The
 main global keys:
@@ -1628,7 +1635,7 @@ main global keys:
 |---|---|
 | Window | `⌃⌥← → ↑ ↓`, `⌃⌥U I J K`, `⌃⌥↩`, `⌃⌥C`, `⌃⌥P`, `⌃⌥F`, `⌃⌥M` |
 | Layouts | `⌃⌥G`, `⌃⌥S`, `⌃⌥A`, `⌃⌥W` |
-| Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥N`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
+| Panels | `⌥⇥`, `⌥⇧⇥`, `⌥Space`, `⌥V`, `⌃⌥D`, `⌃⌥L` |
 | Timers | `⌃⌥T` |
 | Screenshots | `⌃⌥⇧S`, `⌃⌥⇧W`, `⌃⌥⇧C`, `⌃⌥⇧R` |
 | Text from the screen | `⌃⌥⇧O` |
@@ -1692,7 +1699,6 @@ The table below is generated from the app's own table, with
 | Window switcher | `⌥⇥` | Panel |
 | Window switcher — backwards | `⌥⇧⇥` | Panel |
 | Search windows and applications | `⌥Space` | Panel |
-| Notes | `⌥N` | Panel |
 | Clipboard history | `⌥V` | Panel |
 | Shelf | `⌃⌥D` | Window |
 | Checklist | `⌃⌥L` | Window |
@@ -1792,6 +1798,7 @@ The table below is generated from the app's own table, with
 | Terminal quake | `⌃⌥Q` | Window |
 | Docker | `⌃⌥E` | Window |
 | Browser | `⌃⌥⌘W` | Desktop |
+| Notes | `⌃⌥N` | Window |
 
 <!-- shortcuts:end -->
 

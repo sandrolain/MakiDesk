@@ -453,7 +453,7 @@ final class TextRecognitionController {
             // places it is usually wanted next, plus a copy for the case where
             // it was not copied at all (T41).
             var actions: [HUDAction] = [
-                HUDAction(title: "New Note") { NotesController.shared.addNote(text: result.text) },
+                HUDAction(title: "New Note") { NotesHelperLauncher.shared.addNote(text: result.text) },
                 HUDAction(title: "Send to Shelf") { ShelfController.shared.add(text: result.text) }
             ]
             if output == .historyOnly {

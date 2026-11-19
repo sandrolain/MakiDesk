@@ -40,6 +40,8 @@ struct MakiDeskApp: App {
         DockerController.shared.start()
         BrowserLauncher.shared.syncTheme()
         BrowserActivationObserver.shared.start()
+        NotesHelperLauncher.shared.themeDidChange()
+        NotesActivationObserver.shared.start()
     }
 
     /// A menu item whose shortcut text sits after the title. The menu has no
@@ -97,8 +99,8 @@ struct MakiDeskApp: App {
             menuButton("Search Windows", keys: shortcutKeys(.searchWindows), icon: "magnifyingglass") {
                 store.applyShortcut(.searchWindows)
             }
-            menuButton("Notes", keys: shortcutKeys(.toggleNotes), icon: "note.text") {
-                NotesController.shared.show()
+            menuButton("Notes", keys: shortcutKeys(.openNotes), icon: "note.text") {
+                NotesHelperLauncher.shared.open()
             }
             menuButton("Clipboard History", keys: shortcutKeys(.clipboardHistory), icon: "doc.on.clipboard") {
                 ClipboardController.shared.toggle()
@@ -585,13 +587,9 @@ struct MakiDeskApp: App {
     private static var didAttemptFirstRun = false
 }
 
-/// Notes are written while the user types, but the session (tabs, cursors,
-/// window frame) and the clean-close marker are flushed here, together with
-/// any debounce still in flight (T20).
 final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
-            NotesStore.shared.flushIfNeeded(cleanClose: true)
             TimerController.shared.shutdown()
             KeyboardSoundController.shared.shutdown()
             ChecklistStore.shared.flushBlocking()

@@ -2,7 +2,7 @@ import AppKit
 
 // MARK: - Controller
 
-/// Owns the notes panel: one panel, shown and hidden with `⌥N` (T20).
+/// Owns the Notes window in the standalone helper app.
 @MainActor
 final class NotesController: NSObject, NSWindowDelegate {
     static let shared = NotesController()
@@ -19,8 +19,8 @@ final class NotesController: NSObject, NSWindowDelegate {
 
     private override init() {
         super.init()
-        themeObserver = NotificationCenter.default.addObserver(
-            forName: .makiDeskThemeChanged, object: nil, queue: .main
+        themeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NotesHelperIdentity.themeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.content?.applyTheme() }
         }
@@ -99,6 +99,16 @@ final class NotesController: NSObject, NSWindowDelegate {
         show()
     }
 
+    func deleteAllNotes() {
+        store.deleteAllNotes()
+    }
+
+    @objc func newNoteFromMenu(_ sender: Any?) { content?.performNewNote() }
+    @objc func openDocumentFromMenu(_ sender: Any?) { content?.performOpenDocument() }
+    @objc func saveFromMenu(_ sender: Any?) { content?.performSave() }
+    @objc func saveAsFromMenu(_ sender: Any?) { content?.performSaveAs() }
+    @objc func closeNoteFromMenu(_ sender: Any?) { content?.performCloseNote() }
+
     private func build() {
         let content = NotesViewController(store: store)
         let panel = NotesPanel(
@@ -110,9 +120,7 @@ final class NotesController: NSObject, NSWindowDelegate {
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isMovableByWindowBackground = true
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.hidesOnDeactivate = false
+        panel.level = .normal
         panel.isReleasedWhenClosed = false
         panel.minSize = NSSize(width: 620, height: 400)
         panel.tabbingMode = .disallowed
@@ -258,16 +266,26 @@ final class NotesController: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        hide()
-        return false
+        guard sender === window else { return true }
+        if store.anchor == nil { store.updateWindowFrame(sender.frame) }
+        store.flushAsync()
+        NotesRewriteController.shared.reset()
+        NotesRewritePanelController.shared.hide()
+        return true
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closingWindow = notification.object as? NSWindow,
+              closingWindow === window else { return }
+        window = nil
+        content = nil
     }
 }
 
-/// The panel must be able to take the keyboard while the app stays `.accessory`,
-/// and the key equivalents are handled here because the app has no main menu
-/// (the Settings window works the same way, T20).
+/// The helper window owns its editing key equivalents so shortcuts behave the
+/// same in its toolbar, search field and text view.
 @MainActor
-final class NotesPanel: NSPanel {
+final class NotesPanel: NSWindow {
     var onKeyEquivalent: ((NSEvent) -> Bool)?
     var onCancel: (() -> Void)?
 
@@ -384,11 +402,13 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     init(store: NotesStore) {
         self.store = store
-        let themeID = Settings.string(.themeID) ?? ""
+        let themeID = NotesHelperIPC.themeID(
+            fallback: Settings.string(.themeID, in: NotesPreferences.defaults)
+        ) ?? ""
         self.theme = NotesSyntaxTheme(theme: PaletteTheme.named(themeID))
         self.editor = NotesEditorView(theme: self.theme)
         super.init(nibName: nil, bundle: nil)
-        let savedSize = Settings.double(.notesFontSize)
+        let savedSize = Settings.double(.notesFontSize, in: NotesPreferences.defaults)
         if savedSize >= 10, savedSize <= 24 { editor.fontSize = CGFloat(savedSize) }
         store.onChange = { [weak self] in self?.refreshChrome() }
     }
@@ -693,7 +713,9 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     // MARK: - Theme
 
     func applyTheme() {
-        let themeID = Settings.string(.themeID) ?? ""
+        let themeID = NotesHelperIPC.themeID(
+            fallback: Settings.string(.themeID, in: NotesPreferences.defaults)
+        ) ?? ""
         let palette = PaletteTheme.named(themeID)
         theme = NotesSyntaxTheme(theme: palette)
         let background = theme.background
@@ -786,7 +808,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             highlighter = nil
             editor.setText("", cursor: 0)
             editor.isHidden = true
-            emptyLabel.stringValue = note.textLoadFailed ? "Could not load note" : "Loading note…"
+            emptyLabel.stringValue = note.textLoadFailed ? "Could not load note" : ""
             emptyLabel.isHidden = false
             if note.textLoadFailed {
                 // The text sent here has nowhere to go: say so once instead of
@@ -865,8 +887,9 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         if let error = store.persistenceError(for: note.id) {
             state = ("Not saved", .systemRed, error)
         } else if !note.textLoaded {
-            state = (note.textLoadFailed ? "Could not load note" : "Loading note…",
-                     note.textLoadFailed ? .systemRed : theme.subtext, nil)
+            state = note.textLoadFailed
+                ? ("Could not load note", .systemRed, nil)
+                : ("", .clear, nil)
         } else if let url = note.externalURL {
             if note.externalBaseline == nil {
                 state = ("File missing · draft only", .systemRed, url.path)
@@ -995,6 +1018,12 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         refreshChrome()
         focusEditor()
     }
+
+    func performNewNote() { newNote() }
+    func performOpenDocument() { openDocument() }
+    func performSave() { save() }
+    func performSaveAs() { saveAs() }
+    func performCloseNote() { closeSelectedNote() }
 
     @objc private func tabClicked(_ sender: NSButton) {
         guard let raw = sender.identifier?.rawValue, let id = UUID(uuidString: raw) else { return }
@@ -1413,7 +1442,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private func changeFontSize(by delta: CGFloat) {
         let size = min(24, max(10, editor.fontSize + delta))
         editor.fontSize = size
-        Settings.set(Double(size), for: .notesFontSize)
+        Settings.set(Double(size), for: .notesFontSize, in: NotesPreferences.defaults)
         highlighter?.update(theme: theme, baseAttributes: editor.baseAttributes)
     }
 

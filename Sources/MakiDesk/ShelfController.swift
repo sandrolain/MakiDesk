@@ -1382,7 +1382,7 @@ final class ShelfController: NSObject, NSWindowDelegate,
             HUDController.shared.show(HUDMessage.noTextInSelection)
             return
         }
-        NotesController.shared.addNote(text: texts.joined(separator: "\n\n"))
+        NotesHelperLauncher.shared.addNote(text: texts.joined(separator: "\n\n"))
         HUDController.shared.show(HUDMessage.insertedInNotes)
     }
 

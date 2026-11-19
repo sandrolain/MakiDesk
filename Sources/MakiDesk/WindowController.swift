@@ -42,8 +42,8 @@ enum WindowController {
         case suggestLayout
         /// Areas proportional to the content seen in each window (T30).
         case contentLayout
-        /// Show or hide the notes panel (T20).
-        case toggleNotes
+        /// Open the Notes helper app (T20).
+        case openNotes
         /// Show or hide the clipboard history (T21).
         case clipboardHistory
         /// Show or hide the shelf (T31).

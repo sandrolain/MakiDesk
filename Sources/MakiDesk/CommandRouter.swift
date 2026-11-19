@@ -103,7 +103,7 @@ enum CommandRouter {
         case .switchWindows, .switchWindowsBack: return "switch"
         case .searchWindows: return "search"
         case .assignToGroup, .recallGroup: return "group"
-        case .toggleNotes: return "notes"
+        case .openNotes: return "notes"
         case .clipboardHistory: return "clipboard"
         case .toggleShelf: return "shelf"
         case .recognizeText: return "text"

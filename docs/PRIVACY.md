@@ -136,6 +136,8 @@ All paths are under your user account:
 | Dropzones and icons | `…/MakiDesk/dropzones.json` (0600) and `…/MakiDesk/DropzoneIcons/` | Until you delete them or reset |
 | Dropzone runs | `~/Library/Caches/MakiDesk/DropzoneRuns/<run>/` | Removed when the run ends unless kept or revealed |
 | Notes and drafts | `…/MakiDesk/Note/note-<id>.txt` and `session.json` (including a SHA-256 digest of each linked external file's last known text) | Until you delete them or reset |
+| Notes helper requests | `…/MakiDesk/notes-requests/*.json`: local show/insert/add-note messages; messages from Shelf, OCR or Clipboard are removed after the helper handles them. The queue is capped at 100 requests and text at 1 MB per request. | Transient, until handled |
+| Notes helper theme | `…/MakiDesk/notes-theme.json`: the selected palette id shared with the Notes app | Until the theme changes or the file is deleted |
 | Checklist items | `…/MakiDesk/checklist.json` | Until you delete them; a factory reset leaves them |
 | Utility bar buttons | `…/MakiDesk/utility-bar.json`: button ids, shown or not, optional titles and symbols | Until you delete them or reset |
 | Terminal layout | `…/MakiDesk/Terminal/workspaces.json`: workspace titles, split tree, selection, zoomed pane, last directory and launch command per pane | Until you delete it; a factory reset does not remove it |

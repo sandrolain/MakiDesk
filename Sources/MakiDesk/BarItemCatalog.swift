@@ -87,7 +87,7 @@ struct BarItem: Identifiable, Equatable {
 enum BarItemCatalog {
     static let utility: [BarItem] = [
         BarItem(id: "notes", title: "Notes", symbol: "note.text",
-                zone: .utility, kind: .shortcut(.toggleNotes), priority: 1),
+                zone: .utility, kind: .shortcut(.openNotes), priority: 1),
         BarItem(id: "clipboard", title: "Clipboard", symbol: "doc.on.clipboard",
                 zone: .utility, kind: .shortcut(.clipboardHistory), priority: 1),
         BarItem(id: "shelf", title: "Shelf", symbol: "tray",

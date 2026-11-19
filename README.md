@@ -19,7 +19,7 @@ configurable command dropzones, all in one place. No MakiDesk account or cloud
 service, and no telemetry.
 
 <p align="center">
-  <img src="docs/assets/notes.png" alt="MakiDesk notes panel with a searchable list and syntax highlighting" width="90%">
+  <img src="docs/assets/notes.png" alt="MakiDesk Notes app with a searchable list and syntax highlighting" width="90%">
 </p>
 
 ## Features
@@ -114,10 +114,11 @@ badges and its notices, for a palette as wide as the windows alone.
 
 ### Notes without the ceremony
 
-A plain-text scratchpad that keeps drafts even when you never save them. Nine
-syntax-highlighted languages, a searchable sidebar, external files opened as
-drafts, a line-number gutter, and a panel you can dock to either screen edge.
-External files are written only when you press `⌘S`.
+`⌃⌥N` opens **MakiDesk Notes**, a separate app with its own window. It is a
+Markdown-first scratchpad that keeps drafts even when you never save them.
+Nine syntax-highlighted languages, a searchable sidebar, external files opened
+as drafts, and a line-number gutter. The normal MakiDesk window shortcuts work
+while Notes is frontmost. External files are written only when you press `⌘S`.
 
 ### A checklist you cannot leave behind
 
@@ -277,8 +278,8 @@ below the workspace list. A shared sidebar card also shows Codex account quota
 windows, reset times and any token metrics the local Codex app-server supplies;
 it updates on request and every five minutes while the Terminal window is
 visible. Click a terminal notice to return to its pane; move a
-focused split into its own workspace without stopping it. `⌘N` opens Notes in
-MakiDesk, and the sidebar gear opens Terminal settings. The workspace list marks
+focused split into its own workspace without stopping it. `⌘N` opens a new note
+in MakiDesk Notes, and the sidebar gear opens Terminal settings. The workspace list marks
 tmux sessions separately from ordinary shells, and a right sidebar can show the
 focused pane's Git changes as an expandable path tree. Unattached tmux sessions
 can be attached into new workspaces, and the status-bar preference applies to
@@ -378,7 +379,7 @@ Taskfile commands and the signing notes.
 | `⌃⌥⇧O` | text from a selected area |
 | `⌃⌥⇧P` | locate pointer |
 | `⌃⌥⇧X` | pointer effects on/off |
-| `⌥N` | notes |
+| `⌃⌥N` | MakiDesk Notes |
 | `⌥V` | clipboard history |
 | `⌃⌥D` | shelf |
 | `⌃⌥L` | checklist |

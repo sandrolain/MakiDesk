@@ -1,6 +1,21 @@
 // swift-tools-version: 5.9
 import PackageDescription
 
+let appDependencies: [Target.Dependency] = [
+    .product(name: "MakiShared", package: "MakiShared"),
+    .product(name: "SwiftTreeSitter", package: "SwiftTreeSitter"),
+    .product(name: "TreeSitterSwift", package: "tree-sitter-swift"),
+    .product(name: "TreeSitterJSON", package: "tree-sitter-json"),
+    .product(name: "TreeSitterMarkdown", package: "tree-sitter-markdown"),
+    .product(name: "TreeSitterBash", package: "tree-sitter-bash"),
+    .product(name: "TreeSitterPython", package: "tree-sitter-python"),
+    .product(name: "TreeSitterJavaScript", package: "tree-sitter-javascript"),
+    .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
+    .product(name: "TreeSitterHTML", package: "tree-sitter-html"),
+    .product(name: "TreeSitterCSS", package: "tree-sitter-css"),
+    "GrammarScanners"
+]
+
 let package = Package(
     name: "MakiDesk",
     platforms: [.macOS("26.0")],
@@ -23,20 +38,7 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "MakiDesk",
-            dependencies: [
-                .product(name: "MakiShared", package: "MakiShared"),
-                .product(name: "SwiftTreeSitter", package: "SwiftTreeSitter"),
-                .product(name: "TreeSitterSwift", package: "tree-sitter-swift"),
-                .product(name: "TreeSitterJSON", package: "tree-sitter-json"),
-                .product(name: "TreeSitterMarkdown", package: "tree-sitter-markdown"),
-                .product(name: "TreeSitterBash", package: "tree-sitter-bash"),
-                .product(name: "TreeSitterPython", package: "tree-sitter-python"),
-                .product(name: "TreeSitterJavaScript", package: "tree-sitter-javascript"),
-                .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
-                .product(name: "TreeSitterHTML", package: "tree-sitter-html"),
-                .product(name: "TreeSitterCSS", package: "tree-sitter-css"),
-                "GrammarScanners"
-            ],
+            dependencies: appDependencies,
             path: "Sources/MakiDesk"
         ),
         .target(

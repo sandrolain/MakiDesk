@@ -232,7 +232,7 @@ final class TerminalClient {
                 SettingsController.shared.show(tab: .terminal)
             }
         case .openNotes:
-            DispatchQueue.main.async { NotesController.shared.toggle() }
+            DispatchQueue.main.async { NotesHelperLauncher.shared.open() }
         case .ping, .pong, .state, .settingsRequested,
              .settingsChanged, .themeChanged, .agentStatus, .willTerminate,
              .dockerExec, .focusTarget:

@@ -245,7 +245,6 @@ enum ShortcutDefinitions {
             modifiers: optionKey | shiftKey, action: .switchWindowsBack),
         def("panel.search", "Search windows and applications", section: "Panels", key: kVK_Space,
             modifiers: optionKey, action: .searchWindows),
-        def("panel.notes", "Notes", section: "Panels", key: kVK_ANSI_N, modifiers: optionKey, action: .toggleNotes),
         def("panel.clipboard", "Clipboard history", section: "Panels", key: kVK_ANSI_V, modifiers: optionKey, action: .clipboardHistory),
         def("panel.shelf", "Shelf", section: "Panels", key: kVK_ANSI_D, action: .toggleShelf),
         def("panel.checklist", "Checklist", section: "Panels", key: kVK_ANSI_L, action: .toggleChecklist,
@@ -362,5 +361,8 @@ enum ShortcutDefinitions {
         def("app.browser", "Browser", section: "App", key: kVK_ANSI_W,
             modifiers: ctrlOptCmd, action: .openBrowser,
             note: "Opens MakiBrowser with vertical tabs, a per-site ad blocker and an on-device page summary."),
+        def("panel.notes", "Notes", section: "App", key: kVK_ANSI_N,
+            modifiers: ctrlOpt, action: .openNotes,
+            note: "Opens MakiDesk Notes as a separate app with the usual window shortcuts."),
     ]
 }

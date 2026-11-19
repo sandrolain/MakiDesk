@@ -129,7 +129,7 @@ final class ClipboardController: NSObject, NSWindowDelegate {
         history.start()
         focusReturn.capture()
         previousApp = NSWorkspace.shared.frontmostApplication
-        notesWasKey = NotesController.shared.isKey
+        notesWasKey = NotesHelperLauncher.shared.isFrontmost
         model.theme = PaletteTheme.named(Settings.string(.themeID) ?? "")
         model.animationsEnabled = WorkspaceStore.shared.effectiveAnimationsEnabled
         model.animationDuration = WorkspaceStore.shared.animationDuration
@@ -234,14 +234,13 @@ final class ClipboardController: NSObject, NSWindowDelegate {
                 return
             }
         }
-        // The notes panel (or another text field of ours) was in front. If no
-        // responder takes the paste, fall back to the open note's cursor.
+        // Notes was frontmost before this panel. If activating its app did not
+        // paste through the normal responder chain, send the text to its cursor.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             guard NSApp.isActive else { return }
             let handled = NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
-            if handled == false, pasteIntoNotes, entry.image == nil,
-               NotesController.shared.isVisible, NSApp.isActive {
-                NotesController.shared.insertText(entry.text)
+            if handled == false, pasteIntoNotes, entry.image == nil {
+                NotesHelperLauncher.shared.insertText(entry.text)
             }
         }
     }

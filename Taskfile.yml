@@ -111,6 +111,23 @@ tasks:
       - sh scripts/bundle-browser.sh
       - open dist/MakiDeskBrowser.app
 
+  notes:build:
+    desc: Build the shared MakiDesk executable used by the Notes helper
+    cmds:
+      - swift build
+
+  notes:bundle:
+    desc: Build and bundle the Notes helper in dist/MakiDeskNotes.app
+    cmds:
+      - sh scripts/bundle-notes.sh release
+
+  notes:run:
+    desc: Launch the bundled Notes helper
+    deps:
+      - notes:bundle
+    cmds:
+      - open dist/MakiDeskNotes.app
+
   release:
     desc: Compile optimized release target
     cmds:
@@ -124,6 +141,7 @@ tasks:
       - docker:release
       - browser:release
     cmds:
+      - task: notes:bundle
       - mkdir -p "{{.APP_BUNDLE}}/Contents/MacOS" "{{.APP_BUNDLE}}/Contents/Resources"
       - cp "{{.RELEASE_BIN}}" "{{.APP_BUNDLE}}/Contents/MacOS/{{.APP_NAME}}"
       - cp Resources/Info.plist "{{.APP_BUNDLE}}/Contents/Info.plist"
@@ -136,6 +154,8 @@ tasks:
       - cp -R "{{.ROOT_DIR}}/dist/MakiDeskDocker.app" "{{.APP_BUNDLE}}/Contents/Applications/"
       - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskBrowser.app"
       - cp -R "{{.ROOT_DIR}}/dist/MakiDeskBrowser.app" "{{.APP_BUNDLE}}/Contents/Applications/"
+      - rm -rf "{{.APP_BUNDLE}}/Contents/Applications/MakiDeskNotes.app"
+      - cp -R "{{.ROOT_DIR}}/dist/MakiDeskNotes.app" "{{.APP_BUNDLE}}/Contents/Applications/"
 
   cert:
     desc: Create a stable self-signed signing identity (run once)
@@ -171,6 +191,7 @@ tasks:
         HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskTerminal.app"
         DOCKER_HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskDocker.app"
         BROWSER_HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskBrowser.app"
+        NOTES_HELPER="{{.APP_BUNDLE}}/Contents/Applications/MakiDeskNotes.app"
         if security find-identity -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$CERT_NAME"; then
           security unlock-keychain -p makidesk "$KEYCHAIN"
           if [ -d "$DOCKER_HELPER" ]; then
@@ -181,6 +202,9 @@ tasks:
           fi
           if [ -d "$BROWSER_HELPER" ]; then
             codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$BROWSER_HELPER"
+          fi
+          if [ -d "$NOTES_HELPER" ]; then
+            codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "$NOTES_HELPER"
           fi
           codesign --force --deep --sign "$CERT_NAME" --keychain "$KEYCHAIN" "{{.APP_BUNDLE}}"
           echo "Signed with '$CERT_NAME' — Accessibility permission survives rebuilds."
@@ -193,6 +217,9 @@ tasks:
           fi
           if [ -d "$BROWSER_HELPER" ]; then
             codesign --force --sign - -r='designated => identifier "com.makidesk.app.browser"' "$BROWSER_HELPER"
+          fi
+          if [ -d "$NOTES_HELPER" ]; then
+            codesign --force --sign - -r='designated => identifier "com.makidesk.app.notes"' "$NOTES_HELPER"
           fi
           codesign --force --deep --sign - -r='designated => identifier "com.makidesk.app"' "{{.APP_BUNDLE}}"
           echo "WARNING: ad-hoc signed. Accessibility permission may reset each build."
@@ -213,6 +240,7 @@ tasks:
       - pkill -x "MakiDeskDocker" || true
       - pkill -x "MakiTerminal" || true
       - pkill -x "MakiDeskBrowser" || true
+      - pkill -x "MakiDeskNotes" || true
       - sleep 1
       - task: open
 

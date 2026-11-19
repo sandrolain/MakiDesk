@@ -25,8 +25,10 @@ never draws a separate desktop or mirrors their content as a workspace.
 - Panels are `NSPanel`s or `NSWindow`s with `NSHostingView`/AppKit content:
   the window switcher, notes, clipboard, shelf, shortcuts reference, HUD,
   overlay and peek. Settings is the SwiftUI scene.
-- MakiDesk is one process; the terminal and Docker windows are separate helper
-  apps. State lives in `WorkspaceStore` (windows, groups, scenes, settings),
+- MakiDesk is one process; Notes, Terminal, Docker and Browser have separate
+  helper apps. Notes runs the shared executable in its own process with an
+  independent `NotesStore`; state lives in `WorkspaceStore` (windows, groups,
+  scenes, settings),
   `NotesStore`, `ClipboardHistory`, `ShelfController`, `SystemMonitor` and
   Docker's `DockerStore` in its own process.
 
@@ -842,11 +844,16 @@ with tests) so an example is never rewritten, and the session's begin/end
 suspends the syntax highlighter (`NotesHighlighter.setSuspended`) and the
 automatic draft write, which then runs once for the whole rewrite.
 
-`NotesStore` restores metadata first on both the panel's asynchronous path and
-the synchronous action path (new note, open by id, external drop), and loads a
-body on demand, so an unopened note has an empty placeholder editor for a
-moment. The synchronous restore reads titles and the session only, never every
-body. Text sent from the
+`NotesStore` restores metadata first on both the app's asynchronous path and the
+synchronous action path (new note, open by id, external drop), and loads a body
+on demand; until the selected body is ready, the editor and its status stay
+blank. New notes default to Markdown, while opened files infer syntax from their
+extension. The synchronous restore reads titles and the session only, never every
+body. MakiDesk launches the regular `MakiDeskNotes` helper with `⌃⌥N`; a bounded
+file queue under `Application Support/MakiDesk/notes-requests` carries show,
+insert and add-note requests from the clipboard, Shelf and OCR, and each request
+is removed after delivery. The helper follows the MakiDesk theme through a small
+shared theme document and distributed notification. Text sent from the
 shelf or OCR therefore becomes a **new note** (`NotesStore.addNote`): the draft
 the user has open is never mutated. The clipboard panel's paste fallback still
 inserts at the cursor through `NotesInsertionPolicy` / `NotesInsertionQueue`, so a

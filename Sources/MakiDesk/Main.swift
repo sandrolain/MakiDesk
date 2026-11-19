@@ -12,6 +12,12 @@ enum MakiDeskMain {
         // makes "never set" and "the default" the same value (R02).
         Settings.registerDefaults()
 
+        if Bundle.main.bundleIdentifier == NotesHelperIdentity.bundleIdentifier {
+            Settings.registerDefaults(in: NotesPreferences.defaults)
+            MakiDeskNotesApp.run()
+            return
+        }
+
         var arguments = CommandLine.arguments.dropFirst()
         guard arguments.first == "--dump-shortcuts" else {
             MakiDeskApp.main()

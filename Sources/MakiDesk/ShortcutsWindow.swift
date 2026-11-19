@@ -129,7 +129,7 @@ enum ShortcutCatalog {
             .init(title: "Switch to note 1…9", keys: "⌘1…9"),
             .init(title: "Larger / smaller text", keys: "⌘+ / ⌘−"),
             .init(title: "Close the panel", keys: LocalKey.cancel.keys, localKey: .cancel),
-        ], note: "⌥N opens the panel from anywhere."),
+        ], note: "⌃⌥N opens the separate Notes app from anywhere."),
 
         ShortcutSection(title: "Clipboard", scope: "Panel focused", items: [
             .init(title: "Move the selection", keys: "↑ ↓",

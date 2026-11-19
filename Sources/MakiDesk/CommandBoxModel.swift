@@ -79,7 +79,7 @@ enum CommandCatalog {
         entry("undo", "Undo one focus step", .shortcut(.undoStep)),
         entry("focus selection", "Focus the windows ticked in the switcher", .shortcut(.focusSelection)),
         // Panels
-        entry("notes", "Open the notes panel", .shortcut(.toggleNotes)),
+        entry("notes", "Open MakiDesk Notes", .shortcut(.openNotes)),
         entry("clipboard", "Open the clipboard history", .shortcut(.clipboardHistory)),
         entry("shelf", "Open the shelf", .shortcut(.toggleShelf)),
         entry("switcher", "Open the window switcher", .shortcut(.switchWindows)),

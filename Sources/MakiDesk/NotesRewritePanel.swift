@@ -78,7 +78,11 @@ private struct NotesRewriteView: View {
     let onCancel: () -> Void
 
     @State private var controller = NotesRewriteController.shared
-    private var theme: PaletteTheme { WorkspaceStore.shared.theme }
+    private var theme: PaletteTheme {
+        PaletteTheme.named(NotesHelperIPC.themeID(
+            fallback: Settings.string(.themeID, in: NotesPreferences.defaults)
+        ) ?? "")
+    }
 
     var body: some View {
         VStack(spacing: 0) {

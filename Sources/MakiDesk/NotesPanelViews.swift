@@ -62,7 +62,7 @@ final class NotesSplitView: NSView {
 
     init() {
         super.init(frame: .zero)
-        let saved = Settings.double(.notesSidebarWidth)
+        let saved = Settings.double(.notesSidebarWidth, in: NotesPreferences.defaults)
         if saved >= Double(Self.minimumSidebar), saved <= Double(Self.maximumSidebar) {
             width = CGFloat(saved)
         }
@@ -70,7 +70,7 @@ final class NotesSplitView: NSView {
         divider.onDrag = { [weak self] delta in self?.drag(by: delta) }
         divider.onEnd = { [weak self] in
             guard let self else { return }
-            Settings.set(Double(self.width), for: .notesSidebarWidth)
+            Settings.set(Double(self.width), for: .notesSidebarWidth, in: NotesPreferences.defaults)
         }
     }
 

@@ -613,12 +613,12 @@ final class WorkspaceStore {
         WindowOutlineController.shared.applySettings()
     }
 
-    /// An auxiliary helper is frontmost: keep only its own keys alive so the
-    /// helper can receive everything else. Called by `TerminalController` and
-    /// `DockerController` and `BrowserActivationObserver` workspace observers.
+    /// An auxiliary helper is frontmost: suspend unrelated global keys, while
+    /// keeping its launch key and the shared window commands available.
     private var terminalIsFrontmost = false
     private var dockerIsFrontmost = false
     private var browserIsFrontmost = false
+    private var notesIsFrontmost = false
 
     func setTerminalFrontmost(_ frontmost: Bool) {
         terminalIsFrontmost = frontmost
@@ -635,9 +635,14 @@ final class WorkspaceStore {
         applyAuxiliaryShortcutSuspension()
     }
 
+    func setNotesFrontmost(_ frontmost: Bool) {
+        notesIsFrontmost = frontmost
+        applyAuxiliaryShortcutSuspension()
+    }
+
     private func applyAuxiliaryShortcutSuspension() {
         var keeping: Set<String> = [
-            "app.terminal", "app.terminalQuake", "app.docker", "app.browser",
+            "app.terminal", "app.terminalQuake", "app.docker", "app.browser", "panel.notes",
         ]
         let defaults = UserDefaults.standard
         let keepsWindowRows = (defaults.object(forKey: SettingsKey.keepTerminalWindowShortcuts.rawValue)
@@ -645,8 +650,10 @@ final class WorkspaceStore {
         if keepsWindowRows {
             keeping.formUnion(ShortcutDefinitions.windowShortcutIDs)
         }
-        shortcutManager?.setSuspended(terminalIsFrontmost || dockerIsFrontmost || browserIsFrontmost,
-                                      keeping: keeping)
+        shortcutManager?.setSuspended(
+            terminalIsFrontmost || dockerIsFrontmost || browserIsFrontmost || notesIsFrontmost,
+            keeping: keeping
+        )
     }
 
     /// Re-applies the auxiliary suspension after the preference changes.
@@ -1056,6 +1063,7 @@ final class WorkspaceStore {
         TerminalController.shared.themeDidChange()
         DockerController.shared.themeDidChange()
         BrowserLauncher.shared.themeDidChange()
+        NotesHelperLauncher.shared.themeDidChange()
     }
 
     func updateOverlayScale(_ value: Double) {
@@ -1559,7 +1567,7 @@ final class WorkspaceStore {
     /// left to bring them back.
     func resetToDefaults(scope: ResetScope = .settings) {
         if scope.contains(.notes) {
-            MainActor.assumeIsolated { NotesStore.shared.deleteAllNotes() }
+            MainActor.assumeIsolated { NotesHelperLauncher.shared.deleteAllNotes() }
         }
         if scope.contains(.clipboard) {
             MainActor.assumeIsolated { ClipboardHistory.shared.clear(includingPins: true) }
@@ -1678,10 +1686,9 @@ final class WorkspaceStore {
     // MARK: - Shortcuts
 
     func applyShortcut(_ action: WindowController.ShortcutAction) {
-        // The notes panel does not touch other windows, so it must work even
-        // when Accessibility has not been granted (T20).
-        if action == .toggleNotes {
-            MainActor.assumeIsolated { NotesController.shared.toggle() }
+        // Opening Notes is an app activation and does not need Accessibility.
+        if action == .openNotes {
+            MainActor.assumeIsolated { NotesHelperLauncher.shared.open() }
             return
         }
         if action == .toggleShelf {
