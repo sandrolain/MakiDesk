@@ -24,14 +24,19 @@ macOS privacy permissions only for the features that need them:
 | Permission | Why |
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
-| **Input Monitoring** | Optional keyboard sound feedback. Requested only when you turn on Keyboard Sounds; the passive listener receives key-down events while enabled. |
+| **Input Monitoring** | Optional keyboard sound feedback and drag-from-anywhere. Requested only when you enable the corresponding feature; the sound listener receives key-down events, while the drag listener can suppress and rewrite mouse-down/drag/up events only for an ⌥-drag gesture while enabled. |
+
+When drag-from-anywhere is enabled, MakiDesk temporarily changes the macOS
+Option-drag tiling preference to prevent two window managers from handling the
+same gesture. It restores the previous value when the feature is disabled,
+unless the user changes the preference manually in MakiDesk settings.
 | **Apple Intelligence** | Rewriting notes uses the on-device model only: no network, no account, no content in logs. The notice under Settings ▸ Panels ▸ Tools says when it is unavailable. |
 | **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, the area selected for text recognition, the annotated captures and screen recordings (T40). A recording can include the system's own sound; the microphone is never used. |
 
 These permissions are granted by you in **System Settings ▸ Privacy & Security**
 and can be revoked there at any time. Input Monitoring is requested only after
-you explicitly enable Keyboard Sounds. The app does not request Full Disk
-Access, Contacts, Calendar, Microphone, Camera or Automation.
+you explicitly enable Keyboard Sounds or Drag from anywhere. The app does not
+request Full Disk Access, Contacts, Calendar, Microphone, Camera or Automation.
 
 The pointer effects add no permission at all: `⌃⌥⇧P` and `⌃⌥⇧X` read the pointer
 through AppKit's mouse events and draw their own transparent panels, so they
@@ -69,6 +74,15 @@ identity asks again. A Developer ID-signed public release behaves best here.
   notices key-down events and plays a locally generated sound. It does not read
   key codes, characters, modifiers, typed text or the frontmost app. A bounded
   in-memory count coalesces bursts; no key data is logged, persisted or sent.
+- **Mouse down, drag and up events**, only while Drag from anywhere is enabled
+  and Input Monitoring is allowed: an ⌥-drag on another app's window is
+  translated into a native title-bar drag so the window follows the pointer.
+  Drags from recognized icons, images, rows, links and the title-bar control
+  corner pass through to the app. A click without movement is replayed to the
+  target. The gesture ends when the mouse is released; ⌥ held at release also
+  applies the existing snap position.
+  The events are not recorded or logged, and the listener is stopped when the
+  option is disabled or MakiDesk quits.
 - **Window images** through ScreenCaptureKit, only while previews or the
   content measure are in use. The images are downscaled and kept **in memory**;
   they are used for the switcher cards, the overlay and the edge-energy score,

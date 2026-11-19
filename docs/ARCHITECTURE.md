@@ -49,7 +49,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `WindowPalette.swift`                                                                                           | `⌥⇥` / `⌥Space` switcher and search, preview cards, applications shelf, groups column, layout buttons.                                                                  |
 | `InstalledApplications.swift`                                                                                   | Installed `.app` inventory and pure matching for the palette shelf; own worker queue, small in-memory cache.                                                            |
 | `PaletteMath.swift`                                                                                             | Expression parser for the search field: arithmetic, percentages and the closed unit table; pure, locale-aware separators, no I/O.                                       |
-| `WindowDrag.swift`, `DragActivator.swift`, `MacOSTiling.swift`                                                  | ⌥-drag snapping, live activator, macOS tiling detection.                                                                                                                |
+| `WindowDrag.swift`, `WindowDragInputTap.swift`, `DragActivator.swift`, `MacOSTiling.swift`                    | Existing live snap preview plus opt-in ⌥ drag-from-anywhere event tap and macOS tiling detection.                                                                         |
 | `GroupStore.swift`, `WindowGroup.swift`, `GroupRenamePrompt.swift`                                              | Groups: members, names, arrangement, persistence.                                                                                                                       |
 | `WindowScene.swift`, `WorkspaceStore` (focus)                                                                   | Scene/focus state, send-away and undo.                                                                                                                                  |
 | `PeekController.swift`, `PeekPanel.swift`                                                                       | Designated-window overlay and hold state machine.                                                                                                                       |
@@ -164,6 +164,28 @@ it ends is not ordered out from under the new one.
 The `WorkspaceStore` reads the index freshly before a command (`syncNow`) and
 keeps a model for the palette/overlay. It never assumes that a window found a
 moment ago is still there.
+
+`WindowDragInputTap` owns the opt-in drag-from-anywhere path. It installs an
+active Core Graphics event tap on a dedicated run-loop thread only while the
+user setting and Input Monitoring permission are both active. On an ⌥ mouse-down
+it does one bounded AX hit test and raise; if the pointer crosses the drag
+threshold, it converts the first drag event into a title-bar press and translates
+subsequent drag/up coordinates. Recognized draggable content roles (icons,
+images, rows, cells and links) and the title-bar control corner pass through; a
+click without movement is replayed. The tap does not run global discovery or UI
+work. It also owns the physical ⌥ state from `flagsChanged`, so preview and
+release do not depend on AppKit's view of the rewritten mouse events.
+`WindowDrag` owns the theme-matched preview and reuses `TilingEngine.dragZone`;
+`WorkspaceStore` applies the final frame after a short nonblocking handoff for
+the native mouse-up, guarded by both the command epoch and gesture generation.
+The preview and final snap use the physical pointer coordinate from the same
+event tap stream. The store reads the actual AX frame off-main after native
+mouse-up only as the source for screen-aware position/size write ordering and
+verification. Releasing ⌥ before mouse-up leaves the native free-drag position.
+When this feature is enabled,
+`WorkspaceStore` temporarily disables macOS Option tiling and restores it when
+the feature is disabled. A manual change in Settings clears the restore marker
+and takes precedence. Startup reconciles the marker after an interrupted run.
 
 ## Layout engines
 
@@ -1109,10 +1131,10 @@ modifiers, text, application identity or per-key timestamps.
 ## Permissions
 
 - **Accessibility** — AX window discovery/frames, `CGEvent` for clipboard paste,
-  the shelf's global shake monitor. No Input Monitoring entitlement is requested.
-- **Input Monitoring** — optional, only for Keyboard Sounds; requested after the
-  user enables it. The event tap uses listen-only mode and does not inspect key
-  data beyond the event type.
+  the shelf's global shake monitor and bounded target hit-tests for window drag.
+- **Input Monitoring** — optional, for Keyboard Sounds or Drag from anywhere;
+  requested after the user enables the corresponding feature. The sound tap is
+  listen-only; the drag tap may suppress/rewrite only mouse events in an ⌥ drag.
 - **Screen Recording** — ScreenCaptureKit previews and the content measure.
 - **No sandbox** — the app is distributed outside the Mac App Store. A sandboxed
   build would not be able to drive other apps' windows this way.

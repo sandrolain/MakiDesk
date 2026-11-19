@@ -591,6 +591,7 @@ final class MakiDeskAppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             TimerController.shared.shutdown()
+            WindowDrag.shared.shutdown()
             KeyboardSoundController.shared.shutdown()
             ChecklistStore.shared.flushBlocking()
             ShelfController.shared.shutdown()

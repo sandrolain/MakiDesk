@@ -176,6 +176,7 @@ struct SettingsView: View {
 
     @State private var system = SystemMonitor.shared
     @State private var keyboardSounds = KeyboardSoundController.shared
+    @State private var windowDrag = WindowDrag.shared
 
     private var systemDiskMode: Binding<DiskMenuBarMode> {
         Binding(get: { system.diskMenuBarMode }, set: { system.updateDiskMenuBarMode($0) })
@@ -656,17 +657,56 @@ struct SettingsView: View {
                     }
                     caption("Space kept between tiled windows and at the screen edges.")
 
-                    Picker("Drag to snap", selection: Binding(
+                    Picker("Title-bar snap modifier", selection: Binding(
                         get: { store.dragActivator },
                         set: { store.updateDragActivator($0) }
                     )) {
                         ForEach(DragActivator.allCases) { Text($0.label).tag($0) }
                     }
-                    Toggle("Enable drag to snap", isOn: Binding(
+                    Toggle("Enable title-bar drag to snap", isOn: Binding(
                         get: { store.dragEnabled },
                         set: { store.updateDragEnabled($0) }
                     ))
-                    caption("Hold these keys while dragging a window to snap it to the nearest half / golden position. Control is not offered: ⌃-click opens context menus (it is macOS's secondary click).")
+                    caption("Hold these keys while dragging a window from its title bar to snap it to the nearest half / golden position. Control is not offered: ⌃-click opens context menus (it is macOS's secondary click).")
+
+                    Toggle("Drag from anywhere with ⌥", isOn: Binding(
+                        get: { store.dragFromAnywhereEnabled },
+                        set: { store.updateDragFromAnywhereEnabled($0) }
+                    ))
+                    .disabled(!store.dragEnabled)
+                    caption("Hold Option (Alt, ⌥) and drag from anywhere inside a window. The window follows the pointer; keep ⌥ held on release to snap it to the nearest half / golden position. Requires Input Monitoring.")
+                    if store.dragFromAnywhereEnabled && store.macOSTilingEnabled {
+                        Label("macOS ⌥-tiling was turned back on and may compete with MakiDesk.",
+                              systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(theme.subtext)
+                    }
+                    if store.dragFromAnywhereEnabled && !windowDrag.dragFromAnywherePermissionGranted {
+                        HStack(spacing: 8) {
+                            Label("Allow MakiDesk in Privacy & Security ▸ Input Monitoring.",
+                                  systemImage: "hand.raised")
+                                .font(.caption)
+                                .foregroundStyle(theme.subtext)
+                            Spacer()
+                            Button("Open Settings…") {
+                                windowDrag.openInputMonitoringSettings()
+                            }
+                            Button("Try again") {
+                                windowDrag.setDragFromAnywhereEnabled(true)
+                            }
+                        }
+                    } else if store.dragFromAnywhereEnabled && windowDrag.dragFromAnywhereListenerUnavailable {
+                        HStack(spacing: 8) {
+                            Label("The drag listener could not start. Check Accessibility and Input Monitoring.",
+                                  systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(theme.subtext)
+                            Spacer()
+                            Button("Try again") {
+                                windowDrag.setDragFromAnywhereEnabled(true)
+                            }
+                        }
+                    }
                 }
             }
             if windowsPage == .focus {
@@ -777,7 +817,7 @@ struct SettingsView: View {
                         set: { store.updateMacOSTiling($0) }
                     ))
 
-                    caption("MakiDesk's ⌥-drag is a richer replacement for the system one (it snaps to the nearest half / golden position). When the macOS setting above is on, both react at once — leave it off so only MakiDesk moves the window. Same switch as System Settings ▸ Desktop & Dock ▸ Windows ▸ “Hold ⌥ key while dragging windows to tile”.")
+                    caption("When Drag from anywhere is enabled, MakiDesk turns off macOS ⌥-tiling and restores its previous setting when you disable the feature. Changing this switch manually takes precedence. Same preference as System Settings ▸ Desktop & Dock ▸ Windows ▸ “Hold ⌥ key while dragging windows to tile”.")
                 }
             }
         }

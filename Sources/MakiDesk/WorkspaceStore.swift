@@ -178,6 +178,7 @@ final class WorkspaceStore {
     var announceGroupChanges = Settings.bool(.announceGroupChanges)
     var dragActivator = Settings.value(.dragActivator, as: DragActivator.self) ?? .fallback
     var dragEnabled = Settings.bool(.dragEnabled)
+    var dragFromAnywhereEnabled = Settings.bool(.dragFromAnywhereEnabled)
     /// Whether the intelligent layout offers what it suggests — with the reason —
     /// instead of applying it straight away (T18).
     var layoutAsksFirst = Settings.bool(.layoutAsksFirst)
@@ -346,6 +347,7 @@ final class WorkspaceStore {
     /// Increments for every accepted frame command. Async layouts and delayed
     /// scene restores use it to discard work superseded by a newer command.
     @ObservationIgnored private var frameCommandEpoch = 0
+    @ObservationIgnored private var nativeDragApplyGeneration = 0
     @ObservationIgnored private var contentAnalysisTask: Task<Void, Never>?
     @ObservationIgnored private var peekCaptureTask: Task<Void, Never>?
     @ObservationIgnored private var lastFrontmostKey: String?
@@ -443,6 +445,7 @@ final class WorkspaceStore {
     // permission state live; no manual "connect" needed, no permanent polling.
     func start() {
         guard shortcutManager == nil else { return }
+        reconcileDragFromAnywhereTilingPreference()
         loadGroups()
         loadBarConfiguration()
         ActiveDisplayTracker.shared.start()
@@ -1152,6 +1155,32 @@ final class WorkspaceStore {
     func updateDragEnabled(_ value: Bool) {
         dragEnabled = value
         Settings.set(value, for: .dragEnabled)
+        WindowDrag.shared.dragEnabledDidChange(value)
+    }
+
+    func updateDragFromAnywhereEnabled(_ value: Bool) {
+        if value, !dragFromAnywhereEnabled, MacOSTiling.optionDragEnabled {
+            Settings.set(true, for: .dragFromAnywhereRestoresMacOSTiling)
+            setMacOSTilingPreference(false)
+        } else if !value, Settings.bool(.dragFromAnywhereRestoresMacOSTiling) {
+            Settings.set(false, for: .dragFromAnywhereRestoresMacOSTiling)
+            setMacOSTilingPreference(true)
+        }
+        dragFromAnywhereEnabled = value
+        Settings.set(value, for: .dragFromAnywhereEnabled)
+        WindowDrag.shared.setDragFromAnywhereEnabled(value)
+    }
+
+    private func reconcileDragFromAnywhereTilingPreference() {
+        guard Settings.bool(.dragFromAnywhereRestoresMacOSTiling) else { return }
+        if dragFromAnywhereEnabled {
+            if MacOSTiling.optionDragEnabled {
+                setMacOSTilingPreference(false)
+            }
+        } else {
+            Settings.set(false, for: .dragFromAnywhereRestoresMacOSTiling)
+            setMacOSTilingPreference(true)
+        }
     }
 
     func updateLayoutAsksFirst(_ value: Bool) {
@@ -1525,6 +1554,13 @@ final class WorkspaceStore {
     /// Turns the macOS "hold ⌥ to tile" setting on/off (writes the system
     /// preference) and mirrors it in our observable state.
     func updateMacOSTiling(_ enabled: Bool) {
+        // A manual choice takes precedence over the automatic preference
+        // restoration associated with drag-from-anywhere.
+        Settings.set(false, for: .dragFromAnywhereRestoresMacOSTiling)
+        setMacOSTilingPreference(enabled)
+    }
+
+    private func setMacOSTilingPreference(_ enabled: Bool) {
         MacOSTiling.optionDragEnabled = enabled
         macOSTilingEnabled = enabled
     }
@@ -1612,6 +1648,7 @@ final class WorkspaceStore {
         updatePaletteEmptyGroups(true)
         updateGroupAnnouncements(true)
         updateDragActivator(.option)
+        updateDragFromAnywhereEnabled(false)
         updateDragEnabled(true)
         updateLayoutAsksFirst(true)
         layoutPriors = LayoutAdvisor.defaultPriors
@@ -2644,6 +2681,51 @@ final class WorkspaceStore {
             element: element, frame: frame, pid: pid
         )
         applyFrame(frame, to: target, reason: "dragged")
+    }
+
+    func frameCommandRevisionForDrag() -> Int { frameCommandEpoch }
+
+    /// Let the event-tap mouse-up finish the target app's native tracking loop
+    /// before writing the final snap frame. This is nonblocking and superseded
+    /// by any newer frame command or drag session.
+    func applyDraggedFrameAfterNativeDrag(
+        _ frame: CGRect,
+        element: AXUIElement,
+        expectedCommandEpoch: Int,
+        gestureIsCurrent: @escaping @MainActor () -> Bool
+    ) {
+        nativeDragApplyGeneration &+= 1
+        let applyGeneration = nativeDragApplyGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                // The native title-bar drag has moved the window by now. Read
+                // its actual frame off-main so frame ordering and verification
+                // compare the destination with the real post-drag geometry.
+                guard let previousFrame = WindowController.frame(of: element) else { return }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self,
+                          self.nativeDragApplyGeneration == applyGeneration,
+                          self.frameCommandEpoch == expectedCommandEpoch,
+                          gestureIsCurrent() else { return }
+                    self.nativeDragApplyGeneration &+= 1
+                    self.applyDraggedFrame(frame, element: element, previousFrame: previousFrame)
+                }
+            }
+        }
+    }
+
+    private func applyDraggedFrame(_ frame: CGRect, element: AXUIElement,
+                                   previousFrame: CGRect) {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success, pid != Self.ownPID else { return }
+        let target = WindowController.WindowInfo(
+            id: "", title: "", appName: appName(for: pid) ?? "Window",
+            element: element, frame: previousFrame, pid: pid
+        )
+        // The native drag already supplied the visual movement. Apply the
+        // final snap directly so applyFrame's screen-aware write order sets
+        // both position and size against the true post-drag frame.
+        applyFrame(frame, to: target, reason: "dragged", animate: false)
     }
 
     private func appName(for pid: pid_t) -> String? {

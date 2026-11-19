@@ -189,6 +189,8 @@ enum SettingsDefaults {
         .shelfShakeSensitivity: ShelfShakeSensitivity.medium.rawValue,
         .dragEnabled: true,
         .dragActivator: DragActivator.fallback.rawValue,
+        .dragFromAnywhereEnabled: false,
+        .dragFromAnywhereRestoresMacOSTiling: false,
         .layoutAsksFirst: true,
         .announceGroupChanges: true,
 

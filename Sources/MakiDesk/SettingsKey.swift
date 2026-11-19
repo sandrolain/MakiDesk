@@ -11,7 +11,7 @@ import Foundation
 /// Defaults and types arrive with the reads that use them: duplicating a
 /// default here before then would be the same hazard in a new place.
 enum SettingsKey: String, CaseIterable, Sendable {
-    /// A macOS tiling preference: read only, never written.
+    /// macOS tiling preference, read and written to avoid competing ⌥ drags.
     case enableTilingOptionAccelerator = "EnableTilingOptionAccelerator"
     case idlePerformanceDiagnostics = "IdlePerformanceDiagnostics"
     case keyboardSoundsEnabled = "keyboardSoundsEnabled"
@@ -32,6 +32,8 @@ enum SettingsKey: String, CaseIterable, Sendable {
     case colorPickerFormat = "colorPickerFormat"
     case dragActivator = "dragActivator"
     case dragEnabled = "dragEnabled"
+    case dragFromAnywhereEnabled = "dragFromAnywhereEnabled"
+    case dragFromAnywhereRestoresMacOSTiling = "dragFromAnywhereRestoresMacOSTiling"
     case focusBorderEnabled = "focusBorderEnabled"
     case focusBorderWidth = "focusBorderWidth"
     case focusDimColour = "focusDimColour"

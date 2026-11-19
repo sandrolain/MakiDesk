@@ -1,4 +1,6 @@
 import AppKit
+import ApplicationServices
+import Observation
 import SwiftUI
 
 /// Dragging a window while holding the **activator keys** (default `⌥`,
@@ -26,6 +28,7 @@ import SwiftUI
 /// applied, which goes through `WorkspaceStore.applyDraggedFrame`.
 /// so the model and overlay stay in sync.
 @MainActor
+@Observable
 final class WindowDrag {
     static let shared = WindowDrag()
 
@@ -47,23 +50,181 @@ final class WindowDrag {
     private var preview: NSPanel?
     private var previewVisible = false
     private var lastRendered: CGRect = .zero
+    private var nativeGesture = false
+    private var nativeOptionHeld = false
+    private var nativePointerPoint: CGPoint?
+    private var nativeGestureGeneration: UInt64 = 0
+    private var nativeGestureCommandEpoch = 0
+    private var inputTap: WindowDragInputTap?
+    private var inputTapGeneration: UInt64 = 0
+    private var activationObserver: NSObjectProtocol?
+    private(set) var dragFromAnywherePermissionGranted = CGPreflightListenEventAccess()
+    private(set) var dragFromAnywhereActive = false
+    private(set) var dragFromAnywhereListenerUnavailable = false
 
     func start() {
         guard monitor == nil else { return }
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp, .flagsChanged]) { [weak self] event in
             self?.handle(event)
         }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshDragFromAnywherePermission() }
+        }
+        refreshDragFromAnywherePermission()
+    }
+
+    func shutdown() {
+        nativeGestureGeneration &+= 1
+        stopInputTap()
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        if let activationObserver {
+            NotificationCenter.default.removeObserver(activationObserver)
+        }
+        activationObserver = nil
+        reset()
+    }
+
+    func setDragFromAnywhereEnabled(_ enabled: Bool) {
+        guard enabled else {
+            nativeGestureGeneration &+= 1
+            stopInputTap()
+            if nativeGesture { reset() }
+            return
+        }
+        dragFromAnywherePermissionGranted = CGRequestListenEventAccess()
+        if dragFromAnywherePermissionGranted {
+            startInputTap()
+        } else {
+            dragFromAnywherePermissionGranted = CGPreflightListenEventAccess()
+            if dragFromAnywherePermissionGranted { startInputTap() }
+        }
+    }
+
+    func refreshDragFromAnywherePermission() {
+        dragFromAnywherePermissionGranted = CGPreflightListenEventAccess()
+        if WorkspaceStore.shared.dragFromAnywhereEnabled,
+           WorkspaceStore.shared.dragEnabled,
+           dragFromAnywherePermissionGranted {
+            startInputTap()
+        } else {
+            stopInputTap()
+        }
+    }
+
+    func dragEnabledDidChange(_ enabled: Bool) {
+        if enabled {
+            refreshDragFromAnywherePermission()
+        } else {
+            nativeGestureGeneration &+= 1
+            stopInputTap()
+            if nativeGesture { reset() }
+        }
+    }
+
+    func openInputMonitoringSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func startInputTap() {
+        guard inputTap == nil, WorkspaceStore.shared.dragEnabled else { return }
+        inputTapGeneration &+= 1
+        let generation = inputTapGeneration
+        dragFromAnywhereListenerUnavailable = false
+        let tap = WindowDragInputTap { [weak self] message in
+            DispatchQueue.main.async { @MainActor [weak self] in
+                self?.receiveInputTapMessage(message, generation: generation)
+            }
+        }
+        inputTap = tap
+        tap.start()
+    }
+
+    private func stopInputTap() {
+        nativeGestureGeneration &+= 1
+        inputTapGeneration &+= 1
+        inputTap?.stop()
+        inputTap = nil
+        dragFromAnywhereActive = false
+    }
+
+    private func receiveInputTapMessage(_ message: WindowDragTapMessage,
+                                        generation: UInt64) {
+        guard generation == inputTapGeneration else { return }
+        switch message {
+        case let .availability(active):
+            dragFromAnywhereActive = active
+            if !active {
+                dragFromAnywhereListenerUnavailable = true
+                inputTap = nil
+            }
+        case let .began(hit, point):
+            guard WorkspaceStore.shared.dragEnabled,
+                  WorkspaceStore.shared.dragFromAnywhereEnabled else { return }
+            nativeGestureGeneration &+= 1
+            nativeGesture = true
+            nativeOptionHeld = true
+            nativeGestureCommandEpoch = WorkspaceStore.shared.frameCommandRevisionForDrag()
+            downPoint = point
+            nativePointerPoint = point
+            active = true
+            element = hit.element
+            area = area(at: point)
+            dragging = false
+            lastRendered = .zero
+            startPolling()
+        case let .modifierChanged(held):
+            guard nativeGesture else { return }
+            nativeOptionHeld = held
+            poll()
+        case let .pointerMoved(point):
+            guard nativeGesture else { return }
+            nativePointerPoint = point
+            poll()
+        case let .ended(point, shouldSnap, didMove):
+            guard nativeGesture else { return }
+            nativePointerPoint = point
+            area = area(at: point)
+            dragging = didMove
+            nativeOptionHeld = shouldSnap
+            if shouldSnap, didMove, let element {
+                let frame = renderFrame(zone(at: point))
+                let gestureGeneration = nativeGestureGeneration
+                WorkspaceStore.shared.applyDraggedFrameAfterNativeDrag(
+                    frame, element: element,
+                    expectedCommandEpoch: nativeGestureCommandEpoch,
+                    gestureIsCurrent: { [weak self] in
+                        self?.nativeGestureGeneration == gestureGeneration
+                    })
+            }
+            nativeGesture = false
+            reset()
+        }
     }
 
     private func handle(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
-            guard WorkspaceStore.shared.dragEnabled else { return }
+            guard WorkspaceStore.shared.dragEnabled, !nativeGesture,
+                  !WindowDragInputTap.isSynthesizedMouseEvent(event.cgEvent) else { return }
+            if dragFromAnywhereActive,
+               WorkspaceStore.shared.dragFromAnywhereEnabled,
+               event.modifierFlags.contains(.option) {
+                nativeGestureGeneration &+= 1
+                return
+            }
+            nativeGestureGeneration &+= 1
             downPoint = cursorPoint()
             startPolling()
         case .flagsChanged:
             if downPoint != nil { poll() }
         case .leftMouseUp:
+            guard !nativeGesture else { return }
             applyIfNeeded()
             reset()
         default:
@@ -90,7 +251,7 @@ final class WindowDrag {
         // The button may be released without us seeing `leftMouseUp` (a native
         // drag can consume it), so `pressedMouseButtons` is the source of truth
         // and the release is never left hanging (B4).
-        if NSEvent.pressedMouseButtons == 0 {
+        if NSEvent.pressedMouseButtons == 0, !nativeGesture {
             applyIfNeeded()
             reset()
             return
@@ -101,6 +262,8 @@ final class WindowDrag {
             return
         }
         let cursor = cursorPoint()
+        let snapPoint = nativeGesture ? (nativePointerPoint ?? cursor) : cursor
+        if nativeGesture { area = area(at: snapPoint) }
         let combo = activatorHeld
         if combo, !active, Date() >= nextHitTest {
             if !begin(at: cursor) { nextHitTest = Date().addingTimeInterval(0.25) }
@@ -110,18 +273,25 @@ final class WindowDrag {
         guard combo else { hidePreview(); return }
 
         if !dragging {
-            let origin = downPoint ?? cursor
-            dragging = hypot(cursor.x - origin.x, cursor.y - origin.y) > Self.dragThreshold
+            let origin = downPoint ?? snapPoint
+            dragging = hypot(snapPoint.x - origin.x, snapPoint.y - origin.y) > Self.dragThreshold
         }
-        if dragging { showPreview(renderFrame(zone(at: cursor))) }
+        if dragging { showPreview(renderFrame(zone(at: snapPoint))) }
     }
 
     private var activatorHeld: Bool {
-        WorkspaceStore.shared.dragActivator.matches(NSEvent.modifierFlags)
+        if nativeGesture { return nativeOptionHeld }
+        return WorkspaceStore.shared.dragActivator.matches(NSEvent.modifierFlags)
     }
 
     private func cursorPoint() -> CGPoint {
         WindowController.flipPoint(NSEvent.mouseLocation)
+    }
+
+    private func area(at axPoint: CGPoint) -> CGRect {
+        let cocoaPoint = WindowController.flipPoint(axPoint)
+        let screen = NSScreen.screens.first { $0.frame.contains(cocoaPoint) } ?? NSScreen.main
+        return WindowController.axVisibleFrame(for: screen)
     }
 
     /// Captures the window under `point`. Returns false when there is none.
@@ -184,6 +354,9 @@ final class WindowDrag {
         hidePreview()
         active = false
         dragging = false
+        nativeGesture = false
+        nativeOptionHeld = false
+        nativePointerPoint = nil
         downPoint = nil
         element = nil
         lastRendered = .zero

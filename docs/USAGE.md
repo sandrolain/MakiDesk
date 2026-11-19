@@ -107,6 +107,20 @@ off, in **Settings ▸ Windows** (Placement): six combinations are offered, with
 ⌥ as the default. Control is not offered because `⌃`-click is macOS's secondary
 click.
 
+To move and snap a window from anywhere inside it, enable **Drag from anywhere
+with ⌥** in the same section. This uses ⌥ for both actions: the window follows
+the pointer, and releasing it while still holding ⌥ snaps it to the nearest
+half/golden position under the pointer. Preview and final snap use the same
+pointer position, including when crossing displays.
+Releasing ⌥ before the mouse leaves the window at its free-drag position. This option asks for Input
+Monitoring; without that permission the existing title-bar snap gesture remains
+available. A click with ⌥ and no drag is replayed to the target window. Drags
+that begin on Finder file icons, links or title-bar controls keep their native
+action; start the window drag on the surrounding surface. While this feature is
+enabled, MakiDesk temporarily turns off macOS's own ⌥-tiling and restores the
+previous setting when you turn the feature off. A manual change under
+**Settings ▸ Windows ▸ macOS** takes precedence.
+
 The mini-map shows connected displays in their relative positions and sizes.
 Window boxes use solid outlines and translucent fills; the focused window has a
 more opaque fill and the theme accent around it. In the switcher, the selected
@@ -116,10 +130,10 @@ corner the mini-map would use, the map steps below it (or above, in a lower
 corner) with a small margin, and only moves beside it when there is no room
 that way.
 
-**macOS tiling.** macOS also tiles a window dragged with ⌥. Settings ▸ Windows
-detects that system switch and lets you turn it off so only MakiDesk reacts, or
-leave both on if you prefer. The macOS option lives in System Settings ▸ Desktop
-& Dock ▸ Windows.
+**macOS tiling.** macOS also tiles a window dragged with ⌥. MakiDesk turns this
+off while **Drag from anywhere** is enabled and restores the previous value
+when disabled. Settings ▸ Windows ▸ macOS can override this behavior manually.
+The macOS option lives in System Settings ▸ Desktop & Dock ▸ Windows.
 
 The **gap** setting (Settings ▸ Windows) is the space kept between tiled
 windows and at the screen edges. Layout commands act on the windows in view on
