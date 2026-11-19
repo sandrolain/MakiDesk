@@ -7,7 +7,7 @@ import PackageDescription
 let package = Package(
     name: "MakiShared",
     platforms: [
-        .macOS(.v14),
+        .macOS("26.0"),
     ],
     products: [
         .library(name: "MakiShared", targets: ["MakiShared"]),

@@ -439,7 +439,7 @@ keeps your work even when you never save it to a file.
   Apply, and Apply is one `⌘Z` away. The model fills a structure, the Markdown
   is written by the editor's own serializer. **Settings ▸ Panels ▸ Tools ▸ Notes
   rewriting** says whether the model is available and why.
-- **Writing Tools** (macOS 15.1 and later) is the system's own, in the text's
+- **Writing Tools** (macOS 26 and later) is the system's own, in the text's
   context menu: Proofread, Rewrite, Summarise and the rest. The note stays plain
   text, so the result is plain text; fenced code blocks are left alone; while the
   session runs the syntax colours and the automatic save wait, and the rewrite is

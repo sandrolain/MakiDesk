@@ -12,7 +12,7 @@ final class SurfaceStyleTests: XCTestCase {
             switch role {
             case .chrome, .floatingPanel:
                 XCTAssertTrue(recipe.usesLiquidGlass, "\(role) should adopt glass")
-                XCTAssertNotNil(recipe.material, "\(role) needs a macOS 14–25 material")
+                XCTAssertNotNil(recipe.material, "\(role) needs a macOS 26+ material")
             case .window, .passiveCard, .overlay:
                 XCTAssertFalse(recipe.usesLiquidGlass, "\(role) must stay solid")
                 XCTAssertNil(recipe.material, "\(role) must stay solid")

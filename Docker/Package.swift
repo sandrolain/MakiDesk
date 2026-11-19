@@ -7,7 +7,7 @@ import PackageDescription
 let package = Package(
     name: "MakiDocker",
     platforms: [
-        .macOS(.v14),
+        .macOS("26.0"),
     ],
     products: [
         .executable(name: "MakiDeskDocker", targets: ["MakiDeskDocker"]),
