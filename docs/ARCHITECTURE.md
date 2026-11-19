@@ -668,9 +668,20 @@ terminal socket.
 `DockerStore` is the main-actor view model. Reads are sequential and publish each
 list as it arrives, so the first paint does not wait for disk usage; a generation
 check discards a superseded result, and the refresh task exists only while the
-window is visible and the app is active. Logs are a separate `DockerLogStream`
-process with a bounded `DockerLogBuffer`; stats poll only while their tab is
-visible. Resource search state is held independently for containers, images,
+window is visible and the app is active. `DockerRefreshCoalescer` retains at
+most one manual or post-action refresh requested during an active read. A
+successful complete read updates `lastUpdated`; a later partial failure keeps
+that timestamp so the UI can mark retained inventory as potentially stale.
+`DockerAttention` derives unhealthy, restarting, dead and unknown-state items
+from the current inventory without maintaining a second state store. Logs are
+a separate `DockerLogStream` process with a bounded `DockerLogBuffer`; stats
+poll only while their tab is visible and retain the last sample with a stale
+indicator on a transient miss. The Processes tab uses Docker's top command at
+a slow interval only while visible, and `DockerProcessParsing` preserves the
+command tail when splitting fixed columns. `DockerRegistryPage` derives
+best-effort web pages for Docker Hub, GHCR, Quay and other named registries; it
+only hands the URL to the default browser after an explicit click. Resource
+search state is held independently for containers, images,
 volumes and networks, and each section owns the placement of its search field;
 Cleanup has no search control. Prune uses `docker system prune` for the basic action and
 `docker system prune --all --volumes` for "prune all", with the preview computed

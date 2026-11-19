@@ -294,8 +294,10 @@ are grouped by Compose project, with start/stop/restart/delete and a terminal
 that opens in MakiDesk Terminal; images, volumes and networks show their size and
 usage with filters for state, health, usage and resource type; each resource
 section has its own search field. Logs and stats update while you watch them.
-The container overview links common published
-HTTP/HTTPS ports to the default browser. **Cleanup** previews what a
+The container detail adds process lists and an attention summary for unhealthy,
+restarting or otherwise unavailable containers. The overview links common
+published HTTP/HTTPS ports to the default browser and the image reference to
+Docker Hub or a supported registry page. **Cleanup** previews what a
 prune would reclaim and separates the safe prune from the one that also removes
 unused volumes. It can also pull/build/tag/push/save images, transfer files,
 manage volumes and network connections, and run bulk container actions. It is a

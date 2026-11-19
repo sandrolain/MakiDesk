@@ -268,6 +268,11 @@ to render the window and are not sent to a separate MakiDesk service.
 When you click a published HTTP/HTTPS port in the container overview, MakiDesk
 hands its localhost URL to the default browser. The Docker helper does not fetch
 the URL or read the page contents.
+When you click Open image on… in a container's Overview, MakiDesk hands the
+derived registry page URL to the default browser. The image reference is part
+of that URL; the browser contacts the registry site. MakiDesk does not fetch the
+image page. Private registries may require authentication or may not provide a
+browser page for the inferred repository path.
 
 The helper stores only its window frame, local preferences and the theme. It
 does not persist logs, inspect output, environment values, container IDs or

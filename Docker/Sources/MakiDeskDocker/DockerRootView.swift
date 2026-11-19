@@ -321,6 +321,39 @@ struct DockerContainersView: View {
                 subtitle: "\(store.containers.filter(\.isRunning).count) running · \(store.containers.count) total",
                 store: store
             )
+            if store.attentionItems.isEmpty == false {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Needs attention · \(store.attentionItems.count)",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.orange)
+                    ForEach(store.attentionItems.prefix(4)) { item in
+                        Button {
+                            reveal(item.container)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(item.container.name)
+                                    .foregroundStyle(store.theme.text)
+                                Spacer(minLength: 8)
+                                Text(item.reason.title)
+                                    .foregroundStyle(.orange)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show \(item.container.name) in the container list")
+                    }
+                    if store.attentionItems.count > 4 {
+                        Text("And \(store.attentionItems.count - 4) more")
+                            .font(.caption)
+                            .foregroundStyle(store.theme.subtext)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(store.theme.surface)
+            }
             if selectedIDs.isEmpty == false {
                 HStack {
                     Text("\(selectedIDs.count) selected")
@@ -470,6 +503,21 @@ struct DockerContainersView: View {
         store.containers.filter { selectedIDs.contains($0.id) }
     }
 
+    private func reveal(_ container: DockerContainer) {
+        store.containerSearch = ""
+        store.containerStateFilter = .all
+        store.containerHealthFilter = .all
+        store.containerSourceFilter = .all
+        store.showStopped = true
+        if let group = store.groups.first(where: { group in
+            group.containers.contains(where: { $0.id == container.id })
+        }) {
+            store.expandedGroups.insert(group.id)
+        }
+        selectedIDs = [container.id]
+        store.selectedContainerID = container.id
+    }
+
     private var hasActiveFilters: Bool {
         store.containerStateFilter != .defaultVisibility
             || store.containerHealthFilter != .all
@@ -546,7 +594,7 @@ struct DockerSectionHeader: View {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                    Text(message)
+                    Text(errorSummary(message))
                         .font(.callout)
                         .foregroundStyle(.orange)
                         .lineLimit(2)
@@ -561,6 +609,14 @@ struct DockerSectionHeader: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(store.theme.surface)
+    }
+
+    private func errorSummary(_ message: String) -> String {
+        if store.inventoryIsStale, let lastUpdated = store.lastUpdated {
+            let time = lastUpdated.formatted(date: .omitted, time: .shortened)
+            return "Some data may be stale · last complete refresh \(time) · \(message)"
+        }
+        return "No complete refresh yet · \(message)"
     }
 }
 

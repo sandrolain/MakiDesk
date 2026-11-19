@@ -62,4 +62,69 @@ final class DockerCoreTests: XCTestCase {
         XCTAssertEqual(buffer.lines, ["one", "two", "three"])
         XCTAssertEqual(buffer.partial, "")
     }
+
+    func testProcessParsingPreservesCommandArguments() {
+        XCTAssertEqual(
+            DockerCommands.processes(id: "container-123"),
+            ["top", "container-123", "-eo", "pid,ppid,user,stat,%cpu,%mem,etime,args"]
+        )
+        let output = """
+        PID PPID USER STAT %CPU %MEM ELAPSED COMMAND
+        17 1 root S 0.4 2.1 00:12 /usr/bin/node server.js --host 0.0.0.0
+        28 17 app R 1.2 3.4 01:05 worker --queue background jobs
+        """
+        let processes = DockerProcessParsing.parse(output)
+        XCTAssertEqual(processes.count, 2)
+        XCTAssertEqual(processes[0].pid, "17")
+        XCTAssertEqual(processes[0].parentPID, "1")
+        XCTAssertEqual(processes[0].command, "/usr/bin/node server.js --host 0.0.0.0")
+        XCTAssertEqual(processes[1].command, "worker --queue background jobs")
+    }
+
+    func testRegistryPagesResolveCommonRegistriesAndSkipLocalOrDigestOnlyImages() {
+        XCTAssertEqual(
+            DockerRegistryPage(imageReference: "nginx:1.27")?.url.absoluteString,
+            "https://hub.docker.com/_/nginx"
+        )
+        XCTAssertEqual(
+            DockerRegistryPage(imageReference: "acme/api:2.0")?.url.absoluteString,
+            "https://hub.docker.com/r/acme/api"
+        )
+        XCTAssertEqual(
+            DockerRegistryPage(imageReference: "ghcr.io/acme/api:2.0")?.url.absoluteString,
+            "https://github.com/acme/packages/container/package/api"
+        )
+        XCTAssertEqual(
+            DockerRegistryPage(imageReference: "quay.io/acme/api:2.0")?.url.absoluteString,
+            "https://quay.io/repository/acme/api"
+        )
+        XCTAssertEqual(
+            DockerRegistryPage(imageReference: "registry.example.com:5000/team/api:2.0")?
+                .url.absoluteString,
+            "https://registry.example.com:5000/team/api"
+        )
+        XCTAssertNil(DockerRegistryPage(imageReference: "localhost:5000/acme/api:2.0"))
+        XCTAssertNil(DockerRegistryPage(imageReference: "sha256:abcdef123456"))
+    }
+
+    func testAttentionIncludesKnownFailuresButNotExpectedStoppedContainers() {
+        let unhealthy = DockerContainer(id: "a", name: "api", image: "api:latest",
+                                        state: .running, status: "Up", health: .unhealthy)
+        let restarting = DockerContainer(id: "b", name: "worker", image: "worker:latest",
+                                         state: .restarting, status: "Restarting",
+                                         health: .starting)
+        let stopped = DockerContainer(id: "c", name: "batch", image: "batch:latest",
+                                      state: .exited, status: "Exited", health: .none)
+        let items = DockerAttention.items(for: [stopped, restarting, unhealthy])
+        XCTAssertEqual(items.map(\.container.id), ["a", "b"])
+        XCTAssertEqual(items.map(\.reason), [.unhealthy, .restarting])
+    }
+
+    func testRefreshRequestsDuringAnActiveReadCoalesceIntoOneFollowUp() {
+        var coalescer = DockerRefreshCoalescer()
+        coalescer.request()
+        coalescer.request()
+        XCTAssertTrue(coalescer.takePendingRequest())
+        XCTAssertFalse(coalescer.takePendingRequest())
+    }
 }

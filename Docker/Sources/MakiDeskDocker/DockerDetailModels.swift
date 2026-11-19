@@ -122,12 +122,20 @@ final class DockerStatsModel {
     var history: [DockerStatsSample] = []
     var isRunning = false
     var error: String?
+    var lastUpdated: Date?
+    var isStale: Bool { error != nil && lastUpdated != nil }
 
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var containerID: String?
 
     func start(container: DockerContainer, store: DockerStore, interval: Double) {
         stop()
-        guard container.isRunning else {
+        if containerID != container.id {
+            stats = .empty
+            lastUpdated = nil
+            containerID = container.id
+        }
+        guard container.state == .running else {
             error = "No statistics while the container is stopped."
             return
         }
@@ -140,6 +148,7 @@ final class DockerStatsModel {
                 if let value = await store.stats(for: container) {
                     self.stats = value
                     self.error = nil
+                    self.lastUpdated = Date()
                     let cpu = Self.percentage(value.cpuPercent)
                     let memory = Self.percentage(value.memoryPercent)
                     if let cpu, let memory {
@@ -167,6 +176,91 @@ final class DockerStatsModel {
 
     private static func percentage(_ value: String) -> Double? {
         Double(value.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "%", with: ""))
+    }
+}
+
+@MainActor
+@Observable
+final class DockerProcessesModel {
+    var processes: [DockerProcess] = []
+    var isRunning = false
+    var isLoading = false
+    var error: String?
+    var lastUpdated: Date?
+
+    @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var refreshPending = false
+    @ObservationIgnored private var currentContainer: DockerContainer?
+    @ObservationIgnored private weak var currentStore: DockerStore?
+
+    func start(container: DockerContainer, store: DockerStore, interval: Double = 5) {
+        stop()
+        guard container.state == .running else {
+            error = "Processes are available only while the container is running."
+            return
+        }
+        generation += 1
+        let token = generation
+        currentContainer = container
+        currentStore = store
+        isRunning = true
+        error = nil
+        task = Task { [weak self] in
+            guard let self else { return }
+            while Task.isCancelled == false, token == self.generation {
+                await self.load(container: container, store: store, token: token)
+                try? await Task.sleep(nanoseconds: UInt64(max(3, interval) * 1_000_000_000))
+            }
+            if token == self.generation { self.isRunning = false }
+        }
+    }
+
+    func refreshNow() {
+        guard isRunning, let currentContainer, let currentStore else { return }
+        guard isLoading == false else {
+            refreshPending = true
+            return
+        }
+        let token = generation
+        Task { await load(container: currentContainer, store: currentStore, token: token) }
+    }
+
+    func stop() {
+        generation += 1
+        task?.cancel()
+        task = nil
+        refreshPending = false
+        isRunning = false
+        isLoading = false
+        currentContainer = nil
+        currentStore = nil
+        processes = []
+        error = nil
+        lastUpdated = nil
+    }
+
+    private func load(container: DockerContainer, store: DockerStore, token: Int) async {
+        guard token == generation else { return }
+        guard isLoading == false else {
+            refreshPending = true
+            return
+        }
+        isLoading = true
+        let value = await store.processes(for: container)
+        guard token == generation, Task.isCancelled == false else { return }
+        if let value {
+            processes = value
+            error = nil
+            lastUpdated = Date()
+        } else {
+            error = "Could not read the process list."
+        }
+        isLoading = false
+        if refreshPending {
+            refreshPending = false
+            await load(container: container, store: store, token: token)
+        }
     }
 }
 

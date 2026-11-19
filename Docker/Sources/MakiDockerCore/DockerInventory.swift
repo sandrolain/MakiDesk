@@ -86,6 +86,11 @@ public struct DockerReader: Sendable {
         let output = try await cli.runChecked(DockerCommands.stats(), timeout: 15)
         return await parse(output) { DockerJSON.statsByName(from: $0) }
     }
+
+    public func processes(id: String) async throws -> [DockerProcess] {
+        let output = try await cli.runChecked(DockerCommands.processes(id: id), timeout: 15)
+        return await parse(output) { DockerProcessParsing.parse($0) }
+    }
 }
 
 public enum DockerGrouping {

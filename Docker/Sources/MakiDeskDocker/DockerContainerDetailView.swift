@@ -9,16 +9,18 @@ struct DockerContainerDetailView: View {
     @State private var tab: Tab = .overview
     @State private var logs = DockerLogsModel()
     @State private var stats = DockerStatsModel()
+    @State private var processes = DockerProcessesModel()
     @State private var inspect = DockerInspectModel()
 
     enum Tab: String, CaseIterable, Identifiable {
-        case overview, logs, stats, inspect
+        case overview, logs, stats, processes, inspect
         var id: String { rawValue }
         var title: String {
             switch self {
             case .overview: return "Overview"
             case .logs: return "Logs"
             case .stats: return "Stats"
+            case .processes: return "Processes"
             case .inspect: return "Inspect"
             }
         }
@@ -44,6 +46,9 @@ struct DockerContainerDetailView: View {
                 DockerLogsTabView(store: store, container: container, logs: logs)
             case .stats:
                 DockerStatsTabView(store: store, container: container, stats: stats)
+            case .processes:
+                DockerProcessesTabView(store: store, container: container,
+                                       processes: processes)
             case .inspect:
                 DockerInspectTabView(store: store, container: container, model: inspect)
             }
@@ -52,6 +57,7 @@ struct DockerContainerDetailView: View {
         .onChange(of: container.id) { _, _ in
             logs.stop()
             stats.stop()
+            processes.stop()
             inspect.clear()
             tab = .overview
         }
@@ -227,6 +233,14 @@ struct DockerContainerDetailView: View {
                     ("Compose service", container.compose?.service ?? "—"),
                     ("Compose file", container.compose?.configFiles.joined(separator: "\n") ?? "—"),
                 ], store: store)
+
+                if let page = DockerRegistryPage(imageReference: container.image) {
+                    Link(destination: page.url) {
+                        Label("Open image on \(page.registryName)",
+                              systemImage: "arrow.up.right.square")
+                    }
+                    .help("Open \(container.image) in \(page.registryName)")
+                }
 
                 if inspect.isLoading {
                     ProgressView("Reading container configuration…")
@@ -442,9 +456,14 @@ struct DockerStatsTabView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let error = stats.error {
-                    Text(error)
-                        .font(.callout)
-                        .foregroundStyle(.orange)
+                    Label(
+                        stats.isStale
+                            ? "Showing last sample from \(stats.lastUpdated?.formatted(date: .omitted, time: .shortened) ?? "earlier") · \(error)"
+                            : error,
+                        systemImage: stats.isStale ? "clock.arrow.circlepath" : "exclamationmark.triangle.fill"
+                    )
+                    .font(.callout)
+                    .foregroundStyle(.orange)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)],
                           spacing: 12) {
@@ -493,6 +512,86 @@ struct DockerStatsTabView: View {
             }
         }
         .onDisappear { stats.stop() }
+    }
+}
+
+struct DockerProcessesTabView: View {
+    @Bindable var store: DockerStore
+    let container: DockerContainer
+    @Bindable var processes: DockerProcessesModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if processes.isLoading { ProgressView().controlSize(.small) }
+                if let error = processes.error {
+                    Label(
+                        processes.lastUpdated.map {
+                            "Showing last result from \($0.formatted(date: .omitted, time: .shortened)) · \(error)"
+                        } ?? error,
+                        systemImage: processes.lastUpdated == nil
+                            ? "exclamationmark.triangle.fill" : "clock.arrow.circlepath"
+                    )
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                } else if let lastUpdated = processes.lastUpdated {
+                    Text("Updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
+                        .foregroundStyle(store.theme.subtext)
+                } else if container.isRunning == false {
+                    Text("Processes are available only while the container is running.")
+                        .foregroundStyle(store.theme.subtext)
+                }
+                Spacer()
+                Button("Refresh", systemImage: "arrow.clockwise") {
+                    processes.refreshNow()
+                }
+                .disabled(processes.isRunning == false)
+            }
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+
+            if processes.processes.isEmpty {
+                DockerEmptyView(
+                    icon: processes.error == nil ? "gearshape.2" : "exclamationmark.triangle",
+                    title: processes.error == nil ? "No processes" : "Could not load processes",
+                    detail: processes.error ?? "The process list will appear when available."
+                )
+            } else {
+                Table(processes.processes) {
+                    TableColumn(dockerTableHeader("PID", theme: store.theme), value: \.pid)
+                    TableColumn(dockerTableHeader("PPID", theme: store.theme), value: \.parentPID)
+                    TableColumn(dockerTableHeader("User", theme: store.theme), value: \.user)
+                    TableColumn(dockerTableHeader("State", theme: store.theme), value: \.state)
+                    TableColumn(dockerTableHeader("CPU", theme: store.theme), value: \.cpuPercent)
+                    TableColumn(dockerTableHeader("Memory", theme: store.theme), value: \.memoryPercent)
+                    TableColumn(dockerTableHeader("Elapsed", theme: store.theme), value: \.elapsed)
+                    TableColumn(dockerTableHeader("Command", theme: store.theme), value: \.command)
+                }
+                .tableStyle(.inset(alternatesRowBackgrounds: false))
+                .tableColumnHeaders(.visible)
+                .scrollContentBackground(.hidden)
+                .background(store.theme.surface)
+                .foregroundStyle(store.theme.text)
+                .environment(\.colorScheme, store.theme.isDark ? .dark : .light)
+                .background(DockerTableHeaderTheme<DockerProcess>(
+                    theme: store.theme,
+                    columnTitles: ["PID", "PPID", "User", "State", "CPU", "Memory", "Elapsed", "Command"],
+                    sortOrder: [],
+                    keyPaths: []))
+            }
+        }
+        .task(id: container.id) {
+            processes.start(container: container, store: store, interval: 5)
+        }
+        .onChange(of: store.windowVisible) { _, visible in
+            if visible {
+                processes.start(container: container, store: store, interval: 5)
+            } else {
+                processes.stop()
+            }
+        }
+        .onDisappear { processes.stop() }
     }
 }
 

@@ -905,7 +905,7 @@ sections; **Cleanup** has no search field.
   missing containers and starts the services represented by that group,
   including profile-gated services when their service names are available;
   **Restart project** uses Docker's supported timeout option. The detail
-  pane has **Overview**, **Logs**, **Stats** and **Inspect**. Stats adds a
+  pane has **Overview**, **Logs**, **Stats**, **Processes** and **Inspect**. Stats adds a
   rolling CPU and memory percentage chart for the samples collected while the
   tab is visible; the cards also show network I/O, block I/O and PID count. The container list
   shows live CPU and memory readings while its window is visible, with Start,
@@ -914,6 +914,16 @@ sections; **Cleanup** has no search field.
   entrypoint and command, plus environment variables in a Name/Value table
   sorted by key. The environment values are visible in the Overview and may
   contain secrets.
+  **Processes** shows PID, parent PID, user, state, CPU, memory, elapsed time
+  and command from Docker's `top` command. It polls every five seconds while
+  the tab is visible and the container is running. **Refresh** requests an
+  immediate update. If the daemon fails, the last process list stays visible
+  and is marked with its last successful time.
+  Containers with an unhealthy check, restarting, dead or unknown state appear
+  in a **Needs attention** summary above the list. Selecting one clears the
+  filters and opens that container's details. A stopped container is not
+  labelled unexpected because MakiDesk does not track whether its stop was
+  intentional.
   Inspect colours JSON keys, strings, numbers and literals to make the document
   easier to scan. Running containers are never removed by a prune.
 - **Images, volumes, networks.** Each section lists the resource with the size,
@@ -926,6 +936,11 @@ sections; **Cleanup** has no search field.
   The Images section can pull, build, tag, push and save image archives. Pull
   and push use the credentials already configured for the selected Docker
   context. A built image uses a selected folder as its Docker build context.
+  In the container **Overview**, **Open image on…** opens the image's repository
+  page in the default browser when the registry can be inferred. Docker Hub,
+  GitHub Container Registry and Quay have known page formats; other named
+  registries use a best-effort host/repository URL. Local and digest-only image
+  references do not show this link.
   Volumes and bridge networks can be created; networks can connect or disconnect
   containers from their context and detail actions. The container overview lists
   published ports and provides browser links for common HTTP/HTTPS ports; other
@@ -938,7 +953,11 @@ sections; **Cleanup** has no search field.
   under the log actions menu. The field filters the lines already received, and
   the buffer is bounded (20,000 lines by default) so a chatty container cannot
   grow memory without limit. **Stats** polls only while the tab is visible and
-  the container is running.
+  the container is running; after a transient failure it labels the retained
+  values as the last sample. Container inventory keeps the last complete
+  refresh time when a later refresh fails, so retained lists are identified as
+  potentially stale. A manual refresh requested during an active read runs once
+  after that read finishes; repeated requests coalesce.
 - **Terminal.** **Terminal** opens a workspace in **MakiDesk Terminal** running
   `docker exec -it <container> <shell>`. The shell defaults to `sh` and can be
   changed in the Docker window's settings. MakiDesk must be running to relay the

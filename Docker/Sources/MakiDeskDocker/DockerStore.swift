@@ -123,12 +123,18 @@ final class DockerStore {
     var dockerPath: URL?
     var currentContext: String?
 
+    var attentionItems: [DockerAttentionItem] {
+        DockerAttention.items(for: containers)
+    }
+    var inventoryIsStale: Bool { lastError != nil && lastUpdated != nil }
+
     @ObservationIgnored private var cli: DockerCLI?
     @ObservationIgnored private var reader: DockerReader?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var containerStatsTask: Task<Void, Never>?
     @ObservationIgnored private var containerStatsGeneration = 0
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var refreshRequests = DockerRefreshCoalescer()
     private(set) var windowVisible = false
     @ObservationIgnored private var appActive = true
     @ObservationIgnored weak var server: DockerIPCServer?
@@ -301,15 +307,26 @@ final class DockerStore {
     // MARK: - Reading
 
     func refreshNow() {
-        Task { await refreshAll() }
+        Task { await refreshAll(queueIfBusy: true) }
     }
 
-    func refreshAll() async {
-        guard let reader, isRefreshing == false else { return }
+    func refreshAll(queueIfBusy: Bool = false) async {
+        guard let reader else { return }
+        guard isRefreshing == false else {
+            if queueIfBusy { refreshRequests.request() }
+            return
+        }
         generation += 1
         let currentGeneration = generation
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer {
+            isRefreshing = false
+            if refreshRequests.takePendingRequest() {
+                Task { @MainActor [weak self] in
+                    await self?.refreshAll(queueIfBusy: true)
+                }
+            }
+        }
 
         var firstError: String?
         var refreshedImages: [DockerImage]?
@@ -387,13 +404,13 @@ final class DockerStore {
         if let refreshedNetworks {
             networks = refreshedNetworks
         }
-        lastUpdated = Date()
         if let firstError {
             lastError = firstError
             if containers.isEmpty && images.isEmpty && volumes.isEmpty && networks.isEmpty {
                 connection = .failed(firstError)
             }
         } else {
+            lastUpdated = Date()
             lastError = nil
             if case let .ready(version) = connection {
                 connection = .ready(version: version)
@@ -566,7 +583,7 @@ final class DockerStore {
                 actionError = error.localizedDescription
             }
             isActionRunning = false
-            await refreshAll()
+            await refreshAll(queueIfBusy: true)
         }
     }
 
@@ -605,7 +622,7 @@ final class DockerStore {
                 actionError = error.localizedDescription
             }
             isActionRunning = false
-            await refreshAll()
+            await refreshAll(queueIfBusy: true)
         }
     }
 
@@ -637,7 +654,7 @@ final class DockerStore {
                     actionError = error.localizedDescription
                 }
                 isActionRunning = false
-                await refreshAll()
+                await refreshAll(queueIfBusy: true)
             }
             return
         }
@@ -669,7 +686,7 @@ final class DockerStore {
                 actionError = error.localizedDescription
             }
             isActionRunning = false
-            await refreshAll()
+            await refreshAll(queueIfBusy: true)
         }
     }
 
@@ -705,7 +722,7 @@ final class DockerStore {
                 actionError = error.localizedDescription
             }
             isActionRunning = false
-            await refreshAll()
+            await refreshAll(queueIfBusy: true)
         }
     }
 
@@ -744,7 +761,7 @@ final class DockerStore {
                 actionError = error.localizedDescription
             }
             isActionRunning = false
-            await refreshAll()
+            await refreshAll(queueIfBusy: true)
         }
     }
 
@@ -944,7 +961,7 @@ final class DockerStore {
                 actionError = error.localizedDescription
             }
             isActionRunning = false
-            await refreshAll()
+            await refreshAll(queueIfBusy: true)
         }
     }
 
@@ -976,6 +993,15 @@ final class DockerStore {
             return try await reader.inspect(id: container.id)
         } catch {
             actionError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func processes(for container: DockerContainer) async -> [DockerProcess]? {
+        guard let reader else { return nil }
+        do {
+            return try await reader.processes(id: container.id)
+        } catch {
             return nil
         }
     }

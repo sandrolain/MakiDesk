@@ -285,6 +285,10 @@ public enum DockerCommands {
         ["stats", "--no-stream", "--format", "{{json .}}"]
     }
 
+    public static func processes(id: String) -> [String] {
+        ["top", id, "-eo", "pid,ppid,user,stat,%cpu,%mem,etime,args"]
+    }
+
     public static func logs(id: String, tail: Int, follow: Bool, timestamps: Bool) -> [String] {
         var arguments = ["logs", "--tail", "\(max(1, tail))"]
         if follow { arguments.append("--follow") }

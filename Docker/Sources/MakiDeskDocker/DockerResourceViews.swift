@@ -1,7 +1,7 @@
 import SwiftUI
 import MakiDockerCore
 
-private func dockerTableHeader(_ title: String, theme: DockerUITheme) -> Text {
+func dockerTableHeader(_ title: String, theme: DockerUITheme) -> Text {
     Text(title)
         .font(.callout.weight(.medium))
         .foregroundColor(theme.text)
