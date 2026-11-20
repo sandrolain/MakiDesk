@@ -1682,6 +1682,10 @@ take a slightly lifted tone derived from the same palette. The selected control
 or tab receives a small shift toward the theme accent, so it stays distinct
 from the raised cards even in palettes where the two used to match.
 **Reduce Transparency** turns any material into a solid surface.
+The Look theme picker also includes GitHub Light and Dark, Everforest Dark and
+Monokai. The existing Plum, Arctic, Midnight, Caramel and Graphite palettes
+are based on Dracula, Nord, Tokyo Night, Gruvbox and One Dark respectively;
+the Terminal follows each selected palette with matching ANSI colours.
 **Reset to defaults** asks whether groups, notes, clipboard history and
 dropzones should go too; settings always reset.
 

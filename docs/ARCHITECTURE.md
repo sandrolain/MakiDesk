@@ -647,6 +647,10 @@ Ghostty's shell-integration cursor (`shell-integration-features = no-cursor`),
 so the chosen shape is not replaced by a bar at the prompt. Each theme carries
 its own sixteen ANSI colours and the surface/text/accent colours for the
 helper's sidebar and title bar.
+`PaletteTheme.all` also supplies the GitHub Light/Dark, Everforest Dark and
+Monokai palettes. Their IDs are the persisted theme values and each has a
+matching terminal ANSI palette, so the helper continues to follow the selected
+theme without a separate preference or migration.
 
 ### The Docker helper (F4)
 

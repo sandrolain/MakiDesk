@@ -336,7 +336,9 @@ the process holding each one; Terminate asks first and sends `SIGTERM`, never
 ### Small details, native feel
 
 A theme that covers the panels, the Settings window, the overlay and the text
-caret, configurable animations, a focus border, a searchable Keyboard Shortcuts window,
+caret, popular GitHub Light/Dark, Everforest and Monokai palettes alongside
+the existing Catppuccin, Dracula, Nord, Tokyo Night, Gruvbox, One Dark and
+Solarized families, configurable animations, a focus border, a searchable Keyboard Shortcuts window,
 and Settings with a sidebar — General, Windows, Layouts, Panels, Notifications,
 Groups, System and Dropzones — whose longer pages split into a strip of
 sub-sections. The System theme borrows macOS materials for the utility bar and
