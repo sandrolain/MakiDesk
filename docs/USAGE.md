@@ -140,7 +140,10 @@ windows and at the screen edges. Layout commands act on the windows in view on
 each screen, one display at a time; a window's own shortcuts follow the screen
 it is on. Unplugging a monitor rescues its windows to a remaining screen without
 overwriting the group's layout; plugging it back restores the arrangement saved
-for that display set. macOS does not let an app move a window to another Space,
+for that display set. After wake, if an external display has not reconnected yet,
+MakiDesk leaves windows in place instead of shrinking them to fit the laptop
+display; a later display change triggers another reconciliation. macOS does not
+let an app move a window to another Space,
 so MakiDesk never pretends
 to.
 

@@ -405,6 +405,9 @@ final class WorkspaceStore {
     @ObservationIgnored private var lastSettledFingerprint = ""
     @ObservationIgnored private var displayTransitionGeneration = 0
     @ObservationIgnored private var wakeObserver: NSObjectProtocol?
+    /// Display set that was active before sleep, used to avoid rescuing windows
+    /// onto a temporary one-display layout while external displays reconnect.
+    @ObservationIgnored private var wakeExpectedDisplayKey: String?
 
     /// What is on screen, in use, as the one record the scene commands work
     /// from: leaving it, undoing back to it, sending one more window to the tray.
@@ -496,7 +499,7 @@ final class WorkspaceStore {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.lastWakeAt = Date() }
+            MainActor.assumeIsolated { self?.handleWake() }
         }
         startGlobalShortcuts()
         checkTrust()
@@ -4137,9 +4140,26 @@ final class WorkspaceStore {
             snapshotLayoutForCurrentDisplays()
             displayTransitionActive = true
             displaySettleAttempts = 0
-            displayTransitionGeneration &+= 1
         }
         scheduleDisplaySettle(after: displaySettleDelay())
+    }
+
+    /// A wake may not produce a screen-parameter notification when a display
+    /// keeps the same mode. Start the same guarded transition explicitly so
+    /// the final inventory is read after macOS has had time to reconnect panels.
+    private func handleWake() {
+        lastWakeAt = Date()
+        let fingerprint = DisplayFingerprint(screens: NSScreen.screens)
+        if currentDisplayKey.isEmpty {
+            currentDisplayKey = fingerprint.identity.key
+        }
+        if displayTransitionActive == false {
+            snapshotLayoutForCurrentDisplays()
+            displayTransitionActive = true
+            displaySettleAttempts = 0
+        }
+        wakeExpectedDisplayKey = currentDisplayKey
+        scheduleDisplaySettle(after: Self.wakeDisplaySettle)
     }
 
     /// A normal display change settles in about a second; a wake takes longer
@@ -4152,8 +4172,10 @@ final class WorkspaceStore {
 
     private func scheduleDisplaySettle(after delay: TimeInterval) {
         displaySettleWork?.cancel()
+        displayTransitionGeneration &+= 1
+        let generation = displayTransitionGeneration
         displayFingerprintAtSchedule = DisplayFingerprint(screens: NSScreen.screens).signature
-        let work = DispatchWorkItem { [weak self] in self?.settleDisplayChange() }
+        let work = DispatchWorkItem { [weak self] in self?.settleDisplayChange(generation: generation) }
         displaySettleWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
@@ -4161,8 +4183,8 @@ final class WorkspaceStore {
     /// Only a desk that has stopped changing is reconciled. A few reschedules
     /// cover a wake that takes a moment; after that the last reading is used,
     /// so a flickering panel cannot postpone the rescue forever.
-    private func settleDisplayChange() {
-        guard displayTransitionActive else { return }
+    private func settleDisplayChange(generation: Int) {
+        guard displayTransitionActive, displayTransitionGeneration == generation else { return }
         let fingerprint = DisplayFingerprint(screens: NSScreen.screens)
         if fingerprint.signature != displayFingerprintAtSchedule,
            displaySettleAttempts < Self.maximumDisplaySettleAttempts {
@@ -4178,9 +4200,34 @@ final class WorkspaceStore {
         let generation = displayTransitionGeneration
         WindowIndex.shared.refreshAsync { [weak self] discovered in
             guard let self, self.displayTransitionGeneration == generation else { return }
+            let latestFingerprint = DisplayFingerprint(screens: NSScreen.screens)
+            guard latestFingerprint.signature == fingerprint.signature else {
+                self.scheduleDisplaySettle(after: self.displaySettleDelay())
+                return
+            }
             self.rebuildModel(from: discovered, announce: false)
             let previousKey = self.currentDisplayKey
-            let snapshot = newKey != previousKey ? self.displaySnapshots[newKey] : nil
+            let expectedWakeKey = self.wakeExpectedDisplayKey
+            self.wakeExpectedDisplayKey = nil
+
+            // A laptop-only or otherwise partial topology can be stable for a
+            // few seconds before an external display returns. Do not clamp
+            // saved frames or rescue off-screen windows onto that temporary
+            // layout: either action can permanently reduce their dimensions.
+            if let expectedWakeKey, newKey != expectedWakeKey {
+                MakiLog.index.notice(
+                    "wake display set incomplete; deferred frame reconciliation expected=\(expectedWakeKey, privacy: .public) current=\(newKey, privacy: .public)"
+                )
+                self.currentDisplayKey = newKey
+                self.lastSettledFingerprint = fingerprint.signature
+                self.displayTransitionActive = false
+                self.status = "Display layout is still reconnecting; windows were left in place"
+                WindowOutlineController.shared.refresh()
+                return
+            }
+
+            let shouldRestoreSnapshot = newKey != previousKey || expectedWakeKey == newKey
+            let snapshot = shouldRestoreSnapshot ? self.displaySnapshots[newKey] : nil
             let restored = snapshot.map { self.restoreGroups(from: $0) } ?? 0
             // Anything still off-screen — a window of the display that went
             // away, or one no group owns — is pulled back. Its rescue frame is
@@ -4282,7 +4329,7 @@ final class WorkspaceStore {
     }
 
     private static let normalDisplaySettle: TimeInterval = 1.5
-    private static let wakeDisplaySettle: TimeInterval = 5
+    private static let wakeDisplaySettle: TimeInterval = 8
     private static let wakeWindow: TimeInterval = 20
     private static let maximumDisplaySettleAttempts = 4
     private static let maximumDisplaySnapshots = 8

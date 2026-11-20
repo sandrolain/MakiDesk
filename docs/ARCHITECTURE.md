@@ -215,8 +215,13 @@ All layout maths is pure and unit-tested:
 - A display transition is debounced on a fingerprint of the connected displays,
   their usable areas and their scales. The first notification saves every
   group's arrangement under the departing display key; the settle restores the
-  snapshot when that key returns. Rescue frames from a detached monitor are
-  never written back as the arrangement.
+  snapshot when that key returns. Wake starts a settle even when macOS emits no
+  screen-parameter event. Each settle and asynchronous inventory read carries
+  the latest transition generation, and the inventory completion rechecks the
+  live fingerprint before moving windows. If wake settles on a partial display
+  set, MakiDesk leaves windows in place for that pass instead of clamping them
+  to the laptop display. Rescue frames from a detached monitor are never
+  written back as the arrangement.
 - `LayoutAdvisor` classifies windows by app/title (`WindowKind`), reads the
   content measure and chooses grid/spiral/content. `LayoutAdvisor.weights`
   combines the per-kind priors with `0.7 + 0.6 × score/median`. The advisor is
