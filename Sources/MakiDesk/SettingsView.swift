@@ -1,6 +1,7 @@
 import AppKit
 import MakiShared
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Bindable var store: WorkspaceStore
@@ -175,7 +176,9 @@ struct SettingsView: View {
     }
 
     @State private var system = SystemMonitor.shared
+    @State private var pointerEffects = PointerEffectController.shared
     @State private var keyboardSounds = KeyboardSoundController.shared
+    @State private var showingSoundPackImporter = false
     @State private var windowDrag = WindowDrag.shared
 
     private var systemDiskMode: Binding<DiskMenuBarMode> {
@@ -481,21 +484,41 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var keyboardSoundsTab: some View {
         SettingsSection("Keyboard Sounds") {
             Toggle("Play sounds as I type", isOn: Binding(
                 get: { keyboardSounds.isEnabled },
                 set: { keyboardSounds.setEnabled($0) }
             ))
-            Picker("Sound", selection: Binding(
-                get: { keyboardSounds.preset },
-                set: { keyboardSounds.setPreset($0) }
-            )) {
-                ForEach(KeyboardSoundPreset.allCases) { preset in
-                    Text(preset.title).tag(preset)
-                }
+            Picker("Sound source", selection: Binding(get: { keyboardSounds.source }, set: { keyboardSounds.setSource($0) })) {
+                ForEach(KeyboardSoundSource.allCases) { source in Text(source.title).tag(source) }
             }
-            .disabled(!keyboardSounds.isEnabled)
+            .disabled(!keyboardSounds.isEnabled || keyboardSounds.importedPackName == nil)
+            if keyboardSounds.source == .soundPack {
+                Picker("Sound", selection: Binding(
+                    get: { keyboardSounds.selectedPackPath },
+                    set: { keyboardSounds.selectPack($0) }
+                )) {
+                    if !keyboardSounds.savedPacks.contains(where: { $0.id == keyboardSounds.selectedPackPath }) {
+                        Text("Select a pack").tag(keyboardSounds.selectedPackPath)
+                    }
+                    ForEach(keyboardSounds.savedPacks) { pack in
+                        Text(pack.name).tag(pack.id)
+                    }
+                }
+                .disabled(!keyboardSounds.isEnabled || keyboardSounds.isImportingPack || keyboardSounds.savedPacks.isEmpty)
+            } else {
+                Picker("Sound", selection: Binding(
+                    get: { keyboardSounds.preset },
+                    set: { keyboardSounds.setPreset($0) }
+                )) {
+                    ForEach(KeyboardSoundPreset.allCases) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                .disabled(!keyboardSounds.isEnabled)
+            }
             SliderRow(title: "Volume",
                       value: Binding(get: { keyboardSounds.volume },
                                      set: { keyboardSounds.setVolume($0) }),
@@ -516,7 +539,77 @@ struct SettingsView: View {
                 Button("Try") { keyboardSounds.preview() }
                     .disabled(!keyboardSounds.isEnabled || !keyboardSounds.permissionGranted)
             }
-            caption("Choose a synthesized key sound, including Quack, and set its volume. MakiDesk hears only key-down events; it does not read characters, modifiers or the active app. Turning this on asks for Input Monitoring. The listener runs only while enabled and is removed when MakiDesk quits. The System menu has a quick on/off switch.")
+            Picker("Play sound", selection: Binding(get: { keyboardSounds.trigger }, set: { keyboardSounds.setTrigger($0) })) {
+                ForEach(KeyboardSoundTrigger.allCases) { trigger in Text(trigger.title).tag(trigger) }
+            }
+            .disabled(!keyboardSounds.isEnabled)
+            caption("Held keys play once. On press and release, synthesized sounds use a distinct lower-pitched release sound; imported packs use their own configured clips when available.")
+        }
+
+        SettingsSection("Sound packs") {
+            HStack {
+                Text("Drop a Mechvibes ZIP here")
+                    .foregroundStyle(theme.subtext)
+                Spacer()
+                VStack(alignment: .trailing, spacing: 5) {
+                    Button(keyboardSounds.isImportingPack ? "Importing…" : "Choose ZIP…") { showingSoundPackImporter = true }
+                        .disabled(keyboardSounds.isImportingPack)
+                    Link("Browse packs", destination: URL(string: "https://mechvibes.com/sound-packs")!)
+                        .font(.caption)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.surface, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border, lineWidth: 1))
+            .dropDestination(for: URL.self) { urls, _ in
+                guard !keyboardSounds.isImportingPack else { return false }
+                guard let archive = urls.first, archive.pathExtension.lowercased() == "zip" else { return false }
+                keyboardSounds.importSoundPack(archive)
+                return true
+            }
+            if let importError = keyboardSounds.importError {
+                Label(importError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            if !keyboardSounds.savedPacks.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(keyboardSounds.savedPacks) { pack in
+                        HStack(spacing: 10) {
+                            Text(pack.name)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Button("Press") { keyboardSounds.previewPack(pack.id, release: false) }
+                                .disabled(!keyboardSounds.isEnabled || !keyboardSounds.permissionGranted)
+                                .help("Preview a key press sound")
+                            Button("Release") { keyboardSounds.previewPack(pack.id, release: true) }
+                                .disabled(!keyboardSounds.isEnabled || !keyboardSounds.permissionGranted)
+                                .help("Preview a key release sound")
+                            Button(role: .destructive) {
+                                keyboardSounds.deletePack(pack.id)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .labelStyle(.iconOnly)
+                            .help("Delete sound pack")
+                            .accessibilityLabel("Delete \(pack.name)")
+                        }
+                        .padding(.vertical, 7)
+                        if pack.id != keyboardSounds.savedPacks.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 10))
+            }
+            caption("MakiDesk imports the pack locally and keeps its license file. Single audio files can be WAV, MP3, FLAC or OGG. OGG import requires FFmpeg installed via Homebrew.")
+        }
+        .fileImporter(isPresented: $showingSoundPackImporter, allowedContentTypes: [.zip], allowsMultipleSelection: false) { result in
+            if case let .success(urls) = result, let archive = urls.first {
+                keyboardSounds.importSoundPack(archive)
+            }
         }
     }
 
@@ -1119,6 +1212,10 @@ struct SettingsView: View {
             }
             if panelsPage == .pointer {
                 SettingsSection("Pointer effects") {
+                    Toggle("Show pointer effect", isOn: Binding(
+                        get: { pointerEffects.isPresentationActive },
+                        set: { if $0 { pointerEffects.startPresentation() } else { pointerEffects.stopPresentation() } }
+                    ))
                     Picker("Presentation style", selection: Binding(
                         get: { store.pointerEffectStyle },
                         set: { store.updatePointerEffectStyle($0) }

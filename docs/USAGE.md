@@ -1558,19 +1558,36 @@ the window opens and on **Refresh**; nothing polls while it is closed.
 - lsof normally sees the ports of the current user; system daemons it cannot
   inspect are simply absent.
 
+Use **Settings ▸ Panels ▸ Pointer ▸ Show pointer effect** to start or stop the presentation directly.
+
 ## Keyboard sound feedback
 
 Open **Settings ▸ Keyboard Sounds** and turn on **Play sounds as I type**.
 MakiDesk then asks for **Input Monitoring**. Choose the Soft, Crisp, Low or
-Quack synthesized sound and adjust its volume. The **System** menu has a
+Quack synthesized sound or switch to an imported sound pack, choose the trigger
+phase and adjust its volume. The **System** menu has a
 Keyboard Sounds switch for quick mute and a **Configure Keyboard Sounds…**
 shortcut to this section; **Try** previews the selected sound.
 
-The listener is passive and runs only while the setting is on. It responds to
-key-down events without reading characters, modifiers, typed text or the app in
-front. Sound is generated locally; no sample pack is downloaded or stored. If
-permission is not granted yet, enable MakiDesk in **System Settings ▸ Privacy &
-Security ▸ Input Monitoring**, then return to MakiDesk.
+Choose whether the sound plays on key press, key release or both. A held key
+plays only once; in both mode synthesized feedback uses distinct press and
+release timbres. In **Sound packs**, drag a Mechvibes ZIP onto the import area
+or choose it with **Choose ZIP…**. Imports are kept in the library. Set **Sound source** to **Sound pack**,
+then use **Sound** to switch between them. Mechvibes V2 packs with one WAV, MP3, FLAC or OGG
+file are supported. OGG import converts locally to WAV using FFmpeg from Homebrew.
+The library lists imported packs with **Press** and **Release** preview buttons
+and a delete button. Deleting the active pack selects another imported pack, or
+returns to synthesized sounds when the library is empty. The pack and its license
+stay in Application Support. Sounds from different keys
+can overlap. Find packs at
+[mechvibes.com/sound-packs](https://mechvibes.com/sound-packs).
+
+The listener is passive and runs only while the setting is on. It reads virtual
+key codes and press/release phases in memory to select a local sound clip; it
+does not read characters, typed text or the app in front. Sound is generated
+locally or read from the pack you import; no pack is downloaded automatically.
+If permission is not granted yet, enable MakiDesk in **System Settings ▸ Privacy
+& Security ▸ Input Monitoring**, then return to MakiDesk.
 
 ## Notifications
 

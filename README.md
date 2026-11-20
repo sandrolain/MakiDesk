@@ -87,10 +87,10 @@ drawn around it, not over it.
 
 Turn on **Keyboard Sounds** in its own Settings section to hear a short,
 locally generated sound as you type. Choose Soft, Crisp, Low or the playful
-Quack preset, set the volume, and use the System menu for a quick mute. MakiDesk
-asks for Input Monitoring only when you enable the feature; the passive listener
-reacts to key-down events without reading characters, modifiers or the frontmost
-app.
+Quack preset, set the volume and press/release behavior, or import a compatible
+Mechvibes sound pack (WAV, MP3, FLAC, or OGG with Homebrew FFmpeg). Held keys play once. MakiDesk asks for Input Monitoring
+only when you enable the feature; the passive listener reads virtual key codes
+and press/release phases in memory, never typed text or the frontmost app.
 
 ### A switcher you will actually use
 

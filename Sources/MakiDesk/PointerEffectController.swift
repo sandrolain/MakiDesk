@@ -33,6 +33,7 @@ final class PointerEffectController {
     @ObservationIgnored private var pulseGenerations: [CGDirectDisplayID: Int] = [:]
     @ObservationIgnored private var pulseHideWork: [CGDirectDisplayID: DispatchWorkItem] = [:]
     @ObservationIgnored private var expiryWork: DispatchWorkItem?
+    @ObservationIgnored private var expiryGeneration: UInt64 = 0
 
     private init() {}
 
@@ -166,6 +167,7 @@ final class PointerEffectController {
         isPresentationActive = false
         presentationEndsAt = nil
         presentationStartedAt = nil
+        expiryGeneration &+= 1
         expiryWork?.cancel()
         expiryWork = nil
         removeMonitors()
@@ -197,6 +199,8 @@ final class PointerEffectController {
     /// to `0` while it runs removes the deadline; giving it a length again
     /// schedules the remaining time, or ends it at once if that has passed.
     private func updateDeadline() {
+        expiryGeneration &+= 1
+        let generation = expiryGeneration
         expiryWork?.cancel()
         expiryWork = nil
         guard let startedAt = presentationStartedAt else {
@@ -210,14 +214,18 @@ final class PointerEffectController {
         presentationEndsAt = startedAt.addingTimeInterval(
             TimeInterval(settings.presentationMinutes * 60)
         )
-        scheduleExpiry()
+        scheduleExpiry(generation: generation)
     }
 
-    private func scheduleExpiry() {
+    private func scheduleExpiry(generation: UInt64) {
         guard let endsAt = presentationEndsAt else { return }
         let delay = max(0, endsAt.timeIntervalSinceNow)
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.presentationExpired() }
+            MainActor.assumeIsolated {
+                guard let self, self.expiryGeneration == generation,
+                      self.presentationEndsAt != nil else { return }
+                self.presentationExpired()
+            }
         }
         expiryWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
@@ -322,9 +330,16 @@ final class PointerEffectController {
         let moved = lastPointer.map {
             hypot(pointer.x - $0.x, pointer.y - $0.y) > 0.5
         } ?? true
-        guard moved || NSEvent.pressedMouseButtons != 0 else { return }
-        lastMoveAt = Date()
-        startTicker()
+        let buttonDown = NSEvent.pressedMouseButtons != 0
+        let currentDisplay = screen(containing: pointer).flatMap(PaletteScreenLocation.displayID)
+        let surfaceMissing = currentDisplay.map { surfaces[$0]?.isVisible != true } ?? true
+        let displayChanged = currentDisplay != effectDisplayID
+        guard moved || buttonDown || surfaceMissing || displayChanged else { return }
+        if moved || buttonDown {
+            lastMoveAt = Date()
+            startTicker()
+        }
+        updateEffect(at: pointer, isMoving: moved || buttonDown)
     }
 
     private func tick() {
@@ -474,6 +489,12 @@ final class PointerEffectController {
             MainActor.assumeIsolated { self?.applySettings() }
         })
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restorePresentationSurface() }
+        })
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
@@ -497,6 +518,18 @@ final class PointerEffectController {
         let pointer = NSEvent.mouseLocation
         follow = PointerFollow(pointer)
         lastPointer = pointer
+        updateEffect(at: pointer)
+    }
+
+    /// Another application's activation can reorder its own high-level
+    /// windows over a passive effect panel. Reassert the panel without taking
+    /// focus, then redraw at the current pointer location.
+    private func restorePresentationSurface() {
+        guard isPresentationActive else { return }
+        let pointer = NSEvent.mouseLocation
+        guard let screen = screen(containing: pointer),
+              let surface = surface(for: screen) else { return }
+        surface.bringToFront()
         updateEffect(at: pointer)
     }
 

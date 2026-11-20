@@ -55,12 +55,17 @@ final class PointerEffectSurface {
         displayFrame = screen.frame
         effectView = PointerEffectView(frame: CGRect(origin: .zero, size: screen.frame.size))
         panel = PointerEffectPanel.make(frame: screen.frame, sharingType: sharingType)
+        panel.setFrame(screen.frame, display: false)
         panel.contentView = effectView
         effectView.autoresizingMask = [.width, .height]
     }
 
     func setSharingType(_ sharingType: NSWindow.SharingType) {
         panel.sharingType = sharingType
+    }
+
+    func bringToFront() {
+        panel.orderFrontRegardless()
     }
 
     func localPoint(_ screenPoint: CGPoint) -> CGPoint {
@@ -179,8 +184,9 @@ final class PointerEffectView: NSView {
     }
 
     private func setUp() {
+        let root = CALayer()
+        layer = root
         wantsLayer = true
-        guard let root = layer else { return }
         root.masksToBounds = true
 
         // Ordered bottom-to-top. The hole leaves the desktop visible while the
@@ -358,6 +364,8 @@ final class PointerEffectView: NSView {
         let circle = CGRect(x: -radius, y: -radius,
                             width: radius * 2, height: radius * 2)
         let path = CGPath(ellipseIn: circle, transform: nil)
+        ringLayer.bounds = circle
+        coreLayer.bounds = circle
         ringLayer.path = path
         coreLayer.path = path
         ringLayer.position = point

@@ -65,7 +65,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `ListeningPorts.swift`                                                                                          | Pure `lsof -Fpcn` parser, injectable reader, list model; reads on open/refresh, never polls.                                                                            |
 | `PortsWindow.swift`                                                                                             | Ports window: filter, addresses, confirmed `SIGTERM` termination.                                                                                                       |
 | `SystemNotifier.swift`                                                                                          | Opt-in `UNUserNotificationCenter` copy of a notice; permission asked only when the option is switched on.                                                               |
-| `KeyboardSoundController.swift`                                                                                | Opt-in listen-only key-down tap, bounded event handoff, synthesized presets and serial audio playback.                                                                    |
+| `KeyboardSoundController.swift`                                                                                | Opt-in listen-only key phase tracking, bounded event handoff, synthesized presets, sound pack import and mixed audio playback.                                               |
 | `ShortcutManager.swift`                                                                                         | Carbon global hot keys; these registrations remain independent of the optional keyboard-sound event tap.                                                                |
 | `NotesStore.swift`                                                                                              | Notes, drafts, session, external-file baselines, Trash.                                                                                                                 |
 | `Confirmation.swift`                                                                                            | The modals as values: one wording, one presenter; no file builds an `NSAlert` by hand.                                                                                  |
@@ -1049,7 +1049,7 @@ tuning (a count turned into an emitter birth rate, a size turned into a sprite
 scale, dot sizes and the radius that leaves room for them) — so they are tested
 without a window server.
 
-The surface is one borderless, non-activating `FloatingPanel` per `NSScreen`,
+The renderer owns an explicit Core Animation root layer. The surface is one borderless, non-activating `FloatingPanel` per `NSScreen`,
 at `statusBar + 1`, `ignoresMouseEvents` for its whole life, in every space and
 over full-screen windows. The ring is a `CAShapeLayer` and radial glow; the
 ribbon is a short filled path (at most 26 samples); particles use one
@@ -1065,7 +1065,10 @@ stationary it only compares the in-memory pointer location. The global and
 local mouse monitors and idle watcher exist only while presentation mode is
 on; a pulse installs no
 monitor or timer, and a generation counter stops a late pulse from clearing a
-newer one. Reduce Motion
+newer one. Presentation expiry has its own generation too, so a cancelled
+finite deadline cannot stop a later unlimited session. The idle watcher
+re-shows a missing surface, and application activation reorders it above newly
+activated windows without taking focus. Reduce Motion
 replaces the ribbon/particles with a static ring and pauses orbit rotation. Sleep,
 screen sleep, screen lock and a display parameter change tear the surfaces down
 instead of leaving a transparent high-level window behind; the panel is
@@ -1121,17 +1124,30 @@ command line is logged.
 `KeyboardSoundController` owns the opt-in setting and Input Monitoring state.
 It does not request access on launch: the user must turn the feature on first.
 The listen-only Core Graphics event tap runs its run loop on a dedicated thread
-and subscribes only to key-down event types. Its callback reads no event fields;
-it transfers a capped count of signals to one serial audio queue, with at most
-one drain scheduled. That queue owns the `AVAudioEngine`, generated PCM buffer,
-preset and volume. Turning the feature off clears queued signals, invalidates
-the tap, stops audio, and persists the disabled setting. Permission is checked
+and subscribes to key-down and key-up. Its callback reads only the virtual key
+code and event phase; a lock-protected bounded queue tracks held keys, suppresses
+autorepeat and schedules one drain on the serial audio queue. The selected
+trigger mode decides whether to play on press, release or both. The audio queue
+owns the `AVAudioEngine`, generated buffers, optional imported PCM pack and
+volume. Imported ZIPs are read by member name, accept safe relative paths for
+packs with one audio file, are bounded by a 100 MiB archive/audio limit, and are stored
+under Application Support with the pack license and a normalized config. V2
+timing ranges map to macOS virtual key codes and are sliced into PCM buffers.
+The library loads pack metadata and decodes only the selected pack for normal
+playback; per-pack press/release audition decodes the chosen pack on a worker
+and submits its representative clips to the shared audio queue. The user can
+delete imported pack directories from the library; deleting the active pack
+selects another available pack or returns to synthesized playback. A pool of
+32 player nodes mixes concurrent sounds and replaces the oldest scheduled voice
+when the pool cycles. OGG conversion uses a local Homebrew FFmpeg executable.
+ZIP import runs off the main actor. Turning the feature off clears queued/held keys, invalidates the
+tap, stops audio, and persists the disabled setting. Permission is checked
 again when MakiDesk becomes active so a grant made in System Settings can start
 the feature without polling.
 
-The presets are synthesized locally; there are no soundpack files or network
-requests. Neither the listener nor the audio path stores key codes, characters,
-modifiers, text, application identity or per-key timestamps.
+Synthesized press/release tones have distinct timbres. No soundpack is fetched
+over the network. Neither the listener nor the audio path stores characters,
+typed text, application identity or key event history.
 
 ## Permissions
 

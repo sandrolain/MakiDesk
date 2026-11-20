@@ -24,7 +24,7 @@ macOS privacy permissions only for the features that need them:
 | Permission | Why |
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
-| **Input Monitoring** | Optional keyboard sound feedback and drag-from-anywhere. Requested only when you enable the corresponding feature; the sound listener receives key-down events, while the drag listener can suppress and rewrite mouse-down/drag/up events only for an ⌥-drag gesture while enabled. |
+| **Input Monitoring** | Optional keyboard sound feedback and drag-from-anywhere. Requested only when you enable the corresponding feature; the sound listener receives key-down/key-up events, while the drag listener can suppress and rewrite mouse-down/drag/up events only for an ⌥-drag gesture while enabled. |
 
 When drag-from-anywhere is enabled, MakiDesk temporarily changes the macOS
 Option-drag tiling preference to prevent two window managers from handling the
@@ -70,10 +70,13 @@ identity asks again. A Developer ID-signed public release behaves best here.
   presentation effect is on, to place a transparent panel around the pointer.
   It is used in memory only; the position is never recorded, logged or written,
   and nothing samples the pointer or stays on screen once the feature is off.
-- **Keyboard event type**, only while Keyboard Sounds is enabled: a passive tap
-  notices key-down events and plays a locally generated sound. It does not read
-  key codes, characters, modifiers, typed text or the frontmost app. A bounded
-  in-memory count coalesces bursts; no key data is logged, persisted or sent.
+- **Keyboard event type and virtual key code**, only while Keyboard Sounds is
+  enabled: a passive tap tracks press/release phases in a bounded in-memory set
+  so held keys do not repeat and imported local clips can be selected. It does
+  not read characters, typed text or the frontmost app. No key data is logged,
+  persisted or sent. An imported sound pack and its license stay in Application
+  Support until the user deletes that pack or removes the app data. OGG conversion runs locally with
+  FFmpeg and uses only the imported audio.
 - **Mouse down, drag and up events**, only while Drag from anywhere is enabled
   and Input Monitoring is allowed: an ⌥-drag on another app's window is
   translated into a native title-bar drag so the window follows the pointer.

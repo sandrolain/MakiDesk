@@ -104,6 +104,9 @@ enum SettingsDefaults {
         .keyboardSoundsEnabled: false,
         .keyboardSoundsPreset: KeyboardSoundPreset.soft.rawValue,
         .keyboardSoundsVolume: 0.35,
+        .keyboardSoundsTrigger: KeyboardSoundTrigger.press.rawValue,
+        .keyboardSoundsPack: "",
+        .keyboardSoundsSource: KeyboardSoundSource.synthesized.rawValue,
 
         // Notes: the editor's own size and the split view's starting width.
         .notesFontSize: 13.0,
