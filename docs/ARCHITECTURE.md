@@ -701,7 +701,11 @@ most one manual or post-action refresh requested during an active read. A
 successful complete read updates `lastUpdated`; a later partial failure keeps
 that timestamp so the UI can mark retained inventory as potentially stale.
 `DockerAttention` derives unhealthy, restarting, dead and unknown-state items
-from the current inventory without maintaining a second state store. Logs are
+from the current inventory without maintaining a second state store; stale
+unhealthy health values are suppressed when every member of that Compose group
+is stopped. One `DockerInspectModel` per selected container loads once at the
+detail-pane level and shares its generation-checked result between Overview and
+Inspect, so switching tabs does not clear or duplicate the request. Logs are
 a separate `DockerLogStream` process with a bounded `DockerLogBuffer`; stats
 poll only while their tab is visible and retain the last sample with a stale
 indicator on a transient miss. The Processes tab uses Docker's top command at

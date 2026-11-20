@@ -929,7 +929,9 @@ sections; **Cleanup** has no search field.
   missing containers and starts the services represented by that group,
   including profile-gated services when their service names are available;
   **Restart project** uses Docker's supported timeout option. The detail
-  pane has **Overview**, **Logs**, **Stats**, **Processes** and **Inspect**. Stats adds a
+  pane has **Overview**, **Logs**, **Stats**, **Processes** and **Inspect**. The
+  detail title uses the same Compose-prefix-free name as the container list.
+  Stats adds a
   rolling CPU and memory percentage chart for the samples collected while the
   tab is visible; the cards also show network I/O, block I/O and PID count. The container list
   shows live CPU and memory readings while its window is visible, with Start,
@@ -942,9 +944,11 @@ sections; **Cleanup** has no search field.
   and command from Docker's `top` command. It polls every five seconds while
   the tab is visible and the container is running. **Refresh** requests an
   immediate update. If the daemon fails, the last process list stays visible
-  and is marked with its last successful time.
+  and is marked with its last successful time. The short process columns are
+  sized for their expected values; the command column takes the remaining room.
   Containers with an unhealthy check, restarting, dead or unknown state appear
-  in a **Needs attention** summary above the list. Selecting one clears the
+  in a **Needs attention** summary above the list, except unhealthy containers
+  in a Compose group where every container is stopped. Selecting one clears the
   filters and opens that container's details. A stopped container is not
   labelled unexpected because MakiDesk does not track whether its stop was
   intentional.

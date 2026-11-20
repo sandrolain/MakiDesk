@@ -54,13 +54,14 @@ struct DockerContainerDetailView: View {
             }
         }
         .background(store.theme.background)
+        .task(id: container.id) { inspect.load(container: container, store: store) }
         .onChange(of: container.id) { _, _ in
             logs.stop()
             stats.stop()
             processes.stop()
-            inspect.clear()
             tab = .overview
         }
+        .onDisappear { inspect.clear() }
     }
 
     private var header: some View {
@@ -69,7 +70,7 @@ struct DockerContainerDetailView: View {
                 Circle()
                     .fill(stateColor)
                     .frame(width: 9, height: 9)
-                Text(container.name)
+                Text(container.displayName)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(store.theme.text)
                     .lineLimit(1)
@@ -242,9 +243,13 @@ struct DockerContainerDetailView: View {
                     .help("Open \(container.image) in \(page.registryName)")
                 }
 
-                if inspect.isLoading {
-                    ProgressView("Reading container configuration…")
-                        .font(.callout)
+                if inspect.isLoading && inspect.summary == nil {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Reading container configuration…")
+                            .font(.callout)
+                            .foregroundStyle(store.theme.subtext)
+                    }
                 }
                 if let error = inspect.error {
                     Text(error).font(.callout).foregroundStyle(.orange)
@@ -269,7 +274,6 @@ struct DockerContainerDetailView: View {
             }
             .padding(16)
         }
-        .task(id: container.id) { inspect.load(container: container, store: store) }
     }
 
     private func overviewInspectValue(_ keyPath: KeyPath<DockerInspectSummary, [String]>) -> String {
@@ -559,13 +563,13 @@ struct DockerProcessesTabView: View {
                 )
             } else {
                 Table(processes.processes) {
-                    TableColumn(dockerTableHeader("PID", theme: store.theme), value: \.pid)
-                    TableColumn(dockerTableHeader("PPID", theme: store.theme), value: \.parentPID)
-                    TableColumn(dockerTableHeader("User", theme: store.theme), value: \.user)
-                    TableColumn(dockerTableHeader("State", theme: store.theme), value: \.state)
-                    TableColumn(dockerTableHeader("CPU", theme: store.theme), value: \.cpuPercent)
-                    TableColumn(dockerTableHeader("Memory", theme: store.theme), value: \.memoryPercent)
-                    TableColumn(dockerTableHeader("Elapsed", theme: store.theme), value: \.elapsed)
+                    TableColumn(dockerTableHeader("PID", theme: store.theme), value: \.pid).width(64)
+                    TableColumn(dockerTableHeader("PPID", theme: store.theme), value: \.parentPID).width(68)
+                    TableColumn(dockerTableHeader("User", theme: store.theme), value: \.user).width(96)
+                    TableColumn(dockerTableHeader("State", theme: store.theme), value: \.state).width(76)
+                    TableColumn(dockerTableHeader("CPU", theme: store.theme), value: \.cpuPercent).width(68)
+                    TableColumn(dockerTableHeader("Memory", theme: store.theme), value: \.memoryPercent).width(82)
+                    TableColumn(dockerTableHeader("Elapsed", theme: store.theme), value: \.elapsed).width(92)
                     TableColumn(dockerTableHeader("Command", theme: store.theme), value: \.command)
                 }
                 .tableStyle(.inset(alternatesRowBackgrounds: false))
@@ -624,7 +628,7 @@ struct DockerInspectTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             if model.isLoading {
-                ProgressView("Reading inspect…")
+                DockerLoadingView(title: "Reading inspect…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let summary = model.summary {
                 VStack(alignment: .leading, spacing: 8) {
@@ -693,7 +697,15 @@ struct DockerInspectTabView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: container.id) { model.load(container: container, store: store) }
-        .onDisappear { model.clear() }
+    }
+}
+
+/// A minimal progress indicator with no card or enclosing surface.
+private struct DockerLoadingView: View {
+    let title: String
+
+    var body: some View {
+        ProgressView(title)
+            .controlSize(.regular)
     }
 }

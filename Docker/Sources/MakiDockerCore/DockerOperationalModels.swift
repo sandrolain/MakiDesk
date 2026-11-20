@@ -191,7 +191,18 @@ public struct DockerAttentionItem: Identifiable, Equatable, Sendable {
 
 public enum DockerAttention {
     public static func items(for containers: [DockerContainer]) -> [DockerAttentionItem] {
-        containers.compactMap(DockerAttentionItem.init(container:))
+        let fullyStoppedComposeGroups = Set(
+            DockerGrouping.groups(containers)
+                .filter { $0.isStandalone == false && $0.stoppedCount == $0.totalCount }
+                .map(\.id)
+        )
+        return containers.compactMap { container in
+            if container.health == .unhealthy,
+               fullyStoppedComposeGroups.contains(container.groupKey) {
+                return nil
+            }
+            return DockerAttentionItem(container: container)
+        }
             .sorted { lhs, rhs in
                 let nameOrder = lhs.container.name.localizedStandardCompare(rhs.container.name)
                 if nameOrder != .orderedSame { return nameOrder == .orderedAscending }

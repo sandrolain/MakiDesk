@@ -276,6 +276,7 @@ final class DockerInspectModel {
     func load(container: DockerContainer, store: DockerStore) {
         generation += 1
         let token = generation
+        summary = nil
         isLoading = true
         error = nil
         Task { [weak self] in

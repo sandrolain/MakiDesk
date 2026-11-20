@@ -332,7 +332,7 @@ struct DockerContainersView: View {
                             reveal(item.container)
                         } label: {
                             HStack(spacing: 8) {
-                                Text(item.container.name)
+                                Text(item.container.displayName)
                                     .foregroundStyle(store.theme.text)
                                 Spacer(minLength: 8)
                                 Text(item.reason.title)
@@ -341,7 +341,7 @@ struct DockerContainersView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help("Show \(item.container.name) in the container list")
+                        .help("Show \(item.container.displayName) in the container list")
                     }
                     if store.attentionItems.count > 4 {
                         Text("And \(store.attentionItems.count - 4) more")
