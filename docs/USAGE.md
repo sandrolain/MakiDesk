@@ -203,8 +203,10 @@ itself and everything above it stay clear. Off by default.
 
 Two overlays MakiDesk draws itself, for finding the pointer and for showing it
 to someone else. Neither asks for a permission: the pointer is read in memory
-through the same global mouse events the utility bar already uses, and nothing
-is captured, written or logged.
+through global mouse events plus a low-rate movement check while a presentation
+is active, and nothing is captured, written or logged. The 60 Hz follower only
+runs during movement, while the lower-rate check can restart it if a global
+event is missed.
 
 - `⌃⌥⇧P` — **Locate pointer**. Three rings expand from the pointer for about a
   second, on the display it is on, then disappear. It installs nothing that
@@ -641,14 +643,15 @@ it, and leaves no room behind.
   from the keyboard, and the same key closes it. The menu bar's **Utility Bar**
   item does the same, and the command box has `utility bar`, `bar show`,
   `bar hide` and `bar pin`.
-- **What is on it.** On the left the everyday panels and tools — Notes,
-  Clipboard, Shelf, Timer, the command box, the Terminal and its Quake, Docker,
-  then screenshots, text from the screen, colour, measure and the Ports window. The Timer button carries the
-  nearest running countdown as a badge, so one Timer is both the command and the
-  figure. In the middle the presentation toggles — focus
-  border, focus dim, mini map — lit in the accent while on. On the right the
-  figures: free disk, CPU and the number of windows in the switcher. A click runs
-  the same action as the shortcut and the menu.
+- **What is on it.** Three taller rows have separate categories: **Panels**
+  (Notes, Clipboard, Shelf, Checklist and Timer), **Apps** (Command box,
+  Terminal, Quake, Docker and Browser), **Capture & tools** (Screenshot, text
+  from screen, colour, measure, locate pointer and Ports), then **Quick toggles**
+  and **System**. Focus border, focus dim, mini map, pointer effects, click
+  ripple and keyboard sounds show their on state in the accent. Disk, CPU and
+  window counts remain informational. The Timer button carries the nearest
+  running countdown as a badge. A click runs the same action as its shortcut or
+  Settings toggle.
 - **The pin.** The pin on the right keeps the bar open. It lasts for the session:
   quitting MakiDesk clears it, and so does clicking it again. A pinned bar ignores
   clicks elsewhere and display changes — close it with the pin, `⌃⌥B` or the menu.
@@ -667,11 +670,11 @@ it, and leaves no room behind.
   the chevron, whose menu opens just below it. Untick the buttons you never use
   and everything fits.
 - **Settings ▸ Panels ▸ Utility bar** turns the pointer reveal off, sets the
-  height (28–64 pt, 46 by default), chooses whether the labels follow the
+  height (156–220 pt, 176 by default), chooses whether the labels follow the
   display, are always shown or never shown, and lists every button with a tick.
   The pin and the Settings button always stay; the chevron appears when
-  something does not fit. The buttons grow with
-  the height, so a taller bar is easier to hit, not just more padded. With the
+  something does not fit. Buttons and symbols are larger and grow with
+  the height, so the extra space improves hit targets. With the
   reveal off, only `⌃⌥B`, the menu and the command box open it.
 - **The buttons file.** Visibility and order also live in
   `~/Library/Application Support/MakiDesk/utility-bar.json`: each entry names a
@@ -1622,7 +1625,7 @@ reopening Settings starts at the first one.
 - **Panels** — shelf shake settings, the checklist card (visibility, opacity,
   width, corner and display), the countdown card (visibility, opacity, corner
   and display), the window switcher/search appearance (including the groups
-  column and its announcements), the utility bar (pointer reveal, taller two-row
+  column and its announcements), the utility bar (pointer reveal, taller three-row
   layout, labels and the buttons file), the annotated screenshot's clipboard copy, the notice for screenshots
   macOS saves, and text recognition quality and correction. The display choice
   *Active display* is the monitor of the last window focus or pointer move;

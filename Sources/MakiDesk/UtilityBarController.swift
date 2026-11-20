@@ -45,7 +45,7 @@ final class UtilityBarController {
     /// Reads the preferences and re-arms or shuts down accordingly. Called at
     /// launch and after every change in Settings.
     func applySettings() {
-        model.height = Self.clampedHeight(Settings.int(.utilityBarHeight))
+        model.height = UtilityBarModel.height(fromStored: Settings.int(.utilityBarHeight))
         model.labelMode = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
 
         guard Settings.bool(.utilityBarEnabled) else {
@@ -59,13 +59,6 @@ final class UtilityBarController {
         if isVisible, let screen = screen(containing: NSEvent.mouseLocation) {
             position(panel, on: screen)
         }
-    }
-
-    private static func clampedHeight(_ stored: Int) -> CGFloat {
-        guard stored > 0 else { return UtilityBarModel.defaultHeight }
-        let value = CGFloat(stored)
-        return min(max(value, UtilityBarModel.heightRange.lowerBound),
-                   UtilityBarModel.heightRange.upperBound)
     }
 
     // MARK: - Opening and closing
@@ -126,6 +119,17 @@ final class UtilityBarController {
         case let .shortcut(action):
             dismissForCommand()
             WorkspaceStore.shared.applyShortcut(action)
+        case let .toggle(toggle):
+            switch toggle {
+            case .pointerEffects:
+                PointerEffectController.shared.togglePresentation()
+            case .clickRipple:
+                let store = WorkspaceStore.shared
+                store.updatePointerClickRipple(!store.pointerClickRipple)
+            case .keyboardSounds:
+                let sounds = KeyboardSoundController.shared
+                sounds.setEnabled(!sounds.isEnabled)
+            }
         case let .info(info):
             dismissForCommand()
             switch info {

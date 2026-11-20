@@ -124,9 +124,7 @@ final class WorkspaceStore {
     /// The utility bar (F1/F2): whether it opens on approach, how tall it is,
     /// and whether it shows the words beside the icons.
     var utilityBarEnabled = Settings.bool(.utilityBarEnabled)
-    var utilityBarHeight = min(max(Settings.int(.utilityBarHeight),
-                                   Int(UtilityBarModel.heightRange.lowerBound)),
-                               Int(UtilityBarModel.heightRange.upperBound))
+    var utilityBarHeight = Int(UtilityBarModel.height(fromStored: Settings.int(.utilityBarHeight)))
     var utilityBarLabels = BarLabelMode(rawValue: Settings.string(.utilityBarLabels) ?? "") ?? .auto
     /// The bar's buttons (F1), file-backed: visibility, order inside each zone
     /// and an optional title and symbol per button, all editable by hand.

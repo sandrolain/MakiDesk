@@ -3,8 +3,8 @@ import SwiftUI
 
 /// The strip itself (F1): utility commands, toggles, info, and the pin.
 ///
-/// It reads the controllers that own the values and runs the existing
-/// shortcuts; the only state of its own is hover and the keyboard selection.
+/// It reads the controllers that own the values and runs existing commands or
+/// settings; the only state of its own is hover and the keyboard selection.
 struct UtilityBarView: View {
     @Bindable var controller: UtilityBarController
     @Bindable var model: UtilityBarModel
@@ -20,7 +20,7 @@ struct UtilityBarView: View {
     /// The buttons grow with the bar, within limits: a taller bar should feel
     /// roomier, not merely padded.
     private var controlHeight: CGFloat {
-        min(max((model.height - 18) / 2, 22), 38)
+        min(max((model.height - 50) / 3, 32), 54)
     }
 
     var body: some View {
@@ -29,28 +29,33 @@ struct UtilityBarView: View {
             let plan = plan(for: proxy.size.width, labels: labels)
             let shown = store.barConfiguration.resolvedItems()
                 .filter { plan.visible.contains($0.id) }
-            let utility = shown.filter { $0.zone == .utility }
-            let toggles = shown.filter { $0.zone == .toggle }
-            let infoItems = shown.filter { $0.zone == .info }
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    groupLabel("Panels & tools")
-                    zone(utility, plan: plan, labels: labels)
+            let panels = shown.filter { $0.category == .panels }
+            let apps = shown.filter { $0.category == .apps }
+            let tools = shown.filter { $0.category == .tools }
+            let options = shown.filter { $0.category == .quickToggles }
+            let system = shown.filter { $0.category == .system }
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    category(.panels, items: panels, plan: plan, labels: labels)
+                    if panels.isEmpty == false, apps.isEmpty == false { divider }
+                    category(.apps, items: apps, plan: plan, labels: labels)
                     Spacer(minLength: 4)
                     rightZone(plan: plan)
                 }
-                HStack(spacing: 4) {
-                    groupLabel("Window controls")
-                    zone(toggles, plan: plan, labels: labels)
-                    if toggles.isEmpty == false, infoItems.isEmpty == false { divider }
-                    if infoItems.isEmpty == false { groupLabel("System status") }
-                    infoZone(infoItems, plan: plan, labels: labels)
+                HStack(spacing: 8) {
+                    category(.tools, items: tools, plan: plan, labels: labels)
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 8) {
+                    category(.quickToggles, items: options, plan: plan, labels: labels)
+                    if options.isEmpty == false, system.isEmpty == false { divider }
+                    category(.system, items: system, plan: plan, labels: labels)
                     Spacer(minLength: 0)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .frame(width: proxy.size.width, height: model.height, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(width: proxy.size.width, height: model.height, alignment: .center)
             .makiSurface(.chrome, theme: theme, fill: theme.raisedSurface)
             .onAppear {
                 width = proxy.size.width
@@ -77,24 +82,31 @@ struct UtilityBarView: View {
 
     // MARK: - Zones
 
+    @ViewBuilder
+    private func category(_ category: BarItem.Category, items: [BarItem], plan: BarLayout.Plan,
+                          labels: Bool) -> some View {
+        if items.isEmpty == false {
+            HStack(spacing: 5) {
+                groupLabel(category.title)
+                zone(items, plan: plan, labels: labels)
+            }
+        }
+    }
+
     private func zone(_ items: [BarItem], plan: BarLayout.Plan, labels: Bool) -> some View {
         ForEach(items.filter { plan.visible.contains($0.id) }) { item in
-            // The Timer button carries the nearest countdown as a badge, so it
-            // has to refresh itself; the other controls change with their store.
-            if item.id == "timer" {
+            // Timer badges and system figures are time-varying; the other
+            // controls read state from their owning stores.
+            if case .info = item.kind {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    info(item, labels: labels, now: context.date)
+                }
+            } else if item.id == "timer" {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     control(item, labels: labels, now: context.date)
                 }
             } else {
                 control(item, labels: labels)
-            }
-        }
-    }
-
-    private func infoZone(_ items: [BarItem], plan: BarLayout.Plan, labels: Bool) -> some View {
-        ForEach(items.filter { plan.visible.contains($0.id) }) { item in
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                info(item, labels: labels, now: context.date)
             }
         }
     }
@@ -119,10 +131,10 @@ struct UtilityBarView: View {
 
     private func groupLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 9, weight: .semibold))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(theme.subtext.opacity(0.8))
             .lineLimit(1)
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 5)
     }
 
     // MARK: - Controls
@@ -139,11 +151,11 @@ struct UtilityBarView: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: symbol(for: item))
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 15.5, weight: .medium))
                     .foregroundStyle(tint(for: item))
                 if labels, showsTitle(item) {
                     Text(item.title)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(tint(for: item))
                         .lineLimit(1)
                 }
@@ -156,7 +168,8 @@ struct UtilityBarView: View {
                         .background(Capsule().fill(theme.selectionSurface))
                 }
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 9)
+            .frame(minWidth: 48)
             .frame(height: controlHeight)
             .background(
                 RoundedRectangle(cornerRadius: MakiRadius.control)
@@ -185,21 +198,22 @@ struct UtilityBarView: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: item.symbol)
-                    .font(.system(size: 11.5, weight: .regular))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(theme.subtext)
                 if case let .info(info) = item.kind {
                     Text(model.value(for: info, now: now))
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(.system(size: 12, weight: .medium).monospacedDigit())
                         .foregroundStyle(theme.text)
                 }
                 if labels {
                     Text(item.title)
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 10.5))
                         .foregroundStyle(theme.subtext.opacity(0.85))
                         .lineLimit(1)
                 }
             }
-            .padding(.horizontal, 5)
+            .padding(.horizontal, 8)
+            .frame(minWidth: 52)
             .frame(height: controlHeight)
             .background(RoundedRectangle(cornerRadius: MakiRadius.control)
                 .fill(background(for: item)))
@@ -288,13 +302,17 @@ struct UtilityBarView: View {
             }
             return BarLayout.plan(measured, available: width, reserve: reserve)
         }
-        // The wider, two-row bar gives each contextual group its own width
-        // budget. Reserve the right controls on row one and the group labels on
-        // both rows; the overflow indicator is reserved before its count is known.
-        let utility = layout(configured.filter { $0.zone == .utility }, reserve: 180)
-        let status = layout(configured.filter { $0.zone == .toggle || $0.zone == .info }, reserve: 210)
-        return BarLayout.Plan(visible: utility.visible + status.visible,
-                              overflow: utility.overflow + status.overflow)
+        // Each contextual row gets its own width budget. Row one reserves room
+        // for category labels and the pin/overflow/settings controls.
+        let first = layout(configured.filter {
+            $0.category == .panels || $0.category == .apps
+        }, reserve: 250)
+        let second = layout(configured.filter { $0.category == .tools }, reserve: 110)
+        let third = layout(configured.filter {
+            $0.category == .quickToggles || $0.category == .system
+        }, reserve: 230)
+        return BarLayout.Plan(visible: first.visible + second.visible + third.visible,
+                              overflow: first.overflow + second.overflow + third.overflow)
     }
 
     private func showOverflowMenu() {

@@ -19,10 +19,9 @@ enum BarLabelMode: String, CaseIterable, Identifiable, Sendable {
 
 /// One control in the utility bar (F1).
 ///
-/// The catalog is the single source: a command appears in the bar only because
-/// it is here, and every entry names an action that already exists — the bar
-/// adds presentation, not behaviour. That is what keeps it from growing a
-/// second, subtly different copy of the menu.
+/// The catalog is the single source for button behavior and category. Commands
+/// reuse existing actions; quick toggles call the controller that owns their
+/// setting, so the bar does not grow a second implementation of either.
 struct BarItem: Identifiable, Equatable {
     enum Zone: String, CaseIterable, Sendable {
         case utility
@@ -34,10 +33,36 @@ struct BarItem: Identifiable, Equatable {
     enum Kind: Equatable, Sendable {
         /// Runs the same action the shortcut and the menu run.
         case shortcut(WindowController.ShortcutAction)
+        /// A setting with a direct on/off state, shown as a toggle.
+        case toggle(Toggle)
         case info(Info)
         case pin
         case overflow
         case customize
+    }
+
+    enum Toggle: Equatable, Sendable {
+        case pointerEffects
+        case clickRipple
+        case keyboardSounds
+    }
+
+    enum Category: String, CaseIterable, Sendable {
+        case panels
+        case apps
+        case tools
+        case quickToggles
+        case system
+
+        var title: String {
+            switch self {
+            case .panels: return "Panels"
+            case .apps: return "Apps"
+            case .tools: return "Capture & tools"
+            case .quickToggles: return "Quick toggles"
+            case .system: return "System"
+            }
+        }
     }
 
     enum Info: String, CaseIterable, Identifiable, Sendable {
@@ -57,6 +82,8 @@ struct BarItem: Identifiable, Equatable {
     /// controls are never planned and keep 0.
     let priority: Int
 
+    var category: Category? { BarItemCatalog.category(for: id) }
+
     var shortcutAction: WindowController.ShortcutAction? {
         guard case let .shortcut(action) = kind else { return nil }
         return action
@@ -70,11 +97,13 @@ struct BarItem: Identifiable, Equatable {
         let base: CGFloat
         switch kind {
         case .info:
-            base = labels ? 74 : 56
+            base = labels ? 92 : 68
         case .pin, .overflow, .customize:
-            base = 26
+            base = 40
         case .shortcut:
-            base = labels ? 26 + CGFloat(title.count) * 6.2 + 8 : 26
+            base = labels ? 42 + CGFloat(title.count) * 7.0 : 42
+        case .toggle:
+            base = labels ? 42 + CGFloat(title.count) * 7.0 : 42
         }
         guard let badge, badge.isEmpty == false else { return base }
         // 9 pt semibold digits, 4 pt of side padding and the 5 pt gap after
@@ -85,6 +114,18 @@ struct BarItem: Identifiable, Equatable {
 
 /// The bar's contents (F1), in display order.
 enum BarItemCatalog {
+    static func category(for id: String) -> BarItem.Category? {
+        switch id {
+        case "notes", "clipboard", "shelf", "checklist", "timer": return .panels
+        case "command", "terminal", "terminalQuake", "docker", "browser": return .apps
+        case "screenshot", "text", "colour", "measure", "locatePointer", "ports": return .tools
+        case "focusBorder", "focusDim", "miniMap", "pointerEffects", "clickRipple",
+             "keyboardSounds": return .quickToggles
+        case "disk", "cpu", "windows": return .system
+        default: return nil
+        }
+    }
+
     static let utility: [BarItem] = [
         BarItem(id: "notes", title: "Notes", symbol: "note.text",
                 zone: .utility, kind: .shortcut(.openNotes), priority: 1),
@@ -104,6 +145,8 @@ enum BarItemCatalog {
                 zone: .utility, kind: .shortcut(.sampleColor), priority: 3),
         BarItem(id: "measure", title: "Measure", symbol: "ruler",
                 zone: .utility, kind: .shortcut(.measureArea), priority: 3),
+        BarItem(id: "locatePointer", title: "Locate pointer", symbol: "scope",
+                zone: .utility, kind: .shortcut(.locatePointer), priority: 2),
         BarItem(id: "ports", title: "Ports", symbol: "network",
                 zone: .utility, kind: .shortcut(.openPorts), priority: 3),
         BarItem(id: "command", title: "Command box", symbol: "command",
@@ -125,6 +168,12 @@ enum BarItemCatalog {
                 zone: .toggle, kind: .shortcut(.toggleFocusDim), priority: 1),
         BarItem(id: "miniMap", title: "Mini map", symbol: "map",
                 zone: .toggle, kind: .shortcut(.toggleMiniMap), priority: 3),
+        BarItem(id: "pointerEffects", title: "Pointer effects", symbol: "cursorarrow.rays",
+                zone: .toggle, kind: .toggle(.pointerEffects), priority: 1),
+        BarItem(id: "clickRipple", title: "Click ripple", symbol: "dot.circle.and.hand.point.up.left.fill",
+                zone: .toggle, kind: .toggle(.clickRipple), priority: 2),
+        BarItem(id: "keyboardSounds", title: "Keyboard sounds", symbol: "keyboard",
+                zone: .toggle, kind: .toggle(.keyboardSounds), priority: 2),
     ]
 
     static let info: [BarItem] = [

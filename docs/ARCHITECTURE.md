@@ -367,9 +367,10 @@ pinned bar instead of closing it. `UtilityBarController` samples the pointer at
 10 Hz through one
 `RunLoop.common` timer that exists only while the setting is on, and stops it,
 the click monitors and the `NSWorkspace` observers when it is turned off.
-`BarItemCatalog` is the only list of controls: each entry names an existing
-`ShortcutAction`, so a click runs the same `applyShortcut` as the key and the
-menu. `BarConfiguration` (`Application Support/MakiDesk/utility-bar.json`) holds
+`BarItemCatalog` is the only list of controls: command entries name an existing
+`ShortcutAction`, while option entries call the setting owner directly, so the
+bar never grows a second implementation of either behavior. `BarConfiguration`
+(`Application Support/MakiDesk/utility-bar.json`) holds
 the presentation the catalog does not: visibility, order inside each zone and an
 optional title and symbol per button. It is the only hand-editable bar state,
 loaded at start and re-read with one `stat` when the bar appears, so an edit
@@ -377,10 +378,10 @@ applies without a relaunch; a corrupt file is quarantined as `.bak` and a newer
 one is used read-only. Ids missing from the file are appended visible, so a new
 catalog button needs no migration; the old comma-separated hidden list is read
 once and then removed. The right-hand controls never leave the bar.
-`UtilityBarView` uses two rows: workspace panels and tools above, window
-controls and system status below. The height range is 64–96 pt, leaving the
-controls readable in both rows. Each row gets an independent width plan, and
-the unplaced controls from either row share the More menu. `BarLayout` picks
+`UtilityBarView` uses three rows with named groups for panels, apps, capture and
+tools, quick toggles, and system status. The height range is 156–220 pt, keeping
+the larger controls readable in every row. Each row gets an independent width
+plan, and the unplaced controls share the More menu. `BarLayout` picks
 what fits from the widths the view also uses, badges included (least important
 first, rightmost on a tie), and the remainder becomes an `NSMenu` anchored under
 the chevron rather than at the pointer, because a passive panel must not become
@@ -1058,9 +1059,13 @@ are transient Core Animation layers. Only the spotlight shades the full display;
 the others update small layer properties and do not redraw a full-screen view.
 The follower samples the pointer at 60 Hz only while it is moving (or while a
 button is held, because a native drag can swallow `mouseMoved`), and stops about
-a second after the pointer settles. The global and local mouse monitors exist
-only while presentation mode is on; a pulse installs no monitor at all, and a
-generation counter stops a late pulse from clearing a newer one. Reduce Motion
+a second after the pointer settles. A 150 ms watcher remains while presentation
+mode is on and restarts the follower if a global mouse callback is missed; when
+stationary it only compares the in-memory pointer location. The global and
+local mouse monitors and idle watcher exist only while presentation mode is
+on; a pulse installs no
+monitor or timer, and a generation counter stops a late pulse from clearing a
+newer one. Reduce Motion
 replaces the ribbon/particles with a static ring and pauses orbit rotation. Sleep,
 screen sleep, screen lock and a display parameter change tear the surfaces down
 instead of leaving a transparent high-level window behind; the panel is

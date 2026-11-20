@@ -66,10 +66,10 @@ identity asks again. A Developer ID-signed public release behaves best here.
   are remembered in memory; the position is never recorded, logged or written,
   and it is not used for anything else.
 - **The pointer position**, while the pointer effects are in use: read once for
-  `⌃⌥⇧P`, and through the same global mouse events while a presentation effect
-  is on, to place a transparent panel around the pointer. It is used in memory
-  only; the position is never recorded, logged or written, and nothing samples
-  the pointer or stays on screen once the feature is off.
+  `⌃⌥⇧P`, and from global mouse events plus a 150 ms fallback check while a
+  presentation effect is on, to place a transparent panel around the pointer.
+  It is used in memory only; the position is never recorded, logged or written,
+  and nothing samples the pointer or stays on screen once the feature is off.
 - **Keyboard event type**, only while Keyboard Sounds is enabled: a passive tap
   notices key-down events and plays a locally generated sound. It does not read
   key codes, characters, modifiers, typed text or the frontmost app. A bounded

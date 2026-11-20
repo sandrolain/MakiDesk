@@ -23,6 +23,7 @@ final class PointerEffectController {
     @ObservationIgnored private var monitors: [Any] = []
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var ticker: Timer?
+    @ObservationIgnored private var idleWatcher: Timer?
     @ObservationIgnored private var follow = PointerFollow(.zero)
     @ObservationIgnored private var trail = PointerTrail()
     @ObservationIgnored private var lastPointer: CGPoint?
@@ -38,6 +39,9 @@ final class PointerEffectController {
     /// How often the follower reads the pointer while it is moving. The ring is
     /// settled in a fraction of a second; the timer stops as soon as it is.
     private static let tickInterval: TimeInterval = 1.0 / 60.0
+    /// A low-rate fallback notices movement if a global mouse callback is
+    /// dropped; smooth rendering still runs only in the short 60 Hz bursts.
+    private static let idleWatchInterval: TimeInterval = 0.15
     /// After this long without movement and with the button up, there is
     /// nothing left to follow.
     private static let idleStop: TimeInterval = 1.0
@@ -141,6 +145,7 @@ final class PointerEffectController {
         installObservers()
         updateEffect(at: pointer)
         startTicker()
+        startIdleWatcher()
 
         HUDController.shared.show(
             HUDMessage.pointerEffects(active: true, minutes: settings.presentationMinutes)
@@ -166,6 +171,7 @@ final class PointerEffectController {
         removeMonitors()
         removeObservers()
         stopTicker()
+        stopIdleWatcher()
         if reason == .system {
             // A sleep or a lock is not a pause: do not leave an ordered-out
             // high-level window behind for the wake to inherit.
@@ -291,6 +297,34 @@ final class PointerEffectController {
     private func stopTicker() {
         ticker?.invalidate()
         ticker = nil
+    }
+
+    private func startIdleWatcher() {
+        guard idleWatcher == nil else { return }
+        let timer = Timer(timeInterval: Self.idleWatchInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.watchWhileIdle() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        idleWatcher = timer
+    }
+
+    private func stopIdleWatcher() {
+        idleWatcher?.invalidate()
+        idleWatcher = nil
+    }
+
+    private func watchWhileIdle() {
+        guard isPresentationActive else {
+            stopIdleWatcher()
+            return
+        }
+        let pointer = NSEvent.mouseLocation
+        let moved = lastPointer.map {
+            hypot(pointer.x - $0.x, pointer.y - $0.y) > 0.5
+        } ?? true
+        guard moved || NSEvent.pressedMouseButtons != 0 else { return }
+        lastMoveAt = Date()
+        startTicker()
     }
 
     private func tick() {

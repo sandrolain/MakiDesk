@@ -113,12 +113,12 @@ enum SettingsDefaults {
         .clipboardKeepsImages: true,
         .clipboardImageBudgetMB: 32,
 
-        // Utility bar (F1): opens on approach, 78 pt, every button, labels by
+        // Utility bar (F1): opens on approach, 176 pt, every button, labels by
         // width. `utilityBarHiddenItems` is the old comma-separated hidden
         // list: the buttons now live in utility-bar.json, and this key is read
         // once to migrate a pre-file choice, then removed.
         .utilityBarEnabled: true,
-        .utilityBarHeight: 78,
+        .utilityBarHeight: 176,
         .utilityBarHiddenItems: "",
         .utilityBarLabels: BarLabelMode.auto.rawValue,
 

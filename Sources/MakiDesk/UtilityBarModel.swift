@@ -12,13 +12,23 @@ final class UtilityBarModel {
     var isPinned = false
     /// The bar took the keyboard with ⌃⌥B and draws a selection.
     var isKeyboardDriven = false
-    var height: CGFloat = 78
+    var height: CGFloat = 176
     var labelMode: BarLabelMode = .auto
 
-    static let defaultHeight: CGFloat = 78
-    static let heightRange: ClosedRange<CGFloat> = 64...96
-    /// Below this the words beside the icons would push the info values out.
-    static let labelWidth: CGFloat = 1_150
+    static let defaultHeight: CGFloat = 176
+    static let heightRange: ClosedRange<CGFloat> = 156...220
+    /// At this width the larger category groups can keep their labels visible.
+    static let labelWidth: CGFloat = 1_100
+
+    /// Heights saved by earlier releases were 64–96 pt. Those values cannot
+    /// hold the new three-row layout, so start those installations at the new
+    /// default instead of silently pinning them to its minimum.
+    static func height(fromStored value: Int) -> CGFloat {
+        guard value > 0 else { return defaultHeight }
+        let height = CGFloat(value)
+        guard height >= heightRange.lowerBound else { return defaultHeight }
+        return min(height, heightRange.upperBound)
+    }
 
     func showsLabels(at width: CGFloat) -> Bool {
         switch labelMode {
@@ -33,6 +43,9 @@ final class UtilityBarModel {
         case "focusBorder": return WorkspaceStore.shared.focusBorderEnabled
         case "focusDim": return WorkspaceStore.shared.focusDimEnabled
         case "miniMap": return WorkspaceStore.shared.showMiniMap
+        case "pointerEffects": return PointerEffectController.shared.isPresentationActive
+        case "clickRipple": return WorkspaceStore.shared.pointerClickRipple
+        case "keyboardSounds": return KeyboardSoundController.shared.isEnabled
         default: return false
         }
     }
