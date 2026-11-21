@@ -840,7 +840,8 @@ it running, so its shells keep working.
   It follows the Terminal theme; drag its divider to resize it. Added and
   untracked files are green, modified or renamed files are yellow, and deleted
   files are red. The helper remembers whether it was open on the previous run;
-  it disappears outside a Git repository.
+  outside a Git repository it stays open and explains that the focused
+  directory is not a repository.
   **Settings ▸ Terminal ▸ Show tmux status bar**
   controls the status line in managed and attached tmux sessions. Since tmux
   stores this option per session, it also affects other clients attached to

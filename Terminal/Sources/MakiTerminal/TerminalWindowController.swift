@@ -1530,9 +1530,7 @@ final class TerminalWindowController: NSWindowController,
                 }
                 switch result {
                 case .notRepository:
-                    self.gitTreeRoots = []
-                    self.gitOutlineView.reloadData()
-                    self.setGitSidebarExpanded(false)
+                    self.showGitSidebarMessage("No Git repository in this directory")
                 case let .success(root, _):
                     self.gitSidebarTitle.stringValue =
                         "Git changes · \(URL(fileURLWithPath: root).lastPathComponent)"

@@ -493,7 +493,7 @@ commands run through a bounded process runner; session enumeration returns
 errors separately from an empty list, and status-bar retries are timed and
 revision-checked. The optional Git sidebar runs `git rev-parse` and porcelain
 status for the focused pane's working directory on a worker queue; it renders an expandable path tree and
-hides when the directory is outside a repository. While visible it refreshes
+shows an explanatory empty state when the directory is outside a repository. While visible it refreshes
 every five seconds and stops its timer when the window is hidden. Collapsing the
 sidebar removes its content constraints and attaches the pane container to the
 content view's trailing edge without rebuilding terminal surfaces. A separate
