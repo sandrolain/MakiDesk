@@ -133,17 +133,33 @@ final class WorkspaceCellView: NSTableCellView {
 /// can be written back without searching the tree.
 final class WorkspaceSplitView: NSSplitView {
     var path: [Int] = []
-    var needsInitialPosition = true
     weak var controller: TerminalWindowController?
+    var isApplyingStoredRatio = false
+    private var didScheduleInitialPosition = false
 
     override func layout() {
         super.layout()
-        guard needsInitialPosition, bounds.width > 0, bounds.height > 0,
-              subviews.count >= 2, let controller else { return }
-        needsInitialPosition = false
+        guard bounds.width > 0, bounds.height > 0,
+              subviews.count >= 2, controller != nil,
+              didScheduleInitialPosition == false else { return }
+        didScheduleInitialPosition = true
+        DispatchQueue.main.async { [weak self] in
+            self?.applyStoredRatio()
+        }
+    }
+
+    private func applyStoredRatio() {
+        guard let controller, bounds.width > 0, bounds.height > 0,
+              subviews.count >= 2 else { return }
         let total = isVertical ? bounds.width : bounds.height
-        let ratio = controller.ratio(at: path)
-        setPosition(total * ratio, ofDividerAt: 0)
+        let available = total - dividerThickness
+        guard available > 0 else { return }
+        let target = available * controller.ratio(at: path)
+        let current = isVertical ? subviews[0].frame.width : subviews[0].frame.height
+        guard abs(current - target) > 1 else { return }
+        isApplyingStoredRatio = true
+        setPosition(target, ofDividerAt: 0)
+        isApplyingStoredRatio = false
     }
 }
 
@@ -2502,12 +2518,16 @@ final class TerminalWindowController: NSWindowController,
         guard isBuilding == false,
               let split = notification.object as? WorkspaceSplitView,
               split.subviews.count >= 2,
+              split.isApplyingStoredRatio == false,
               selected < workspaces.count else { return }
         let total = split.isVertical ? split.bounds.width : split.bounds.height
-        guard total > 0 else { return }
+        let available = total - split.dividerThickness
+        guard available > 0 else { return }
         let first = split.isVertical ? split.subviews[0].frame.width
                                      : split.subviews[0].frame.height
-        workspaces[selected].setRatio(Double(first / total), at: split.path)
+        if workspaces[selected].setRatio(Double(first / available), at: split.path) {
+            scheduleSave()
+        }
     }
 
     func ratio(at path: [Int]) -> Double {

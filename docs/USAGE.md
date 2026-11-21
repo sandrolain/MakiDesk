@@ -869,6 +869,9 @@ it running, so its shells keep working.
   visible, and a failed refresh marks the previous values stale.
 - **Split titles.** The selected pane controls the workspace tab and window
   title. Titles emitted by background split panes do not replace it.
+- **Split proportions.** Divider positions are saved with the workspace as
+  they change and restored when Terminal reopens. The split layout preserves
+  those proportions when its content area is resized.
 - **Settings ▸ Terminal.** Font family and size, the cursor shape and blink,
   the scrollback size per pane, copying selected text, hiding the pointer while
   typing, the shell command (empty starts your login shell), the quake height
