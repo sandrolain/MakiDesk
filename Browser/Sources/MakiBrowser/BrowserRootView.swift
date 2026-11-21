@@ -490,6 +490,12 @@ private struct BrowserAddressOverlay: View {
                     .font(.system(size: 14))
                     .foregroundStyle(store.theme.text)
                     .focused($isAddressFocused)
+                    .onAppear {
+                        DispatchQueue.main.async {
+                            isAddressFocused = true
+                            NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                        }
+                    }
                     .onSubmit { store.navigate(store.addressText) }
                     .onExitCommand { dismiss() }
                     .onChange(of: store.addressFocusToken) { _, _ in
