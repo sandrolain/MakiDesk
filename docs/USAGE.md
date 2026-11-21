@@ -1153,9 +1153,11 @@ browser without touching MakiDesk.
   available in this build. See the [integration requirements](ARCHITECTURE.md#apple-passwords-integration).
 - **Page summary.** The sparkles button, or `⇧⌘S`, extracts the readable text
   of the page and summarizes it on-device with Apple Intelligence (Foundation
-  Models). Nothing is uploaded and the page text is not logged. If Apple
-  Intelligence is unavailable, the panel says so instead of falling back to a
-  cloud service. `Copy`, `Regenerate`, `Stop` and `Close` are in the panel.
+  Models). For substantial articles, the model is asked for up to 300 words,
+  formatted in Markdown with an overview and the key points and supporting details.
+  The model is asked to keep shorter pages proportionately brief. Nothing is
+  uploaded and the page text is not logged. If Apple Intelligence is unavailable,
+  the panel says so. `Copy`, `Regenerate`, `Stop` and `Close` are in the panel.
   The **ChatGPT** button in the left rail prepares the current URL and an
   Italian summary prompt in the official ChatGPT app. It does not send the
   prompt; review it and press

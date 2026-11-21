@@ -377,12 +377,6 @@ private struct BrowserIconRail: View {
             }
             .disabled(store.selectedTab == nil || store.settings.summaryEnabled == false)
 
-            icon("bubble.left.and.text.bubble.right", id: "chatgpt-summary",
-                 help: "Summarize in ChatGPT") {
-                _ = store.summarizeInChatGPT()
-            }
-            .disabled(store.selectedTab?.url == nil)
-
             icon("curlybraces", id: "web-inspector",
                  help: inspectorEnabled
                     ? "Disable Web Inspector for this tab"
@@ -1179,9 +1173,6 @@ private struct BrowserSummaryPanel: View {
                 Label("Page summary", systemImage: "sparkles")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text("ON-DEVICE")
-                    .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(store.theme.subtext)
                 Button("Open in ChatGPT") {
                     _ = store.summarizeInChatGPT()
                 }
@@ -1204,10 +1195,12 @@ private struct BrowserSummaryPanel: View {
                 progress("Asking the on-device model…")
             case .streaming(let text), .ready(let text):
                 ScrollView {
-                    Text(text)
-                        .font(.system(size: 12))
+                    Text(.init(text))
+                        .font(.system(size: 14))
+                        .lineSpacing(3)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
                 }
                 HStack {
                     Button("Copy") {
@@ -1229,7 +1222,7 @@ private struct BrowserSummaryPanel: View {
                     .controlSize(.small)
             }
         }
-        .padding(12)
+        .padding(16)
         .frame(width: 340, alignment: .leading)
         .background(.regularMaterial,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous))
