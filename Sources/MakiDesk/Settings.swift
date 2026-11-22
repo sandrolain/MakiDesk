@@ -110,6 +110,8 @@ enum SettingsDefaults {
 
         // Notes: the editor's own size and the split view's starting width.
         .notesFontSize: 13.0,
+        .notesRewriteProvider: NotesRewriteProvider.appleIntelligence.rawValue,
+        .notesRewriteModel: "qwen3.5:4b",
         .notesSidebarWidth: 230.0,
 
         // Clipboard history (U3): images on, 32 MB of stored image data.

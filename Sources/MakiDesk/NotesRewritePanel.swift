@@ -163,14 +163,18 @@ private struct NotesRewriteView: View {
         switch controller.phase {
         case .idle: return "Ready"
         case .running: return "Writing…"
-        case .ready: return "On-device model · nothing saved yet"
+        case .ready: return controller.provider == .ollama
+            ? "Ollama · local · nothing saved yet"
+            : "Apple Intelligence · on-device · nothing saved yet"
         case let .failed(reason): return reason
         }
     }
 
     private var placeholder: String {
         switch controller.phase {
-        case .running: return "The on-device model is writing the proposal…"
+        case .running: return controller.provider == .ollama
+            ? "Ollama is writing the proposal…"
+            : "Apple Intelligence is writing the proposal…"
         case let .failed(reason): return reason
         default: return "Nothing to show yet."
         }

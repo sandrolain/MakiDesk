@@ -72,7 +72,7 @@ never draws a separate desktop or mirrors their content as a workspace.
 | `StoredJSONFile.swift`                                                                                          | The JSON-file mechanics four stores repeated: the path, the atomic write, the quarantine of an unreadable file.                                                         |
 | `NotesPanelViews.swift`                                                                                         | The note panel's leaf views: drop target, split and divider, toolbar buttons, table row.                                                                                |
 | `NotesMarkdownTable.swift`                                                                                      | One Markdown table renderer: the formatter and the rewrite serializer both use it, so they cannot disagree on widths again.                                             |
-| `NotesStore.swift`                                                                                              | Notes window, sidebar, toolbar, tabs-free navigation, anchoring.                                                                                                        |
+| `NotesStore.swift`                                                                                              | Notes window, sidebar, toolbar, tab recency, persistence and legacy anchoring.                                                                                          |
 | `NotesEditor.swift`                                                                                             | TextKit 1 text view and line-number ruler.                                                                                                                              |
 | `NotesSyntax.swift`, `NotesGrammarQueries.swift`                                                                | Syntax configuration, captures, colours, highlighter.                                                                                                                   |
 | `ClipboardHistory.swift`, `ClipboardPanel.swift`                                                                | In-memory text and image history, pasteboard poll, image budget and pins, picker.                                                                                       |
@@ -272,7 +272,7 @@ keyboard.
 | ------------------ | ------------------------------------------------------------------------------------------------------ |
 | Window groups      | `~/Library/Application Support/MakiDesk/groups.json`                                                   |
 | Notes and drafts   | `~/Library/Application Support/MakiDesk/Note/note-<uuid>.txt`                                          |
-| Notes session      | `…/Note/session.json` (order, cursors, languages, external paths, frame, anchor)                       |
+| Notes session      | `…/Note/session.json` (order, cursors, languages, external paths, tab last-use times, frame, anchor)   |
 | Preferences        | `UserDefaults` (theme, layout priors, shelf shake, screenshot folder/view, animations, switcher, etc.) |
 | Clipboard history  | Memory only; lost on quit                                                                              |
 | Shelf              | Memory + a temporary staging folder; removed on close                                                  |
@@ -919,16 +919,14 @@ ranges, so emoji never split a marker. The editor applies the result through
 the store and the syntax highlighter treat it as typing. The model never writes
 Markdown: this pure code does, and T66 serialises into it.
 
-`NotesIntelligence` (T66) asks the on-device model (Foundation Models, macOS 26,
-behind `#if canImport` and `@available`) for a structure — `@Generable`: title,
-summary, sections with paragraphs, bullets and table rows — and
-`NotesMarkdownSerializer` writes the Markdown, so the model never emits a
-marker and a fence or a table cannot come out broken. `NotesRewriteController`
-runs one request at a time with a generation, streams partial drafts into the
-preview panel, and drops whatever belongs to an older request; switching note or
-closing the panel ends the session. Apply reaches the editor as one undoable
-edit. The engine is a protocol, so the state machine is tested with a fake and
-the real one only exists on a system that reports the model available.
+`NotesRewriteController` (T66) selects Apple Intelligence or the local Ollama
+`/api/chat` engine from shared preferences. Apple Intelligence uses a structured
+Foundation Models schema; Ollama streams complete Markdown. The **Polish
+Markdown** action preserves the source structure and asks for minimal language
+corrections. Rewrites stream into the preview with a generation guard; switching
+notes or closing the panel ends the session. Apply reaches the editor as one
+undoable edit. The engine remains injectable for deterministic state-machine
+checks.
 
 `ClipboardHistory` polls `changeCount` and stores text entries directly. An image
 is read as bytes on the main actor, then decoded, thumbnailed and hashed on a

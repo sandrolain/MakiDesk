@@ -60,6 +60,8 @@ enum SettingsKey: String, CaseIterable, Sendable {
     case measureUnit = "measureUnit"
     case miniMapPosition = "miniMapPosition"
     case notesFontSize = "notesFontSize"
+    case notesRewriteProvider = "notesRewriteProvider"
+    case notesRewriteModel = "notesRewriteModel"
     case notesSidebarWidth = "notesSidebarWidth"
     case ocrFastRecognition = "ocrFastRecognition"
     case ocrLanguageCorrection = "ocrLanguageCorrection"

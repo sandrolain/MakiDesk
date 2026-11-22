@@ -134,6 +134,8 @@ struct SettingsView: View {
 
     @AppStorage(SettingsTab.defaultsKey) private var settingsTab: SettingsTab = .general
     @State private var settingsSearch = ""
+    @State private var notesRewriteProvider: NotesRewriteProvider = NotesRewriteService.provider
+    @State private var notesRewriteModel = NotesRewriteService.ollamaModel
     @State private var sshPortErrors: [UUID: String] = [:]
     @State private var sshPortDrafts: [UUID: String] = [:]
     @AppStorage(SettingsKey.keepTerminalWindowShortcuts.rawValue)
@@ -1149,7 +1151,27 @@ struct SettingsView: View {
                     caption("⌃⌥⇧R (or menu ▸ Record Area…) records the area you drag to a movie on the shelf; the same key stops it. The menu-bar menu pauses, resumes and stops a recording, and its icon changes while one runs. The system's own sound is included unless you turn it off above; the microphone is not used. Files go to Application Support ▸ MakiDesk ▸ Recordings.")
                 }
                 SettingsSection("Notes rewriting") {
-                    caption("Apple Intelligence on this Mac: \(NotesIntelligence.availability().summary) The notes editor's Format menu offers Improve wording, Format as Markdown and Summarize. The on-device model only writes a proposal — nothing leaves the Mac and nothing is logged — and it appears in a preview with Apply, Copy and Cancel before it touches the note. Apply is a single edit, one ⌘Z away.")
+                    Picker("Model", selection: Binding(
+                        get: { notesRewriteProvider },
+                        set: {
+                            notesRewriteProvider = $0
+                            Settings.set($0.rawValue, for: .notesRewriteProvider, in: NotesPreferences.defaults)
+                        }
+                    )) {
+                        ForEach(NotesRewriteProvider.allCases) { provider in
+                            Text(provider.title).tag(provider)
+                        }
+                    }
+                    if notesRewriteProvider == .ollama {
+                        TextField("Ollama model", text: $notesRewriteModel,
+                                  prompt: Text("qwen3.5:4b"))
+                            .onChange(of: notesRewriteModel) { _, value in
+                                Settings.set(value, for: .notesRewriteModel, in: NotesPreferences.defaults)
+                            }
+                        caption("Ollama must be running locally at 127.0.0.1:11434. The note text is sent to this local server for rewriting; MakiDesk does not send it to a cloud service.")
+                    } else {
+                        caption("Apple Intelligence on this Mac: \(NotesIntelligence.availability().summary). Notes rewriting runs on-device. The model proposes changes in a preview with Apply, Copy and Cancel; nothing changes until you Apply, and Apply is a single edit, one ⌘Z away.")
+                    }
                 }
                 SettingsSection("Clipboard history") {
                     Toggle("Keep copied images", isOn: Binding(

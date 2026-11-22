@@ -29,6 +29,51 @@ protocol NotesRewriteEngine: Sendable {
     func stream(prompt: String, action: NotesRewriteAction) -> AsyncThrowingStream<NotesRewriteDraft, Error>
 }
 
+enum NotesRewriteProvider: String, CaseIterable, Identifiable, Sendable {
+    case appleIntelligence
+    case ollama
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .appleIntelligence: "Apple Intelligence"
+        case .ollama: "Ollama (local)"
+        }
+    }
+}
+
+enum NotesRewriteService {
+    static var provider: NotesRewriteProvider {
+        Settings.value(.notesRewriteProvider, as: NotesRewriteProvider.self,
+                       in: NotesPreferences.defaults) ?? .appleIntelligence
+    }
+
+    static var ollamaModel: String {
+        Settings.string(.notesRewriteModel, in: NotesPreferences.defaults) ?? "qwen3.5:4b"
+    }
+
+    static func availability() -> NotesIntelligenceAvailability {
+        switch provider {
+        case .appleIntelligence:
+            NotesIntelligence.availability()
+        case .ollama:
+            ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? .unavailable("Enter an Ollama model name in Settings > Panels > Tools.")
+                : .available
+        }
+    }
+
+    static func makeEngine() -> NotesRewriteEngine? {
+        switch provider {
+        case .appleIntelligence:
+            return NotesIntelligence.makeEngine()
+        case .ollama:
+            let model = ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            return model.isEmpty ? nil : OllamaNotesRewriteEngine(model: model)
+        }
+    }
+}
+
 /// What the app can say about the model on this system and in this language.
 enum NotesIntelligence {
     static func availability() -> NotesIntelligenceAvailability {
@@ -80,13 +125,24 @@ private struct AppleNotesRewriteEngine: NotesRewriteEngine {
                         instructions: NotesRewritePrompt.instructions(for: action)
                     )
                     var options = GenerationOptions()
-                    options.temperature = action == .improve ? 0.3 : 0.5
-                    let stream = session.streamResponse(to: prompt,
-                                                        generating: GeneratedRewrite.self,
-                                                        options: options)
-                    for try await snapshot in stream {
-                        try Task.checkCancellation()
-                        continuation.yield(Self.draft(from: snapshot.content))
+                    options.temperature = action == .proofread ? 0.15 : (action == .improve ? 0.3 : 0.5)
+                    if action == .proofread {
+                        let stream = session.streamResponse(to: prompt,
+                                                            generating: ProofreadMarkdown.self,
+                                                            options: options)
+                        for try await snapshot in stream {
+                            try Task.checkCancellation()
+                            let markdown = snapshot.content.markdown ?? ""
+                            continuation.yield(NotesRewriteDraft(summary: markdown, rawMarkdown: markdown))
+                        }
+                    } else {
+                        let stream = session.streamResponse(to: prompt,
+                                                            generating: GeneratedRewrite.self,
+                                                            options: options)
+                        for try await snapshot in stream {
+                            try Task.checkCancellation()
+                            continuation.yield(Self.draft(from: snapshot.content))
+                        }
                     }
                     continuation.finish()
                 } catch {
@@ -120,6 +176,13 @@ private struct AppleNotesRewriteEngine: NotesRewriteEngine {
         default: return 2
         }
     }
+}
+
+@available(macOS 26, *)
+@Generable
+private struct ProofreadMarkdown {
+    @Guide(description: "The complete corrected Markdown document, preserving all existing structure and content with minimal spelling, grammar, punctuation and readability edits. Return no preface or commentary.")
+    var markdown: String
 }
 
 /// The shape the model fills in. Everything is plain text: the Markdown is
@@ -177,15 +240,16 @@ final class NotesRewriteController {
     private(set) var preview = ""
     private(set) var action: NotesRewriteAction = .improve
     private(set) var noteID: UUID?
+    private(set) var provider: NotesRewriteProvider = .appleIntelligence
 
     var isRunning: Bool { phase == .running }
 
-    /// Injected by the tests; the app uses Foundation Models (T66).
+    /// Injected by tests; the app uses the provider selected in Settings.
     @ObservationIgnored var availabilityProvider: () -> NotesIntelligenceAvailability = {
-        NotesIntelligence.availability()
+        NotesRewriteService.availability()
     }
     @ObservationIgnored var engineProvider: () -> NotesRewriteEngine? = {
-        NotesIntelligence.makeEngine()
+        NotesRewriteService.makeEngine()
     }
 
     /// Every start and cancel bumps it: a result that arrives for an older
@@ -229,7 +293,10 @@ final class NotesRewriteController {
         self.noteID = noteID
         preview = ""
         phase = .running
-        let prompt = NotesRewritePrompt.prompt(for: action, source: source)
+        let selectedProvider = NotesRewriteService.provider
+        provider = selectedProvider
+        let prompt = NotesRewritePrompt.prompt(for: action, source: source,
+                                               provider: selectedProvider)
         task = Task { @MainActor [weak self] in
             do {
                 for try await draft in engine.stream(prompt: prompt, action: action) {
@@ -271,5 +338,76 @@ final class NotesRewriteController {
         phase = .idle
         preview = ""
         noteID = nil
+    }
+}
+
+private struct OllamaNotesRewriteEngine: NotesRewriteEngine {
+    let model: String
+
+    func stream(prompt: String, action: NotesRewriteAction) -> AsyncThrowingStream<NotesRewriteDraft, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var request = URLRequest(url: URL(string: "http://127.0.0.1:11434/api/chat")!)
+                    request.httpMethod = "POST"
+                    request.timeoutInterval = 180
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = try JSONSerialization.data(withJSONObject: [
+                        "model": model,
+                        "stream": true,
+                        "think": false,
+                        "keep_alive": "5m",
+                        "messages": [[
+                            "role": "user",
+                            "content": prompt
+                        ]]
+                    ])
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    guard let response = response as? HTTPURLResponse else {
+                        throw OllamaNotesRewriteError.invalidResponse
+                    }
+                    guard (200..<300).contains(response.statusCode) else {
+                        throw OllamaNotesRewriteError.httpStatus(response.statusCode)
+                    }
+                    var accumulated = ""
+                    for try await line in bytes.lines {
+                        try Task.checkCancellation()
+                        guard let data = line.data(using: .utf8),
+                              let event = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                            continue
+                        }
+                        if let error = event["error"] as? String {
+                            throw OllamaNotesRewriteError.server(error)
+                        }
+                        if let message = event["message"] as? [String: Any],
+                           let content = message["content"] as? String, !content.isEmpty {
+                            accumulated += content
+                            continuation.yield(NotesRewriteDraft(summary: accumulated,
+                                                                  rawMarkdown: accumulated))
+                        }
+                        if event["done"] as? Bool == true { break }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+private enum OllamaNotesRewriteError: LocalizedError {
+    case invalidResponse
+    case httpStatus(Int)
+    case server(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse: "Ollama returned an invalid response."
+        case .httpStatus(let status): "Ollama returned HTTP \(status). Check that the model is installed and Ollama is running."
+        case .server(let message): "Ollama: \(message)"
+        }
     }
 }

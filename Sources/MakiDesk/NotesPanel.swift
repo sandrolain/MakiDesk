@@ -40,6 +40,7 @@ final class NotesController: NSObject, NSWindowDelegate {
         guard let window, let content else { return }
         content.applyTheme()
         if !wasVisible { place(window) }
+        content.setOldTabRefreshActive(true)
         applyMovability(to: window)
         content.updateToolbar()
 
@@ -58,6 +59,8 @@ final class NotesController: NSObject, NSWindowDelegate {
                 if self.store.selectedTab == nil || self.store.note(id: self.store.selectedTab!) == nil,
                    let first = self.store.notes.first {
                     self.store.openNote(id: first.id)
+                } else if let selected = self.store.selectedTab {
+                    self.store.selectTab(selected)
                 }
             }
             content.reloadEverything()
@@ -78,6 +81,7 @@ final class NotesController: NSObject, NSWindowDelegate {
         if store.anchor == nil { store.updateWindowFrame(window.frame) }
         store.flushAsync()
         // A rewrite belongs to the open note: closing the panel ends it (T66).
+        content?.setOldTabRefreshActive(false)
         NotesRewriteController.shared.reset()
         NotesRewritePanelController.shared.hide()
         window.orderOut(nil)
@@ -269,6 +273,7 @@ final class NotesController: NSObject, NSWindowDelegate {
         guard sender === window else { return true }
         if store.anchor == nil { store.updateWindowFrame(sender.frame) }
         store.flushAsync()
+        content?.setOldTabRefreshActive(false)
         NotesRewriteController.shared.reset()
         NotesRewritePanelController.shared.hide()
         return true
@@ -366,16 +371,17 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private let toolbarHairline = NSView()
     private let toolbarSeparator1 = NSView()
     private let toolbarSeparator2 = NSView()
+    private let oldTabsLabel = NSTextField(labelWithString: "")
+    private let closeOldTabsButton = NSButton()
     private let newButton = IconButton()
     private let openButton = IconButton()
     private let saveButton = IconButton()
     private let saveAsButton = IconButton()
     private let formatButton = IconButton()
+    private let polishButton = NSButton()
     private let revealButton = IconButton()
     private let closeButton = IconButton()
     private let floatButton = IconButton()
-    private let anchorLeftButton = IconButton()
-    private let anchorRightButton = IconButton()
     private let editor: NotesEditorView
     private let emptyLabel = NSTextField(labelWithString: "")
     private let statusBar = NSView()
@@ -396,6 +402,8 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     private var searchRevision: UInt64 = 0
     private let searchQueue = DispatchQueue(label: "com.makidesk.notes-search", qos: .userInitiated)
     private var isRefreshing = false
+    private var oldTabIDs: Set<UUID> = []
+    private var oldTabsRefreshTimer: Timer?
     /// Texts sent to this note while its body was still loading: they wait for
     /// the body instead of being written into the placeholder editor.
     private var pendingInsertions = NotesInsertionQueue()
@@ -415,6 +423,17 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setOldTabRefreshActive(_ active: Bool) {
+        oldTabsRefreshTimer?.invalidate()
+        guard active else {
+            oldTabsRefreshTimer = nil
+            return
+        }
+        oldTabsRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshChrome(refreshSearch: false) }
+        }
+    }
 
     override func loadView() {
         view = root
@@ -505,14 +524,31 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
         countLabel.font = .systemFont(ofSize: 10.5)
         countLabel.textColor = theme.subtext
+        oldTabsLabel.font = .systemFont(ofSize: 10)
+        oldTabsLabel.textColor = theme.subtext
+        closeOldTabsButton.image = NSImage(systemSymbolName: "trash",
+                                           accessibilityDescription: "Close old tabs")?
+            .withSymbolConfiguration(.init(pointSize: 11, weight: .medium))
+        closeOldTabsButton.isBordered = false
+        closeOldTabsButton.contentTintColor = theme.subtext
+        closeOldTabsButton.target = self
+        closeOldTabsButton.action = #selector(closeOldTabs)
+        closeOldTabsButton.setAccessibilityLabel("Close old tabs")
 
-        for subview in [header, search, tableScroll, countLabel] {
+        for subview in [header, oldTabsLabel, closeOldTabsButton, search, tableScroll, countLabel] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             sidebar.addSubview(subview)
         }
         NSLayoutConstraint.activate([
             header.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
             header.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 48),
+            header.trailingAnchor.constraint(lessThanOrEqualTo: oldTabsLabel.leadingAnchor, constant: -5),
+            oldTabsLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            closeOldTabsButton.leadingAnchor.constraint(equalTo: oldTabsLabel.trailingAnchor, constant: 5),
+            closeOldTabsButton.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
+            closeOldTabsButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            closeOldTabsButton.widthAnchor.constraint(equalToConstant: 22),
+            closeOldTabsButton.heightAnchor.constraint(equalToConstant: 22),
 
             search.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
             search.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
@@ -545,16 +581,23 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         configureToolbar(formatButton, symbol: "textformat", label: "Format",
                          tip: "Markdown formatting (⌘B bold, ⌘I italic, ⌘K link)",
                          action: #selector(showFormatMenu))
+        polishButton.image = NSImage(systemSymbolName: "sparkles",
+                                     accessibilityDescription: "Polish Markdown")?
+            .withSymbolConfiguration(.init(pointSize: 14, weight: .medium))
+        polishButton.isBordered = false
+        polishButton.imagePosition = .imageOnly
+        polishButton.focusRingType = .none
+        polishButton.target = self
+        polishButton.action = #selector(polishMarkdown)
+        polishButton.setAccessibilityLabel("Polish Markdown")
+        polishButton.setAccessibilityHelp("Proofread and polish this Markdown document with the selected AI model")
+        polishButton.toolTip = "Proofread and polish this Markdown document with the selected AI model"
         configureToolbar(revealButton, symbol: "doc.text.magnifyingglass", label: "Reveal",
                          tip: "Reveal in Finder", action: #selector(revealCurrent))
         configureToolbar(closeButton, symbol: "xmark.circle", label: "Close",
                          tip: "Close the note", action: #selector(closeSelectedNote))
         configureToolbar(floatButton, symbol: "pin.slash", label: "Float",
                          tip: "Float the panel", action: #selector(floatPanel))
-        configureToolbar(anchorLeftButton, symbol: "sidebar.left", label: "Left",
-                         tip: "Anchor to the left edge", action: #selector(anchorLeftPanel))
-        configureToolbar(anchorRightButton, symbol: "sidebar.right", label: "Right",
-                         tip: "Anchor to the right edge", action: #selector(anchorRightPanel))
 
         statusBar.wantsLayer = true
         statusDot.wantsLayer = true
@@ -587,8 +630,8 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             main.addSubview(subview)
         }
         for subview in [newButton, openButton, saveButton, saveAsButton, formatButton,
-                        revealButton, closeButton, floatButton, anchorLeftButton,
-                        anchorRightButton, toolbarSeparator1, toolbarSeparator2,
+                        polishButton, revealButton, closeButton, floatButton,
+                        toolbarSeparator1, toolbarSeparator2,
                         toolbarHairline] {
             subview.translatesAutoresizingMaskIntoConstraints = false
             toolbarBar.addSubview(subview)
@@ -652,7 +695,12 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             formatButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
             formatButton.heightAnchor.constraint(equalToConstant: 40),
 
-            toolbarSeparator1.leadingAnchor.constraint(equalTo: formatButton.trailingAnchor, constant: 8),
+            polishButton.leadingAnchor.constraint(equalTo: formatButton.trailingAnchor, constant: 4),
+            polishButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
+            polishButton.widthAnchor.constraint(equalToConstant: 28),
+            polishButton.heightAnchor.constraint(equalToConstant: 32),
+
+            toolbarSeparator1.leadingAnchor.constraint(equalTo: polishButton.trailingAnchor, constant: 8),
             toolbarSeparator1.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
             toolbarSeparator1.widthAnchor.constraint(equalToConstant: 1),
             toolbarSeparator1.heightAnchor.constraint(equalToConstant: 20),
@@ -670,12 +718,6 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             floatButton.leadingAnchor.constraint(equalTo: toolbarSeparator2.trailingAnchor, constant: 8),
             floatButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
             floatButton.heightAnchor.constraint(equalToConstant: 40),
-            anchorLeftButton.leadingAnchor.constraint(equalTo: floatButton.trailingAnchor, constant: 4),
-            anchorLeftButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
-            anchorLeftButton.heightAnchor.constraint(equalToConstant: 40),
-            anchorRightButton.leadingAnchor.constraint(equalTo: anchorLeftButton.trailingAnchor, constant: 4),
-            anchorRightButton.centerYAnchor.constraint(equalTo: toolbarBar.centerYAnchor),
-            anchorRightButton.heightAnchor.constraint(equalToConstant: 40),
 
             editor.leadingAnchor.constraint(equalTo: main.leadingAnchor),
             editor.trailingAnchor.constraint(equalTo: main.trailingAnchor),
@@ -918,6 +960,7 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
 
         if store.selectedTab != currentID { loadEditor() }
         if refreshSearch { updateFilteredNotes() }
+        oldTabIDs = store.oldTabIDs
         table.reloadData()
         if let id = store.selectedTab, let row = filtered.firstIndex(where: { $0.id == id }) {
             table.selectRowIndexes([row], byExtendingSelection: false)
@@ -957,13 +1000,14 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     }
 
     private func detail(for note: Note) -> String {
-        guard note.textLoaded else { return "Loading…" }
+        guard note.textLoaded else { return oldTabIDs.contains(note.id) ? "Old tab · loading…" : "Loading…" }
         let count = note.text.count
         let size = count == 1 ? "1 character" : "\(count) characters"
+        let age = oldTabIDs.contains(note.id) ? "Old tab · " : ""
         if note.externalURL != nil {
-            return note.isDirty ? "\(size) · changed" : "\(size) · file"
+            return age + (note.isDirty ? "\(size) · changed" : "\(size) · file")
         }
-        return size
+        return age + size
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -1104,29 +1148,20 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         focusEditor()
     }
 
-    @objc private func anchorLeftPanel() {
-        NotesController.shared.setAnchor(store.anchor == .left ? nil : .left)
-        updateToolbar()
-        focusEditor()
-    }
-
-    @objc private func anchorRightPanel() {
-        NotesController.shared.setAnchor(store.anchor == .right ? nil : .right)
-        updateToolbar()
-        focusEditor()
-    }
-
     /// Everything the toolbar shows depends on the note and on the docking
     /// state, so it lives in one place and is refreshed with the status bar.
     func updateToolbar() {
         let note = currentID.flatMap { store.note(id: $0) }
         let hasNote = note != nil
+        let oldTabCount = store.oldTabIDs.count
 
         saveButton.isEnabled = hasNote
         saveAsButton.isEnabled = hasNote
         closeButton.isEnabled = hasNote
         revealButton.isEnabled = note?.externalURL != nil
         floatButton.isEnabled = store.anchor != nil
+        polishButton.isEnabled = note?.language == .markdown
+        closeOldTabsButton.isEnabled = !store.openTabs.isEmpty
 
         let dim = theme.subtext.withAlphaComponent(0.35)
         newButton.setTint(theme.text)
@@ -1138,8 +1173,12 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         closeButton.setTint(hasNote ? theme.text : dim)
         revealButton.setTint(note?.externalURL != nil ? theme.text : dim)
         floatButton.setTint(store.anchor != nil ? theme.text : dim)
-        anchorLeftButton.setTint(store.anchor == .left ? theme.accent : theme.text)
-        anchorRightButton.setTint(store.anchor == .right ? theme.accent : theme.text)
+        polishButton.contentTintColor = note?.language == .markdown ? theme.accent : dim
+        oldTabsLabel.stringValue = oldTabCount == 0 ? "" : "Old · \(oldTabCount)"
+        closeOldTabsButton.contentTintColor = oldTabCount == 0 ? dim : theme.text
+        closeOldTabsButton.toolTip = oldTabCount == 0
+            ? "No old tabs to close"
+            : "Close all old tabs (\(oldTabCount)); notes remain in the list"
 
         if let url = note?.externalURL {
             saveButton.toolTip = note?.isDirty == true
@@ -1153,12 +1192,27 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
             : "Reveal in Finder"
         closeButton.toolTip = "Close the note (the draft goes to the Trash)"
         floatButton.toolTip = store.anchor == nil ? "Float the panel (not docked)" : "Float the panel"
-        anchorLeftButton.toolTip = store.anchor == .left
-            ? "Docked left — click to float"
-            : "Anchor to the left edge"
-        anchorRightButton.toolTip = store.anchor == .right
-            ? "Docked right — click to float"
-            : "Anchor to the right edge"
+    }
+
+    @objc private func polishMarkdown() {
+        guard currentID.flatMap({ store.note(id: $0) })?.language == .markdown else { return }
+        startRewrite(.proofread)
+    }
+
+    @objc private func closeOldTabs() {
+        let oldTabs = store.oldTabs
+        guard !oldTabs.isEmpty, let window = view.window else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Close \(oldTabs.count) old tabs?"
+        alert.informativeText = "The tabs will close, but their notes and drafts will remain in the Notes list."
+        alert.addButton(withTitle: "Close Old Tabs")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let self else { return }
+            self.store.closeOldTabs()
+            self.refreshChrome()
+        }
     }
 
     @objc private func saveAsFromMenu() { saveAs() }
@@ -1315,16 +1369,18 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
         addFormatItem(menu, "Table", .table)
         menu.addItem(.separator())
         let availability = NotesRewriteController.shared.availability
-        let header = NSMenuItem(title: "Rewrite with Apple Intelligence", action: nil,
+        let header = NSMenuItem(title: "Rewrite with \(NotesRewriteService.provider.title)", action: nil,
                                 keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         if availability.isAvailable {
-            for (index, action) in NotesRewriteAction.allCases.enumerated() {
+            let isMarkdown = currentID.flatMap { store.note(id: $0) }?.language == .markdown
+            let actions = NotesRewriteAction.allCases.filter { $0 != .proofread || isMarkdown }
+            for action in actions {
                 let item = NSMenuItem(title: action.menuTitle,
                                       action: #selector(rewriteMenuAction(_:)),
                                       keyEquivalent: "")
-                item.tag = index
+                item.tag = NotesRewriteAction.allCases.firstIndex(of: action) ?? 0
                 item.target = self
                 menu.addItem(item)
             }
@@ -1365,12 +1421,18 @@ final class NotesViewController: NSViewController, NSTableViewDataSource, NSTabl
     /// Apply changes the note — as one undoable edit (T66).
     private func startRewrite(_ action: NotesRewriteAction) {
         guard let id = currentID, let note = store.note(id: id) else { return }
+        guard action != .proofread || note.language == .markdown else { return }
         let availability = NotesRewriteController.shared.availability
         guard availability.isAvailable else {
             presentRewriteNote(availability.summary)
             return
         }
         let selection = editor.textView.selectedRange()
+        if action == .proofread, selection.length == 0,
+           (note.text as NSString).length > NotesRewritePrompt.maximumCharacters {
+            presentRewriteNote("This Markdown document is longer than the AI editing limit. Select a smaller section and try again.")
+            return
+        }
         let source = NotesRewritePrompt.source(note.text, selection: selection)
         guard source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             return

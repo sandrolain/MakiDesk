@@ -61,6 +61,7 @@ struct Note: Identifiable, Equatable, Sendable {
     var cursor: Int
     let createdAt: Date
     var updatedAt: Date
+    var lastUsedAt: Date = .distantPast
 
     var isExternal: Bool { externalURL != nil }
 
@@ -149,6 +150,7 @@ enum NotesLanguage: String, CaseIterable, Identifiable {
 @MainActor
 final class NotesStore {
     static let shared = NotesStore()
+    static let oldTabAge: TimeInterval = 24 * 60 * 60
 
     private(set) var notes: [Note] = []
     private(set) var openTabs: [UUID] = []
@@ -306,7 +308,7 @@ final class NotesStore {
                             externalURL: nil, externalBaseline: nil,
                             externalEncoding: String.Encoding.utf8.rawValue,
                             languageID: meta?.language ?? "plain", cursor: meta?.cursor ?? 0,
-                            createdAt: created, updatedAt: modified)
+                            createdAt: created, updatedAt: modified, lastUsedAt: meta?.lastUsedAt ?? Date())
             if let path = meta?.externalPath {
                 note.externalURL = URL(fileURLWithPath: path)
                 note.externalEncoding = meta?.encoding ?? String.Encoding.utf8.rawValue
@@ -436,7 +438,7 @@ final class NotesStore {
         let note = Note(id: UUID(), text: "", externalURL: nil, externalBaseline: nil,
                         externalEncoding: String.Encoding.utf8.rawValue,
                         languageID: language.rawValue, cursor: 0,
-                        createdAt: now, updatedAt: now)
+                        createdAt: now, updatedAt: now, lastUsedAt: now)
         notes.insert(note, at: 0)
         openTabs.append(note.id)
         selectedTab = note.id
@@ -463,7 +465,8 @@ final class NotesStore {
 
     func openNote(id: UUID) {
         loadIfNeeded()
-        guard notes.contains(where: { $0.id == id }) else { return }
+        guard let index = noteIndex(id: id) else { return }
+        notes[index].lastUsedAt = Date()
         if openTabs.contains(id) == false {
             openTabs.append(id)
         }
@@ -474,6 +477,7 @@ final class NotesStore {
 
     func selectTab(_ id: UUID?) {
         guard let id, openTabs.contains(id) else { return }
+        if let index = noteIndex(id: id) { notes[index].lastUsedAt = Date() }
         selectedTab = id
         scheduleSession()
         onChange?()
@@ -487,6 +491,43 @@ final class NotesStore {
         if selectedTab == id {
             let next = min(index, openTabs.count - 1)
             selectedTab = next >= 0 ? openTabs[next] : nil
+        }
+        scheduleSession()
+        onChange?()
+    }
+
+    var oldTabIDs: Set<UUID> {
+        let cutoff = Date().addingTimeInterval(-Self.oldTabAge)
+        return Set(openTabs.filter { id in
+            guard let note = note(id: id) else { return false }
+            return note.lastUsedAt <= cutoff
+        })
+    }
+
+    var oldTabs: [Note] {
+        let ids = oldTabIDs
+        return openTabs.compactMap { id in
+            guard ids.contains(id), let note = note(id: id) else { return nil }
+            return note
+        }
+    }
+
+    /// Closes stale tabs but leaves their notes and drafts in the sidebar.
+    func closeOldTabs(now: Date = Date()) {
+        let cutoff = now.addingTimeInterval(-Self.oldTabAge)
+        let oldIDs = Set(openTabs.filter { id in
+            note(id: id).map { $0.lastUsedAt <= cutoff } ?? false
+        })
+        guard !oldIDs.isEmpty else { return }
+        for id in oldIDs {
+            draftWork[id]?.cancel()
+            enqueueDraftSave(id)
+        }
+        let selectedIndex = selectedTab.flatMap { openTabs.firstIndex(of: $0) }
+        openTabs.removeAll { oldIDs.contains($0) }
+        if let selectedTab, oldIDs.contains(selectedTab) {
+            let next = min(selectedIndex ?? 0, openTabs.count - 1)
+            self.selectedTab = next >= 0 ? openTabs[next] : openTabs.first
         }
         scheduleSession()
         onChange?()
@@ -568,7 +609,7 @@ final class NotesStore {
         var note = Note(id: UUID(), text: text, externalURL: url.standardizedFileURL,
                         externalBaseline: text, externalEncoding: encoding,
                         languageID: NotesLanguage.forFile(url).rawValue, cursor: 0,
-                        createdAt: now, updatedAt: now)
+                        createdAt: now, updatedAt: now, lastUsedAt: now)
         note.externalBaselineDigest = Self.externalDigest(text)
         notes.insert(note, at: 0)
         openTabs.append(note.id)
@@ -620,7 +661,7 @@ final class NotesStore {
                 var note = Note(id: UUID(), text: text, externalURL: standardizedURL,
                                 externalBaseline: text, externalEncoding: encoding,
                                 languageID: NotesLanguage.forFile(standardizedURL).rawValue, cursor: 0,
-                                createdAt: now, updatedAt: now)
+                                createdAt: now, updatedAt: now, lastUsedAt: now)
                 note.externalBaselineDigest = Self.externalDigest(text)
                 self.notes.insert(note, at: 0)
                 self.openTabs.append(note.id)
@@ -1234,6 +1275,7 @@ final class NotesStore {
             var encoding: UInt?
             var title: String?
             var externalBaselineDigest: Data?
+            var lastUsedAt: Date?
         }
         var notes: [Meta]
         var tabs: [UUID]
@@ -1264,7 +1306,8 @@ final class NotesStore {
         let metas = notes.map { note in
             Session.Meta(id: note.id, language: note.languageID, cursor: note.cursor,
                          externalPath: note.externalURL?.path, encoding: note.externalEncoding,
-                         title: note.title, externalBaselineDigest: note.externalBaselineDigest)
+                         title: note.title, externalBaselineDigest: note.externalBaselineDigest,
+                         lastUsedAt: note.lastUsedAt)
         }
         return Session(notes: metas, tabs: openTabs, selected: selectedTab,
                        frame: windowFrame, anchor: anchor, cleanClose: cleanClose)

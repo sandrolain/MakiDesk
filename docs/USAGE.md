@@ -433,8 +433,8 @@ keeps your work even when you never save it to a file.
 - **The sidebar is the only list.** It shows every note with a search field.
   The current note has an accent tint and a left bar; a file with unsaved
   changes shows an orange dot that becomes the close × on hover.
-- **The toolbar** has New, Open, Save, Save As, Reveal, Close, Float, Left and
-  Right. **Drafts** are written automatically; an external file is always a
+- **The toolbar** has New, Open, Save, Save As, Format, Polish, Reveal, Close
+  and Float. **Drafts** are written automatically; an external file is always a
   draft until you press `⌘S` (Save As is `⇧⌘S`). Close a note with × or `⌘W`:
   a draft goes to the Trash, an external file is left untouched, and a file
   with unsaved changes (or a missing file) asks first.
@@ -451,13 +451,17 @@ keeps your work even when you never save it to a file.
   indent/outdent, a code block closed with the note's own language, and a table
   whose columns are aligned on their content. Each command is one edit: `⌘Z`
   takes it back in one step.
-- **Rewrite with Apple Intelligence** (macOS 26, on-device): the last section
+- **AI rewriting**: the last section
   of the Format menu offers **Improve wording**, **Format as Markdown** and
-  **Summarize** on the selection or the whole note. The proposal streams into a
+  **Summarize** on the selection or the whole note. The **Polish** button runs
+  a minimal proofread on the selected text or the whole Markdown document,
+  preserving its structure and content as far as possible. Choose Apple
+  Intelligence or local Ollama (`qwen3.5:4b` by default) in **Settings ▸ Panels
+  ▸ Tools ▸ Notes rewriting**. With Ollama, note text is sent to
+  `127.0.0.1:11434` only. The proposal streams into a
   preview with **Apply**, **Copy** and **Cancel**: nothing is written until
-  Apply, and Apply is one `⌘Z` away. The model fills a structure, the Markdown
-  is written by the editor's own serializer. **Settings ▸ Panels ▸ Tools ▸ Notes
-  rewriting** says whether the model is available and why.
+  Apply, and Apply is one `⌘Z` away. Structured rewrites are serialized by the
+  editor.
 - **Writing Tools** (macOS 26 and later) is the system's own, in the text's
   context menu: Proofread, Rewrite, Summarise and the rest. The note stays plain
   text, so the result is plain text; fenced code blocks are left alone; while the
@@ -466,9 +470,11 @@ keeps your work even when you never save it to a file.
 - **Languages**: Plain Text, Swift, JSON, Markdown, Shell, Python, JavaScript,
   TypeScript, HTML and CSS. The language popup in the status bar changes it. An unknown
   file opens as plain text, never as an error.
-- **Anchoring**: the Float, Left and Right buttons set it. An anchored panel fills
-  the screen height on that edge and cannot be moved until you choose Float;
-  it stays anchored on the next launch.
+- **Old tabs**: tabs not used for 24 hours are marked in the sidebar. The trash
+  button beside the Notes heading closes all old tabs; their notes and drafts
+  stay in the list and can be opened again.
+- **Float** releases a panel docked by an earlier version. Its window size and
+  position are remembered.
 - **External files** opened as drafts survive a restart; if the file moves or
   disappears, the draft stays and is marked *Not available* / *file missing*.
 - **Text sent to Notes** from OCR or the shelf arrives as a **new note** and

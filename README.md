@@ -120,7 +120,10 @@ badges and its notices, for a palette as wide as the windows alone.
 Markdown-first scratchpad that keeps drafts even when you never save them.
 Nine syntax-highlighted languages, a searchable sidebar, external files opened
 as drafts, and a line-number gutter. The normal MakiDesk window shortcuts work
-while Notes is frontmost. External files are written only when you press `⌘S`.
+while Notes is frontmost. Markdown notes can be proofread with Apple Intelligence
+or local Ollama through a reviewable one-step-undo proposal. Old tabs can be
+closed without deleting their notes. External files are written only when you
+press `⌘S`.
 
 ### A checklist you cannot leave behind
 

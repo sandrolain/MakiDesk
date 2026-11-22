@@ -25,13 +25,14 @@ macOS privacy permissions only for the features that need them:
 |---|---|
 | **Accessibility** | Read and move other apps' windows, paste into the front app, and listen for the shake gesture. |
 | **Input Monitoring** | Optional keyboard sound feedback and drag-from-anywhere. Requested only when you enable the corresponding feature; the sound listener receives key-down/key-up events, while the drag listener can suppress and rewrite mouse-down/drag/up events only for an ⌥-drag gesture while enabled. |
+| **Apple Intelligence** | Rewriting notes uses the on-device model only: no network, no account, no content in logs. |
+| **Ollama (Notes)** | When selected, note text is sent to the local Ollama server at `127.0.0.1:11434` for rewriting. MakiDesk does not send it to a cloud service. |
+| **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, the area selected for text recognition, the annotated captures and screen recordings (T40). A recording can include the system's own sound; the microphone is never used. |
 
 When drag-from-anywhere is enabled, MakiDesk temporarily changes the macOS
 Option-drag tiling preference to prevent two window managers from handling the
 same gesture. It restores the previous value when the feature is disabled,
 unless the user changes the preference manually in MakiDesk settings.
-| **Apple Intelligence** | Rewriting notes uses the on-device model only: no network, no account, no content in logs. The notice under Settings ▸ Panels ▸ Tools says when it is unavailable. |
-| **Screen Recording** | Live window previews, the content measure used by the suggested/content-weighted layouts, the area selected for text recognition, the annotated captures and screen recordings (T40). A recording can include the system's own sound; the microphone is never used. |
 
 These permissions are granted by you in **System Settings ▸ Privacy & Security**
 and can be revoked there at any time. Input Monitoring is requested only after
@@ -175,7 +176,7 @@ All paths are under your user account:
 | Window previews/measure | RAM | Replaced/evicted while running |
 | Screenshot previews | RAM | While the screenshot window is open |
 | Screen recordings | `~/Library/Application Support/MakiDesk/Recordings` | Until you delete them: they outlive the shelf |
-| Notes rewriting | RAM only | The note excerpt is sent to the on-device model and the proposal is discarded unless you Apply |
+| Notes rewriting | RAM only | The note excerpt is sent to the selected model (on-device Apple Intelligence or local Ollama); the proposal is discarded unless you Apply |
 
 Deleting a note moves its draft to the Trash (recoverable). The factory reset
 can remove groups, notes, clipboard history and dropzones; settings always
