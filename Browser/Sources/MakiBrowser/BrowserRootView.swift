@@ -1124,8 +1124,25 @@ private struct BrowserSettingsView: View {
                 }
                 Toggle("Block ads and trackers by default",
                        isOn: $draft.blockerEnabledByDefault)
-                Toggle("On-device page summaries",
-                       isOn: $draft.summaryEnabled)
+                Toggle("Page summaries", isOn: $draft.summaryEnabled)
+                Picker("Summary model", selection: $draft.summaryProvider) {
+                    ForEach(BrowserSummaryProvider.allCases) { provider in
+                        Text(provider.title).tag(provider)
+                    }
+                }
+                if draft.summaryProvider == .ollama {
+                    TextField("Ollama model", text: $draft.ollamaModel,
+                              prompt: Text("qwen3.5:4b"))
+                }
+                Picker("Summary language", selection: $draft.summaryLanguage) {
+                    ForEach(BrowserSummaryLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                Stepper("Maximum length: \(draft.summaryMaximumWords) words",
+                        value: $draft.summaryMaximumWords,
+                        in: 100...1000,
+                        step: 50)
                 Toggle("Allow Safari Web Inspector",
                        isOn: $draft.webInspectorEnabled)
                 Button("Set MakiDesk Browser as default") {
@@ -1150,6 +1167,11 @@ private struct BrowserSettingsView: View {
             Text("The default page is prefilled in the address bar when a new tab opens; it is not loaded automatically.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(store.theme.subtext)
+            if draft.summaryProvider == .ollama {
+                Text("Ollama must be running locally at 127.0.0.1:11434 with the selected model available. Page text is sent to that local Ollama server for summarization.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(store.theme.subtext)
+            }
             Text("When enabled, inspect this browser from Safari ▸ Develop ▸ MakiDesk Browser.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(store.theme.subtext)
@@ -1198,15 +1220,13 @@ private struct BrowserSummaryPanel: View {
             case .extracting:
                 progress("Reading the page…")
             case .loading:
-                progress("Asking the on-device model…")
+                progress(store.settings.summaryProvider == .ollama
+                         ? "Waiting for Ollama…"
+                         : "Asking the on-device model…")
             case .streaming(let text), .ready(let text):
                 ScrollView {
-                    Text(.init(text))
-                        .font(.system(size: 14))
-                        .lineSpacing(3)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
+                    BrowserSummaryMarkdownView(markdown: text)
+                        .padding(12)
                 }
                 HStack {
                     Button("Copy") {
@@ -1245,5 +1265,92 @@ private struct BrowserSummaryPanel: View {
             Text(label).font(.system(size: 11.5)).foregroundStyle(store.theme.subtext)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct BrowserSummaryMarkdownView: View {
+    let markdown: String
+
+    private enum Block {
+        case heading(Int, String)
+        case paragraph(String)
+        case bullet(String)
+        case numbered(String, String)
+        case quote(String)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .heading(let level, let text):
+                    inline(text)
+                        .font(.system(size: level <= 2 ? 17 : 15, weight: .semibold))
+                        .padding(.top, level == 1 ? 2 : 5)
+                case .paragraph(let text):
+                    inline(text)
+                        .font(.system(size: 14))
+                        .lineSpacing(3)
+                case .bullet(let text):
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text("•").foregroundStyle(.secondary)
+                        inline(text).font(.system(size: 14)).lineSpacing(3)
+                    }
+                case .numbered(let marker, let text):
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text(marker).foregroundStyle(.secondary)
+                        inline(text).font(.system(size: 14)).lineSpacing(3)
+                    }
+                case .quote(let text):
+                    inline(text)
+                        .font(.system(size: 14).italic())
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 10)
+                        .overlay(alignment: .leading) { Rectangle().fill(.secondary.opacity(0.45)).frame(width: 2) }
+                }
+            }
+        }
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var blocks: [Block] {
+        var result: [Block] = []
+        var paragraphLines: [String] = []
+        func flushParagraph() {
+            let value = paragraphLines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            if !value.isEmpty { result.append(.paragraph(value)) }
+            paragraphLines.removeAll(keepingCapacity: true)
+        }
+        for rawLine in markdown.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { flushParagraph(); continue }
+            if let match = line.range(of: "^#{1,6}\\s+", options: .regularExpression) {
+                flushParagraph()
+                let level = line[..<match.upperBound].filter { $0 == "#" }.count
+                result.append(.heading(level, String(line[match.upperBound...])))
+            } else if let match = line.range(of: "^[-*+]\\s+", options: .regularExpression) {
+                flushParagraph(); result.append(.bullet(String(line[match.upperBound...])))
+            } else if let match = line.range(of: "^\\d+[.)]\\s+", options: .regularExpression) {
+                flushParagraph()
+                let prefix = String(line[..<match.upperBound]).trimmingCharacters(in: .whitespaces)
+                result.append(.numbered(prefix, String(line[match.upperBound...])))
+            } else if line.hasPrefix("> ") {
+                flushParagraph(); result.append(.quote(String(line.dropFirst(2))))
+            } else {
+                paragraphLines.append(line)
+            }
+        }
+        flushParagraph()
+        return result
+    }
+
+    private func inline(_ value: String) -> Text {
+        do {
+            return Text(try AttributedString(markdown: value,
+                                             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+        } catch {
+            return Text(value)
+        }
     }
 }

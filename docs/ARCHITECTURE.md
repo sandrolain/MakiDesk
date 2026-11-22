@@ -823,12 +823,15 @@ to macOS. This affects browser chrome only, not web page styles.
 decodes it off the main thread and extracts a dominant colour; a missing icon
 falls back to a stable hash of the registrable domain. `BrowserSummaryController`
 extracts visible page text in WebKit's isolated client world and streams a
-summary from Foundation Models when Apple Intelligence is available. The prompt
-and output schema request Markdown with an overview, supporting details, and a
-target of 180–300 words for substantial articles. The panel renders the streamed
-Markdown. The controller checks model availability
-for each request and cancels generation on navigation or tab close. Page text
-is never logged. A separate rail
+summary using the provider selected in browser settings. Apple Intelligence
+runs via Foundation Models; Ollama uses its streaming `/api/chat` endpoint on
+the loopback host with the configured model (default `qwen3.5:4b`). Both prompts
+request Markdown in the configured language (system language by default) and
+within the configured maximum length (100–1000 words, default 200). The panel renders streamed Markdown headings, lists,
+quotes and inline formatting. The
+controller cancels generation on navigation or tab close. Ollama receives the
+extracted page title, URL, and text; neither provider's page text is logged by
+MakiDesk. A separate rail
 button opens the official ChatGPT app with the current URL and an Italian
 prompt prefilled; the user reviews and sends it there. This handoff does not
 extract or transmit page text. `BrowserHistoryStore` keeps a bounded local list

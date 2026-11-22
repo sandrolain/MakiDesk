@@ -332,6 +332,10 @@ struct BrowserSettings: Codable, Equatable {
     var blockerEnabledByDefault: Bool
     var disabledBlockerDomains: Set<String>
     var summaryEnabled: Bool
+    var summaryProvider: BrowserSummaryProvider
+    var ollamaModel: String
+    var summaryLanguage: BrowserSummaryLanguage
+    var summaryMaximumWords: Int
     /// Prefilled, not loaded automatically, when a new tab opens.
     var defaultPageURL: String
     var searchEngine: BrowserSearchEngine
@@ -342,6 +346,10 @@ struct BrowserSettings: Codable, Equatable {
     init(blockerEnabledByDefault: Bool = true,
          disabledBlockerDomains: Set<String> = [],
          summaryEnabled: Bool = true,
+         summaryProvider: BrowserSummaryProvider = .appleIntelligence,
+         ollamaModel: String = "qwen3.5:4b",
+         summaryLanguage: BrowserSummaryLanguage = .system,
+         summaryMaximumWords: Int = 200,
          defaultPageURL: String = "https://www.google.com",
          searchEngine: BrowserSearchEngine = .google,
          compactTabs: Bool = false,
@@ -350,6 +358,10 @@ struct BrowserSettings: Codable, Equatable {
         self.blockerEnabledByDefault = blockerEnabledByDefault
         self.disabledBlockerDomains = disabledBlockerDomains
         self.summaryEnabled = summaryEnabled
+        self.summaryProvider = summaryProvider
+        self.ollamaModel = ollamaModel
+        self.summaryLanguage = summaryLanguage
+        self.summaryMaximumWords = min(max(summaryMaximumWords, 100), 1000)
         self.defaultPageURL = defaultPageURL
         self.searchEngine = searchEngine
         self.compactTabs = compactTabs
@@ -362,6 +374,11 @@ struct BrowserSettings: Codable, Equatable {
         blockerEnabledByDefault = try container.decodeIfPresent(Bool.self, forKey: .blockerEnabledByDefault) ?? true
         disabledBlockerDomains = try container.decodeIfPresent(Set<String>.self, forKey: .disabledBlockerDomains) ?? []
         summaryEnabled = try container.decodeIfPresent(Bool.self, forKey: .summaryEnabled) ?? true
+        summaryProvider = try container.decodeIfPresent(BrowserSummaryProvider.self, forKey: .summaryProvider) ?? .appleIntelligence
+        let savedOllamaModel = try container.decodeIfPresent(String.self, forKey: .ollamaModel) ?? "qwen3.5:4b"
+        ollamaModel = savedOllamaModel == "qwen3.5" ? "qwen3.5:4b" : savedOllamaModel
+        summaryLanguage = try container.decodeIfPresent(BrowserSummaryLanguage.self, forKey: .summaryLanguage) ?? .system
+        summaryMaximumWords = min(max(try container.decodeIfPresent(Int.self, forKey: .summaryMaximumWords) ?? 200, 100), 1000)
         defaultPageURL = try container.decodeIfPresent(String.self, forKey: .defaultPageURL) ?? "https://www.google.com"
         searchEngine = try container.decodeIfPresent(BrowserSearchEngine.self, forKey: .searchEngine) ?? .google
         compactTabs = try container.decodeIfPresent(Bool.self, forKey: .compactTabs) ?? false

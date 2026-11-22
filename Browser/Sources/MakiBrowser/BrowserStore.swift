@@ -802,7 +802,7 @@ final class BrowserStore {
               let session = sessions[selectedTabID] else { return }
         summaryTabID = selectedTabID
         summary = .extracting
-        summaryController.summarize(webView: session.webView) { [weak self] state in
+        summaryController.summarize(webView: session.webView, settings: settings) { [weak self] state in
             guard let self, self.summaryTabID == selectedTabID else { return }
             self.summary = state
         }

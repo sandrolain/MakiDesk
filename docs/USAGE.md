@@ -1156,9 +1156,15 @@ browser without touching MakiDesk.
   an extension host and a browser identity authorized by Apple; neither is
   available in this build. See the [integration requirements](ARCHITECTURE.md#apple-passwords-integration).
 - **Page summary.** The sparkles button, or `⇧⌘S`, extracts the readable text
-  of the page and summarizes it on-device with Apple Intelligence (Foundation
-  Models). For substantial articles, the model is asked for up to 300 words,
-  formatted in Markdown with an overview and the key points and supporting details.
+  of the page and summarizes it with the model selected in Browser settings.
+  Apple Intelligence runs on-device. Ollama sends the extracted page text to
+  the local server at `127.0.0.1:11434`; choose its installed model in settings,
+  with `qwen3.5:4b` as the default. Choose the summary language (page language,
+  system language, page language, or one of the main supported languages) and
+  maximum length (100–1000 words, default 200) in Browser settings.
+  The rendered Markdown displays headings, lists and inline formatting. For
+  substantial articles, the model is asked to use the configured limit with an
+  overview and key points and supporting details.
   The model is asked to keep shorter pages proportionately brief. Nothing is
   uploaded and the page text is not logged. If Apple Intelligence is unavailable,
   the panel says so. `Copy`, `Regenerate`, `Stop` and `Close` are in the panel.

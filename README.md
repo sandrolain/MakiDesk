@@ -63,8 +63,8 @@ direct addresses and search actions navigable with
 ↑/↓, and a rail button copies the current page URL. MakiDesk has no built-in
 password manager; Apple Passwords autofill is not available in the current
 local build. Blocking is on by default and can be turned off for one site or one tab;
-page summaries use the on-device model with up to 300 words requested for
-substantial articles, or can open the page URL in ChatGPT. It is WebKit,
+page summaries can use Apple Intelligence or a local Ollama model with a
+configurable language and length, or open the page URL in ChatGPT. It is WebKit,
 not a second browser engine. It can be selected as the macOS default browser;
 incoming links show a chooser for MakiDesk Browser, another installed app or
 cancellation, which is useful for sites authenticated in another browser. It

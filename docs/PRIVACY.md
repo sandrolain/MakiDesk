@@ -349,16 +349,18 @@ server. The built-in starter list contains domain patterns only. Disabling the
 blocker for a site or a tab is stored as described above; the per-tab override
 is discarded when the tab navigates.
 
-Page summarization uses Apple's Foundation Models on the device. The readable
-text of the current page is extracted in the WebKit view's isolated client
-world, capped at 12,000
-characters, and passed to the local model; it is not uploaded, not written to
-disk and not logged. The resulting summary is kept in memory for the current
-view and is discarded on navigation or when the panel closes. If Apple
-Intelligence is unavailable, the browser shows that fact and does not fall back
-to a cloud model. The extension host is not active in this version; when it is
-added, extension permissions and storage will be documented here before they
-ship.
+Page summarization uses the selected provider. The readable text of the current
+page is extracted in the WebKit view's isolated client world and capped at
+12,000 characters. The summary language and maximum length (100–1000 words,
+default 200) are stored in browser settings. With Apple Intelligence, it is
+processed on-device. With Ollama selected, the page title, URL, and extracted text are sent to the
+configured local Ollama endpoint at `127.0.0.1:11434` for inference. MakiDesk
+does not send that request to a cloud service. The page text is not written to
+disk or logged. The resulting summary is kept in memory for the current view
+and discarded on navigation or when the panel closes. If the selected provider
+is unavailable, the browser reports the error and does not switch providers.
+The extension host is not active in this version; when it is added, extension
+permissions and storage will be documented here before they ship.
 
 The optional **ChatGPT** action creates a new conversation in the
 official ChatGPT app with the current page URL and a summary prompt prefilled.
