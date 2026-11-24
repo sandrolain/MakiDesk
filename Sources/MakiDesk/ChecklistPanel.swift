@@ -183,6 +183,7 @@ final class ChecklistController: NSObject, NSWindowDelegate {
     /// shows at full opacity while it is being used (T59).
     private var hovering = false
     private var started = false
+    private var firstLoadProcessed = false
 
     private override init() {
         super.init()
@@ -200,11 +201,29 @@ final class ChecklistController: NSObject, NSWindowDelegate {
     func start() {
         guard !started else { return }
         started = true
-        store.onChange = { [weak self] in self?.scheduleRefresh() }
+        
+        store.onChange = { [weak self] in
+            // After the first load, show checklist if it has items and is not already visible
+            guard let self else { return }
+            if !self.firstLoadProcessed,
+               self.store.isReady,
+               !self.store.isRestoring {
+                self.firstLoadProcessed = true
+                let checklistHasItems = !self.store.items.isEmpty
+                if checklistHasItems && !WorkspaceStore.shared.checklistVisible {
+                    WorkspaceStore.shared.updateChecklistVisible(true)
+                }
+            }
+            self.scheduleRefresh()
+        }
+        
         activeDisplayToken = ActiveDisplayTracker.shared.addObserver { [weak self] _ in
             guard let self, self.isVisible else { return }
             self.scheduleRefresh()
         }
+        
+        // Trigger the load
+        store.loadIfNeeded()
         applySettings()
     }
 
@@ -274,7 +293,7 @@ final class ChecklistController: NSObject, NSWindowDelegate {
                                     .stationary, .ignoresCycle]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.isMovable = false
+        panel.isMovable = true
         panel.animationBehavior = .none
         panel.tabbingMode = .disallowed
         // The checklist is a viewing aid for the user, not part of what they
@@ -374,6 +393,41 @@ final class ChecklistController: NSObject, NSWindowDelegate {
         interaction.isKey = false
         updateAppearance()
         scheduleRefresh()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard let window, notification.object as? NSWindow === window else { return }
+        
+        // Determine the new position based on the panel's frame
+        let frameInScreenCoordinates = window.frame
+        guard let targetScreen = targetScreen() else { return }
+        let screenFrame = targetScreen.visibleFrame
+        
+        // Determine which corner the panel is closest to
+        let panelCenterX = frameInScreenCoordinates.midX
+        let panelCenterY = frameInScreenCoordinates.midY
+        let screenCenterX = screenFrame.midX
+        let screenCenterY = screenFrame.midY
+        
+        let newPosition: HUDPosition
+        if panelCenterY > screenCenterY {
+            // Top half of screen
+            if panelCenterX < screenCenterX {
+                newPosition = .topCenter
+            } else {
+                newPosition = .topRight
+            }
+        } else {
+            // Bottom half of screen
+            if panelCenterX < screenCenterX {
+                newPosition = .bottomCenter
+            } else {
+                newPosition = .bottomRight
+            }
+        }
+        
+        // Save the new position
+        WorkspaceStore.shared.updateChecklistPosition(newPosition)
     }
 }
 
