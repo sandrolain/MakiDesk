@@ -44,8 +44,10 @@ enum HUDKind: String, Equatable, Sendable, CaseIterable {
 
 /// Where notices sit on the chosen display.
 enum HUDPosition: String, CaseIterable, Identifiable, Sendable {
+    case bottomLeft
     case bottomCenter
     case bottomRight
+    case topLeft
     case topCenter
     case topRight
 
@@ -53,8 +55,10 @@ enum HUDPosition: String, CaseIterable, Identifiable, Sendable {
 
     var label: String {
         switch self {
+        case .bottomLeft: return "Bottom left"
         case .bottomCenter: return "Bottom centre"
         case .bottomRight: return "Bottom right"
+        case .topLeft: return "Top left"
         case .topCenter: return "Top centre"
         case .topRight: return "Top right"
         }
@@ -66,8 +70,10 @@ extension HUDPosition {
     /// for the shared placement rule (T59, T61).
     var palettePosition: PalettePosition {
         switch self {
+        case .bottomLeft: return .bottomLeft
         case .bottomCenter: return .bottomCenter
         case .bottomRight: return .bottomRight
+        case .topLeft: return .topLeft
         case .topCenter: return .topCenter
         case .topRight: return .topRight
         }
@@ -321,12 +327,14 @@ enum HUDLayout {
                 x = screen.midX - size.width / 2
             case .bottomRight, .topRight:
                 x = screen.maxX - margin - size.width
+            case .bottomLeft, .topLeft:
+                x = screen.minX + margin
             }
             let y: CGFloat
             switch anchor {
-            case .bottomCenter, .bottomRight:
+            case .bottomLeft, .bottomCenter, .bottomRight:
                 y = screen.minY + margin + offset
-            case .topCenter, .topRight:
+            case .topCenter, .topRight, .topLeft:
                 y = screen.maxY - margin - offset - size.height
             }
             let clampedX = min(max(x, screen.minX + minimumEdge),

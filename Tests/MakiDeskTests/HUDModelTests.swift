@@ -40,6 +40,17 @@ final class HUDModelTests: XCTestCase {
         XCTAssertEqual(frames[1], CGRect(x: 756, y: 678, width: 220, height: 50))
     }
 
+    func testLeftPositionsAnchorToTheLeftEdge() {
+        let top = HUDLayout.frames(anchor: .topLeft, screen: screen,
+                                   sizes: [CGSize(width: 200, height: 40)])
+        let bottom = HUDLayout.frames(anchor: .bottomLeft, screen: screen,
+                                      sizes: [CGSize(width: 200, height: 40)])
+        XCTAssertEqual(top[0], CGRect(x: 24, y: 736, width: 200, height: 40))
+        XCTAssertEqual(bottom[0], CGRect(x: 24, y: 24, width: 200, height: 40))
+        XCTAssertEqual(HUDPosition.topLeft.palettePosition, .topLeft)
+        XCTAssertEqual(HUDPosition.bottomLeft.palettePosition, .bottomLeft)
+    }
+
     func testNegativeOriginDisplayStaysInside() {
         let left = CGRect(x: -1200, y: 0, width: 1200, height: 800)
         let frames = HUDLayout.frames(anchor: .bottomRight, screen: left,

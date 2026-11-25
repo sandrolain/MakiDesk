@@ -179,6 +179,7 @@ final class ChecklistController: NSObject, NSWindowDelegate {
     private let focusReturn = PanelFocusReturn()
     private var refreshWork: DispatchWorkItem?
     private var activeDisplayToken: UUID?
+    private var isPanelDragging = false
     /// The pointer is over the card, or the card has the keys: either way it
     /// shows at full opacity while it is being used (T59).
     private var hovering = false
@@ -279,6 +280,15 @@ final class ChecklistController: NSObject, NSWindowDelegate {
             self.updateAppearance()
         }
         hosting.onFocusRequest = { [weak self] in self?.beginEditing() }
+        hosting.canDragPanel = { [weak interaction = self.interaction] in
+            interaction?.isKey == true
+        }
+        hosting.onDragStarted = { [weak self] in self?.isPanelDragging = true }
+        hosting.onDragEnded = { [weak self] in
+            guard let self else { return }
+            self.isPanelDragging = false
+            self.finishPanelDrag()
+        }
         let panel = ChecklistPanel(
             contentRect: NSRect(x: 0, y: 0, width: width, height: 240),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -308,7 +318,7 @@ final class ChecklistController: NSObject, NSWindowDelegate {
 
     /// Measures the card, clamps it to the display and puts it in its corner.
     private func refresh() {
-        guard let window, let hosting = window.contentView else { return }
+        guard !isPanelDragging, let window, let hosting = window.contentView else { return }
         let settings = WorkspaceStore.shared
         let width = CGFloat(settings.checklistWidth)
         hosting.layoutSubtreeIfNeeded()
@@ -357,7 +367,7 @@ final class ChecklistController: NSObject, NSWindowDelegate {
     /// Re-measures on the next run-loop turn: the SwiftUI view has not laid
     /// itself out yet when the model change is published.
     private func scheduleRefresh() {
-        guard isVisible else { return }
+        guard isVisible, !isPanelDragging else { return }
         refreshWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.refresh() }
         refreshWork = work
@@ -367,6 +377,31 @@ final class ChecklistController: NSObject, NSWindowDelegate {
     /// The display chosen in Settings, with the palette's rule and fallback.
     private func targetScreen() -> NSScreen? {
         WorkspaceStore.shared.checklistScreen.targetScreen()
+    }
+
+    private func finishPanelDrag() {
+        guard let window, let screen = targetScreen() else { return }
+        let settings = WorkspaceStore.shared
+        let margin = ChecklistSettings.edgeMargin(forGap: settings.gap)
+        let position = HUDPosition.allCases.min { first, second in
+            let firstFrame = ChecklistSettings.frame(
+                for: window.frame.size, position: first,
+                screen: screen.visibleFrame, margin: margin
+            )
+            let secondFrame = ChecklistSettings.frame(
+                for: window.frame.size, position: second,
+                screen: screen.visibleFrame, margin: margin
+            )
+            return hypot(window.frame.minX - firstFrame.minX,
+                         window.frame.minY - firstFrame.minY)
+                < hypot(window.frame.minX - secondFrame.minX,
+                        window.frame.minY - secondFrame.minY)
+        }
+        if let position, position != settings.checklistPosition {
+            settings.updateChecklistPosition(position)
+        } else {
+            refresh()
+        }
     }
 
     // MARK: - Typing
@@ -394,41 +429,6 @@ final class ChecklistController: NSObject, NSWindowDelegate {
         updateAppearance()
         scheduleRefresh()
     }
-
-    func windowDidMove(_ notification: Notification) {
-        guard let window, notification.object as? NSWindow === window else { return }
-        
-        // Determine the new position based on the panel's frame
-        let frameInScreenCoordinates = window.frame
-        guard let targetScreen = targetScreen() else { return }
-        let screenFrame = targetScreen.visibleFrame
-        
-        // Determine which corner the panel is closest to
-        let panelCenterX = frameInScreenCoordinates.midX
-        let panelCenterY = frameInScreenCoordinates.midY
-        let screenCenterX = screenFrame.midX
-        let screenCenterY = screenFrame.midY
-        
-        let newPosition: HUDPosition
-        if panelCenterY > screenCenterY {
-            // Top half of screen
-            if panelCenterX < screenCenterX {
-                newPosition = .topCenter
-            } else {
-                newPosition = .topRight
-            }
-        } else {
-            // Bottom half of screen
-            if panelCenterX < screenCenterX {
-                newPosition = .bottomCenter
-            } else {
-                newPosition = .bottomRight
-            }
-        }
-        
-        // Save the new position
-        WorkspaceStore.shared.updateChecklistPosition(newPosition)
-    }
 }
 
 /// A panel that may sit anywhere on any display; a plain `NSPanel` clamps its
@@ -445,8 +445,14 @@ private final class ChecklistPanel: FloatingPanel {
 private final class ChecklistHostingView<Content: View>: NSHostingView<Content> {
     var onHover: ((Bool) -> Void)?
     var onFocusRequest: (() -> Void)?
+    var canDragPanel: () -> Bool = { false }
+    var onDragStarted: (() -> Void)?
+    var onDragEnded: (() -> Void)?
     private var tracking: NSTrackingArea?
     private var pressPoint: CGPoint?
+    private var dragStartMouseLocation: CGPoint?
+    private var dragStartWindowOrigin: CGPoint?
+    private let dragHandleHeight: CGFloat = 24
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -458,11 +464,41 @@ private final class ChecklistHostingView<Content: View>: NSHostingView<Content> 
     /// stay outside this area, so using them never activates MakiDesk.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        let isInDragHandle = isFlipped
+            ? point.y <= bounds.minY + dragHandleHeight
+            : point.y >= bounds.maxY - dragHandleHeight
+        if isInDragHandle, canDragPanel() {
+            guard let window else { return }
+            dragStartMouseLocation = NSEvent.mouseLocation
+            dragStartWindowOrigin = window.frame.origin
+            onDragStarted?()
+            return
+        }
         pressPoint = (point.x > 28 && point.x < bounds.width - 28) ? point : nil
         super.mouseDown(with: event)
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        guard let window,
+              let dragStartMouseLocation,
+              let dragStartWindowOrigin else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let mouseLocation = NSEvent.mouseLocation
+        window.setFrameOrigin(NSPoint(
+            x: dragStartWindowOrigin.x + mouseLocation.x - dragStartMouseLocation.x,
+            y: dragStartWindowOrigin.y + mouseLocation.y - dragStartMouseLocation.y
+        ))
+    }
+
     override func mouseUp(with event: NSEvent) {
+        if dragStartMouseLocation != nil {
+            dragStartMouseLocation = nil
+            dragStartWindowOrigin = nil
+            onDragEnded?()
+            return
+        }
         if let start = pressPoint {
             let end = convert(event.locationInWindow, from: nil)
             if hypot(end.x - start.x, end.y - start.y) < 3 {
@@ -516,6 +552,17 @@ private struct ChecklistView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if interaction.isKey {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(theme.subtext)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 12)
+                    .contentShape(Rectangle())
+                    .accessibilityLabel("Move checklist")
+                    .help("Drag to move the checklist")
+            }
+
             if let error = store.loadError {
                 HStack(spacing: 6) {
                     Text(error).font(MakiType.meta).foregroundStyle(theme.subtext)

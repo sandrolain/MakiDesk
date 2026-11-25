@@ -501,14 +501,18 @@ default), at the same distance from the edges as a tiled window — half the
 opacity is the **resting**
 value: pointing at the card or typing in it brings it to 100% until the pointer
 leaves, so it can stay faint in the corner and become readable the moment you
-use it.
+use it. If saved items exist, the card opens automatically when MakiDesk starts.
 
-- Type an item and press Return; the add field appears only while the card has
-  the keys, so the resting card keeps a single line of height. Click anywhere on
-  the list to take the keys and open it. Click the circle to tick an item (the
-  text gets a line through), drag the row itself to reorder it, and the ✕ on the
-  row to delete it. When something is ticked, the trash appears in the add row
-  and clears only the completed items. Items hold up to 200 characters and keep
+- When the card has keyboard focus, drag the grip at the top to move it; on
+  release it snaps to the nearest supported position on the left, centre or
+  right. Type an item and
+  press Return; the add field
+  appears only while the card has the keys, so the resting card keeps a single
+  line of height. Click anywhere on the list to take the keys and open it. Click
+  the circle to tick an item (its text gets a line through), drag the row itself
+  to reorder it, and the ✕ on the row to delete it. When something is ticked,
+  the trash appears in the add row and clears only the completed items. Items
+  hold up to 200 characters and keep
   the line breaks you type; the list stops at 50.
 - Double-click an item's text, or point at it and click the pencil, to edit it
   in place. Click the checkmark or leave the field to save; blank edits keep

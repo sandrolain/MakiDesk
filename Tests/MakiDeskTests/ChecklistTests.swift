@@ -396,9 +396,15 @@ final class ChecklistTests: XCTestCase {
                 let frame = ChecklistSettings.frame(for: size, position: position,
                                                     screen: screen, margin: edge)
                 switch position {
+                case .topLeft:
+                    XCTAssertEqual(frame.minX, screen.minX + edge, accuracy: 0.5)
+                    XCTAssertEqual(frame.maxY, screen.maxY - edge, accuracy: 0.5)
                 case .topRight:
                     XCTAssertEqual(frame.maxX, screen.maxX - edge, accuracy: 0.5)
                     XCTAssertEqual(frame.maxY, screen.maxY - edge, accuracy: 0.5)
+                case .bottomLeft:
+                    XCTAssertEqual(frame.minX, screen.minX + edge, accuracy: 0.5)
+                    XCTAssertEqual(frame.minY, screen.minY + edge, accuracy: 0.5)
                 case .bottomRight:
                     XCTAssertEqual(frame.maxX, screen.maxX - edge, accuracy: 0.5)
                     XCTAssertEqual(frame.minY, screen.minY + edge, accuracy: 0.5)
